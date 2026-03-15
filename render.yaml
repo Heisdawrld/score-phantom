@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: scorephantom
+    env: node
+    buildCommand: npm install
+    startCommand: node src/app.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APIFY_TOKEN
+        sync: false
+      - key: APIFY_ACTOR_ID
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        value: ./scorephantom.db
+      - key: PORT
+        value: 3000
