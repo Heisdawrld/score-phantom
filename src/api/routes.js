@@ -11,10 +11,43 @@ router.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'ScorePhantom API' });
 });
 
+// ─── SEED ─────────────────────────────────────────────────────────────────────
+
+router.get('/seed', async (req, res) => {
+    try {
+        const { readFileSync } = await import('fs');
+        const { resolve } = await import('path');
+
+        const filePath = resolve('./fixtures.json');
+        const fixtures = JSON.parse(readFileSync(filePath, 'utf-8'));
+
+        let inserted = 0;
+
+        const insertTeam = db.prepare(`INSERT OR IGNORE INTO teams (team_id, team_name, short_name) VALUES (?, ?, ?)`);
+        const insertTournament = db.prepare(`INSERT OR IGNORE INTO tournaments (tournament_id, tournament_name, category_name, tournament_url) VALUES (?, ?, ?, ?)`);
+        const insertFixture = db.prepare(`INSERT OR IGNORE INTO fixtures (match_id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+        const seedAll = db.transaction(() => {
+            for (const f of fixtures) {
+                insertTeam.run(f.home_team_id, f.home_team_name, f.home_team_short_name);
+                insertTeam.run(f.away_team_id, f.away_team_name, f.away_team_short_name);
+                insertTournament.run(f.tournament_id, f.tournament_name, f.category_name, f.tournament_url);
+                insertFixture.run(f.match_id, f.home_team_id, f.away_team_id, f.tournament_id, f.home_team_name, f.away_team_name, f.tournament_name, f.category_name, f.match_date, f.match_url);
+                inserted++;
+            }
+        });
+
+        seedAll();
+
+        res.json({ success: true, processed: fixtures.length, inserted });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Seed failed', detail: err.message });
+    }
+});
+
 // ─── FIXTURES ─────────────────────────────────────────────────────────────────
 
-// GET /fixtures
-// Returns all fixtures, optionally filtered by date or tournament
 router.get('/fixtures', (req, res) => {
     try {
         const { date, tournament, enriched, limit = 50, offset = 0 } = req.query;
@@ -42,18 +75,13 @@ router.get('/fixtures', (req, res) => {
 
         const fixtures = db.prepare(query).all(...params);
 
-        res.json({
-            total: fixtures.length,
-            fixtures,
-        });
+        res.json({ total: fixtures.length, fixtures });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Failed to fetch fixtures' });
     }
 });
 
-// GET /fixtures/:id
-// Returns a single fixture with its historical match data
 router.get('/fixtures/:id', (req, res) => {
     try {
         const fixture = db
@@ -72,10 +100,7 @@ router.get('/fixtures/:id', (req, res) => {
         const homeForm = history.filter((m) => m.type === 'home_form');
         const awayForm = history.filter((m) => m.type === 'away_form');
 
-        res.json({
-            fixture,
-            history: { h2h, homeForm, awayForm },
-        });
+        res.json({ fixture, history: { h2h, homeForm, awayForm } });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Failed to fetch fixture' });
@@ -84,8 +109,6 @@ router.get('/fixtures/:id', (req, res) => {
 
 // ─── PREDICTIONS ──────────────────────────────────────────────────────────────
 
-// GET /predict/:fixtureId
-// Returns full prediction for a fixture across all markets
 router.get('/predict/:fixtureId', (req, res) => {
     try {
         const fixture = db
@@ -116,8 +139,6 @@ router.get('/predict/:fixtureId', (req, res) => {
     }
 });
 
-// GET /predict/:fixtureId/explain
-// Returns prediction + Groq AI explanation
 router.get('/predict/:fixtureId/explain', async (req, res) => {
     try {
         const fixture = db
@@ -142,10 +163,7 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
 
         const explanation = await explainPrediction(prediction);
 
-        res.json({
-            ...prediction,
-            explanation,
-        });
+        res.json({ ...prediction, explanation });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Explain failed', detail: err.message });
@@ -154,8 +172,6 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
 
 // ─── TOURNAMENTS ──────────────────────────────────────────────────────────────
 
-// GET /tournaments
-// Returns all tournaments in the database
 router.get('/tournaments', (req, res) => {
     try {
         const tournaments = db
@@ -171,8 +187,6 @@ router.get('/tournaments', (req, res) => {
 
 // ─── STATS ────────────────────────────────────────────────────────────────────
 
-// GET /stats
-// Returns database summary
 router.get('/stats', (req, res) => {
     try {
         const totalFixtures = db.prepare(`SELECT COUNT(*) as count FROM fixtures`).get().count;
