@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../config/database.js';
 import { predict } from '../predictions/poissonEngine.js';
 import { explainPrediction } from '../explanations/groqExplainer.js';
+import { enrichFixture } from '../enrichment/enrichOne.js';
 
 const router = Router();
 
@@ -109,7 +110,7 @@ router.get('/fixtures/:id', (req, res) => {
 
 // ─── PREDICTIONS ──────────────────────────────────────────────────────────────
 
-router.get('/predict/:fixtureId', (req, res) => {
+router.get('/predict/:fixtureId', async (req, res) => {
     try {
         const fixture = db
             .prepare(`SELECT * FROM fixtures WHERE id = ?`)
@@ -120,10 +121,7 @@ router.get('/predict/:fixtureId', (req, res) => {
         }
 
         if (!fixture.enriched) {
-            return res.status(400).json({
-                error: 'Fixture not yet enriched. Run the enrichment script first.',
-                fixture_id: req.params.fixtureId,
-            });
+            await enrichFixture(fixture);
         }
 
         const prediction = predict(
@@ -150,9 +148,7 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
         }
 
         if (!fixture.enriched) {
-            return res.status(400).json({
-                error: 'Fixture not yet enriched. Run the enrichment script first.',
-            });
+            await enrichFixture(fixture);
         }
 
         const prediction = predict(
