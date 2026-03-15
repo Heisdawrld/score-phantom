@@ -23,9 +23,9 @@ router.get('/seed', async (req, res) => {
 
         let inserted = 0;
 
-        const insertTeam = db.prepare(`INSERT OR IGNORE INTO teams (team_id, team_name, short_name) VALUES (?, ?, ?)`);
-        const insertTournament = db.prepare(`INSERT OR IGNORE INTO tournaments (tournament_id, tournament_name, category_name, tournament_url) VALUES (?, ?, ?, ?)`);
-        const insertFixture = db.prepare(`INSERT OR IGNORE INTO fixtures (match_id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const insertTeam = db.prepare(`INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)`);
+        const insertTournament = db.prepare(`INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)`);
+        const insertFixture = db.prepare(`INSERT OR IGNORE INTO fixtures (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
         const seedAll = db.transaction(() => {
             for (const f of fixtures) {
@@ -175,7 +175,7 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
 router.get('/tournaments', (req, res) => {
     try {
         const tournaments = db
-            .prepare(`SELECT DISTINCT tournament_id, tournament_name, category_name FROM fixtures ORDER BY category_name, tournament_name`)
+            .prepare(`SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`)
             .all();
 
         res.json({ total: tournaments.length, tournaments });
