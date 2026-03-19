@@ -1,111 +1,83 @@
 import db from '../config/database.js';
-import { readFileSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { fetchAllFixtures, LEAGUE_IDS } from '../services/sofascore.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Which leagues to seed — edit this list freely
+const ACTIVE_LEAGUES = [
+    'Premier League',
+    'Championship',
+    'League One',
+    'League Two',
+    'La Liga',
+    'Serie A',
+    'Bundesliga',
+    'Ligue 1',
+    'Eredivisie',
+    'Scottish Premiership',
+    'MLS',
+    'Superliga',
+    'Primeira Liga',
+    'Saudi Pro League',
+    'Süper Lig',
+    'Eliteserien',
+    'Liga MX',
+    'Champions League',
+    'Europa League',
+];
 
-// Place your exported Apify JSON file in the project root as fixtures.json
-const fixturesPath = path.join(__dirname, '../../fixtures.json');
+async function seed() {
+    console.log(`[Seed] Fetching fixtures from SofaScore for ${ACTIVE_LEAGUES.length} leagues...`);
+    const fixtures = await fetchAllFixtures(ACTIVE_LEAGUES);
+    console.log(`[Seed] Got ${fixtures.length} fixtures total. Inserting...`);
 
-let fixtures;
-try {
-    fixtures = JSON.parse(readFileSync(fixturesPath, 'utf-8'));
-} catch (err) {
-    console.error('Could not read fixtures.json. Make sure it exists in the project root.');
-    process.exit(1);
-}
-
-console.log(`Seeding ${fixtures.length} fixtures...`);
-
-const insertTeam = db.prepare(`
-    INSERT OR IGNORE INTO teams (id, name, short_name)
-    VALUES (@id, @name, @short_name)
-`);
-
-const insertTournament = db.prepare(`
-    INSERT OR IGNORE INTO tournaments (id, name, category, url)
-    VALUES (@id, @name, @category, @url)
-`);
-
-const insertFixture = db.prepare(`
-    INSERT OR IGNORE INTO fixtures (
-        id,
-        home_team_id,
-        away_team_id,
-        home_team_name,
-        away_team_name,
-        tournament_id,
-        tournament_name,
-        category_name,
-        match_date,
-        match_url
-    ) VALUES (
-        @id,
-        @home_team_id,
-        @away_team_id,
-        @home_team_name,
-        @away_team_name,
-        @tournament_id,
-        @tournament_name,
-        @category_name,
-        @match_date,
-        @match_url
-    )
-`);
-
-// Run everything in a transaction for speed
-const seedAll = db.transaction((fixtures) => {
     let inserted = 0;
     let skipped = 0;
 
     for (const f of fixtures) {
-        // Insert home team
-        insertTeam.run({
-            id: f.home_team_id,
-            name: f.home_team_name,
-            short_name: f.home_team_short_name || null,
-        });
-
-        // Insert away team
-        insertTeam.run({
-            id: f.away_team_id,
-            name: f.away_team_name,
-            short_name: f.away_team_short_name || null,
-        });
-
-        // Insert tournament
-        insertTournament.run({
-            id: f.tournament_id,
-            name: f.tournament_name,
-            category: f.category_name || null,
-            url: f.tournament_url || null,
-        });
-
-        // Build match URL from match_id if not present
-        const matchUrl = f.match_url || `https://www.flashscore.com/match/${f.match_id}/`;
-
-        // Insert fixture
-        const result = insertFixture.run({
-            id: f.match_id,
-            home_team_id: f.home_team_id,
-            away_team_id: f.away_team_id,
-            home_team_name: f.home_team_name,
-            away_team_name: f.away_team_name,
-            tournament_id: f.tournament_id,
-            tournament_name: f.tournament_name,
-            category_name: f.category_name || null,
-            match_date: f.match_date || null,
-            match_url: matchUrl,
-        });
-
-        if (result.changes > 0) inserted++;
-        else skipped++;
+        try {
+            await db.batch([
+                {
+                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+                    args: [f.home_team_id, f.home_team_name, f.home_team_short_name || ''],
+                },
+                {
+                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+                    args: [f.away_team_id, f.away_team_name, f.away_team_short_name || ''],
+                },
+                {
+                    sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
+                    args: [f.tournament_id, f.tournament_name, f.category_name || '', f.tournament_url || ''],
+                },
+                {
+                    sql: `INSERT OR IGNORE INTO fixtures 
+                          (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, 
+                           tournament_name, category_name, match_date, match_url) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    args: [
+                        f.match_id,
+                        f.home_team_id,
+                        f.away_team_id,
+                        f.tournament_id,
+                        f.home_team_name,
+                        f.away_team_name,
+                        f.tournament_name,
+                        f.category_name || '',
+                        f.match_date,
+                        f.match_url, // SofaScore event ID
+                    ],
+                },
+            ]);
+            inserted++;
+        } catch (err) {
+            console.error(`[Seed] Failed to insert ${f.home_team_name} vs ${f.away_team_name}:`, err.message);
+            skipped++;
+        }
     }
 
-    return { inserted, skipped };
+    console.log(`[Seed] Done. Inserted: ${inserted} | Skipped: ${skipped}`);
+    process.exit(0);
+}
+
+seed().catch(err => {
+    console.error('[Seed] Fatal error:', err);
+    process.exit(1);
 });
-
-const { inserted, skipped } = seedAll(fixtures);
-
-console.log(`Done. Inserted: ${inserted} | Skipped (duplicates): ${skipped}`);
