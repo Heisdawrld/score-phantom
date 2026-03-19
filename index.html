@@ -103,7 +103,6 @@ main { padding-bottom:80px; }
 .loading-label { font-size:11px; letter-spacing:2px; color:var(–text3); text-transform:uppercase; }
 .empty { text-align:center; padding:60px 20px; color:var(–text3); font-size:12px; letter-spacing:1px; }
 
-/* MODAL */
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:200; display:none; align-items:flex-end; }
 .overlay.open { display:flex; }
 .sheet { width:100%; max-width:520px; margin:0 auto; background:var(–surface); border-radius:20px 20px 0 0; border:1px solid var(–border2); border-bottom:none; max-height:94vh; overflow-y:auto; scrollbar-width:none; animation:sheetUp .28s cubic-bezier(.32,.72,0,1); }
@@ -196,9 +195,9 @@ main { padding-bottom:80px; }
 .ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
 .ai-label::before { content:‘✦’; font-size:10px; color:var(–accent); }
 .ai-insight { font-size:13px; color:var(–text); line-height:1.6; margin-bottom:10px; }
-.ai-recommended{background:linear-gradient(135deg,#7c3aed22,#4f46e522);border:1px solid #7c3aed66;border-radius:12px;padding:14px 16px;margin:12px 0;}
-.ai-rec-label{font-size:10px;font-weight:700;letter-spacing:1px;color:#a78bfa;margin-bottom:6px;}
-.ai-rec-value{font-size:14px;color:#e2e8f0;line-height:1.5;font-weight:500;}
+.ai-recommended { background:linear-gradient(135deg,#7c3aed22,#4f46e522); border:1px solid #7c3aed66; border-radius:12px; padding:14px 16px; margin:12px 0; }
+.ai-rec-label { font-size:10px; font-weight:700; letter-spacing:1px; color:#a78bfa; margin-bottom:6px; }
+.ai-rec-value { font-size:14px; color:#e2e8f0; line-height:1.5; font-weight:500; }
 .ai-warning { font-size:11px; color:var(–yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
 .ai-picks-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
 .ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(–accent2); font-weight:500; }
@@ -351,12 +350,12 @@ function renderGroups(fixtures) {
         </div>
         <div class="league-header-right">
           <span class="league-count">${g.fixtures.length}</span>
-          <span class="league-chevron">▾</span>
+          <span class="league-chevron">&#9662;</span>
         </div>
       </div>
       <div class="league-fixtures">
         ${g.fixtures.map(f => {
-          const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '—';
+          const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
           return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}')">
             <div class="fixture-time-col"><div class="fixture-time">${time}</div></div>
             <div class="fixture-teams-col">
@@ -365,7 +364,7 @@ function renderGroups(fixtures) {
             </div>
             <div class="fixture-right-col">
               ${f.enriched?'<div class="analysed-dot"></div>':''}
-              <div class="predict-arrow">›</div>
+              <div class="predict-arrow">&#8250;</div>
             </div>
           </div>`;
         }).join('')}
@@ -376,8 +375,8 @@ function renderGroups(fixtures) {
 
 function toggleGroup(h) { h.closest('.league-group').classList.toggle('collapsed'); }
 
-const FLAGS = {'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Spain':'🇪🇸','Germany':'🇩🇪','France':'🇫🇷','Italy':'🇮🇹','Portugal':'🇵🇹','Netherlands':'🇳🇱','Belgium':'🇧🇪','Turkey':'🇹🇷','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Brazil':'🇧🇷','Argentina':'🇦🇷','USA':'🇺🇸','Mexico':'🇲🇽','Nigeria':'🇳🇬','Ghana':'🇬🇭','South Africa':'🇿🇦','Egypt':'🇪🇬','Morocco':'🇲🇦','Ireland':'🇮🇪','Wales':'🏴󠁧󠁢󠁷󠁬󠁳󠁿','Greece':'🇬🇷','Ukraine':'🇺🇦','Poland':'🇵🇱','Sweden':'🇸🇪','Norway':'🇳🇴','Denmark':'🇩🇰','Switzerland':'🇨🇭','Croatia':'🇭🇷','Serbia':'🇷🇸','Romania':'🇷🇴','Peru':'🇵🇪','Colombia':'🇨🇴','Chile':'🇨🇱','Uruguay':'🇺🇾','Japan':'🇯🇵','South Korea':'🇰🇷','Austria':'🇦🇹','Czech Republic':'🇨🇿','Russia':'🇷🇺'};
-function flag(c) { return FLAGS[c] || '🌍'; }
+const FLAGS = {'England':'&#127988;','Spain':'&#127466;&#127480;','Germany':'&#127465;&#127466;','France':'&#127467;&#127479;','Italy':'&#127470;&#127481;','Portugal':'&#127477;&#127481;','Netherlands':'&#127475;&#127473;','Belgium':'&#127463;&#127466;','Turkey':'&#127481;&#127479;','Brazil':'&#127463;&#127479;','Argentina':'&#127462;&#127479;','USA':'&#127482;&#127480;','Mexico':'&#127474;&#127485;','Nigeria':'&#127475;&#127468;','Ghana':'&#127468;&#127469;','Egypt':'&#127466;&#127468;','Morocco':'&#127474;&#127462;','Ukraine':'&#127482;&#127462;','Poland':'&#127477;&#127473;','Sweden':'&#127480;&#127466;','Norway':'&#127475;&#127476;','Denmark':'&#127465;&#127472;','Switzerland':'&#127464;&#127469;','Croatia':'&#127469;&#127479;','Serbia':'&#127479;&#127480;'};
+function flag(c) { return FLAGS[c] || '&#127758;'; }
 function e(s) { if(!s)return''; return s.replace(/'/g,"\\'").replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function pct(v) { return (v*100).toFixed(0)+'%'; }
 function cls(v) { return v>=0.65?'h':v>=0.45?'m':'l'; }
@@ -385,7 +384,7 @@ function cls(v) { return v>=0.65?'h':v>=0.45?'m':'l'; }
 async function init() {
   buildDateTabs();
   try {
-    const res = await fetch(`${API}/fixtures?limit=500`);
+    const res = await fetch(`${API}/fixtures?limit=2000`);
     const data = await res.json();
     allFixtures = data.fixtures || [];
     buildCountryFilters();
@@ -405,14 +404,12 @@ async function openSheet(id, home, away, league, country) {
     </div>`;
 
   try {
-    // Fire both in parallel but don't fail if explain is slow
     const predRes = await fetch(`${API}/predict/${id}`);
     if (!predRes.ok) throw new Error('Prediction failed');
     const pred = await predRes.json();
 
     renderSheet(pred, null, home, away, league, country);
 
-    // Load AI explanation async after initial render
     fetch(`${API}/predict/${id}/explain`).then(r => r.json()).then(explainData => {
       if (explainData.explanation) {
         updateAI(explainData.explanation);
@@ -424,7 +421,7 @@ async function openSheet(id, home, away, league, country) {
   } catch(err) {
     document.getElementById('sheetContent').innerHTML = `
       <div class="fetching">
-        <div style="font-size:28px">⚠️</div>
+        <div style="font-size:28px">&#9888;&#65039;</div>
         <div class="fetch-label" style="color:#f43f5e">Analysis Failed</div>
         <div class="fetch-sub">${err.message}</div>
       </div>`;
@@ -438,50 +435,34 @@ function updateAI(explain) {
   const warning = explain.data_warning || '';
   const recommended = explain.recommended_bet || '';
   const picks = [
-    explain.match_result ? `Result: ${explain.match_result}` : null,
-    explain.goals ? `Goals: ${explain.goals}` : null,
-    explain.btts ? `BTTS: ${explain.btts}` : null,
-    explain.correct_score ? `Score: ${explain.correct_score}` : null,
+    explain.match_result ? 'Result: ' + explain.match_result : null,
+    explain.goals ? 'Goals: ' + explain.goals : null,
+    explain.btts ? 'BTTS: ' + explain.btts : null,
+    explain.correct_score ? 'Score: ' + explain.correct_score : null,
   ].filter(Boolean);
 
-  el.innerHTML = `
-    <div class="ai-label">Groq Intelligence</div>
-    ${insight ? `<div class="ai-insight">${insight}</div>` : ''}
-    ${recommended ? `
-      <div class="ai-recommended">
-        <div class="ai-rec-label">⚡ RECOMMENDED BET</div>
-        <div class="ai-rec-value">${recommended}</div>
-      </div>
-    ` : ''}
-    ${picks.length ? `<div class="ai-picks-row">${picks.map(x=>`<div class="ai-pick-tag">${x}</div>`).join('')}</div>` : ''}
-    ${warning ? `<div class="ai-warning">⚠ ${warning}</div>` : ''}
-  `;
+  el.innerHTML =
+    '<div class="ai-label">Groq Intelligence</div>' +
+    (insight ? '<div class="ai-insight">' + insight + '</div>' : '') +
+    (recommended ? '<div class="ai-recommended"><div class="ai-rec-label">&#9889; RECOMMENDED BET</div><div class="ai-rec-value">' + recommended + '</div></div>' : '') +
+    (picks.length ? '<div class="ai-picks-row">' + picks.map(x => '<div class="ai-pick-tag">' + x + '</div>').join('') + '</div>' : '') +
+    (warning ? '<div class="ai-warning">&#9888; ' + warning + '</div>' : '');
 
-  // Update top recommendation card with Groq's final pick
   const topPick = document.getElementById('top-pick-card');
   if (!topPick) return;
 
-  if (recommended && recommended.toLowerCase() !== 'no value found') {
-    // Extract bet name from recommended string (everything before ' @' or ' —' or ' -')
-    const betMatch = recommended.match(/^([^@—\-]+)/);
+  if (recommended && !recommended.toLowerCase().includes('no clear') && !recommended.toLowerCase().includes('skip')) {
+    const betMatch = recommended.match(/^([^@\-]+)/);
     const betLabel = betMatch ? betMatch[1].trim() : recommended.split(' ').slice(0,3).join(' ');
-    topPick.innerHTML = `
-      <div class="tp-label">⚡ Final Recommendation</div>
-      <div class="tp-value">${betLabel}</div>
-      <div class="tp-meta">
-        <div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div>
-        <div class="tp-conf HIGH">VALUE BET</div>
-      </div>
-    `;
-  } else if (recommended.toLowerCase().includes('no value')) {
-    topPick.innerHTML = `
-      <div class="tp-label">⚡ Final Recommendation</div>
-      <div class="tp-value" style="font-size:18px">No Value Found</div>
-      <div class="tp-meta">
-        <div class="tp-prob" style="font-size:12px;color:#94a3b8">Skip this match</div>
-        <div class="tp-conf LOW">SKIP</div>
-      </div>
-    `;
+    topPick.innerHTML =
+      '<div class="tp-label">&#9889; Final Recommendation</div>' +
+      '<div class="tp-value">' + betLabel + '</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div><div class="tp-conf VALUE">VALUE BET</div></div>';
+  } else if (recommended.toLowerCase().includes('no clear') || recommended.toLowerCase().includes('skip')) {
+    topPick.innerHTML =
+      '<div class="tp-label">&#9889; Final Recommendation</div>' +
+      '<div class="tp-value" style="font-size:18px">No Clear Pick</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#94a3b8">Skip this match</div><div class="tp-conf LOW">SKIP</div></div>';
   }
 }
 
@@ -490,9 +471,9 @@ function renderSheet(d, explain, home, away, league, country) {
   const hf = f.homeFeatures, af = f.awayFeatures, h2hF = f.h2hFeatures;
 
   const picks = [
-    {label:`${home} Win`, prob:mr.home},
-    {label:'Draw', prob:mr.draw},
-    {label:`${away} Win`, prob:mr.away},
+    {label: home + ' Win', prob: mr.home},
+    {label: 'Draw', prob: mr.draw},
+    {label: away + ' Win', prob: mr.away},
   ];
   const top = picks.reduce((a,b) => a.prob>b.prob?a:b);
   const conf = mr.confidence || 'LOW';
@@ -503,7 +484,7 @@ function renderSheet(d, explain, home, away, league, country) {
     const dr = Math.round((feat.draw_rate||0)*n);
     const l = n-w-dr;
     return [...Array(w).fill('W'),...Array(Math.max(0,dr)).fill('D'),...Array(Math.max(0,l)).fill('L')]
-      .slice(0,5).map(x=>`<div class="fdot ${x}">${x}</div>`).join('');
+      .slice(0,5).map(x => '<div class="fdot ' + x + '">' + x + '</div>').join('');
   }
 
   const h2hTotal = h2hF.matches_available||0;
@@ -512,98 +493,97 @@ function renderSheet(d, explain, home, away, league, country) {
   const h2hA = h2hTotal-h2hH-h2hD;
   const scores = p.correct_score.slice(0,6);
 
-  document.getElementById('sheetContent').innerHTML = `
-    <div class="sheet-header">
-      <div class="sheet-match-info">
-        <div class="sheet-league-tag">${league} · ${country}</div>
-        <div class="sheet-teams">
-          <div class="sheet-team">${home}</div>
-          <div class="sheet-vs">VS</div>
-          <div class="sheet-team away">${away}</div>
-        </div>
-      </div>
-      <div class="sheet-close" onclick="closeSheet()">✕</div>
-    </div>
+  document.getElementById('sheetContent').innerHTML =
+    '<div class="sheet-header">' +
+      '<div class="sheet-match-info">' +
+        '<div class="sheet-league-tag">' + league + ' &middot; ' + country + '</div>' +
+        '<div class="sheet-teams">' +
+          '<div class="sheet-team">' + home + '</div>' +
+          '<div class="sheet-vs">VS</div>' +
+          '<div class="sheet-team away">' + away + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sheet-close" onclick="closeSheet()">&#10005;</div>' +
+    '</div>' +
 
-    <div class="top-pick" id="top-pick-card">
-      <div class="tp-label">★ Top Recommendation</div>
-      <div class="tp-value">${top.label}</div>
-      <div class="tp-meta">
-        <div class="tp-prob">Probability: <strong>${pct(top.prob)}</strong></div>
-        <div class="tp-conf ${conf}">${conf}</div>
-      </div>
-    </div>
+    '<div class="top-pick" id="top-pick-card">' +
+      '<div class="tp-label">&#9733; Top Recommendation</div>' +
+      '<div class="tp-value">' + top.label + '</div>' +
+      '<div class="tp-meta">' +
+        '<div class="tp-prob">Probability: <strong>' + pct(top.prob) + '</strong></div>' +
+        '<div class="tp-conf ' + conf + '">' + conf + '</div>' +
+      '</div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">Match Result</div>
-    <div class="result-bars">
-      <div class="rbar-row"><div class="rbar-label">${home.split(' ')[0]}</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:${pct(mr.home)}"></div></div><div class="rbar-pct">${pct(mr.home)}</div></div>
-      <div class="rbar-row"><div class="rbar-label">Draw</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:${pct(mr.draw)}"></div></div><div class="rbar-pct">${pct(mr.draw)}</div></div>
-      <div class="rbar-row"><div class="rbar-label">${away.split(' ')[0]}</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:${pct(mr.away)}"></div></div><div class="rbar-pct">${pct(mr.away)}</div></div>
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Match Result</div>' +
+    '<div class="result-bars">' +
+      '<div class="rbar-row"><div class="rbar-label">' + home.split(' ')[0] + '</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:' + pct(mr.home) + '"></div></div><div class="rbar-pct">' + pct(mr.home) + '</div></div>' +
+      '<div class="rbar-row"><div class="rbar-label">Draw</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:' + pct(mr.draw) + '"></div></div><div class="rbar-pct">' + pct(mr.draw) + '</div></div>' +
+      '<div class="rbar-row"><div class="rbar-label">' + away.split(' ')[0] + '</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:' + pct(mr.away) + '"></div></div><div class="rbar-pct">' + pct(mr.away) + '</div></div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">Key Stats</div>
-    <div class="stats-row">
-      <div class="stat-box"><div class="stat-num">${m.lambdaHome}</div><div class="stat-lbl">xG Home</div></div>
-      <div class="stat-box"><div class="stat-num">${m.lambdaAway}</div><div class="stat-lbl">xG Away</div></div>
-      <div class="stat-box"><div class="stat-num">${pct(p.btts.yes)}</div><div class="stat-lbl">BTTS</div></div>
-      <div class="stat-box"><div class="stat-num">${pct(p.over_under.over_2_5)}</div><div class="stat-lbl">O2.5</div></div>
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Key Stats</div>' +
+    '<div class="stats-row">' +
+      '<div class="stat-box"><div class="stat-num">' + m.lambdaHome + '</div><div class="stat-lbl">xG Home</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + m.lambdaAway + '</div><div class="stat-lbl">xG Away</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + pct(p.btts.yes) + '</div><div class="stat-lbl">BTTS</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + pct(p.over_under.over_2_5) + '</div><div class="stat-lbl">O2.5</div></div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">All Markets</div>
-    <div class="markets-grid">
-      <div class="mcard">
-        <div class="mcard-title">Over / Under</div>
-        ${[['O 0.5',p.over_under.over_0_5],['O 1.5',p.over_under.over_1_5],['O 2.5',p.over_under.over_2_5],['O 3.5',p.over_under.over_3_5],['O 4.5',p.over_under.over_4_5]].map(([k,v])=>`<div class="mrow"><span class="mkey">${k}</span><span class="mval ${cls(v)}">${pct(v)}</span></div>`).join('')}
-      </div>
-      <div class="mcard">
-        <div class="mcard-title">${home.split(' ')[0]} Goals</div>
-        ${[['O 0.5',p.home_team_goals.over_0_5],['O 1.5',p.home_team_goals.over_1_5],['O 2.5',p.home_team_goals.over_2_5]].map(([k,v])=>`<div class="mrow"><span class="mkey">${k}</span><span class="mval ${cls(v)}">${pct(v)}</span></div>`).join('')}
-        <div class="mcard-title" style="margin-top:8px">${away.split(' ')[0]} Goals</div>
-        ${[['O 0.5',p.away_team_goals.over_0_5],['O 1.5',p.away_team_goals.over_1_5],['O 2.5',p.away_team_goals.over_2_5]].map(([k,v])=>`<div class="mrow"><span class="mkey">${k}</span><span class="mval ${cls(v)}">${pct(v)}</span></div>`).join('')}
-      </div>
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">All Markets</div>' +
+    '<div class="markets-grid">' +
+      '<div class="mcard">' +
+        '<div class="mcard-title">Over / Under</div>' +
+        [['O 0.5',p.over_under.over_0_5],['O 1.5',p.over_under.over_1_5],['O 2.5',p.over_under.over_2_5],['O 3.5',p.over_under.over_3_5],['O 4.5',p.over_under.over_4_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+      '</div>' +
+      '<div class="mcard">' +
+        '<div class="mcard-title">' + home.split(' ')[0] + ' Goals</div>' +
+        [['O 0.5',p.home_team_goals.over_0_5],['O 1.5',p.home_team_goals.over_1_5],['O 2.5',p.home_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+        '<div class="mcard-title" style="margin-top:8px">' + away.split(' ')[0] + ' Goals</div>' +
+        [['O 0.5',p.away_team_goals.over_0_5],['O 1.5',p.away_team_goals.over_1_5],['O 2.5',p.away_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+      '</div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">Correct Score</div>
-    <div class="scores-wrap">
-      ${scores.map((s,i)=>`<div class="sc-chip ${i===0?'top':''}"><div class="sc-val">${s.score}</div><div class="sc-pct">${pct(s.probability)}</div></div>`).join('')}
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Correct Score</div>' +
+    '<div class="scores-wrap">' +
+      scores.map(function(s,i){ return '<div class="sc-chip ' + (i===0?'top':'') + '"><div class="sc-val">' + s.score + '</div><div class="sc-pct">' + pct(s.probability) + '</div></div>'; }).join('') +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">Recent Form (${hf.matches_available} matches)</div>
-    <div class="form-section">
-      <div class="form-row"><div class="form-team-label">${home.split(' ')[0]}</div><div class="form-dots">${formDots(hf)}</div></div>
-      <div class="form-row"><div class="form-team-label">${away.split(' ')[0]}</div><div class="form-dots">${formDots(af)}</div></div>
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Recent Form (' + hf.matches_available + ' matches)</div>' +
+    '<div class="form-section">' +
+      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(hf) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(af) + '</div></div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">Head to Head · ${h2hTotal} matches</div>
-    <div class="h2h-section">
-      <div class="h2h-summary">
-        <div class="h2h-box"><div class="h2h-box-num h">${h2hH}</div><div class="h2h-box-lbl">${home.split(' ')[0]}</div></div>
-        <div class="h2h-box"><div class="h2h-box-num d">${h2hD}</div><div class="h2h-box-lbl">Draws</div></div>
-        <div class="h2h-box"><div class="h2h-box-num a">${h2hA}</div><div class="h2h-box-lbl">${away.split(' ')[0]}</div></div>
-      </div>
-      <div class="result-bars">
-        <div class="rbar-row"><div class="rbar-label" style="font-size:10px">Avg Goals</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:${Math.min(100,((h2hF.avg_total_goals||0)/5)*100)}%"></div></div><div class="rbar-pct">${(h2hF.avg_total_goals||0).toFixed(1)}</div></div>
-        <div class="rbar-row"><div class="rbar-label" style="font-size:10px">BTTS Rate</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:${pct(h2hF.btts_rate||0)}"></div></div><div class="rbar-pct">${pct(h2hF.btts_rate||0)}</div></div>
-        <div class="rbar-row"><div class="rbar-label" style="font-size:10px">O2.5 Rate</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:${pct(h2hF.over_2_5_rate||0)}"></div></div><div class="rbar-pct">${pct(h2hF.over_2_5_rate||0)}</div></div>
-      </div>
-    </div>
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Head to Head &middot; ' + h2hTotal + ' matches</div>' +
+    '<div class="h2h-section">' +
+      '<div class="h2h-summary">' +
+        '<div class="h2h-box"><div class="h2h-box-num h">' + h2hH + '</div><div class="h2h-box-lbl">' + home.split(' ')[0] + '</div></div>' +
+        '<div class="h2h-box"><div class="h2h-box-num d">' + h2hD + '</div><div class="h2h-box-lbl">Draws</div></div>' +
+        '<div class="h2h-box"><div class="h2h-box-num a">' + h2hA + '</div><div class="h2h-box-lbl">' + away.split(' ')[0] + '</div></div>' +
+      '</div>' +
+      '<div class="result-bars">' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">Avg Goals</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:' + Math.min(100,((h2hF.avg_total_goals||0)/5)*100) + '%"></div></div><div class="rbar-pct">' + (h2hF.avg_total_goals||0).toFixed(1) + '</div></div>' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">BTTS Rate</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:' + pct(h2hF.btts_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.btts_rate||0) + '</div></div>' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">O2.5 Rate</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:' + pct(h2hF.over_2_5_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.over_2_5_rate||0) + '</div></div>' +
+      '</div>' +
+    '</div>' +
 
-    <div class="sdiv"></div>
-    <div class="stitle">AI Analysis</div>
-    <div class="ai-section">
-      <div class="ai-card">
-        <div id="ai-content">
-          <div class="ai-thinking"><div class="ai-spinner"></div> Groq is analysing this match...</div>
-        </div>
-      </div>
-    </div>
-  `;
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">AI Analysis</div>' +
+    '<div class="ai-section">' +
+      '<div class="ai-card">' +
+        '<div id="ai-content">' +
+          '<div class="ai-thinking"><div class="ai-spinner"></div> Groq is analysing this match...</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
 }
 
 function closeSheet() { document.getElementById('overlay').classList.remove('open'); }
