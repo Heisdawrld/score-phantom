@@ -1,114 +1,205 @@
-import db from '../config/database.js';
 import axios from 'axios';
-import dotenv from 'dotenv';
-dotenv.config();
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
-const APIFY_ACTOR_ID = process.env.APIFY_ACTOR_ID;
+// SofaScore unofficial API - no key needed
+const BASE = 'https://api.sofascore.com/api/v1';
+
+const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.sofascore.com/',
+    'Origin': 'https://www.sofascore.com',
+};
 
 function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(r => setTimeout(r, ms));
 }
 
-export async function runApifyActor(matchUrl) {
-    const runRes = await axios.post(
-        `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${APIFY_TOKEN}`,
-        { matchUrl },
-        { headers: { 'Content-Type': 'application/json' } }
-    );
-
-    const runId = runRes.data.data.id;
-    let status = 'RUNNING';
-    let attempts = 0;
-
-    while (status === 'RUNNING' || status === 'READY') {
-        await sleep(4000);
-        const statusRes = await axios.get(
-            `https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`
-        );
-        status = statusRes.data.data.status;
-        attempts++;
-        if (attempts > 30) throw new Error(`Actor run timed out for ${matchUrl}`);
-    }
-
-    if (status !== 'SUCCEEDED') {
-        throw new Error(`Actor run failed with status ${status} for ${matchUrl}`);
-    }
-
-    const datasetId = runRes.data.data.defaultDatasetId;
-    const resultRes = await axios.get(
-        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`
-    );
-
-    return resultRes.data[0] || null;
+async function get(path) {
+    await sleep(400 + Math.random() * 300); // polite delay
+    const res = await axios.get(`${BASE}${path}`, { headers, timeout: 15000 });
+    return res.data;
 }
 
-function parseScore(scoreStr) {
-    if (!scoreStr || !scoreStr.includes('-')) return { home: null, away: null };
-    const parts = scoreStr.split('-');
-    const home = parseInt(parts[0], 10);
-    const away = parseInt(parts[1], 10);
-    if (isNaN(home) || isNaN(away)) return { home: null, away: null };
-    return { home, away };
-}
+// ─── League IDs for SofaScore ───────────────────────────────────────────────
+export const LEAGUE_IDS = {
+    // Major
+    'Premier League':           17,
+    'La Liga':                  8,
+    'Serie A':                  23,
+    'Bundesliga':               35,
+    'Ligue 1':                  34,
+    'Champions League':         7,
+    'Europa League':            679,
+    'Conference League':        17015,
+    // English
+    'Championship':             18,
+    'League One':               19,
+    'League Two':               20,
+    // Others you listed
+    'Scottish Premiership':     36,
+    'Eredivisie':               37,       // Netherlands
+    'MLS':                      242,
+    'Superliga':                1196,     // Denmark
+    'Primeira Liga':            238,      // Portugal
+    'Saudi Pro League':         955,
+    'Super Liga':               406,      // Slovenia
+    'Super League':             1067,     // Switzerland
+    'Süper Lig':                52,       // Turkey
+    'Eliteserien':              751,      // Norway
+    'Liga MX':                  352,      // Mexico
+    'Serie A Brazil':           325,
+    'Argentinian Primera':      155,
+};
 
-export async function storeEnrichment(fixtureId, data) {
-    // Clear existing historical matches
-    await db.execute({
-        sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
-        args: [fixtureId],
-    });
-
-    const sections = [
-        { key: 'h2h', type: 'h2h' },
-        { key: 'homeForm', type: 'home_form' },
-        { key: 'awayForm', type: 'away_form' },
-    ];
-
-    for (const section of sections) {
-        const matches = data[section.key] || [];
-        for (const match of matches) {
-            if (
-                match.home === data.homeTeam &&
-                match.away === data.awayTeam &&
-                section.type !== 'h2h'
-            ) continue;
-
-            const { home, away } = parseScore(match.score);
-
-            await db.execute({
-                sql: `INSERT INTO historical_matches (fixture_id, type, date, home_team, away_team, home_goals, away_goals) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                args: [fixtureId, section.type, match.date || null, match.home || null, match.away || null, home, away],
-            });
+// ─── Fetch upcoming fixtures for a league ───────────────────────────────────
+export async function fetchFixturesByLeague(leagueId, season) {
+    try {
+        // Get current season if not specified
+        if (!season) {
+            const info = await get(`/unique-tournament/${leagueId}/seasons`);
+            season = info.seasons[0].id;
         }
-    }
 
-    // Store odds if available
-    if (data.odds) {
-        await db.execute({
-            sql: `INSERT OR REPLACE INTO fixture_odds (fixture_id, home, draw, away, btts_yes, btts_no, over_under) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            args: [
-                fixtureId,
-                data.odds.home || null,
-                data.odds.draw || null,
-                data.odds.away || null,
-                data.odds.btts_yes || null,
-                data.odds.btts_no || null,
-                data.odds.over_under ? JSON.stringify(data.odds.over_under) : null,
-            ],
-        });
-    }
+        const data = await get(`/unique-tournament/${leagueId}/season/${season}/events/next/0`);
+        const events = data.events || [];
 
-    // Mark fixture as enriched
-    await db.execute({
-        sql: `UPDATE fixtures SET enriched = 1 WHERE id = ?`,
-        args: [fixtureId],
-    });
+        return events.map(e => ({
+            match_id:           String(e.id),
+            home_team_id:       String(e.homeTeam.id),
+            home_team_name:     e.homeTeam.name,
+            home_team_short_name: e.homeTeam.shortName || e.homeTeam.nameCode || '',
+            away_team_id:       String(e.awayTeam.id),
+            away_team_name:     e.awayTeam.name,
+            away_team_short_name: e.awayTeam.shortName || e.awayTeam.nameCode || '',
+            tournament_id:      String(leagueId),
+            tournament_name:    e.tournament?.name || e.season?.name || '',
+            category_name:      e.tournament?.category?.name || '',
+            tournament_url:     '',
+            match_date:         new Date(e.startTimestamp * 1000).toISOString(),
+            match_url:          String(e.id), // we store sofascore event ID as match_url
+        }));
+    } catch (err) {
+        console.error(`[SofaScore] Failed to fetch league ${leagueId}:`, err.message);
+        return [];
+    }
 }
 
-export async function enrichFixture(fixture) {
-    const data = await runApifyActor(fixture.match_url);
-    if (!data) throw new Error('No data returned from Apify');
-    await storeEnrichment(fixture.id, data);
-    return data;
+// ─── Fetch all configured leagues ───────────────────────────────────────────
+export async function fetchAllFixtures(leagueNames = null) {
+    const leagues = leagueNames
+        ? leagueNames.map(n => ({ name: n, id: LEAGUE_IDS[n] })).filter(l => l.id)
+        : Object.entries(LEAGUE_IDS).map(([name, id]) => ({ name, id }));
+
+    const allFixtures = [];
+    for (const league of leagues) {
+        console.log(`[SofaScore] Fetching ${league.name}...`);
+        const fixtures = await fetchFixturesByLeague(league.id);
+        allFixtures.push(...fixtures);
+        await sleep(500);
+    }
+
+    return allFixtures;
+}
+
+// ─── Fetch H2H for a SofaScore event ────────────────────────────────────────
+async function fetchH2H(eventId) {
+    try {
+        const data = await get(`/event/${eventId}/h2h`);
+        const toMatch = (e) => ({
+            home: e.homeTeam?.name || '',
+            away: e.awayTeam?.name || '',
+            score: e.homeScore?.current != null
+                ? `${e.homeScore.current}-${e.awayScore.current}`
+                : null,
+            date: e.startTimestamp
+                ? new Date(e.startTimestamp * 1000).toISOString().split('T')[0]
+                : null,
+        });
+
+        const h2h = (data.events || []).slice(0, 10).map(toMatch);
+        return h2h;
+    } catch (err) {
+        console.error(`[SofaScore] H2H failed for ${eventId}:`, err.message);
+        return [];
+    }
+}
+
+// ─── Fetch last N matches for a team ────────────────────────────────────────
+async function fetchTeamForm(teamId, count = 7) {
+    try {
+        const data = await get(`/team/${teamId}/events/last/0`);
+        const events = (data.events || []).slice(0, count);
+
+        return events.map(e => ({
+            home: e.homeTeam?.name || '',
+            away: e.awayTeam?.name || '',
+            score: e.homeScore?.current != null
+                ? `${e.homeScore.current}-${e.awayScore.current}`
+                : null,
+            date: e.startTimestamp
+                ? new Date(e.startTimestamp * 1000).toISOString().split('T')[0]
+                : null,
+        }));
+    } catch (err) {
+        console.error(`[SofaScore] Form failed for team ${teamId}:`, err.message);
+        return [];
+    }
+}
+
+// ─── Fetch standings for the event's tournament ──────────────────────────────
+async function fetchStandings(tournamentId, seasonId) {
+    try {
+        const data = await get(`/unique-tournament/${tournamentId}/season/${seasonId}/standings/total`);
+        const rows = data.standings?.[0]?.rows || [];
+        return rows.map(r => ({
+            position: r.position,
+            team: r.team?.name,
+            played: r.matches,
+            wins: r.wins,
+            draws: r.draws,
+            losses: r.losses,
+            goalsFor: r.scoresFor,
+            goalsAgainst: r.scoresAgainst,
+            points: r.points,
+        }));
+    } catch (err) {
+        console.error(`[SofaScore] Standings failed:`, err.message);
+        return [];
+    }
+}
+
+// ─── Main enrichment function — replaces runApifyActor ──────────────────────
+// eventId = the sofascore event ID (stored as match_url in your DB)
+// homeTeamId / awayTeamId = stored in your teams table
+export async function fetchMatchData(eventId, homeTeamId, awayTeamId) {
+    // Get event details first to get tournament/season info
+    let tournamentId = null;
+    let seasonId = null;
+
+    try {
+        const eventData = await get(`/event/${eventId}`);
+        const event = eventData.event;
+        tournamentId = event?.tournament?.uniqueTournament?.id;
+        seasonId = event?.season?.id;
+    } catch (err) {
+        console.error(`[SofaScore] Event fetch failed for ${eventId}:`, err.message);
+    }
+
+    const [h2h, homeForm, awayForm, standings] = await Promise.all([
+        fetchH2H(eventId),
+        fetchTeamForm(homeTeamId),
+        fetchTeamForm(awayTeamId),
+        tournamentId && seasonId
+            ? fetchStandings(tournamentId, seasonId)
+            : Promise.resolve([]),
+    ]);
+
+    return {
+        h2h,
+        homeForm,
+        awayForm,
+        standings,
+        odds: null, // odds not available from SofaScore freely; handled separately if needed
+    };
 }
