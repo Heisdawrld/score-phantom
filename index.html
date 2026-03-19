@@ -195,6 +195,9 @@ main { padding-bottom:80px; }
 .ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
 .ai-label::before { content:‘✦’; font-size:10px; color:var(–accent); }
 .ai-insight { font-size:13px; color:var(–text); line-height:1.6; margin-bottom:10px; }
+.ai-recommended{background:linear-gradient(135deg,#7c3aed22,#4f46e522);border:1px solid #7c3aed66;border-radius:12px;padding:14px 16px;margin:12px 0;}
+.ai-rec-label{font-size:10px;font-weight:700;letter-spacing:1px;color:#a78bfa;margin-bottom:6px;}
+.ai-rec-value{font-size:14px;color:#e2e8f0;line-height:1.5;font-weight:500;}
 .ai-warning { font-size:11px; color:var(–yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
 .ai-picks-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
 .ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(–accent2); font-weight:500; }
@@ -432,6 +435,7 @@ function updateAI(explain) {
   if (!el) return;
   const insight = explain.top_insight || '';
   const warning = explain.data_warning || '';
+  const recommended = explain.recommended_bet || '';
   const picks = [
     explain.match_result ? `Result: ${explain.match_result}` : null,
     explain.goals ? `Goals: ${explain.goals}` : null,
@@ -442,6 +446,12 @@ function updateAI(explain) {
   el.innerHTML = `
     <div class="ai-label">Groq Intelligence</div>
     ${insight ? `<div class="ai-insight">${insight}</div>` : ''}
+    ${recommended ? `
+      <div class="ai-recommended">
+        <div class="ai-rec-label">⚡ RECOMMENDED BET</div>
+        <div class="ai-rec-value">${recommended}</div>
+      </div>
+    ` : ''}
     ${picks.length ? `<div class="ai-picks-row">${picks.map(x=>`<div class="ai-pick-tag">${x}</div>`).join('')}</div>` : ''}
     ${warning ? `<div class="ai-warning">⚠ ${warning}</div>` : ''}
   `;
