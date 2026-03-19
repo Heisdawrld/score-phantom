@@ -6,46 +6,36 @@ import { enrichFixture } from '../enrichment/enrichOne.js';
 
 const router = Router();
 
+const ACTIVE_LEAGUES = [
+    'Premier League', 'Championship', 'League One', 'League Two',
+    'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Eredivisie',
+    'Scottish Premiership', 'MLS', 'Superliga', 'Primeira Liga',
+    'Saudi Pro League', 'Süper Lig', 'Eliteserien', 'Liga MX',
+    'Champions League', 'Europa League',
+];
+
 router.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'ScorePhantom API' });
 });
 
-router.get('/seed', async (req, res) => {
+router.get('/reseed', async (req, res) => {
     try {
-        const { readFileSync } = await import('fs');
-        const { resolve } = await import('path');
-
-        const filePath = resolve('./fixtures.json');
-        const fixtures = JSON.parse(readFileSync(filePath, 'utf-8'));
-
+        const { fetchAllFixtures } = await import('../services/sofascore.js');
+        res.json({ message: 'Seeding started, check Render logs...' });
+        const fixtures = await fetchAllFixtures(ACTIVE_LEAGUES);
         let inserted = 0;
-
         for (const f of fixtures) {
             await db.batch([
-                {
-                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
-                    args: [f.home_team_id, f.home_team_name, f.home_team_short_name || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
-                    args: [f.away_team_id, f.away_team_name, f.away_team_short_name || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
-                    args: [f.tournament_id, f.tournament_name, f.category_name || '', f.tournament_url || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO fixtures (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    args: [f.match_id, f.home_team_id, f.away_team_id, f.tournament_id, f.home_team_name, f.away_team_name, f.tournament_name, f.category_name || '', f.match_date, f.match_url],
-                },
+                { sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)', args: [f.home_team_id, f.home_team_name, f.home_team_short_name || ''] },
+                { sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)', args: [f.away_team_id, f.away_team_name, f.away_team_short_name || ''] },
+                { sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)', args: [f.tournament_id, f.tournament_name, f.category_name || '', ''] },
+                { sql: 'INSERT OR IGNORE INTO fixtures (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', args: [f.match_id, f.home_team_id, f.away_team_id, f.tournament_id, f.home_team_name, f.away_team_name, f.tournament_name, f.category_name || '', f.match_date, f.match_url] },
             ]);
             inserted++;
         }
-
-        res.json({ success: true, processed: fixtures.length, inserted });
+        console.log(`[Reseed] Complete. Inserted: ${inserted}`);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Seed failed', detail: err.message });
+        console.error('[Reseed] Failed:', err.message);
     }
 });
 
