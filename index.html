@@ -135,6 +135,7 @@ main { padding-bottom:80px; }
 .tp-conf.HIGH { background:rgba(16,185,129,0.15); color:var(–green2); border:1px solid rgba(16,185,129,0.3); }
 .tp-conf.MEDIUM { background:rgba(245,158,11,0.15); color:var(–yellow); border:1px solid rgba(245,158,11,0.3); }
 .tp-conf.LOW { background:rgba(109,40,217,0.15); color:var(–accent); border:1px solid rgba(109,40,217,0.3); }
+.tp-conf.VALUE { background:rgba(124,58,237,0.25); color:#a78bfa; border:1px solid rgba(124,58,237,0.5); }
 
 .result-bars { padding:0 16px; }
 .rbar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
@@ -455,6 +456,33 @@ function updateAI(explain) {
     ${picks.length ? `<div class="ai-picks-row">${picks.map(x=>`<div class="ai-pick-tag">${x}</div>`).join('')}</div>` : ''}
     ${warning ? `<div class="ai-warning">⚠ ${warning}</div>` : ''}
   `;
+
+  // Update top recommendation card with Groq's final pick
+  const topPick = document.getElementById('top-pick-card');
+  if (!topPick) return;
+
+  if (recommended && recommended.toLowerCase() !== 'no value found') {
+    // Extract bet name from recommended string (everything before ' @' or ' —' or ' -')
+    const betMatch = recommended.match(/^([^@—\-]+)/);
+    const betLabel = betMatch ? betMatch[1].trim() : recommended.split(' ').slice(0,3).join(' ');
+    topPick.innerHTML = `
+      <div class="tp-label">⚡ Final Recommendation</div>
+      <div class="tp-value">${betLabel}</div>
+      <div class="tp-meta">
+        <div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div>
+        <div class="tp-conf HIGH">VALUE BET</div>
+      </div>
+    `;
+  } else if (recommended.toLowerCase().includes('no value')) {
+    topPick.innerHTML = `
+      <div class="tp-label">⚡ Final Recommendation</div>
+      <div class="tp-value" style="font-size:18px">No Value Found</div>
+      <div class="tp-meta">
+        <div class="tp-prob" style="font-size:12px;color:#94a3b8">Skip this match</div>
+        <div class="tp-conf LOW">SKIP</div>
+      </div>
+    `;
+  }
 }
 
 function renderSheet(d, explain, home, away, league, country) {
@@ -497,7 +525,7 @@ function renderSheet(d, explain, home, away, league, country) {
       <div class="sheet-close" onclick="closeSheet()">✕</div>
     </div>
 
-    <div class="top-pick">
+    <div class="top-pick" id="top-pick-card">
       <div class="tp-label">★ Top Recommendation</div>
       <div class="tp-value">${top.label}</div>
       <div class="tp-meta">
