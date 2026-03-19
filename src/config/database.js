@@ -7,7 +7,6 @@ const db = createClient({
   authToken: process.env.TURSO_TOKEN,
 });
 
-// Create tables
 await db.batch([
   `CREATE TABLE IF NOT EXISTS teams (
     id TEXT PRIMARY KEY,
@@ -43,6 +42,17 @@ await db.batch([
     away_team TEXT,
     home_goals INTEGER,
     away_goals INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS fixture_odds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fixture_id TEXT NOT NULL UNIQUE,
+    home REAL,
+    draw REAL,
+    away REAL,
+    btts_yes REAL,
+    btts_no REAL,
+    over_under TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS predictions (
