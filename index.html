@@ -1,230 +1,596 @@
-import { Router } from 'express';
-import db from '../config/database.js';
-import { predict } from '../predictions/poissonEngine.js';
-import { explainPrediction } from '../explanations/groqExplainer.js';
-import { enrichFixture } from '../enrichment/enrichOne.js';
+<!DOCTYPE html>
 
-const router = Router();
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ScorePhantom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a12;
+  --surface: #111120;
+  --surface2: #181828;
+  --surface3: #1f1f35;
+  --border: #252540;
+  --border2: #2e2e50;
+  --purple: #6d28d9;
+  --purple2: #7c3aed;
+  --purple3: #8b5cf6;
+  --accent: #a78bfa;
+  --accent2: #c4b5fd;
+  --green: #10b981;
+  --green2: #34d399;
+  --red: #f43f5e;
+  --yellow: #f59e0b;
+  --text: #eeeeff;
+  --text2: #9090b8;
+  --text3: #55557a;
+  --text4: #33334a;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; font-size:14px; min-height:100vh; overflow-x:hidden; }
 
-router.get('/health', (req, res) => {
-    res.json({ status: 'ok', service: 'ScorePhantom API' });
-});
+.header { position:sticky; top:0; z-index:50; background:rgba(10,10,18,0.97); backdrop-filter:blur(20px); border-bottom:1px solid var(–border); }
+.header-top { display:flex; align-items:center; justify-content:space-between; padding:0 14px; height:52px; }
+.logo { display:flex; align-items:center; gap:9px; }
+.logo-mark { width:32px; height:32px; background:linear-gradient(135deg,var(–purple2),var(–accent)); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 0 16px rgba(124,58,237,0.4); }
+.logo-text { font-family:‘Barlow Condensed’,sans-serif; font-weight:700; font-size:20px; letter-spacing:0.5px; }
+.logo-text span { color:var(–accent); }
+.live-pill { display:flex; align-items:center; gap:5px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:600; color:var(–green2); letter-spacing:1px; }
+.live-dot { width:5px; height:5px; background:var(–green2); border-radius:50%; animation:blink 1.4s ease infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-router.get('/seed', async (req, res) => {
-    try {
-        const { readFileSync } = await import('fs');
-        const { resolve } = await import('path');
+.date-bar { display:flex; overflow-x:auto; scrollbar-width:none; border-top:1px solid var(–border); }
+.date-bar::-webkit-scrollbar { display:none; }
+.date-tab { flex-shrink:0; padding:10px 16px; font-size:12px; font-weight:600; color:var(–text3); cursor:pointer; border-bottom:2px solid transparent; text-align:center; transition:all .15s; }
+.date-tab:hover { color:var(–text2); }
+.date-tab.active { color:var(–accent); border-bottom-color:var(–purple2); }
+.date-tab .dn { display:block; font-size:9px; font-weight:500; letter-spacing:1px; text-transform:uppercase; }
+.date-tab .dd { display:block; font-size:16px; font-weight:700; }
 
-        const filePath = resolve('./fixtures.json');
-        const fixtures = JSON.parse(readFileSync(filePath, 'utf-8'));
+.search-bar { padding:10px 14px; border-top:1px solid var(–border); }
+.search-inner { display:flex; align-items:center; gap:8px; background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:8px 12px; transition:border-color .15s; }
+.search-inner:focus-within { border-color:var(–purple); }
+.search-inner input { flex:1; background:none; border:none; outline:none; color:var(–text); font-family:‘Barlow’,sans-serif; font-size:13px; }
+.search-inner input::placeholder { color:var(–text4); }
 
-        let inserted = 0;
+.filter-row { display:flex; gap:6px; padding:0 14px 10px; overflow-x:auto; scrollbar-width:none; }
+.filter-row::-webkit-scrollbar { display:none; }
+.filter-tag { flex-shrink:0; padding:5px 12px; border-radius:6px; border:1px solid var(–border); background:var(–surface2); color:var(–text2); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
+.filter-tag:hover { border-color:var(–purple); color:var(–accent); }
+.filter-tag.active { background:rgba(109,40,217,0.2); border-color:var(–purple2); color:var(–accent2); }
 
-        for (const f of fixtures) {
-            await db.batch([
-                {
-                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
-                    args: [f.home_team_id, f.home_team_name, f.home_team_short_name || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
-                    args: [f.away_team_id, f.away_team_name, f.away_team_short_name || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
-                    args: [f.tournament_id, f.tournament_name, f.category_name || '', f.tournament_url || ''],
-                },
-                {
-                    sql: 'INSERT OR IGNORE INTO fixtures (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    args: [f.match_id, f.home_team_id, f.away_team_id, f.tournament_id, f.home_team_name, f.away_team_name, f.tournament_name, f.category_name || '', f.match_date, f.match_url],
-                },
-            ]);
-            inserted++;
-        }
+main { padding-bottom:80px; }
 
-        res.json({ success: true, processed: fixtures.length, inserted });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Seed failed', detail: err.message });
-    }
-});
+.league-group { margin-bottom:2px; }
+.league-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(–surface); border-top:1px solid var(–border); border-bottom:1px solid var(–border); cursor:pointer; user-select:none; }
+.league-header-left { display:flex; align-items:center; gap:8px; }
+.league-flag { width:20px; font-size:14px; flex-shrink:0; }
+.league-info { display:flex; flex-direction:column; gap:1px; }
+.league-country { font-size:9px; font-weight:700; color:var(–text3); letter-spacing:1px; text-transform:uppercase; }
+.league-name { font-size:13px; font-weight:700; color:var(–text); }
+.league-header-right { display:flex; align-items:center; gap:8px; }
+.league-count { font-size:10px; color:var(–text3); background:var(–surface3); padding:2px 7px; border-radius:10px; }
+.league-chevron { color:var(–text3); font-size:12px; transition:transform .2s; }
+.league-group.collapsed .league-chevron { transform:rotate(-90deg); }
+.league-group.collapsed .league-fixtures { display:none; }
 
-router.get('/fixtures', async (req, res) => {
-    try {
-        const { date, tournament, enriched, limit = 50, offset = 0 } = req.query;
+.fixture-row { display:flex; align-items:center; padding:0 14px; height:52px; border-bottom:1px solid var(–border); background:var(–bg); cursor:pointer; transition:background .12s; gap:10px; position:relative; }
+.fixture-row:hover { background:var(–surface); }
+.fixture-row::before { content:’’; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .15s; }
+.fixture-row:hover::before { background:var(–purple2); }
+.fixture-row.enriched::before { background:linear-gradient(180deg,var(–purple2),var(–accent)); }
 
-        let query = `SELECT * FROM fixtures WHERE 1=1`;
-        const args = [];
+.fixture-time-col { width:42px; flex-shrink:0; text-align:center; }
+.fixture-time { font-size:12px; font-weight:600; color:var(–text2); }
 
-        if (date) {
-            query += ` AND match_date LIKE ?`;
-            args.push(`%${date}%`);
-        }
-        if (tournament) {
-            query += ` AND tournament_name LIKE ?`;
-            args.push(`%${tournament}%`);
-        }
-        if (enriched !== undefined) {
-            query += ` AND enriched = ?`;
-            args.push(enriched === 'true' ? 1 : 0);
-        }
+.fixture-teams-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.fixture-team-row { display:flex; align-items:center; gap:7px; }
+.team-dot { width:6px; height:6px; border-radius:50%; background:var(–surface3); flex-shrink:0; }
+.team-dot.home { background:var(–purple3); }
+.team-dot.away { background:var(–accent); }
+.team-name-text { font-size:13px; font-weight:600; color:var(–text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-        query += ` ORDER BY match_date ASC LIMIT ? OFFSET ?`;
-        args.push(parseInt(limit), parseInt(offset));
+.fixture-right-col { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.predict-arrow { font-size:11px; color:var(–accent); font-weight:600; }
+.analysed-dot { width:6px; height:6px; border-radius:50%; background:var(–purple2); box-shadow:0 0 6px rgba(124,58,237,0.6); }
 
-        const result = await db.execute({ sql: query, args });
-        res.json({ total: result.rows.length, fixtures: result.rows });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch fixtures' });
-    }
-});
+.page-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; height:60vh; gap:14px; }
+.spinner { width:36px; height:36px; border:2px solid var(–border2); border-top-color:var(–purple2); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+.loading-label { font-size:11px; letter-spacing:2px; color:var(–text3); text-transform:uppercase; }
+.empty { text-align:center; padding:60px 20px; color:var(–text3); font-size:12px; letter-spacing:1px; }
 
-router.get('/fixtures/:id', async (req, res) => {
-    try {
-        const result = await db.execute({
-            sql: `SELECT * FROM fixtures WHERE id = ?`,
-            args: [req.params.id],
-        });
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:200; display:none; align-items:flex-end; }
+.overlay.open { display:flex; }
+.sheet { width:100%; max-width:520px; margin:0 auto; background:var(–surface); border-radius:20px 20px 0 0; border:1px solid var(–border2); border-bottom:none; max-height:94vh; overflow-y:auto; scrollbar-width:none; animation:sheetUp .28s cubic-bezier(.32,.72,0,1); }
+.sheet::-webkit-scrollbar { display:none; }
+@keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.sheet-handle { width:36px; height:4px; background:var(–border2); border-radius:2px; margin:10px auto 0; }
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Fixture not found' });
-        }
+.sheet-header { padding:14px 16px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.sheet-match-info { flex:1; }
+.sheet-league-tag { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(–accent); margin-bottom:6px; }
+.sheet-teams { display:flex; align-items:center; gap:10px; }
+.sheet-team { flex:1; font-family:‘Barlow Condensed’,sans-serif; font-size:20px; font-weight:700; color:var(–text); line-height:1.1; }
+.sheet-team.away { text-align:right; }
+.sheet-vs { font-size:11px; color:var(–text3); font-weight:600; padding:4px 8px; border:1px solid var(–border); border-radius:6px; flex-shrink:0; }
+.sheet-close { width:30px; height:30px; border-radius:50%; background:var(–surface3); border:1px solid var(–border); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(–text2); font-size:14px; flex-shrink:0; transition:all .15s; }
+.sheet-close:hover { border-color:var(–purple); color:var(–accent); }
 
-        const fixture = result.rows[0];
+.sdiv { height:1px; background:var(–border); margin:14px 16px; }
+.stitle { padding:0 16px 8px; font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(–text3); }
 
-        const history = await db.execute({
-            sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`,
-            args: [req.params.id],
-        });
+.top-pick { margin:14px 16px 0; background:linear-gradient(135deg,rgba(109,40,217,0.25),rgba(167,139,250,0.08)); border:1px solid rgba(109,40,217,0.5); border-radius:14px; padding:14px; position:relative; overflow:hidden; }
+.top-pick::after { content:’’; position:absolute; top:-20px; right:-20px; width:80px; height:80px; background:radial-gradient(circle,rgba(167,139,250,0.15),transparent 70%); pointer-events:none; }
+.tp-label { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(–accent); margin-bottom:5px; }
+.tp-value { font-family:‘Barlow Condensed’,sans-serif; font-size:26px; font-weight:700; color:var(–text); line-height:1; margin-bottom:8px; }
+.tp-meta { display:flex; align-items:center; justify-content:space-between; }
+.tp-prob { font-size:12px; color:var(–text2); }
+.tp-prob strong { color:var(–accent2); font-size:15px; }
+.tp-conf { font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 10px; border-radius:20px; }
+.tp-conf.HIGH { background:rgba(16,185,129,0.15); color:var(–green2); border:1px solid rgba(16,185,129,0.3); }
+.tp-conf.MEDIUM { background:rgba(245,158,11,0.15); color:var(–yellow); border:1px solid rgba(245,158,11,0.3); }
+.tp-conf.LOW { background:rgba(109,40,217,0.15); color:var(–accent); border:1px solid rgba(109,40,217,0.3); }
+.tp-conf.VALUE { background:rgba(124,58,237,0.25); color:#a78bfa; border:1px solid rgba(124,58,237,0.5); }
 
-        const h2h = history.rows.filter((m) => m.type === 'h2h');
-        const homeForm = history.rows.filter((m) => m.type === 'home_form');
-        const awayForm = history.rows.filter((m) => m.type === 'away_form');
+.result-bars { padding:0 16px; }
+.rbar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.rbar-label { width:56px; font-size:11px; color:var(–text2); flex-shrink:0; font-weight:500; }
+.rbar-track { flex:1; height:5px; background:var(–surface3); border-radius:3px; overflow:hidden; }
+.rbar-fill { height:100%; border-radius:3px; transition:width .5s ease; }
+.fill-home { background:var(–purple3); }
+.fill-draw { background:var(–text3); }
+.fill-away { background:var(–accent); }
+.rbar-pct { width:34px; text-align:right; font-size:12px; font-weight:600; color:var(–text); flex-shrink:0; }
 
-        res.json({ fixture, history: { h2h, homeForm, awayForm } });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch fixture' });
-    }
-});
+.stats-row { display:flex; gap:8px; padding:0 16px; }
+.stat-box { flex:1; background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:10px 8px; text-align:center; }
+.stat-num { font-family:‘Barlow Condensed’,sans-serif; font-size:20px; font-weight:700; color:var(–accent); line-height:1; }
+.stat-lbl { font-size:9px; color:var(–text3); font-weight:600; letter-spacing:.8px; margin-top:3px; text-transform:uppercase; }
 
-router.get('/predict/:fixtureId', async (req, res) => {
-    try {
-        const result = await db.execute({
-            sql: `SELECT * FROM fixtures WHERE id = ?`,
-            args: [req.params.fixtureId],
-        });
+.markets-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px; }
+.mcard { background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:10px; }
+.mcard-title { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–text3); margin-bottom:8px; }
+.mrow { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.mrow:last-child { margin-bottom:0; }
+.mkey { font-size:11px; color:var(–text2); }
+.mval { font-size:12px; font-weight:600; }
+.mval.h { color:var(–green2); }
+.mval.m { color:var(–yellow); }
+.mval.l { color:var(–text2); }
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Fixture not found' });
-        }
+.scores-wrap { padding:0 16px; display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.sc-chip { background:var(–surface2); border:1px solid var(–border); border-radius:8px; padding:8px 4px; text-align:center; }
+.sc-chip.top { background:rgba(109,40,217,0.15); border-color:rgba(109,40,217,0.5); }
+.sc-val { font-family:‘Barlow Condensed’,sans-serif; font-size:16px; font-weight:700; color:var(–text); }
+.sc-chip.top .sc-val { color:var(–accent2); }
+.sc-pct { font-size:9px; color:var(–text3); margin-top:1px; }
 
-        const fixture = result.rows[0];
+.form-section { padding:0 16px; }
+.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.form-team-label { width:80px; font-size:11px; font-weight:600; color:var(–text2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.form-dots { display:flex; gap:4px; }
+.fdot { width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
+.fdot.W { background:rgba(16,185,129,0.15); color:var(–green2); border:1px solid rgba(16,185,129,0.25); }
+.fdot.D { background:rgba(245,158,11,0.12); color:var(–yellow); border:1px solid rgba(245,158,11,0.2); }
+.fdot.L { background:rgba(244,63,94,0.12); color:var(–red); border:1px solid rgba(244,63,94,0.2); }
 
-        if (!fixture.enriched) {
-            await enrichFixture(fixture);
-        }
+.h2h-section { padding:0 16px; }
+.h2h-summary { display:flex; gap:6px; margin-bottom:12px; }
+.h2h-box { flex:1; background:var(–surface2); border:1px solid var(–border); border-radius:8px; padding:8px 6px; text-align:center; }
+.h2h-box-num { font-family:‘Barlow Condensed’,sans-serif; font-size:18px; font-weight:700; }
+.h2h-box-num.h { color:var(–purple3); }
+.h2h-box-num.d { color:var(–text2); }
+.h2h-box-num.a { color:var(–accent); }
+.h2h-box-lbl { font-size:9px; color:var(–text3); font-weight:600; letter-spacing:.8px; margin-top:2px; }
 
-        const oddsResult = await db.execute({
-            sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`,
-            args: [fixture.id],
-        });
-        const oddsRow = oddsResult.rows[0] || null;
-        const odds = oddsRow ? {
-            home: oddsRow.home,
-            draw: oddsRow.draw,
-            away: oddsRow.away,
-            btts_yes: oddsRow.btts_yes,
-            btts_no: oddsRow.btts_no,
-            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
-        } : null;
+.ai-section { padding:0 16px 24px; }
+.ai-card { background:var(–surface2); border:1px solid var(–border2); border-radius:12px; padding:14px; position:relative; overflow:hidden; }
+.ai-card::before { content:’’; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(–purple),var(–accent)); }
+.ai-thinking { display:flex; align-items:center; gap:10px; color:var(–text2); font-size:12px; }
+.ai-spinner { width:16px; height:16px; border:1.5px solid var(–border2); border-top-color:var(–purple3); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+.ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.ai-label::before { content:‘✦’; font-size:10px; color:var(–accent); }
+.ai-insight { font-size:13px; color:var(–text); line-height:1.6; margin-bottom:10px; }
+.ai-recommended { background:linear-gradient(135deg,#7c3aed22,#4f46e522); border:1px solid #7c3aed66; border-radius:12px; padding:14px 16px; margin:12px 0; }
+.ai-rec-label { font-size:10px; font-weight:700; letter-spacing:1px; color:#a78bfa; margin-bottom:6px; }
+.ai-rec-value { font-size:14px; color:#e2e8f0; line-height:1.5; font-weight:500; }
+.ai-warning { font-size:11px; color:var(–yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
+.ai-picks-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(–accent2); font-weight:500; }
 
-        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        res.json({ ...prediction, odds });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Prediction failed', detail: err.message });
-    }
-});
+.fetching { display:flex; flex-direction:column; align-items:center; padding:50px 20px; gap:14px; }
+.fetch-spinner { width:44px; height:44px; border:2px solid var(–border2); border-top-color:var(–purple2); border-radius:50%; animation:spin .7s linear infinite; }
+.fetch-label { font-size:11px; font-weight:600; letter-spacing:2px; color:var(–text2); text-transform:uppercase; }
+.fetch-sub { font-size:11px; color:var(–text3); text-align:center; line-height:1.5; }
+</style>
 
-router.get('/predict/:fixtureId/explain', async (req, res) => {
-    try {
-        const result = await db.execute({
-            sql: `SELECT * FROM fixtures WHERE id = ?`,
-            args: [req.params.fixtureId],
-        });
+</head>
+<body>
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Fixture not found' });
-        }
+<div class="header">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-mark">👻</div>
+      <div class="logo-text">Score<span>Phantom</span></div>
+    </div>
+    <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+  </div>
+  <div class="date-bar" id="dateTabs"></div>
+  <div class="search-bar">
+    <div class="search-inner">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="Search teams or tournaments..." oninput="applyFilters()">
+    </div>
+  </div>
+  <div class="filter-row" id="filterRow">
+    <div class="filter-tag active" onclick="setCountry('all',this)">All</div>
+  </div>
+</div>
 
-        const fixture = result.rows[0];
+<main id="main">
+  <div class="page-loading">
+    <div class="spinner"></div>
+    <div class="loading-label">Loading fixtures...</div>
+  </div>
+</main>
 
-        if (!fixture.enriched) {
-            await enrichFixture(fixture);
-        }
+<div class="overlay" id="overlay" onclick="handleOverlay(event)">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div id="sheetContent"></div>
+  </div>
+</div>
 
-        const oddsResult = await db.execute({
-            sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`,
-            args: [fixture.id],
-        });
-        const oddsRow = oddsResult.rows[0] || null;
-        const odds = oddsRow ? {
-            home: oddsRow.home,
-            draw: oddsRow.draw,
-            away: oddsRow.away,
-            btts_yes: oddsRow.btts_yes,
-            btts_no: oddsRow.btts_no,
-            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
-        } : null;
+<script>
+const API = 'https://score-phantom.onrender.com/api';
+let allFixtures = [];
+let activeDate = null;
+let activeCountry = 'all';
+let searchQ = '';
 
-        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        const explanation = await explainPrediction({ ...prediction, odds });
+function getDates() {
+  const dates = [];
+  const now = new Date();
+  for (let i = -1; i <= 5; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
 
-        res.json({ ...prediction, odds, explanation });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Explain failed', detail: err.message });
-    }
-});
+function fmtKey(d) { return d.toISOString().split('T')[0]; }
 
-router.get('/tournaments', async (req, res) => {
-    try {
-        const result = await db.execute(
-            `SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`
-        );
-        res.json({ total: result.rows.length, tournaments: result.rows });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch tournaments' });
-    }
-});
+function fmtDay(d) {
+  const today = new Date();
+  const diff = Math.round((new Date(fmtKey(d)) - new Date(fmtKey(today))) / 86400000);
+  if (diff === 0) return 'TODAY';
+  if (diff === -1) return 'YEST';
+  if (diff === 1) return 'TMR';
+  return d.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase();
+}
 
-router.get('/stats', async (req, res) => {
-    try {
-        const [total, enriched, historical, teams, tournaments] = await Promise.all([
-            db.execute(`SELECT COUNT(*) as count FROM fixtures`),
-            db.execute(`SELECT COUNT(*) as count FROM fixtures WHERE enriched = 1`),
-            db.execute(`SELECT COUNT(*) as count FROM historical_matches`),
-            db.execute(`SELECT COUNT(*) as count FROM teams`),
-            db.execute(`SELECT COUNT(*) as count FROM tournaments`),
-        ]);
+function buildDateTabs() {
+  const dates = getDates();
+  const today = fmtKey(new Date());
+  activeDate = today;
+  const c = document.getElementById('dateTabs');
+  c.innerHTML = dates.map(d => {
+    const key = fmtKey(d);
+    return `<div class="date-tab ${key===today?'active':''}" onclick="setDate('${key}',this)">
+      <span class="dn">${fmtDay(d)}</span>
+      <span class="dd">${d.getDate()}</span>
+    </div>`;
+  }).join('');
+}
 
-        res.json({
-            fixtures: {
-                total: total.rows[0].count,
-                enriched: enriched.rows[0].count,
-                pending: total.rows[0].count - enriched.rows[0].count,
-            },
-            historical_matches: historical.rows[0].count,
-            teams: teams.rows[0].count,
-            tournaments: tournaments.rows[0].count,
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch stats' });
-    }
-});
+function setDate(key, el) {
+  activeDate = key;
+  document.querySelectorAll('.date-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
 
-export default router;
+function buildCountryFilters() {
+  const countries = [...new Set(allFixtures.map(f => f.category_name).filter(Boolean))].sort();
+  const row = document.getElementById('filterRow');
+  countries.slice(0,15).forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'filter-tag';
+    el.textContent = c;
+    el.onclick = () => setCountry(c, el);
+    row.appendChild(el);
+  });
+}
+
+function setCountry(val, el) {
+  activeCountry = val;
+  document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  searchQ = document.getElementById('searchInput').value.toLowerCase();
+  let list = allFixtures;
+  if (activeDate) list = list.filter(f => f.match_date && f.match_date.startsWith(activeDate));
+  if (activeCountry !== 'all') list = list.filter(f => f.category_name === activeCountry);
+  if (searchQ) list = list.filter(f =>
+    f.home_team_name?.toLowerCase().includes(searchQ) ||
+    f.away_team_name?.toLowerCase().includes(searchQ) ||
+    f.tournament_name?.toLowerCase().includes(searchQ)
+  );
+  renderGroups(list);
+}
+
+function renderGroups(fixtures) {
+  const main = document.getElementById('main');
+  if (!fixtures.length) { main.innerHTML = '<div class="empty">No fixtures found for this date</div>'; return; }
+
+  const groups = {};
+  for (const f of fixtures) {
+    const key = f.tournament_id || f.tournament_name;
+    if (!groups[key]) groups[key] = { name: f.tournament_name, country: f.category_name, fixtures: [] };
+    groups[key].fixtures.push(f);
+  }
+
+  main.innerHTML = Object.values(groups).map(g => `
+    <div class="league-group">
+      <div class="league-header" onclick="toggleGroup(this)">
+        <div class="league-header-left">
+          <div class="league-flag">${flag(g.country)}</div>
+          <div class="league-info">
+            <div class="league-country">${g.country||''}</div>
+            <div class="league-name">${g.name||'Unknown'}</div>
+          </div>
+        </div>
+        <div class="league-header-right">
+          <span class="league-count">${g.fixtures.length}</span>
+          <span class="league-chevron">&#9662;</span>
+        </div>
+      </div>
+      <div class="league-fixtures">
+        ${g.fixtures.map(f => {
+          const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
+          return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}')">
+            <div class="fixture-time-col"><div class="fixture-time">${time}</div></div>
+            <div class="fixture-teams-col">
+              <div class="fixture-team-row"><div class="team-dot home"></div><div class="team-name-text">${e(f.home_team_name)}</div></div>
+              <div class="fixture-team-row"><div class="team-dot away"></div><div class="team-name-text">${e(f.away_team_name)}</div></div>
+            </div>
+            <div class="fixture-right-col">
+              ${f.enriched?'<div class="analysed-dot"></div>':''}
+              <div class="predict-arrow">&#8250;</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleGroup(h) { h.closest('.league-group').classList.toggle('collapsed'); }
+
+const FLAGS = {'England':'&#127988;','Spain':'&#127466;&#127480;','Germany':'&#127465;&#127466;','France':'&#127467;&#127479;','Italy':'&#127470;&#127481;','Portugal':'&#127477;&#127481;','Netherlands':'&#127475;&#127473;','Belgium':'&#127463;&#127466;','Turkey':'&#127481;&#127479;','Brazil':'&#127463;&#127479;','Argentina':'&#127462;&#127479;','USA':'&#127482;&#127480;','Mexico':'&#127474;&#127485;','Nigeria':'&#127475;&#127468;','Ghana':'&#127468;&#127469;','Egypt':'&#127466;&#127468;','Morocco':'&#127474;&#127462;','Ukraine':'&#127482;&#127462;','Poland':'&#127477;&#127473;','Sweden':'&#127480;&#127466;','Norway':'&#127475;&#127476;','Denmark':'&#127465;&#127472;','Switzerland':'&#127464;&#127469;','Croatia':'&#127469;&#127479;','Serbia':'&#127479;&#127480;'};
+function flag(c) { return FLAGS[c] || '&#127758;'; }
+function e(s) { if(!s)return''; return s.replace(/'/g,"\\'").replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function pct(v) { return (v*100).toFixed(0)+'%'; }
+function cls(v) { return v>=0.65?'h':v>=0.45?'m':'l'; }
+
+async function init() {
+  buildDateTabs();
+  try {
+    const res = await fetch(`${API}/fixtures?limit=2000`);
+    const data = await res.json();
+    allFixtures = data.fixtures || [];
+    buildCountryFilters();
+    applyFilters();
+  } catch(err) {
+    document.getElementById('main').innerHTML = '<div class="empty">Failed to load. Check connection.</div>';
+  }
+}
+
+async function openSheet(id, home, away, league, country) {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('sheetContent').innerHTML = `
+    <div class="fetching">
+      <div class="fetch-spinner"></div>
+      <div class="fetch-label">Analysing Match</div>
+      <div class="fetch-sub">${home} vs ${away}<br>Fetching data &amp; computing predictions...</div>
+    </div>`;
+
+  try {
+    const predRes = await fetch(`${API}/predict/${id}`);
+    if (!predRes.ok) throw new Error('Prediction failed');
+    const pred = await predRes.json();
+
+    renderSheet(pred, null, home, away, league, country);
+
+    fetch(`${API}/predict/${id}/explain`).then(r => r.json()).then(explainData => {
+      if (explainData.explanation) {
+        updateAI(explainData.explanation);
+      }
+    }).catch(() => {});
+
+    const fx = allFixtures.find(f => f.id === id);
+    if (fx) { fx.enriched = 1; applyFilters(); }
+  } catch(err) {
+    document.getElementById('sheetContent').innerHTML = `
+      <div class="fetching">
+        <div style="font-size:28px">&#9888;&#65039;</div>
+        <div class="fetch-label" style="color:#f43f5e">Analysis Failed</div>
+        <div class="fetch-sub">${err.message}</div>
+      </div>`;
+  }
+}
+
+function updateAI(explain) {
+  const el = document.getElementById('ai-content');
+  if (!el) return;
+  const insight = explain.top_insight || '';
+  const warning = explain.data_warning || '';
+  const recommended = explain.recommended_bet || '';
+  const picks = [
+    explain.match_result ? 'Result: ' + explain.match_result : null,
+    explain.goals ? 'Goals: ' + explain.goals : null,
+    explain.btts ? 'BTTS: ' + explain.btts : null,
+    explain.correct_score ? 'Score: ' + explain.correct_score : null,
+  ].filter(Boolean);
+
+  el.innerHTML =
+    '<div class="ai-label">Groq Intelligence</div>' +
+    (insight ? '<div class="ai-insight">' + insight + '</div>' : '') +
+    (recommended ? '<div class="ai-recommended"><div class="ai-rec-label">&#9889; RECOMMENDED BET</div><div class="ai-rec-value">' + recommended + '</div></div>' : '') +
+    (picks.length ? '<div class="ai-picks-row">' + picks.map(x => '<div class="ai-pick-tag">' + x + '</div>').join('') + '</div>' : '') +
+    (warning ? '<div class="ai-warning">&#9888; ' + warning + '</div>' : '');
+
+  const topPick = document.getElementById('top-pick-card');
+  if (!topPick) return;
+
+  if (recommended && !recommended.toLowerCase().includes('no clear') && !recommended.toLowerCase().includes('skip')) {
+    const betMatch = recommended.match(/^([^@\-]+)/);
+    const betLabel = betMatch ? betMatch[1].trim() : recommended.split(' ').slice(0,3).join(' ');
+    topPick.innerHTML =
+      '<div class="tp-label">&#9889; Final Recommendation</div>' +
+      '<div class="tp-value">' + betLabel + '</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div><div class="tp-conf VALUE">VALUE BET</div></div>';
+  } else if (recommended.toLowerCase().includes('no clear') || recommended.toLowerCase().includes('skip')) {
+    topPick.innerHTML =
+      '<div class="tp-label">&#9889; Final Recommendation</div>' +
+      '<div class="tp-value" style="font-size:18px">No Clear Pick</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#94a3b8">Skip this match</div><div class="tp-conf LOW">SKIP</div></div>';
+  }
+}
+
+function renderSheet(d, explain, home, away, league, country) {
+  const p = d.predictions, f = d.features, m = d.model, mr = p.match_result;
+  const hf = f.homeFeatures, af = f.awayFeatures, h2hF = f.h2hFeatures;
+
+  const picks = [
+    {label: home + ' Win', prob: mr.home},
+    {label: 'Draw', prob: mr.draw},
+    {label: away + ' Win', prob: mr.away},
+  ];
+  const top = picks.reduce((a,b) => a.prob>b.prob?a:b);
+  const conf = mr.confidence || 'LOW';
+
+  function formDots(feat) {
+    const n = feat.matches_available||0;
+    const w = Math.round((feat.win_rate||0)*n);
+    const dr = Math.round((feat.draw_rate||0)*n);
+    const l = n-w-dr;
+    return [...Array(w).fill('W'),...Array(Math.max(0,dr)).fill('D'),...Array(Math.max(0,l)).fill('L')]
+      .slice(0,5).map(x => '<div class="fdot ' + x + '">' + x + '</div>').join('');
+  }
+
+  const h2hTotal = h2hF.matches_available||0;
+  const h2hH = Math.round((h2hF.home_win_rate||0)*h2hTotal);
+  const h2hD = Math.round((h2hF.draw_rate||0)*h2hTotal);
+  const h2hA = h2hTotal-h2hH-h2hD;
+  const scores = p.correct_score.slice(0,6);
+
+  document.getElementById('sheetContent').innerHTML =
+    '<div class="sheet-header">' +
+      '<div class="sheet-match-info">' +
+        '<div class="sheet-league-tag">' + league + ' &middot; ' + country + '</div>' +
+        '<div class="sheet-teams">' +
+          '<div class="sheet-team">' + home + '</div>' +
+          '<div class="sheet-vs">VS</div>' +
+          '<div class="sheet-team away">' + away + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sheet-close" onclick="closeSheet()">&#10005;</div>' +
+    '</div>' +
+
+    '<div class="top-pick" id="top-pick-card">' +
+      '<div class="tp-label">&#9733; Top Recommendation</div>' +
+      '<div class="tp-value">' + top.label + '</div>' +
+      '<div class="tp-meta">' +
+        '<div class="tp-prob">Probability: <strong>' + pct(top.prob) + '</strong></div>' +
+        '<div class="tp-conf ' + conf + '">' + conf + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Match Result</div>' +
+    '<div class="result-bars">' +
+      '<div class="rbar-row"><div class="rbar-label">' + home.split(' ')[0] + '</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:' + pct(mr.home) + '"></div></div><div class="rbar-pct">' + pct(mr.home) + '</div></div>' +
+      '<div class="rbar-row"><div class="rbar-label">Draw</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:' + pct(mr.draw) + '"></div></div><div class="rbar-pct">' + pct(mr.draw) + '</div></div>' +
+      '<div class="rbar-row"><div class="rbar-label">' + away.split(' ')[0] + '</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:' + pct(mr.away) + '"></div></div><div class="rbar-pct">' + pct(mr.away) + '</div></div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Key Stats</div>' +
+    '<div class="stats-row">' +
+      '<div class="stat-box"><div class="stat-num">' + m.lambdaHome + '</div><div class="stat-lbl">xG Home</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + m.lambdaAway + '</div><div class="stat-lbl">xG Away</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + pct(p.btts.yes) + '</div><div class="stat-lbl">BTTS</div></div>' +
+      '<div class="stat-box"><div class="stat-num">' + pct(p.over_under.over_2_5) + '</div><div class="stat-lbl">O2.5</div></div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">All Markets</div>' +
+    '<div class="markets-grid">' +
+      '<div class="mcard">' +
+        '<div class="mcard-title">Over / Under</div>' +
+        [['O 0.5',p.over_under.over_0_5],['O 1.5',p.over_under.over_1_5],['O 2.5',p.over_under.over_2_5],['O 3.5',p.over_under.over_3_5],['O 4.5',p.over_under.over_4_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+      '</div>' +
+      '<div class="mcard">' +
+        '<div class="mcard-title">' + home.split(' ')[0] + ' Goals</div>' +
+        [['O 0.5',p.home_team_goals.over_0_5],['O 1.5',p.home_team_goals.over_1_5],['O 2.5',p.home_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+        '<div class="mcard-title" style="margin-top:8px">' + away.split(' ')[0] + ' Goals</div>' +
+        [['O 0.5',p.away_team_goals.over_0_5],['O 1.5',p.away_team_goals.over_1_5],['O 2.5',p.away_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Correct Score</div>' +
+    '<div class="scores-wrap">' +
+      scores.map(function(s,i){ return '<div class="sc-chip ' + (i===0?'top':'') + '"><div class="sc-val">' + s.score + '</div><div class="sc-pct">' + pct(s.probability) + '</div></div>'; }).join('') +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Recent Form (' + hf.matches_available + ' matches)</div>' +
+    '<div class="form-section">' +
+      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(hf) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(af) + '</div></div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">Head to Head &middot; ' + h2hTotal + ' matches</div>' +
+    '<div class="h2h-section">' +
+      '<div class="h2h-summary">' +
+        '<div class="h2h-box"><div class="h2h-box-num h">' + h2hH + '</div><div class="h2h-box-lbl">' + home.split(' ')[0] + '</div></div>' +
+        '<div class="h2h-box"><div class="h2h-box-num d">' + h2hD + '</div><div class="h2h-box-lbl">Draws</div></div>' +
+        '<div class="h2h-box"><div class="h2h-box-num a">' + h2hA + '</div><div class="h2h-box-lbl">' + away.split(' ')[0] + '</div></div>' +
+      '</div>' +
+      '<div class="result-bars">' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">Avg Goals</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:' + Math.min(100,((h2hF.avg_total_goals||0)/5)*100) + '%"></div></div><div class="rbar-pct">' + (h2hF.avg_total_goals||0).toFixed(1) + '</div></div>' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">BTTS Rate</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:' + pct(h2hF.btts_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.btts_rate||0) + '</div></div>' +
+        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">O2.5 Rate</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:' + pct(h2hF.over_2_5_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.over_2_5_rate||0) + '</div></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="sdiv"></div>' +
+    '<div class="stitle">AI Analysis</div>' +
+    '<div class="ai-section">' +
+      '<div class="ai-card">' +
+        '<div id="ai-content">' +
+          '<div class="ai-thinking"><div class="ai-spinner"></div> Groq is analysing this match...</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function closeSheet() { document.getElementById('overlay').classList.remove('open'); }
+function handleOverlay(e) { if(e.target===document.getElementById('overlay')) closeSheet(); }
+
+init();
+</script>
+
+</body>
+</html>
