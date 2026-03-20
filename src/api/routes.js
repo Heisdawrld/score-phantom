@@ -170,7 +170,7 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
         } : null;
 
         const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        const explanation = await explainPrediction({ ...prediction, odds });
+        const explanation = await explainPrediction({ ...prediction, odds, meta: fixture.meta || null });
 
         res.json({ ...prediction, odds, explanation });
     } catch (err) {
