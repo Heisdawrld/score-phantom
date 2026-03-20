@@ -219,8 +219,8 @@ Respond ONLY with valid JSON — no markdown, no explanation outside the JSON:
   "correct_score": "1-2 sentence on most likely scorelines given xG and form",
   "home_team_goals": "1 sentence on home team scoring outlook using season avg + recent form",
   "away_team_goals": "1 sentence on away team scoring outlook using season avg + recent form",
-  "top_insight": "The single most decisive data point that determines this prediction",
-  "recommended_bet": "ONE specific bet with clear multi-data-point reasoning — e.g. 'Home Win — 3rd vs 17th in table, home momentum 80%, away failed to score in 5 of last 7, form and table strongly agree' OR 'No clear pick — skip this match'",
+  "top_insight": "One sharp sentence — the single most important factor for this match.",
+  "recommended_bet": "MAX 8 WORDS. Just the tip. e.g. 'Manchester City Win' or 'Over 2.5 Goals' or 'BTTS Yes' or 'No clear pick'. NO reasoning here — reasoning goes in match_result/goals/btts.",
   "data_warning": null or "brief warning if fewer than 3 matches of form data available"
 }`;
 
