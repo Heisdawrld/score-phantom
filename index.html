@@ -32,180 +32,192 @@
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; font-size:14px; min-height:100vh; overflow-x:hidden; }
 
-.header { position:sticky; top:0; z-index:50; background:rgba(10,10,18,0.97); backdrop-filter:blur(20px); border-bottom:1px solid var(–border); }
+.header { position:sticky; top:0; z-index:50; background:rgba(10,10,18,0.97); backdrop-filter:blur(20px); border-bottom:1px solid var(--border); }
 .header-top { display:flex; align-items:center; justify-content:space-between; padding:0 14px; height:52px; }
 .logo { display:flex; align-items:center; gap:9px; }
-.logo-mark { width:32px; height:32px; background:linear-gradient(135deg,var(–purple2),var(–accent)); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 0 16px rgba(124,58,237,0.4); }
-.logo-text { font-family:‘Barlow Condensed’,sans-serif; font-weight:700; font-size:20px; letter-spacing:0.5px; }
-.logo-text span { color:var(–accent); }
-.live-pill { display:flex; align-items:center; gap:5px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:600; color:var(–green2); letter-spacing:1px; }
-.live-dot { width:5px; height:5px; background:var(–green2); border-radius:50%; animation:blink 1.4s ease infinite; }
+.logo-mark { width:32px; height:32px; background:linear-gradient(135deg,var(--purple2),var(--accent)); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 0 16px rgba(124,58,237,0.4); }
+.logo-text { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px; letter-spacing:0.5px; }
+.logo-text span { color:var(--accent); }
+.live-pill { display:flex; align-items:center; gap:5px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:600; color:var(--green2); letter-spacing:1px; }
+.live-dot { width:5px; height:5px; background:var(--green2); border-radius:50%; animation:blink 1.4s ease infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-.date-bar { display:flex; overflow-x:auto; scrollbar-width:none; border-top:1px solid var(–border); }
+.date-bar { display:flex; overflow-x:auto; scrollbar-width:none; border-top:1px solid var(--border); }
 .date-bar::-webkit-scrollbar { display:none; }
-.date-tab { flex-shrink:0; padding:10px 16px; font-size:12px; font-weight:600; color:var(–text3); cursor:pointer; border-bottom:2px solid transparent; text-align:center; transition:all .15s; }
-.date-tab:hover { color:var(–text2); }
-.date-tab.active { color:var(–accent); border-bottom-color:var(–purple2); }
+.date-tab { flex-shrink:0; padding:10px 16px; font-size:12px; font-weight:600; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; text-align:center; transition:all .15s; }
+.date-tab:hover { color:var(--text2); }
+.date-tab.active { color:var(--accent); border-bottom-color:var(--purple2); }
 .date-tab .dn { display:block; font-size:9px; font-weight:500; letter-spacing:1px; text-transform:uppercase; }
 .date-tab .dd { display:block; font-size:16px; font-weight:700; }
 
-.search-bar { padding:10px 14px; border-top:1px solid var(–border); }
-.search-inner { display:flex; align-items:center; gap:8px; background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:8px 12px; transition:border-color .15s; }
-.search-inner:focus-within { border-color:var(–purple); }
-.search-inner input { flex:1; background:none; border:none; outline:none; color:var(–text); font-family:‘Barlow’,sans-serif; font-size:13px; }
-.search-inner input::placeholder { color:var(–text4); }
+.search-bar { padding:10px 14px; border-top:1px solid var(--border); }
+.search-inner { display:flex; align-items:center; gap:8px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:8px 12px; transition:border-color .15s; }
+.search-inner:focus-within { border-color:var(--purple); }
+.search-inner input { flex:1; background:none; border:none; outline:none; color:var(--text); font-family:'Barlow',sans-serif; font-size:13px; }
+.search-inner input::placeholder { color:var(--text4); }
 
 .filter-row { display:flex; gap:6px; padding:0 14px 10px; overflow-x:auto; scrollbar-width:none; }
 .filter-row::-webkit-scrollbar { display:none; }
-.filter-tag { flex-shrink:0; padding:5px 12px; border-radius:6px; border:1px solid var(–border); background:var(–surface2); color:var(–text2); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
-.filter-tag:hover { border-color:var(–purple); color:var(–accent); }
-.filter-tag.active { background:rgba(109,40,217,0.2); border-color:var(–purple2); color:var(–accent2); }
+.filter-tag { flex-shrink:0; padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text2); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
+.filter-tag:hover { border-color:var(--purple); color:var(--accent); }
+.filter-tag.active { background:rgba(109,40,217,0.2); border-color:var(--purple2); color:var(--accent2); }
 
 main { padding-bottom:80px; }
 
 .league-group { margin-bottom:2px; }
-.league-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(–surface); border-top:1px solid var(–border); border-bottom:1px solid var(–border); cursor:pointer; user-select:none; }
+.league-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surface); border-top:1px solid var(--border); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
 .league-header-left { display:flex; align-items:center; gap:8px; }
 .league-flag { width:20px; font-size:14px; flex-shrink:0; }
 .league-info { display:flex; flex-direction:column; gap:1px; }
-.league-country { font-size:9px; font-weight:700; color:var(–text3); letter-spacing:1px; text-transform:uppercase; }
-.league-name { font-size:13px; font-weight:700; color:var(–text); }
+.league-country { font-size:9px; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; }
+.league-name { font-size:13px; font-weight:700; color:var(--text); }
 .league-header-right { display:flex; align-items:center; gap:8px; }
-.league-count { font-size:10px; color:var(–text3); background:var(–surface3); padding:2px 7px; border-radius:10px; }
-.league-chevron { color:var(–text3); font-size:12px; transition:transform .2s; }
+.league-count { font-size:10px; color:var(--text3); background:var(--surface3); padding:2px 7px; border-radius:10px; }
+.league-chevron { color:var(--text3); font-size:12px; transition:transform .2s; }
 .league-group.collapsed .league-chevron { transform:rotate(-90deg); }
 .league-group.collapsed .league-fixtures { display:none; }
 
-.fixture-row { display:flex; align-items:center; padding:0 14px; height:52px; border-bottom:1px solid var(–border); background:var(–bg); cursor:pointer; transition:background .12s; gap:10px; position:relative; }
-.fixture-row:hover { background:var(–surface); }
-.fixture-row::before { content:’’; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .15s; }
-.fixture-row:hover::before { background:var(–purple2); }
-.fixture-row.enriched::before { background:linear-gradient(180deg,var(–purple2),var(–accent)); }
+.fixture-row { display:flex; align-items:center; padding:0 14px; height:52px; border-bottom:1px solid var(--border); background:var(--bg); cursor:pointer; transition:background .12s; gap:10px; position:relative; }
+.fixture-row:hover { background:var(--surface); }
+.fixture-row::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .15s; }
+.fixture-row:hover::before { background:var(--purple2); }
+.fixture-row.enriched::before { background:linear-gradient(180deg,var(--purple2),var(--accent)); }
 
 .fixture-time-col { width:42px; flex-shrink:0; text-align:center; }
-.fixture-time { font-size:12px; font-weight:600; color:var(–text2); }
+.fixture-time { font-size:12px; font-weight:600; color:var(--text2); }
 
 .fixture-teams-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
 .fixture-team-row { display:flex; align-items:center; gap:7px; }
-.team-dot { width:6px; height:6px; border-radius:50%; background:var(–surface3); flex-shrink:0; }
-.team-dot.home { background:var(–purple3); }
-.team-dot.away { background:var(–accent); }
-.team-name-text { font-size:13px; font-weight:600; color:var(–text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.team-dot { width:6px; height:6px; border-radius:50%; background:var(--surface3); flex-shrink:0; }
+.team-dot.home { background:var(--purple3); }
+.team-dot.away { background:var(--accent); }
+.team-name-text { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 .fixture-right-col { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-.predict-arrow { font-size:11px; color:var(–accent); font-weight:600; }
-.analysed-dot { width:6px; height:6px; border-radius:50%; background:var(–purple2); box-shadow:0 0 6px rgba(124,58,237,0.6); }
+.predict-arrow { font-size:11px; color:var(--accent); font-weight:600; }
+.analysed-dot { width:6px; height:6px; border-radius:50%; background:var(--purple2); box-shadow:0 0 6px rgba(124,58,237,0.6); }
 
 .page-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; height:60vh; gap:14px; }
-.spinner { width:36px; height:36px; border:2px solid var(–border2); border-top-color:var(–purple2); border-radius:50%; animation:spin .7s linear infinite; }
+.spinner { width:36px; height:36px; border:2px solid var(--border2); border-top-color:var(--purple2); border-radius:50%; animation:spin .7s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
-.loading-label { font-size:11px; letter-spacing:2px; color:var(–text3); text-transform:uppercase; }
-.empty { text-align:center; padding:60px 20px; color:var(–text3); font-size:12px; letter-spacing:1px; }
+.loading-label { font-size:11px; letter-spacing:2px; color:var(--text3); text-transform:uppercase; }
+.empty { text-align:center; padding:60px 20px; color:var(--text3); font-size:12px; letter-spacing:1px; }
 
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:200; display:none; align-items:flex-end; }
 .overlay.open { display:flex; }
-.sheet { width:100%; max-width:520px; margin:0 auto; background:var(–surface); border-radius:20px 20px 0 0; border:1px solid var(–border2); border-bottom:none; max-height:94vh; overflow-y:auto; scrollbar-width:none; animation:sheetUp .28s cubic-bezier(.32,.72,0,1); }
+.sheet { width:100%; max-width:520px; margin:0 auto; background:var(--surface); border-radius:20px 20px 0 0; border:1px solid var(--border2); border-bottom:none; max-height:94vh; overflow-y:auto; scrollbar-width:none; animation:sheetUp .28s cubic-bezier(.32,.72,0,1); }
 .sheet::-webkit-scrollbar { display:none; }
 @keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
-.sheet-handle { width:36px; height:4px; background:var(–border2); border-radius:2px; margin:10px auto 0; }
+.sheet-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:10px auto 0; }
 
 .sheet-header { padding:14px 16px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
 .sheet-match-info { flex:1; }
-.sheet-league-tag { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(–accent); margin-bottom:6px; }
+.sheet-league-tag { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
 .sheet-teams { display:flex; align-items:center; gap:10px; }
-.sheet-team { flex:1; font-family:‘Barlow Condensed’,sans-serif; font-size:20px; font-weight:700; color:var(–text); line-height:1.1; }
+.sheet-team { flex:1; font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--text); line-height:1.1; }
 .sheet-team.away { text-align:right; }
-.sheet-vs { font-size:11px; color:var(–text3); font-weight:600; padding:4px 8px; border:1px solid var(–border); border-radius:6px; flex-shrink:0; }
-.sheet-close { width:30px; height:30px; border-radius:50%; background:var(–surface3); border:1px solid var(–border); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(–text2); font-size:14px; flex-shrink:0; transition:all .15s; }
-.sheet-close:hover { border-color:var(–purple); color:var(–accent); }
+.sheet-vs { font-size:11px; color:var(--text3); font-weight:600; padding:4px 8px; border:1px solid var(--border); border-radius:6px; flex-shrink:0; }
+.sheet-close { width:30px; height:30px; border-radius:50%; background:var(--surface3); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text2); font-size:14px; flex-shrink:0; transition:all .15s; }
+.sheet-close:hover { border-color:var(--purple); color:var(--accent); }
 
-.sdiv { height:1px; background:var(–border); margin:14px 16px; }
-.stitle { padding:0 16px 8px; font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(–text3); }
+.sdiv { height:1px; background:var(--border); margin:14px 16px; }
+.stitle { padding:0 16px 8px; font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text3); }
 
 .top-pick { margin:14px 16px 0; background:linear-gradient(135deg,rgba(109,40,217,0.25),rgba(167,139,250,0.08)); border:1px solid rgba(109,40,217,0.5); border-radius:14px; padding:14px; position:relative; overflow:hidden; }
-.top-pick::after { content:’’; position:absolute; top:-20px; right:-20px; width:80px; height:80px; background:radial-gradient(circle,rgba(167,139,250,0.15),transparent 70%); pointer-events:none; }
-.tp-label { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(–accent); margin-bottom:5px; }
-.tp-value { font-family:‘Barlow Condensed’,sans-serif; font-size:26px; font-weight:700; color:var(–text); line-height:1; margin-bottom:8px; }
+.top-pick::after { content:''; position:absolute; top:-20px; right:-20px; width:80px; height:80px; background:radial-gradient(circle,rgba(167,139,250,0.15),transparent 70%); pointer-events:none; }
+.tp-label { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--accent); margin-bottom:5px; }
+.tp-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; color:var(--text); line-height:1; margin-bottom:8px; }
 .tp-meta { display:flex; align-items:center; justify-content:space-between; }
-.tp-prob { font-size:12px; color:var(–text2); }
-.tp-prob strong { color:var(–accent2); font-size:15px; }
+.tp-prob { font-size:12px; color:var(--text2); }
+.tp-prob strong { color:var(--accent2); font-size:15px; }
 .tp-conf { font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 10px; border-radius:20px; }
-.tp-conf.HIGH { background:rgba(16,185,129,0.15); color:var(–green2); border:1px solid rgba(16,185,129,0.3); }
-.tp-conf.MEDIUM { background:rgba(245,158,11,0.15); color:var(–yellow); border:1px solid rgba(245,158,11,0.3); }
-.tp-conf.LOW { background:rgba(109,40,217,0.15); color:var(–accent); border:1px solid rgba(109,40,217,0.3); }
+.tp-conf.HIGH { background:rgba(16,185,129,0.15); color:var(--green2); border:1px solid rgba(16,185,129,0.3); }
+.tp-conf.MEDIUM { background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
+.tp-conf.LOW { background:rgba(109,40,217,0.15); color:var(--accent); border:1px solid rgba(109,40,217,0.3); }
 .tp-conf.VALUE { background:rgba(124,58,237,0.25); color:#a78bfa; border:1px solid rgba(124,58,237,0.5); }
 
 .result-bars { padding:0 16px; }
 .rbar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
-.rbar-label { width:56px; font-size:11px; color:var(–text2); flex-shrink:0; font-weight:500; }
-.rbar-track { flex:1; height:5px; background:var(–surface3); border-radius:3px; overflow:hidden; }
+.rbar-label { width:56px; font-size:11px; color:var(--text2); flex-shrink:0; font-weight:500; }
+.rbar-track { flex:1; height:5px; background:var(--surface3); border-radius:3px; overflow:hidden; }
 .rbar-fill { height:100%; border-radius:3px; transition:width .5s ease; }
-.fill-home { background:var(–purple3); }
-.fill-draw { background:var(–text3); }
-.fill-away { background:var(–accent); }
-.rbar-pct { width:34px; text-align:right; font-size:12px; font-weight:600; color:var(–text); flex-shrink:0; }
+.fill-home { background:var(--purple3); }
+.fill-draw { background:var(--text3); }
+.fill-away { background:var(--accent); }
+.rbar-pct { width:34px; text-align:right; font-size:12px; font-weight:600; color:var(--text); flex-shrink:0; }
 
 .stats-row { display:flex; gap:8px; padding:0 16px; }
-.stat-box { flex:1; background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:10px 8px; text-align:center; }
-.stat-num { font-family:‘Barlow Condensed’,sans-serif; font-size:20px; font-weight:700; color:var(–accent); line-height:1; }
-.stat-lbl { font-size:9px; color:var(–text3); font-weight:600; letter-spacing:.8px; margin-top:3px; text-transform:uppercase; }
+.stat-box { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px 8px; text-align:center; }
+.stat-num { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); line-height:1; }
+.stat-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:.8px; margin-top:3px; text-transform:uppercase; }
 
 .markets-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px; }
-.mcard { background:var(–surface2); border:1px solid var(–border); border-radius:10px; padding:10px; }
-.mcard-title { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–text3); margin-bottom:8px; }
+.mcard { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px; }
+.mcard-title { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text3); margin-bottom:8px; }
 .mrow { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
 .mrow:last-child { margin-bottom:0; }
-.mkey { font-size:11px; color:var(–text2); }
+.mkey { font-size:11px; color:var(--text2); }
 .mval { font-size:12px; font-weight:600; }
-.mval.h { color:var(–green2); }
-.mval.m { color:var(–yellow); }
-.mval.l { color:var(–text2); }
+.mval.h { color:var(--green2); }
+.mval.m { color:var(--yellow); }
+.mval.l { color:var(--text2); }
 
 .scores-wrap { padding:0 16px; display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-.sc-chip { background:var(–surface2); border:1px solid var(–border); border-radius:8px; padding:8px 4px; text-align:center; }
+.sc-chip { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 4px; text-align:center; }
 .sc-chip.top { background:rgba(109,40,217,0.15); border-color:rgba(109,40,217,0.5); }
-.sc-val { font-family:‘Barlow Condensed’,sans-serif; font-size:16px; font-weight:700; color:var(–text); }
-.sc-chip.top .sc-val { color:var(–accent2); }
-.sc-pct { font-size:9px; color:var(–text3); margin-top:1px; }
+.sc-val { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:700; color:var(--text); }
+.sc-chip.top .sc-val { color:var(--accent2); }
+.sc-pct { font-size:9px; color:var(--text3); margin-top:1px; }
 
 .form-section { padding:0 16px; }
 .form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.form-team-label { width:80px; font-size:11px; font-weight:600; color:var(–text2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.form-team-label { width:80px; font-size:11px; font-weight:600; color:var(--text2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .form-dots { display:flex; gap:4px; }
 .fdot { width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
-.fdot.W { background:rgba(16,185,129,0.15); color:var(–green2); border:1px solid rgba(16,185,129,0.25); }
-.fdot.D { background:rgba(245,158,11,0.12); color:var(–yellow); border:1px solid rgba(245,158,11,0.2); }
-.fdot.L { background:rgba(244,63,94,0.12); color:var(–red); border:1px solid rgba(244,63,94,0.2); }
+.fdot.W { background:rgba(16,185,129,0.15); color:var(--green2); border:1px solid rgba(16,185,129,0.25); }
+.fdot.D { background:rgba(245,158,11,0.12); color:var(--yellow); border:1px solid rgba(245,158,11,0.2); }
+.fdot.L { background:rgba(244,63,94,0.12); color:var(--red); border:1px solid rgba(244,63,94,0.2); }
 
 .h2h-section { padding:0 16px; }
 .h2h-summary { display:flex; gap:6px; margin-bottom:12px; }
-.h2h-box { flex:1; background:var(–surface2); border:1px solid var(–border); border-radius:8px; padding:8px 6px; text-align:center; }
-.h2h-box-num { font-family:‘Barlow Condensed’,sans-serif; font-size:18px; font-weight:700; }
-.h2h-box-num.h { color:var(–purple3); }
-.h2h-box-num.d { color:var(–text2); }
-.h2h-box-num.a { color:var(–accent); }
-.h2h-box-lbl { font-size:9px; color:var(–text3); font-weight:600; letter-spacing:.8px; margin-top:2px; }
+.h2h-box { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 6px; text-align:center; }
+.h2h-box-num { font-family:'Barlow Condensed',sans-serif; font-size:18px; font-weight:700; }
+.h2h-box-num.h { color:var(--purple3); }
+.h2h-box-num.d { color:var(--text2); }
+.h2h-box-num.a { color:var(--accent); }
+.h2h-box-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:.8px; margin-top:2px; }
+
+.standing-row { display:flex; align-items:center; gap:8px; padding:6px 16px; border-bottom:1px solid var(--border); }
+.standing-pos { width:20px; font-size:11px; font-weight:700; color:var(--text3); text-align:center; }
+.standing-team { flex:1; font-size:12px; font-weight:600; color:var(--text); }
+.standing-team.highlight { color:var(--accent2); }
+.standing-pts { font-size:12px; font-weight:700; color:var(--accent); width:28px; text-align:right; }
+.standing-record { font-size:10px; color:var(--text3); width:70px; text-align:right; }
 
 .ai-section { padding:0 16px 24px; }
-.ai-card { background:var(–surface2); border:1px solid var(–border2); border-radius:12px; padding:14px; position:relative; overflow:hidden; }
-.ai-card::before { content:’’; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(–purple),var(–accent)); }
-.ai-thinking { display:flex; align-items:center; gap:10px; color:var(–text2); font-size:12px; }
-.ai-spinner { width:16px; height:16px; border:1.5px solid var(–border2); border-top-color:var(–purple3); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
-.ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(–purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
-.ai-label::before { content:‘✦’; font-size:10px; color:var(–accent); }
-.ai-insight { font-size:13px; color:var(–text); line-height:1.6; margin-bottom:10px; }
+.ai-card { background:var(--surface2); border:1px solid var(--border2); border-radius:12px; padding:14px; position:relative; overflow:hidden; }
+.ai-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--purple),var(--accent)); }
+.ai-thinking { display:flex; align-items:center; gap:10px; color:var(--text2); font-size:12px; }
+.ai-spinner { width:16px; height:16px; border:1.5px solid var(--border2); border-top-color:var(--purple3); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+.ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.ai-label::before { content:'✦'; font-size:10px; color:var(--accent); }
+.ai-insight { font-size:13px; color:var(--text); line-height:1.6; margin-bottom:10px; }
 .ai-recommended { background:linear-gradient(135deg,#7c3aed22,#4f46e522); border:1px solid #7c3aed66; border-radius:12px; padding:14px 16px; margin:12px 0; }
 .ai-rec-label { font-size:10px; font-weight:700; letter-spacing:1px; color:#a78bfa; margin-bottom:6px; }
 .ai-rec-value { font-size:14px; color:#e2e8f0; line-height:1.5; font-weight:500; }
-.ai-warning { font-size:11px; color:var(–yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
+.ai-warning { font-size:11px; color:var(--yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
 .ai-picks-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-.ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(–accent2); font-weight:500; }
+.ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(--accent2); font-weight:500; }
 
 .fetching { display:flex; flex-direction:column; align-items:center; padding:50px 20px; gap:14px; }
-.fetch-spinner { width:44px; height:44px; border:2px solid var(–border2); border-top-color:var(–purple2); border-radius:50%; animation:spin .7s linear infinite; }
-.fetch-label { font-size:11px; font-weight:600; letter-spacing:2px; color:var(–text2); text-transform:uppercase; }
-.fetch-sub { font-size:11px; color:var(–text3); text-align:center; line-height:1.5; }
+.fetch-spinner { width:44px; height:44px; border:2px solid var(--border2); border-top-color:var(--purple2); border-radius:50%; animation:spin .7s linear infinite; }
+.fetch-label { font-size:11px; font-weight:600; letter-spacing:2px; color:var(--text2); text-transform:uppercase; }
+.fetch-sub { font-size:11px; color:var(--text3); text-align:center; line-height:1.5; }
+.fetch-steps { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+.fetch-step { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:6px; }
+.fetch-step.done { color:var(--green2); }
+.fetch-step.active { color:var(--accent); }
+.step-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
 </style>
 
 </head>
@@ -246,7 +258,8 @@ main { padding-bottom:80px; }
 </div>
 
 <script>
-const API = 'https://score-phantom.onrender.com/api';
+const API = '/api';
+const SS = 'https://www.sofascore.com/api/v1';
 let allFixtures = [];
 let activeDate = null;
 let activeCountry = 'all';
@@ -356,7 +369,7 @@ function renderGroups(fixtures) {
       <div class="league-fixtures">
         ${g.fixtures.map(f => {
           const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
-          return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}')">
+          return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}','${f.match_url}','${f.home_team_id}','${f.away_team_id}')">
             <div class="fixture-time-col"><div class="fixture-time">${time}</div></div>
             <div class="fixture-teams-col">
               <div class="fixture-team-row"><div class="team-dot home"></div><div class="team-name-text">${e(f.home_team_name)}</div></div>
@@ -375,49 +388,186 @@ function renderGroups(fixtures) {
 
 function toggleGroup(h) { h.closest('.league-group').classList.toggle('collapsed'); }
 
-const FLAGS = {'England':'&#127988;','Spain':'&#127466;&#127480;','Germany':'&#127465;&#127466;','France':'&#127467;&#127479;','Italy':'&#127470;&#127481;','Portugal':'&#127477;&#127481;','Netherlands':'&#127475;&#127473;','Belgium':'&#127463;&#127466;','Turkey':'&#127481;&#127479;','Brazil':'&#127463;&#127479;','Argentina':'&#127462;&#127479;','USA':'&#127482;&#127480;','Mexico':'&#127474;&#127485;','Nigeria':'&#127475;&#127468;','Ghana':'&#127468;&#127469;','Egypt':'&#127466;&#127468;','Morocco':'&#127474;&#127462;','Ukraine':'&#127482;&#127462;','Poland':'&#127477;&#127473;','Sweden':'&#127480;&#127466;','Norway':'&#127475;&#127476;','Denmark':'&#127465;&#127472;','Switzerland':'&#127464;&#127469;','Croatia':'&#127469;&#127479;','Serbia':'&#127479;&#127480;'};
+const FLAGS = {'England':'&#127988;','Spain':'&#127466;&#127480;','Germany':'&#127465;&#127466;','France':'&#127467;&#127479;','Italy':'&#127470;&#127481;','Portugal':'&#127477;&#127481;','Netherlands':'&#127475;&#127473;','Belgium':'&#127463;&#127466;','Turkey':'&#127481;&#127479;','Brazil':'&#127463;&#127479;','Argentina':'&#127462;&#127479;','USA':'&#127482;&#127480;','Mexico':'&#127474;&#127485;','Nigeria':'&#127475;&#127468;','Ghana':'&#127468;&#127469;','Egypt':'&#127466;&#127468;','Morocco':'&#127474;&#127462;','Ukraine':'&#127482;&#127462;','Poland':'&#127477;&#127473;','Sweden':'&#127480;&#127466;','Norway':'&#127475;&#127476;','Denmark':'&#127465;&#127472;','Switzerland':'&#127464;&#127469;','Croatia':'&#127469;&#127479;','Serbia':'&#127479;&#127480;','Scotland':'&#127988;','Saudi Arabia':'&#127480;&#127462;'};
 function flag(c) { return FLAGS[c] || '&#127758;'; }
 function e(s) { if(!s)return''; return s.replace(/'/g,"\\'").replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function pct(v) { return (v*100).toFixed(0)+'%'; }
 function cls(v) { return v>=0.65?'h':v>=0.45?'m':'l'; }
 
-async function init() {
-  buildDateTabs();
-  try {
-    const res = await fetch(`${API}/fixtures?limit=2000`);
-    const data = await res.json();
-    allFixtures = data.fixtures || [];
-    buildCountryFilters();
-    applyFilters();
-  } catch(err) {
-    document.getElementById('main').innerHTML = '<div class="empty">Failed to load. Check connection.</div>';
-  }
+// ── SofaScore browser-side fetch ─────────────────────────────────────────────
+async function ssGet(path) {
+  const res = await fetch(`${SS}${path}`, {
+    headers: {
+      'Accept': 'application/json',
+      'Referer': 'https://www.sofascore.com/',
+    }
+  });
+  if (!res.ok) return null;
+  return res.json();
 }
 
-async function openSheet(id, home, away, league, country) {
+function setStep(step) {
+  document.querySelectorAll('.fetch-step').forEach((el, i) => {
+    el.classList.remove('active','done');
+    if (i < step) el.classList.add('done');
+    else if (i === step) el.classList.add('active');
+  });
+}
+
+async function fetchSofaScoreData(eventId, homeTeamId, awayTeamId) {
+  const steps = ['Fetching match details...','Fetching team form...','Fetching standings...','Fetching odds...'];
+
+  // Step 0: event details
+  setStep(0);
+  const eventData = await ssGet(`/event/${eventId}`);
+  const tournamentId = eventData?.event?.tournament?.uniqueTournament?.id;
+  const seasonId = eventData?.event?.season?.id;
+
+  // Step 1: form
+  setStep(1);
+  const [homeFormData, awayFormData, h2hData] = await Promise.all([
+    ssGet(`/team/${homeTeamId}/events/last/0`),
+    ssGet(`/team/${awayTeamId}/events/last/0`),
+    ssGet(`/event/${eventId}/h2h`),
+  ]);
+
+  const toMatch = e => ({
+    home: e.homeTeam?.name || '',
+    away: e.awayTeam?.name || '',
+    score: e.homeScore?.current != null ? `${e.homeScore.current}-${e.awayScore.current}` : null,
+    date: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString().split('T')[0] : null,
+  });
+
+  const homeForm = (homeFormData?.events || []).slice(0,10).map(toMatch);
+  const awayForm = (awayFormData?.events || []).slice(0,10).map(toMatch);
+  const h2hSummary = h2hData?.teamDuel || null;
+
+  // Step 2: standings + season stats
+  setStep(2);
+  let standings = [], homeStats = null, awayStats = null;
+  if (tournamentId && seasonId) {
+    const [standData, homeStatsData, awayStatsData] = await Promise.all([
+      ssGet(`/unique-tournament/${tournamentId}/season/${seasonId}/standings/total`),
+      ssGet(`/team/${homeTeamId}/unique-tournament/${tournamentId}/season/${seasonId}/statistics/overall`),
+      ssGet(`/team/${awayTeamId}/unique-tournament/${tournamentId}/season/${seasonId}/statistics/overall`),
+    ]);
+    standings = (standData?.standings?.[0]?.rows || []).map(r => ({
+      position: r.position, team: r.team?.name, played: r.matches,
+      wins: r.wins, draws: r.draws, losses: r.losses,
+      goalsFor: r.scoresFor, goalsAgainst: r.scoresAgainst, points: r.points,
+      form: r.forms?.map(f => f.value).join('') || '',
+    }));
+    if (homeStatsData?.statistics) {
+      const s = homeStatsData.statistics;
+      homeStats = { avgGoalsScored: s.avgGoalsScored, avgGoalsConceded: s.avgGoalsConceded, cleanSheets: s.cleanSheet, failedToScore: s.failedToScore, bttsCount: s.bothTeamsScored, over25Count: s.over25, matches: s.matches, wins: s.wins, draws: s.draws, losses: s.losses };
+    }
+    if (awayStatsData?.statistics) {
+      const s = awayStatsData.statistics;
+      awayStats = { avgGoalsScored: s.avgGoalsScored, avgGoalsConceded: s.avgGoalsConceded, cleanSheets: s.cleanSheet, failedToScore: s.failedToScore, bttsCount: s.bothTeamsScored, over25Count: s.over25, matches: s.matches, wins: s.wins, draws: s.draws, losses: s.losses };
+    }
+  }
+
+  // Step 3: odds
+  setStep(3);
+  let odds = null;
+  const oddsData = await ssGet(`/event/${eventId}/odds/1/all`);
+  if (oddsData?.markets) {
+    odds = {};
+    for (const market of oddsData.markets) {
+      const name = (market.marketName || '').toLowerCase();
+      if (name.includes('full time') || name === 'match winner' || name === '1x2') {
+        for (const c of market.choices || []) {
+          if (c.name === '1') odds.home = parseFloat(c.odds);
+          if (c.name === 'X' || c.name === 'x') odds.draw = parseFloat(c.odds);
+          if (c.name === '2') odds.away = parseFloat(c.odds);
+        }
+      }
+      if (name.includes('both teams') || name.includes('btts')) {
+        for (const c of market.choices || []) {
+          if (c.name?.toLowerCase() === 'yes') odds.btts_yes = parseFloat(c.odds);
+          if (c.name?.toLowerCase() === 'no') odds.btts_no = parseFloat(c.odds);
+        }
+      }
+      if (name.includes('over/under') && name.includes('2.5')) {
+        const ou = {};
+        for (const c of market.choices || []) {
+          if (c.name?.toLowerCase().includes('over')) ou.over = parseFloat(c.odds);
+          if (c.name?.toLowerCase().includes('under')) ou.under = parseFloat(c.odds);
+        }
+        if (Object.keys(ou).length) odds.over_under = { '2.5': ou };
+      }
+    }
+    if (!Object.keys(odds).length) odds = null;
+  }
+
+  // Compute momentum
+  function momentum(form, teamName) {
+    let pts = 0, total = 0;
+    for (const m of form.slice(0,5)) {
+      if (!m.score) continue;
+      const [h,a] = m.score.split('-').map(Number);
+      const isHome = m.home === teamName;
+      const scored = isHome ? h : a, conceded = isHome ? a : h;
+      if (scored > conceded) pts += 3;
+      else if (scored === conceded) pts += 1;
+      total += 3;
+    }
+    return total > 0 ? ((pts/total)*100).toFixed(1) : null;
+  }
+
+  return {
+    homeForm, awayForm, h2hSummary, standings,
+    homeStats, awayStats, odds,
+    homeMomentum: momentum(homeForm, ''),
+    awayMomentum: momentum(awayForm, ''),
+  };
+}
+
+async function openSheet(id, home, away, league, country, eventId, homeTeamId, awayTeamId) {
   document.getElementById('overlay').classList.add('open');
   document.getElementById('sheetContent').innerHTML = `
     <div class="fetching">
       <div class="fetch-spinner"></div>
       <div class="fetch-label">Analysing Match</div>
-      <div class="fetch-sub">${home} vs ${away}<br>Fetching data &amp; computing predictions...</div>
+      <div class="fetch-sub">${home} vs ${away}</div>
+      <div class="fetch-steps">
+        <div class="fetch-step active"><div class="step-dot"></div>Fetching match details...</div>
+        <div class="fetch-step"><div class="step-dot"></div>Fetching team form...</div>
+        <div class="fetch-step"><div class="step-dot"></div>Fetching standings...</div>
+        <div class="fetch-step"><div class="step-dot"></div>Fetching odds...</div>
+      </div>
     </div>`;
 
   try {
+    // Check if already enriched — if yes, skip SofaScore fetch
+    const fx = allFixtures.find(f => f.id === id);
+    let sofaData = null;
+
+    if (!fx?.enriched) {
+      sofaData = await fetchSofaScoreData(eventId, homeTeamId, awayTeamId);
+
+      // Send enrichment data to backend
+      await fetch(`${API}/enrich/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sofaData),
+      });
+
+      if (fx) { fx.enriched = 1; applyFilters(); }
+    }
+
+    // Get prediction
     const predRes = await fetch(`${API}/predict/${id}`);
     if (!predRes.ok) throw new Error('Prediction failed');
     const pred = await predRes.json();
 
-    renderSheet(pred, null, home, away, league, country);
+    renderSheet(pred, null, home, away, league, country, sofaData);
 
+    // Get AI explanation
     fetch(`${API}/predict/${id}/explain`).then(r => r.json()).then(explainData => {
-      if (explainData.explanation) {
-        updateAI(explainData.explanation);
-      }
+      if (explainData.explanation) updateAI(explainData.explanation);
     }).catch(() => {});
 
-    const fx = allFixtures.find(f => f.id === id);
-    if (fx) { fx.enriched = 1; applyFilters(); }
   } catch(err) {
     document.getElementById('sheetContent').innerHTML = `
       <div class="fetching">
@@ -450,7 +600,6 @@ function updateAI(explain) {
 
   const topPick = document.getElementById('top-pick-card');
   if (!topPick) return;
-
   if (recommended && !recommended.toLowerCase().includes('no clear') && !recommended.toLowerCase().includes('skip')) {
     const betMatch = recommended.match(/^([^@\-]+)/);
     const betLabel = betMatch ? betMatch[1].trim() : recommended.split(' ').slice(0,3).join(' ');
@@ -458,7 +607,7 @@ function updateAI(explain) {
       '<div class="tp-label">&#9889; Final Recommendation</div>' +
       '<div class="tp-value">' + betLabel + '</div>' +
       '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div><div class="tp-conf VALUE">VALUE BET</div></div>';
-  } else if (recommended.toLowerCase().includes('no clear') || recommended.toLowerCase().includes('skip')) {
+  } else {
     topPick.innerHTML =
       '<div class="tp-label">&#9889; Final Recommendation</div>' +
       '<div class="tp-value" style="font-size:18px">No Clear Pick</div>' +
@@ -466,7 +615,30 @@ function updateAI(explain) {
   }
 }
 
-function renderSheet(d, explain, home, away, league, country) {
+function renderStandings(standings, homeTeam, awayTeam) {
+  if (!standings || !standings.length) return '';
+  const relevant = standings.filter(r => r.team === homeTeam || r.team === awayTeam);
+  const nearby = standings.filter(r => {
+    const homeRow = standings.find(s => s.team === homeTeam);
+    const awayRow = standings.find(s => s.team === awayTeam);
+    if (!homeRow && !awayRow) return false;
+    const positions = [homeRow?.position, awayRow?.position].filter(Boolean);
+    return positions.some(p => Math.abs(r.position - p) <= 2);
+  });
+  const toShow = [...new Map([...relevant, ...nearby].map(r => [r.team, r])).values()]
+    .sort((a,b) => a.position - b.position).slice(0,8);
+
+  return '<div class="stitle">League Table</div>' +
+    toShow.map(r => `
+      <div class="standing-row">
+        <div class="standing-pos">${r.position}</div>
+        <div class="standing-team ${r.team===homeTeam||r.team===awayTeam?'highlight':''}">${r.team}</div>
+        <div class="standing-record">${r.wins}W ${r.draws}D ${r.losses}L</div>
+        <div class="standing-pts">${r.points}</div>
+      </div>`).join('');
+}
+
+function renderSheet(d, explain, home, away, league, country, sofaData) {
   const p = d.predictions, f = d.features, m = d.model, mr = p.match_result;
   const hf = f.homeFeatures, af = f.awayFeatures, h2hF = f.h2hFeatures;
 
@@ -478,7 +650,15 @@ function renderSheet(d, explain, home, away, league, country) {
   const top = picks.reduce((a,b) => a.prob>b.prob?a:b);
   const conf = mr.confidence || 'LOW';
 
-  function formDots(feat) {
+  function formDots(feat, matches) {
+    if (matches && matches.length) {
+      return matches.slice(0,7).map(m => {
+        if (!m.score) return '<div class="fdot D">?</div>';
+        const [h,a] = m.score.split('-').map(Number);
+        const r = h > a ? 'W' : h === a ? 'D' : 'L';
+        return `<div class="fdot ${r}">${r}</div>`;
+      }).join('');
+    }
     const n = feat.matches_available||0;
     const w = Math.round((feat.win_rate||0)*n);
     const dr = Math.round((feat.draw_rate||0)*n);
@@ -492,6 +672,10 @@ function renderSheet(d, explain, home, away, league, country) {
   const h2hD = Math.round((h2hF.draw_rate||0)*h2hTotal);
   const h2hA = h2hTotal-h2hH-h2hD;
   const scores = p.correct_score.slice(0,6);
+
+  const standings = sofaData?.standings || [];
+  const homeForm = sofaData?.homeForm || null;
+  const awayForm = sofaData?.awayForm || null;
 
   document.getElementById('sheetContent').innerHTML =
     '<div class="sheet-header">' +
@@ -554,10 +738,10 @@ function renderSheet(d, explain, home, away, league, country) {
     '</div>' +
 
     '<div class="sdiv"></div>' +
-    '<div class="stitle">Recent Form (' + hf.matches_available + ' matches)</div>' +
+    '<div class="stitle">Recent Form</div>' +
     '<div class="form-section">' +
-      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(hf) + '</div></div>' +
-      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(af) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(hf, homeForm) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(af, awayForm) + '</div></div>' +
     '</div>' +
 
     '<div class="sdiv"></div>' +
@@ -568,12 +752,9 @@ function renderSheet(d, explain, home, away, league, country) {
         '<div class="h2h-box"><div class="h2h-box-num d">' + h2hD + '</div><div class="h2h-box-lbl">Draws</div></div>' +
         '<div class="h2h-box"><div class="h2h-box-num a">' + h2hA + '</div><div class="h2h-box-lbl">' + away.split(' ')[0] + '</div></div>' +
       '</div>' +
-      '<div class="result-bars">' +
-        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">Avg Goals</div><div class="rbar-track"><div class="rbar-fill fill-home" style="width:' + Math.min(100,((h2hF.avg_total_goals||0)/5)*100) + '%"></div></div><div class="rbar-pct">' + (h2hF.avg_total_goals||0).toFixed(1) + '</div></div>' +
-        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">BTTS Rate</div><div class="rbar-track"><div class="rbar-fill fill-away" style="width:' + pct(h2hF.btts_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.btts_rate||0) + '</div></div>' +
-        '<div class="rbar-row"><div class="rbar-label" style="font-size:10px">O2.5 Rate</div><div class="rbar-track"><div class="rbar-fill fill-draw" style="width:' + pct(h2hF.over_2_5_rate||0) + '"></div></div><div class="rbar-pct">' + pct(h2hF.over_2_5_rate||0) + '</div></div>' +
-      '</div>' +
     '</div>' +
+
+    (standings.length ? '<div class="sdiv"></div>' + renderStandings(standings, home, away) : '') +
 
     '<div class="sdiv"></div>' +
     '<div class="stitle">AI Analysis</div>' +
@@ -588,6 +769,19 @@ function renderSheet(d, explain, home, away, league, country) {
 
 function closeSheet() { document.getElementById('overlay').classList.remove('open'); }
 function handleOverlay(e) { if(e.target===document.getElementById('overlay')) closeSheet(); }
+
+async function init() {
+  buildDateTabs();
+  try {
+    const res = await fetch(`${API}/fixtures?limit=2000`);
+    const data = await res.json();
+    allFixtures = data.fixtures || [];
+    buildCountryFilters();
+    applyFilters();
+  } catch(err) {
+    document.getElementById('main').innerHTML = '<div class="empty">Failed to load. Check connection.</div>';
+  }
+}
 
 init();
 </script>
