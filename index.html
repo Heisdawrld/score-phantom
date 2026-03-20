@@ -650,27 +650,26 @@ function renderSheet(d, explain, home, away, league, country, sofaData) {
   const top = picks.reduce((a,b) => a.prob>b.prob?a:b);
   const conf = mr.confidence || 'LOW';
 
-  function formDots(feat, matches) {
-    if (matches && matches.length) {
-      return matches.slice(0,7).map(m => {
-        if (!m.score) return '<div class="fdot D">?</div>';
-        const [h,a] = m.score.split('-').map(Number);
-        const r = h > a ? 'W' : h === a ? 'D' : 'L';
-        return `<div class="fdot ${r}">${r}</div>`;
-      }).join('');
-    }
-    const n = feat.matches_available||0;
-    const w = Math.round((feat.win_rate||0)*n);
-    const dr = Math.round((feat.draw_rate||0)*n);
-    const l = n-w-dr;
-    return [...Array(w).fill('W'),...Array(Math.max(0,dr)).fill('D'),...Array(Math.max(0,l)).fill('L')]
-      .slice(0,5).map(x => '<div class="fdot ' + x + '">' + x + '</div>').join('');
+  function formDots(teamName, matches) {
+    if (!matches || !matches.length) return '<span style="color:var(--text3);font-size:11px">No data</span>';
+    return matches.slice(0,7).map(m => {
+      if (!m.score) return '<div class="fdot D">?</div>';
+      const parts = m.score.split('-');
+      const h = parseInt(parts[0]), a = parseInt(parts[1]);
+      const isHome = m.home === teamName;
+      const scored = isHome ? h : a;
+      const conceded = isHome ? a : h;
+      const r = scored > conceded ? 'W' : scored === conceded ? 'D' : 'L';
+      return '<div class="fdot ' + r + '" title="' + m.home + ' ' + m.score + ' ' + m.away + ' (' + (m.date||'') + ')">' + r + '</div>';
+    }).join('');
   }
 
-  const h2hTotal = h2hF.matches_available||0;
-  const h2hH = Math.round((h2hF.home_win_rate||0)*h2hTotal);
-  const h2hD = Math.round((h2hF.draw_rate||0)*h2hTotal);
-  const h2hA = h2hTotal-h2hH-h2hD;
+  // Use SofaScore teamDuel summary for H2H
+  const h2hSummary = sofaData?.h2hSummary || null;
+  const h2hH = h2hSummary?.homeWins || 0;
+  const h2hD = h2hSummary?.draws || 0;
+  const h2hA = h2hSummary?.awayWins || 0;
+  const h2hTotal = h2hH + h2hD + h2hA;
   const scores = p.correct_score.slice(0,6);
 
   const standings = sofaData?.standings || [];
@@ -740,8 +739,8 @@ function renderSheet(d, explain, home, away, league, country, sofaData) {
     '<div class="sdiv"></div>' +
     '<div class="stitle">Recent Form</div>' +
     '<div class="form-section">' +
-      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(hf, homeForm) + '</div></div>' +
-      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(af, awayForm) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(home, homeForm) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(away, awayForm) + '</div></div>' +
     '</div>' +
 
     '<div class="sdiv"></div>' +
