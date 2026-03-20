@@ -1,235 +1,1078 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>ScorePhantom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0a0a12;
-  --surface: #111120;
-  --surface2: #181828;
-  --surface3: #1f1f35;
-  --border: #252540;
-  --border2: #2e2e50;
-  --purple: #6d28d9;
-  --purple2: #7c3aed;
-  --purple3: #8b5cf6;
-  --accent: #a78bfa;
-  --accent2: #c4b5fd;
-  --green: #10b981;
-  --green2: #34d399;
-  --red: #f43f5e;
-  --yellow: #f59e0b;
-  --text: #eeeeff;
-  --text2: #9090b8;
-  --text3: #55557a;
-  --text4: #33334a;
+  --black: #000000;
+  --bg: #070708;
+  --surface: #0e0e10;
+  --surface2: #141416;
+  --surface3: #1c1c1f;
+  --border: #1f1f23;
+  --border2: #2a2a30;
+  --green: #39ff6e;
+  --green2: #22c55e;
+  --green3: #16a34a;
+  --green-dim: rgba(57,255,110,0.12);
+  --green-glow: rgba(57,255,110,0.25);
+  --green-glow2: rgba(57,255,110,0.08);
+  --red: #ff4466;
+  --yellow: #fbbf24;
+  --text: #f0f0f2;
+  --text2: #8888a0;
+  --text3: #44444e;
+  --text4: #28282e;
+  --white: #ffffff;
 }
+
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-html,body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; font-size:14px; min-height:100vh; overflow-x:hidden; }
 
-.header { position:sticky; top:0; z-index:50; background:rgba(10,10,18,0.97); backdrop-filter:blur(20px); border-bottom:1px solid var(--border); }
-.header-top { display:flex; align-items:center; justify-content:space-between; padding:0 14px; height:52px; }
-.logo { display:flex; align-items:center; gap:9px; }
-.logo-mark { width:32px; height:32px; background:linear-gradient(135deg,var(--purple2),var(--accent)); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 0 16px rgba(124,58,237,0.4); }
-.logo-text { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px; letter-spacing:0.5px; }
-.logo-text span { color:var(--accent); }
-.live-pill { display:flex; align-items:center; gap:5px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:600; color:var(--green2); letter-spacing:1px; }
-.live-dot { width:5px; height:5px; background:var(--green2); border-radius:50%; animation:blink 1.4s ease infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
 
-.date-bar { display:flex; overflow-x:auto; scrollbar-width:none; border-top:1px solid var(--border); }
-.date-bar::-webkit-scrollbar { display:none; }
-.date-tab { flex-shrink:0; padding:10px 16px; font-size:12px; font-weight:600; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; text-align:center; transition:all .15s; }
-.date-tab:hover { color:var(--text2); }
-.date-tab.active { color:var(--accent); border-bottom-color:var(--purple2); }
-.date-tab .dn { display:block; font-size:9px; font-weight:500; letter-spacing:1px; text-transform:uppercase; }
-.date-tab .dd { display:block; font-size:16px; font-weight:700; }
+/* Subtle grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(57,255,110,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57,255,110,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
 
-.search-bar { padding:10px 14px; border-top:1px solid var(--border); }
-.search-inner { display:flex; align-items:center; gap:8px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:8px 12px; transition:border-color .15s; }
-.search-inner:focus-within { border-color:var(--purple); }
-.search-inner input { flex:1; background:none; border:none; outline:none; color:var(--text); font-family:'Barlow',sans-serif; font-size:13px; }
-.search-inner input::placeholder { color:var(--text4); }
+/* ── HEADER ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(7,7,8,0.96);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(57,255,110,0.08);
+}
 
-.filter-row { display:flex; gap:6px; padding:0 14px 10px; overflow-x:auto; scrollbar-width:none; }
-.filter-row::-webkit-scrollbar { display:none; }
-.filter-tag { flex-shrink:0; padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text2); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
-.filter-tag:hover { border-color:var(--purple); color:var(--accent); }
-.filter-tag.active { background:rgba(109,40,217,0.2); border-color:var(--purple2); color:var(--accent2); }
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+}
 
-main { padding-bottom:80px; }
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-.league-group { margin-bottom:2px; }
-.league-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surface); border-top:1px solid var(--border); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
-.league-header-left { display:flex; align-items:center; gap:8px; }
-.league-flag { width:20px; font-size:14px; flex-shrink:0; }
-.league-info { display:flex; flex-direction:column; gap:1px; }
-.league-country { font-size:9px; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; }
-.league-name { font-size:13px; font-weight:700; color:var(--text); }
-.league-header-right { display:flex; align-items:center; gap:8px; }
-.league-count { font-size:10px; color:var(--text3); background:var(--surface3); padding:2px 7px; border-radius:10px; }
-.league-chevron { color:var(--text3); font-size:12px; transition:transform .2s; }
-.league-group.collapsed .league-chevron { transform:rotate(-90deg); }
-.league-group.collapsed .league-fixtures { display:none; }
+.logo-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(57,255,110,0.6));
+}
 
-.fixture-row { display:flex; align-items:center; padding:0 14px; height:52px; border-bottom:1px solid var(--border); background:var(--bg); cursor:pointer; transition:background .12s; gap:10px; position:relative; }
-.fixture-row:hover { background:var(--surface); }
-.fixture-row::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:transparent; transition:background .15s; }
-.fixture-row:hover::before { background:var(--purple2); }
-.fixture-row.enriched::before { background:linear-gradient(180deg,var(--purple2),var(--accent)); }
+.logo-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+.logo-text .score { color: var(--white); }
+.logo-text .phantom { color: var(--green); }
 
-.fixture-time-col { width:42px; flex-shrink:0; text-align:center; }
-.fixture-time { font-size:12px; font-weight:600; color:var(--text2); }
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(57,255,110,0.06);
+  border: 1px solid rgba(57,255,110,0.2);
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
 
-.fixture-teams-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
-.fixture-team-row { display:flex; align-items:center; gap:7px; }
-.team-dot { width:6px; height:6px; border-radius:50%; background:var(--surface3); flex-shrink:0; }
-.team-dot.home { background:var(--purple3); }
-.team-dot.away { background:var(--accent); }
-.team-name-text { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.live-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 1.4s ease infinite;
+}
 
-.fixture-right-col { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-.predict-arrow { font-size:11px; color:var(--accent); font-weight:600; }
-.analysed-dot { width:6px; height:6px; border-radius:50%; background:var(--purple2); box-shadow:0 0 6px rgba(124,58,237,0.6); }
-
-.page-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; height:60vh; gap:14px; }
-.spinner { width:36px; height:36px; border:2px solid var(--border2); border-top-color:var(--purple2); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
 @keyframes spin { to{transform:rotate(360deg)} }
-.loading-label { font-size:11px; letter-spacing:2px; color:var(--text3); text-transform:uppercase; }
-.empty { text-align:center; padding:60px 20px; color:var(--text3); font-size:12px; letter-spacing:1px; }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
-.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:200; display:none; align-items:flex-end; }
-.overlay.open { display:flex; }
-.sheet { width:100%; max-width:520px; margin:0 auto; background:var(--surface); border-radius:20px 20px 0 0; border:1px solid var(--border2); border-bottom:none; max-height:94vh; overflow-y:auto; scrollbar-width:none; animation:sheetUp .28s cubic-bezier(.32,.72,0,1); }
-.sheet::-webkit-scrollbar { display:none; }
-@keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
-.sheet-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:10px auto 0; }
+/* ── DATE TABS ── */
+.date-bar {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-top: 1px solid var(--border);
+  padding: 0 4px;
+}
+.date-bar::-webkit-scrollbar { display: none; }
 
-.sheet-header { padding:14px 16px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-.sheet-match-info { flex:1; }
-.sheet-league-tag { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
-.sheet-teams { display:flex; align-items:center; gap:10px; }
-.sheet-team { flex:1; font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--text); line-height:1.1; }
-.sheet-team.away { text-align:right; }
-.sheet-vs { font-size:11px; color:var(--text3); font-weight:600; padding:4px 8px; border:1px solid var(--border); border-radius:6px; flex-shrink:0; }
-.sheet-close { width:30px; height:30px; border-radius:50%; background:var(--surface3); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text2); font-size:14px; flex-shrink:0; transition:all .15s; }
-.sheet-close:hover { border-color:var(--purple); color:var(--accent); }
+.date-tab {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: center;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  min-width: 52px;
+}
 
-.sdiv { height:1px; background:var(--border); margin:14px 16px; }
-.stitle { padding:0 16px 8px; font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--text3); }
+.date-tab .dn {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 2px;
+}
 
-.top-pick { margin:14px 16px 0; background:linear-gradient(135deg,rgba(109,40,217,0.25),rgba(167,139,250,0.08)); border:1px solid rgba(109,40,217,0.5); border-radius:14px; padding:14px; position:relative; overflow:hidden; }
-.top-pick::after { content:''; position:absolute; top:-20px; right:-20px; width:80px; height:80px; background:radial-gradient(circle,rgba(167,139,250,0.15),transparent 70%); pointer-events:none; }
-.tp-label { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--accent); margin-bottom:5px; }
-.tp-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; color:var(--text); line-height:1; margin-bottom:8px; }
-.tp-meta { display:flex; align-items:center; justify-content:space-between; }
-.tp-prob { font-size:12px; color:var(--text2); }
-.tp-prob strong { color:var(--accent2); font-size:15px; }
-.tp-conf { font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 10px; border-radius:20px; }
-.tp-conf.HIGH { background:rgba(16,185,129,0.15); color:var(--green2); border:1px solid rgba(16,185,129,0.3); }
-.tp-conf.MEDIUM { background:rgba(245,158,11,0.15); color:var(--yellow); border:1px solid rgba(245,158,11,0.3); }
-.tp-conf.LOW { background:rgba(109,40,217,0.15); color:var(--accent); border:1px solid rgba(109,40,217,0.3); }
-.tp-conf.VALUE { background:rgba(124,58,237,0.25); color:#a78bfa; border:1px solid rgba(124,58,237,0.5); }
+.date-tab .dd {
+  display: block;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  color: var(--text2);
+  line-height: 1;
+}
 
-.result-bars { padding:0 16px; }
-.rbar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
-.rbar-label { width:56px; font-size:11px; color:var(--text2); flex-shrink:0; font-weight:500; }
-.rbar-track { flex:1; height:5px; background:var(--surface3); border-radius:3px; overflow:hidden; }
-.rbar-fill { height:100%; border-radius:3px; transition:width .5s ease; }
-.fill-home { background:var(--purple3); }
-.fill-draw { background:var(--text3); }
-.fill-away { background:var(--accent); }
-.rbar-pct { width:34px; text-align:right; font-size:12px; font-weight:600; color:var(--text); flex-shrink:0; }
+.date-tab:hover .dd { color: var(--text); }
+.date-tab.active .dn { color: var(--green); }
+.date-tab.active .dd { color: var(--green); }
+.date-tab.active { border-bottom-color: var(--green); }
 
-.stats-row { display:flex; gap:8px; padding:0 16px; }
-.stat-box { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px 8px; text-align:center; }
-.stat-num { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); line-height:1; }
-.stat-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:.8px; margin-top:3px; text-transform:uppercase; }
+/* ── SEARCH ── */
+.search-bar {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
 
-.markets-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px; }
-.mcard { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px; }
-.mcard-title { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text3); margin-bottom:8px; }
-.mrow { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
-.mrow:last-child { margin-bottom:0; }
-.mkey { font-size:11px; color:var(--text2); }
-.mval { font-size:12px; font-weight:600; }
-.mval.h { color:var(--green2); }
-.mval.m { color:var(--yellow); }
-.mval.l { color:var(--text2); }
+.search-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 9px 14px;
+  transition: border-color 0.15s;
+}
 
-.scores-wrap { padding:0 16px; display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-.sc-chip { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 4px; text-align:center; }
-.sc-chip.top { background:rgba(109,40,217,0.15); border-color:rgba(109,40,217,0.5); }
-.sc-val { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:700; color:var(--text); }
-.sc-chip.top .sc-val { color:var(--accent2); }
-.sc-pct { font-size:9px; color:var(--text3); margin-top:1px; }
+.search-inner:focus-within {
+  border-color: var(--green3);
+  box-shadow: 0 0 0 3px rgba(57,255,110,0.06);
+}
 
-.form-section { padding:0 16px; }
-.form-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.form-team-label { width:80px; font-size:11px; font-weight:600; color:var(--text2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.form-dots { display:flex; gap:4px; }
-.fdot { width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
-.fdot.W { background:rgba(16,185,129,0.15); color:var(--green2); border:1px solid rgba(16,185,129,0.25); }
-.fdot.D { background:rgba(245,158,11,0.12); color:var(--yellow); border:1px solid rgba(245,158,11,0.2); }
-.fdot.L { background:rgba(244,63,94,0.12); color:var(--red); border:1px solid rgba(244,63,94,0.2); }
+.search-inner svg { color: var(--text3); flex-shrink: 0; }
 
-.h2h-section { padding:0 16px; }
-.h2h-summary { display:flex; gap:6px; margin-bottom:12px; }
-.h2h-box { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 6px; text-align:center; }
-.h2h-box-num { font-family:'Barlow Condensed',sans-serif; font-size:18px; font-weight:700; }
-.h2h-box-num.h { color:var(--purple3); }
-.h2h-box-num.d { color:var(--text2); }
-.h2h-box-num.a { color:var(--accent); }
-.h2h-box-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:.8px; margin-top:2px; }
+.search-inner input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+}
 
-.standing-row { display:flex; align-items:center; gap:8px; padding:6px 16px; border-bottom:1px solid var(--border); }
-.standing-pos { width:20px; font-size:11px; font-weight:700; color:var(--text3); text-align:center; }
-.standing-team { flex:1; font-size:12px; font-weight:600; color:var(--text); }
-.standing-team.highlight { color:var(--accent2); }
-.standing-pts { font-size:12px; font-weight:700; color:var(--accent); width:28px; text-align:right; }
-.standing-record { font-size:10px; color:var(--text3); width:70px; text-align:right; }
+.search-inner input::placeholder { color: var(--text3); }
 
-.ai-section { padding:0 16px 24px; }
-.ai-card { background:var(--surface2); border:1px solid var(--border2); border-radius:12px; padding:14px; position:relative; overflow:hidden; }
-.ai-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--purple),var(--accent)); }
-.ai-thinking { display:flex; align-items:center; gap:10px; color:var(--text2); font-size:12px; }
-.ai-spinner { width:16px; height:16px; border:1.5px solid var(--border2); border-top-color:var(--purple3); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
-.ai-label { font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--purple3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
-.ai-label::before { content:'✦'; font-size:10px; color:var(--accent); }
-.ai-insight { font-size:13px; color:var(--text); line-height:1.6; margin-bottom:10px; }
-.ai-recommended { background:linear-gradient(135deg,#7c3aed22,#4f46e522); border:1px solid #7c3aed66; border-radius:12px; padding:14px 16px; margin:12px 0; }
-.ai-rec-label { font-size:10px; font-weight:700; letter-spacing:1px; color:#a78bfa; margin-bottom:6px; }
-.ai-rec-value { font-size:14px; color:#e2e8f0; line-height:1.5; font-weight:500; }
-.ai-warning { font-size:11px; color:var(--yellow); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:6px 10px; margin-top:8px; }
-.ai-picks-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-.ai-pick-tag { font-size:11px; padding:4px 10px; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.3); border-radius:20px; color:var(--accent2); font-weight:500; }
+/* ── FILTER TAGS ── */
+.filter-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 14px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-row::-webkit-scrollbar { display: none; }
 
-.fetching { display:flex; flex-direction:column; align-items:center; padding:50px 20px; gap:14px; }
-.fetch-spinner { width:44px; height:44px; border:2px solid var(--border2); border-top-color:var(--purple2); border-radius:50%; animation:spin .7s linear infinite; }
-.fetch-label { font-size:11px; font-weight:600; letter-spacing:2px; color:var(--text2); text-transform:uppercase; }
-.fetch-sub { font-size:11px; color:var(--text3); text-align:center; line-height:1.5; }
-.fetch-steps { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
-.fetch-step { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:6px; }
-.fetch-step.done { color:var(--green2); }
-.fetch-step.active { color:var(--accent); }
-.step-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
+.filter-tag {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+
+.filter-tag:hover {
+  border-color: var(--green3);
+  color: var(--green);
+}
+
+.filter-tag.active {
+  background: var(--green-dim);
+  border-color: var(--green2);
+  color: var(--green);
+}
+
+/* ── MAIN ── */
+main { padding-bottom: 80px; position: relative; z-index: 1; }
+
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 12px var(--green-glow);
+}
+
+.loading-label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--text3);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text3);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+/* ── LEAGUE GROUP ── */
+.league-group { margin-bottom: 1px; }
+
+.league-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.league-header:hover { background: var(--surface2); }
+
+.league-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.league-flag { font-size: 16px; flex-shrink: 0; }
+
+.league-info { display: flex; flex-direction: column; gap: 1px; }
+
+.league-country {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.league-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.league-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.league-count {
+  font-size: 10px;
+  color: var(--text3);
+  background: var(--surface3);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.league-chevron {
+  color: var(--text3);
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.league-group.collapsed .league-chevron { transform: rotate(-90deg); }
+.league-group.collapsed .league-fixtures { display: none; }
+
+/* ── FIXTURE ROW ── */
+.fixture-row {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  height: 54px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: background 0.1s;
+  gap: 12px;
+  position: relative;
+}
+
+.fixture-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.fixture-row:hover { background: var(--surface); }
+.fixture-row:hover::before { background: var(--green3); }
+.fixture-row.enriched::before { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+
+.fixture-time-col {
+  width: 44px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.fixture-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
+
+.fixture-teams-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fixture-team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--surface3);
+}
+
+.team-dot.home { background: var(--green); box-shadow: 0 0 4px rgba(57,255,110,0.4); }
+.team-dot.away { background: var(--text3); }
+
+.team-name-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fixture-right-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.predict-arrow {
+  font-size: 16px;
+  color: var(--text3);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.fixture-row:hover .predict-arrow {
+  color: var(--green);
+  transform: translateX(2px);
+}
+
+.analysed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+/* ── OVERLAY & SHEET ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  backdrop-filter: blur(12px);
+  z-index: 200;
+  display: none;
+  align-items: flex-end;
+}
+
+.overlay.open { display: flex; }
+
+.sheet {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  border: 1px solid var(--border2);
+  border-bottom: none;
+  max-height: 94vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  border-top: 1px solid rgba(57,255,110,0.15);
+}
+
+.sheet::-webkit-scrollbar { display: none; }
+
+.sheet-handle {
+  width: 40px;
+  height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  margin: 12px auto 0;
+}
+
+/* ── SHEET HEADER ── */
+.sheet-header {
+  padding: 14px 16px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheet-match-info { flex: 1; }
+
+.sheet-league-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 8px;
+  opacity: 0.8;
+}
+
+.sheet-teams {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sheet-team {
+  flex: 1;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--white);
+  line-height: 1.1;
+  letter-spacing: 1px;
+}
+
+.sheet-team.away { text-align: right; }
+
+.sheet-vs {
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 700;
+  padding: 4px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  flex-shrink: 0;
+  letter-spacing: 1px;
+}
+
+.sheet-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.sheet-close:hover {
+  border-color: var(--green3);
+  color: var(--green);
+}
+
+/* ── DIVIDERS & TITLES ── */
+.sdiv {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 16px;
+}
+
+.stitle {
+  padding: 0 16px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+/* ── TOP RECOMMENDATION ── */
+.top-pick {
+  margin: 14px 16px 0;
+  background: linear-gradient(135deg, rgba(57,255,110,0.08), rgba(34,197,94,0.04));
+  border: 1px solid rgba(57,255,110,0.25);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.top-pick::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity: 0.6;
+}
+
+.top-pick::after {
+  content: '';
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 100px; height: 100px;
+  background: radial-gradient(circle, rgba(57,255,110,0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.tp-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+
+.tp-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  color: var(--white);
+  line-height: 1;
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}
+
+.tp-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tp-prob {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.tp-prob strong {
+  color: var(--green);
+  font-size: 15px;
+}
+
+.tp-conf {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+.tp-conf.HIGH { background: rgba(57,255,110,0.12); color: var(--green); border: 1px solid rgba(57,255,110,0.25); }
+.tp-conf.MEDIUM { background: rgba(251,191,36,0.1); color: var(--yellow); border: 1px solid rgba(251,191,36,0.2); }
+.tp-conf.LOW { background: rgba(255,255,255,0.05); color: var(--text2); border: 1px solid var(--border2); }
+.tp-conf.VALUE { background: rgba(57,255,110,0.15); color: var(--green); border: 1px solid rgba(57,255,110,0.3); box-shadow: 0 0 8px rgba(57,255,110,0.15); }
+.tp-conf.SKIP { background: rgba(255,68,102,0.1); color: var(--red); border: 1px solid rgba(255,68,102,0.2); }
+
+/* ── RESULT BARS ── */
+.result-bars { padding: 0 16px; }
+
+.rbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rbar-label {
+  width: 60px;
+  font-size: 11px;
+  color: var(--text2);
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.rbar-track {
+  flex: 1;
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.rbar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+
+.fill-home { background: var(--green); box-shadow: 0 0 6px rgba(57,255,110,0.4); }
+.fill-draw { background: var(--text3); }
+.fill-away { background: #60a5fa; }
+
+.rbar-pct {
+  width: 36px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+/* ── STAT BOXES ── */
+.stats-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.stat-box {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.stat-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--green);
+  line-height: 1;
+}
+
+.stat-lbl {
+  font-size: 9px;
+  color: var(--text3);
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* ── MARKETS GRID ── */
+.markets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.mcard {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.mcard-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+
+.mrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.mrow:last-child { margin-bottom: 0; }
+.mkey { font-size: 11px; color: var(--text2); }
+.mval { font-size: 12px; font-weight: 600; }
+.mval.h { color: var(--green); }
+.mval.m { color: var(--yellow); }
+.mval.l { color: var(--text2); }
+
+/* ── CORRECT SCORES ── */
+.scores-wrap {
+  padding: 0 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.sc-chip {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 4px;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+
+.sc-chip.top {
+  background: rgba(57,255,110,0.06);
+  border-color: rgba(57,255,110,0.3);
+}
+
+.sc-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.sc-chip.top .sc-val { color: var(--green); }
+
+.sc-pct {
+  font-size: 9px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ── FORM ── */
+.form-section { padding: 0 16px; }
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.form-team-label {
+  width: 80px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.form-dots { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.fdot {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: default;
+}
+
+.fdot.W { background: rgba(57,255,110,0.1); color: var(--green); border: 1px solid rgba(57,255,110,0.2); }
+.fdot.D { background: rgba(251,191,36,0.08); color: var(--yellow); border: 1px solid rgba(251,191,36,0.15); }
+.fdot.L { background: rgba(255,68,102,0.08); color: var(--red); border: 1px solid rgba(255,68,102,0.15); }
+
+/* ── H2H ── */
+.h2h-section { padding: 0 16px; }
+
+.h2h-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.h2h-box {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.h2h-box-num {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.h2h-box-num.h { color: var(--green); }
+.h2h-box-num.d { color: var(--text2); }
+.h2h-box-num.a { color: #60a5fa; }
+
+.h2h-box-lbl {
+  font-size: 9px;
+  color: var(--text3);
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+/* ── STANDINGS ── */
+.standing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.standing-pos {
+  width: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  text-align: center;
+}
+
+.standing-team {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.standing-team.highlight {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.standing-pts {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  color: var(--green);
+  width: 28px;
+  text-align: right;
+}
+
+.standing-record {
+  font-size: 10px;
+  color: var(--text3);
+  width: 72px;
+  text-align: right;
+}
+
+/* ── AI SECTION ── */
+.ai-section { padding: 0 16px 28px; }
+
+.ai-card {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity: 0.4;
+}
+
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text2);
+  font-size: 12px;
+}
+
+.ai-spinner {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border2);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.ai-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+
+.ai-insight {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.65;
+  margin-bottom: 12px;
+}
+
+.ai-recommended {
+  background: rgba(57,255,110,0.05);
+  border: 1px solid rgba(57,255,110,0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.ai-rec-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--green);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.ai-rec-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  color: var(--white);
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+
+.ai-warning {
+  font-size: 11px;
+  color: var(--yellow);
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.15);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 10px;
+}
+
+.ai-picks-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ai-pick-tag {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: rgba(57,255,110,0.06);
+  border: 1px solid rgba(57,255,110,0.15);
+  border-radius: 4px;
+  color: var(--text2);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* ── FETCHING STATE ── */
+.fetching {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 50px 20px;
+  gap: 14px;
+}
+
+.fetch-spinner {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 16px rgba(57,255,110,0.2);
+}
+
+.fetch-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 3px;
+  color: var(--text2);
+  text-transform: uppercase;
+}
+
+.fetch-sub {
+  font-size: 12px;
+  color: var(--text3);
+  text-align: center;
+  line-height: 1.6;
+}
 </style>
-
 </head>
 <body>
 
 <div class="header">
   <div class="header-top">
     <div class="logo">
-      <div class="logo-mark">👻</div>
-      <div class="logo-text">Score<span>Phantom</span></div>
+      <img class="logo-img" src="data:image/png;base64,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" alt="ScorePhantom">
+      <div class="logo-text"><span class="score">SCORE</span><span class="phantom">PHANTOM</span></div>
     </div>
-    <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
   </div>
   <div class="date-bar" id="dateTabs"></div>
   <div class="search-bar">
@@ -259,7 +1102,6 @@ main { padding-bottom:80px; }
 
 <script>
 const API = '/api';
-const SS = 'https://www.sofascore.com/api/v1';
 let allFixtures = [];
 let activeDate = null;
 let activeCountry = 'all';
@@ -284,7 +1126,7 @@ function fmtDay(d) {
   if (diff === 0) return 'TODAY';
   if (diff === -1) return 'YEST';
   if (diff === 1) return 'TMR';
-  return d.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase();
+  return d.toLocaleDateString('en-GB', {weekday:'short'}).toUpperCase();
 }
 
 function buildDateTabs() {
@@ -311,7 +1153,7 @@ function setDate(key, el) {
 function buildCountryFilters() {
   const countries = [...new Set(allFixtures.map(f => f.category_name).filter(Boolean))].sort();
   const row = document.getElementById('filterRow');
-  countries.slice(0,15).forEach(c => {
+  countries.slice(0, 20).forEach(c => {
     const el = document.createElement('div');
     el.className = 'filter-tag';
     el.textContent = c;
@@ -342,7 +1184,10 @@ function applyFilters() {
 
 function renderGroups(fixtures) {
   const main = document.getElementById('main');
-  if (!fixtures.length) { main.innerHTML = '<div class="empty">No fixtures found for this date</div>'; return; }
+  if (!fixtures.length) {
+    main.innerHTML = '<div class="empty">No fixtures found for this date</div>';
+    return;
+  }
 
   const groups = {};
   for (const f of fixtures) {
@@ -369,7 +1214,7 @@ function renderGroups(fixtures) {
       <div class="league-fixtures">
         ${g.fixtures.map(f => {
           const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--';
-          return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}','${f.match_url}','${f.home_team_id}','${f.away_team_id}')">
+          return `<div class="fixture-row ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${e(f.home_team_name)}','${e(f.away_team_name)}','${e(f.tournament_name)}','${e(f.category_name)}')">
             <div class="fixture-time-col"><div class="fixture-time">${time}</div></div>
             <div class="fixture-teams-col">
               <div class="fixture-team-row"><div class="team-dot home"></div><div class="team-name-text">${e(f.home_team_name)}</div></div>
@@ -388,191 +1233,38 @@ function renderGroups(fixtures) {
 
 function toggleGroup(h) { h.closest('.league-group').classList.toggle('collapsed'); }
 
-const FLAGS = {'England':'&#127988;','Spain':'&#127466;&#127480;','Germany':'&#127465;&#127466;','France':'&#127467;&#127479;','Italy':'&#127470;&#127481;','Portugal':'&#127477;&#127481;','Netherlands':'&#127475;&#127473;','Belgium':'&#127463;&#127466;','Turkey':'&#127481;&#127479;','Brazil':'&#127463;&#127479;','Argentina':'&#127462;&#127479;','USA':'&#127482;&#127480;','Mexico':'&#127474;&#127485;','Nigeria':'&#127475;&#127468;','Ghana':'&#127468;&#127469;','Egypt':'&#127466;&#127468;','Morocco':'&#127474;&#127462;','Ukraine':'&#127482;&#127462;','Poland':'&#127477;&#127473;','Sweden':'&#127480;&#127466;','Norway':'&#127475;&#127476;','Denmark':'&#127465;&#127472;','Switzerland':'&#127464;&#127469;','Croatia':'&#127469;&#127479;','Serbia':'&#127479;&#127480;','Scotland':'&#127988;','Saudi Arabia':'&#127480;&#127462;'};
-function flag(c) { return FLAGS[c] || '&#127758;'; }
-function e(s) { if(!s)return''; return s.replace(/'/g,"\\'").replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+const FLAGS = {'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Spain':'🇪🇸','Germany':'🇩🇪','France':'🇫🇷','Italy':'🇮🇹','Portugal':'🇵🇹','Netherlands':'🇳🇱','Belgium':'🇧🇪','Turkey':'🇹🇷','Brazil':'🇧🇷','Argentina':'🇦🇷','USA':'🇺🇸','Mexico':'🇲🇽','Saudi Arabia':'🇸🇦','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Norway':'🇳🇴','Sweden':'🇸🇪','Denmark':'🇩🇰','Poland':'🇵🇱','Czech Republic':'🇨🇿','Romania':'🇷🇴','Austria':'🇦🇹','Greece':'🇬🇷','Ukraine':'🇺🇦','Colombia':'🇨🇴','Europe':'🇪🇺'};
+function flag(c) { return FLAGS[c] || '🌍'; }
+function e(s) { if(!s)return''; return s.replace(/'/g,"\'").replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function pct(v) { return (v*100).toFixed(0)+'%'; }
 function cls(v) { return v>=0.65?'h':v>=0.45?'m':'l'; }
 
-// ── SofaScore browser-side fetch ─────────────────────────────────────────────
-async function ssGet(path) {
-  const res = await fetch(`${SS}${path}`, {
-    headers: {
-      'Accept': 'application/json',
-      'Referer': 'https://www.sofascore.com/',
-    }
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-function setStep(step) {
-  document.querySelectorAll('.fetch-step').forEach((el, i) => {
-    el.classList.remove('active','done');
-    if (i < step) el.classList.add('done');
-    else if (i === step) el.classList.add('active');
-  });
-}
-
-async function fetchSofaScoreData(eventId, homeTeamId, awayTeamId) {
-  const steps = ['Fetching match details...','Fetching team form...','Fetching standings...','Fetching odds...'];
-
-  // Step 0: event details
-  setStep(0);
-  const eventData = await ssGet(`/event/${eventId}`);
-  const tournamentId = eventData?.event?.tournament?.uniqueTournament?.id;
-  const seasonId = eventData?.event?.season?.id;
-
-  // Step 1: form
-  setStep(1);
-  const [homeFormData, awayFormData, h2hData] = await Promise.all([
-    ssGet(`/team/${homeTeamId}/events/last/0`),
-    ssGet(`/team/${awayTeamId}/events/last/0`),
-    ssGet(`/event/${eventId}/h2h`),
-  ]);
-
-  const toMatch = e => ({
-    home: e.homeTeam?.name || '',
-    away: e.awayTeam?.name || '',
-    score: e.homeScore?.current != null ? `${e.homeScore.current}-${e.awayScore.current}` : null,
-    date: e.startTimestamp ? new Date(e.startTimestamp * 1000).toISOString().split('T')[0] : null,
-  });
-
-  const homeForm = (homeFormData?.events || []).slice(0,10).map(toMatch);
-  const awayForm = (awayFormData?.events || []).slice(0,10).map(toMatch);
-  const h2hSummary = h2hData?.teamDuel || null;
-
-  // Step 2: standings + season stats
-  setStep(2);
-  let standings = [], homeStats = null, awayStats = null;
-  if (tournamentId && seasonId) {
-    const [standData, homeStatsData, awayStatsData] = await Promise.all([
-      ssGet(`/unique-tournament/${tournamentId}/season/${seasonId}/standings/total`),
-      ssGet(`/team/${homeTeamId}/unique-tournament/${tournamentId}/season/${seasonId}/statistics/overall`),
-      ssGet(`/team/${awayTeamId}/unique-tournament/${tournamentId}/season/${seasonId}/statistics/overall`),
-    ]);
-    standings = (standData?.standings?.[0]?.rows || []).map(r => ({
-      position: r.position, team: r.team?.name, played: r.matches,
-      wins: r.wins, draws: r.draws, losses: r.losses,
-      goalsFor: r.scoresFor, goalsAgainst: r.scoresAgainst, points: r.points,
-      form: r.forms?.map(f => f.value).join('') || '',
-    }));
-    if (homeStatsData?.statistics) {
-      const s = homeStatsData.statistics;
-      homeStats = { avgGoalsScored: s.avgGoalsScored, avgGoalsConceded: s.avgGoalsConceded, cleanSheets: s.cleanSheet, failedToScore: s.failedToScore, bttsCount: s.bothTeamsScored, over25Count: s.over25, matches: s.matches, wins: s.wins, draws: s.draws, losses: s.losses };
-    }
-    if (awayStatsData?.statistics) {
-      const s = awayStatsData.statistics;
-      awayStats = { avgGoalsScored: s.avgGoalsScored, avgGoalsConceded: s.avgGoalsConceded, cleanSheets: s.cleanSheet, failedToScore: s.failedToScore, bttsCount: s.bothTeamsScored, over25Count: s.over25, matches: s.matches, wins: s.wins, draws: s.draws, losses: s.losses };
-    }
-  }
-
-  // Step 3: odds
-  setStep(3);
-  let odds = null;
-  const oddsData = await ssGet(`/event/${eventId}/odds/1/all`);
-  if (oddsData?.markets) {
-    odds = {};
-    for (const market of oddsData.markets) {
-      const name = (market.marketName || '').toLowerCase();
-      if (name.includes('full time') || name === 'match winner' || name === '1x2') {
-        for (const c of market.choices || []) {
-          if (c.name === '1') odds.home = parseFloat(c.odds);
-          if (c.name === 'X' || c.name === 'x') odds.draw = parseFloat(c.odds);
-          if (c.name === '2') odds.away = parseFloat(c.odds);
-        }
-      }
-      if (name.includes('both teams') || name.includes('btts')) {
-        for (const c of market.choices || []) {
-          if (c.name?.toLowerCase() === 'yes') odds.btts_yes = parseFloat(c.odds);
-          if (c.name?.toLowerCase() === 'no') odds.btts_no = parseFloat(c.odds);
-        }
-      }
-      if (name.includes('over/under') && name.includes('2.5')) {
-        const ou = {};
-        for (const c of market.choices || []) {
-          if (c.name?.toLowerCase().includes('over')) ou.over = parseFloat(c.odds);
-          if (c.name?.toLowerCase().includes('under')) ou.under = parseFloat(c.odds);
-        }
-        if (Object.keys(ou).length) odds.over_under = { '2.5': ou };
-      }
-    }
-    if (!Object.keys(odds).length) odds = null;
-  }
-
-  // Compute momentum
-  function momentum(form, teamName) {
-    let pts = 0, total = 0;
-    for (const m of form.slice(0,5)) {
-      if (!m.score) continue;
-      const [h,a] = m.score.split('-').map(Number);
-      const isHome = m.home === teamName;
-      const scored = isHome ? h : a, conceded = isHome ? a : h;
-      if (scored > conceded) pts += 3;
-      else if (scored === conceded) pts += 1;
-      total += 3;
-    }
-    return total > 0 ? ((pts/total)*100).toFixed(1) : null;
-  }
-
-  return {
-    homeForm, awayForm, h2hSummary, standings,
-    homeStats, awayStats, odds,
-    homeMomentum: momentum(homeForm, ''),
-    awayMomentum: momentum(awayForm, ''),
-  };
-}
-
-async function openSheet(id, home, away, league, country, eventId, homeTeamId, awayTeamId) {
+async function openSheet(id, home, away, league, country) {
   document.getElementById('overlay').classList.add('open');
   document.getElementById('sheetContent').innerHTML = `
     <div class="fetching">
       <div class="fetch-spinner"></div>
-      <div class="fetch-label">Analysing Match</div>
+      <div class="fetch-label">Analysing</div>
       <div class="fetch-sub">${home} vs ${away}</div>
-      <div class="fetch-steps">
-        <div class="fetch-step active"><div class="step-dot"></div>Fetching match details...</div>
-        <div class="fetch-step"><div class="step-dot"></div>Fetching team form...</div>
-        <div class="fetch-step"><div class="step-dot"></div>Fetching standings...</div>
-        <div class="fetch-step"><div class="step-dot"></div>Fetching odds...</div>
-      </div>
     </div>`;
 
   try {
-    // Check if already enriched — if yes, skip SofaScore fetch
-    const fx = allFixtures.find(f => f.id === id);
-    let sofaData = null;
-
-    if (!fx?.enriched) {
-      sofaData = await fetchSofaScoreData(eventId, homeTeamId, awayTeamId);
-
-      // Send enrichment data to backend
-      await fetch(`${API}/enrich/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sofaData),
-      });
-
-      if (fx) { fx.enriched = 1; applyFilters(); }
-    }
-
-    // Get prediction
     const predRes = await fetch(`${API}/predict/${id}`);
     if (!predRes.ok) throw new Error('Prediction failed');
     const pred = await predRes.json();
+    renderSheet(pred, home, away, league, country);
 
-    renderSheet(pred, null, home, away, league, country, sofaData);
-
-    // Get AI explanation
-    fetch(`${API}/predict/${id}/explain`).then(r => r.json()).then(explainData => {
-      if (explainData.explanation) updateAI(explainData.explanation);
+    fetch(`${API}/predict/${id}/explain`).then(r => r.json()).then(data => {
+      if (data.explanation) updateAI(data.explanation);
     }).catch(() => {});
 
+    const fx = allFixtures.find(f => f.id === id);
+    if (fx) { fx.enriched = 1; applyFilters(); }
   } catch(err) {
     document.getElementById('sheetContent').innerHTML = `
       <div class="fetching">
-        <div style="font-size:28px">&#9888;&#65039;</div>
-        <div class="fetch-label" style="color:#f43f5e">Analysis Failed</div>
+        <div style="font-size:32px">⚠️</div>
+        <div class="fetch-label" style="color:var(--red)">Failed</div>
         <div class="fetch-sub">${err.message}</div>
       </div>`;
   }
@@ -581,6 +1273,7 @@ async function openSheet(id, home, away, league, country, eventId, homeTeamId, a
 function updateAI(explain) {
   const el = document.getElementById('ai-content');
   if (!el) return;
+
   const insight = explain.top_insight || '';
   const warning = explain.data_warning || '';
   const recommended = explain.recommended_bet || '';
@@ -594,41 +1287,55 @@ function updateAI(explain) {
   el.innerHTML =
     '<div class="ai-label">Groq Intelligence</div>' +
     (insight ? '<div class="ai-insight">' + insight + '</div>' : '') +
-    (recommended ? '<div class="ai-recommended"><div class="ai-rec-label">&#9889; RECOMMENDED BET</div><div class="ai-rec-value">' + recommended + '</div></div>' : '') +
+    (recommended ? '<div class="ai-recommended"><div class="ai-rec-label">⚡ Recommended Bet</div><div class="ai-rec-value">' + recommended + '</div></div>' : '') +
     (picks.length ? '<div class="ai-picks-row">' + picks.map(x => '<div class="ai-pick-tag">' + x + '</div>').join('') + '</div>' : '') +
-    (warning ? '<div class="ai-warning">&#9888; ' + warning + '</div>' : '');
+    (warning ? '<div class="ai-warning">⚠ ' + warning + '</div>' : '');
 
   const topPick = document.getElementById('top-pick-card');
-  if (!topPick) return;
-  if (recommended && !recommended.toLowerCase().includes('no clear') && !recommended.toLowerCase().includes('skip')) {
-    const betMatch = recommended.match(/^([^@\-]+)/);
-    const betLabel = betMatch ? betMatch[1].trim() : recommended.split(' ').slice(0,3).join(' ');
+  if (!topPick || !recommended) return;
+
+  const isSkip = recommended.toLowerCase().includes('no clear') || recommended.toLowerCase().includes('skip');
+  if (!isSkip) {
     topPick.innerHTML =
-      '<div class="tp-label">&#9889; Final Recommendation</div>' +
-      '<div class="tp-value">' + betLabel + '</div>' +
-      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#a78bfa">Engine + Groq</div><div class="tp-conf VALUE">VALUE BET</div></div>';
+      '<div class="tp-label">⚡ Final Recommendation</div>' +
+      '<div class="tp-value">' + recommended + '</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:11px;color:var(--green);opacity:0.7">Engine + Groq AI</div><div class="tp-conf VALUE">VALUE BET</div></div>';
   } else {
     topPick.innerHTML =
-      '<div class="tp-label">&#9889; Final Recommendation</div>' +
-      '<div class="tp-value" style="font-size:18px">No Clear Pick</div>' +
-      '<div class="tp-meta"><div class="tp-prob" style="font-size:12px;color:#94a3b8">Skip this match</div><div class="tp-conf LOW">SKIP</div></div>';
+      '<div class="tp-label">⚡ Final Recommendation</div>' +
+      '<div class="tp-value" style="font-size:20px;color:var(--text2)">No Clear Pick</div>' +
+      '<div class="tp-meta"><div class="tp-prob" style="font-size:11px;color:var(--text3)">Skip this match</div><div class="tp-conf SKIP">SKIP</div></div>';
   }
+}
+
+function formDots(teamName, matches) {
+  if (!matches || !matches.length) return '<span style="color:var(--text3);font-size:11px;font-style:italic">Pending data</span>';
+  return matches.slice(0, 7).map(m => {
+    if (!m.score) return '<div class="fdot D">?</div>';
+    const parts = m.score.split('-');
+    const h = parseInt(parts[0]), a = parseInt(parts[1]);
+    const homeLower = (m.home || '').toLowerCase();
+    const nameLower = teamName.toLowerCase();
+    const isHome = homeLower.includes(nameLower.split(' ')[0]) || nameLower.includes(homeLower.split(' ')[0]);
+    const scored = isHome ? h : a;
+    const conceded = isHome ? a : h;
+    const r = scored > conceded ? 'W' : scored === conceded ? 'D' : 'L';
+    return '<div class="fdot ' + r + '" title="' + m.home + ' ' + m.score + ' ' + m.away + '">' + r + '</div>';
+  }).join('');
 }
 
 function renderStandings(standings, homeTeam, awayTeam) {
   if (!standings || !standings.length) return '';
-  const relevant = standings.filter(r => r.team === homeTeam || r.team === awayTeam);
-  const nearby = standings.filter(r => {
-    const homeRow = standings.find(s => s.team === homeTeam);
-    const awayRow = standings.find(s => s.team === awayTeam);
-    if (!homeRow && !awayRow) return false;
-    const positions = [homeRow?.position, awayRow?.position].filter(Boolean);
-    return positions.some(p => Math.abs(r.position - p) <= 2);
-  });
-  const toShow = [...new Map([...relevant, ...nearby].map(r => [r.team, r])).values()]
-    .sort((a,b) => a.position - b.position).slice(0,8);
+  const homeRow = standings.find(r => r.team === homeTeam);
+  const awayRow = standings.find(r => r.team === awayTeam);
+  if (!homeRow && !awayRow) return '';
 
-  return '<div class="stitle">League Table</div>' +
+  const positions = [homeRow?.position, awayRow?.position].filter(Boolean);
+  const nearby = standings.filter(r => positions.some(p => Math.abs(r.position - p) <= 2));
+  const toShow = [...new Map([...(homeRow?[homeRow]:[]), ...(awayRow?[awayRow]:[]), ...nearby].map(r => [r.team, r])).values()]
+    .sort((a,b) => a.position - b.position).slice(0, 8);
+
+  return '<div class="sdiv"></div><div class="stitle">League Table</div>' +
     toShow.map(r => `
       <div class="standing-row">
         <div class="standing-pos">${r.position}</div>
@@ -638,9 +1345,18 @@ function renderStandings(standings, homeTeam, awayTeam) {
       </div>`).join('');
 }
 
-function renderSheet(d, explain, home, away, league, country, sofaData) {
+function renderSheet(d, home, away, league, country) {
   const p = d.predictions, f = d.features, m = d.model, mr = p.match_result;
   const hf = f.homeFeatures, af = f.awayFeatures, h2hF = f.h2hFeatures;
+
+  // Parse meta for standings and form
+  let standings = [], homeForm = null, awayForm = null, h2hSummary = null;
+  try {
+    const meta = d.meta ? (typeof d.meta === 'string' ? JSON.parse(d.meta) : d.meta) : null;
+    standings = meta?.standings || [];
+    homeForm = meta?.homeForm || null;
+    awayForm = meta?.awayForm || null;
+  } catch(e) {}
 
   const picks = [
     {label: home + ' Win', prob: mr.home},
@@ -650,47 +1366,27 @@ function renderSheet(d, explain, home, away, league, country, sofaData) {
   const top = picks.reduce((a,b) => a.prob>b.prob?a:b);
   const conf = mr.confidence || 'LOW';
 
-  function formDots(teamName, matches) {
-    if (!matches || !matches.length) return '<span style="color:var(--text3);font-size:11px">No data</span>';
-    return matches.slice(0,7).map(m => {
-      if (!m.score) return '<div class="fdot D">?</div>';
-      const parts = m.score.split('-');
-      const h = parseInt(parts[0]), a = parseInt(parts[1]);
-      const isHome = m.home === teamName;
-      const scored = isHome ? h : a;
-      const conceded = isHome ? a : h;
-      const r = scored > conceded ? 'W' : scored === conceded ? 'D' : 'L';
-      return '<div class="fdot ' + r + '" title="' + m.home + ' ' + m.score + ' ' + m.away + ' (' + (m.date||'') + ')">' + r + '</div>';
-    }).join('');
-  }
-
-  // Use SofaScore teamDuel summary for H2H
-  const h2hSummary = sofaData?.h2hSummary || null;
-  const h2hH = h2hSummary?.homeWins || 0;
-  const h2hD = h2hSummary?.draws || 0;
-  const h2hA = h2hSummary?.awayWins || 0;
-  const h2hTotal = h2hH + h2hD + h2hA;
-  const scores = p.correct_score.slice(0,6);
-
-  const standings = sofaData?.standings || [];
-  const homeForm = sofaData?.homeForm || null;
-  const awayForm = sofaData?.awayForm || null;
+  const h2hTotal = h2hF.matches_available || 0;
+  const h2hH = Math.round((h2hF.home_win_rate||0)*h2hTotal);
+  const h2hD = Math.round((h2hF.draw_rate||0)*h2hTotal);
+  const h2hA = h2hTotal - h2hH - h2hD;
+  const scores = p.correct_score.slice(0, 6);
 
   document.getElementById('sheetContent').innerHTML =
     '<div class="sheet-header">' +
       '<div class="sheet-match-info">' +
-        '<div class="sheet-league-tag">' + league + ' &middot; ' + country + '</div>' +
+        '<div class="sheet-league-tag">' + league + ' · ' + country + '</div>' +
         '<div class="sheet-teams">' +
           '<div class="sheet-team">' + home + '</div>' +
           '<div class="sheet-vs">VS</div>' +
           '<div class="sheet-team away">' + away + '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="sheet-close" onclick="closeSheet()">&#10005;</div>' +
+      '<div class="sheet-close" onclick="closeSheet()">✕</div>' +
     '</div>' +
 
     '<div class="top-pick" id="top-pick-card">' +
-      '<div class="tp-label">&#9733; Top Recommendation</div>' +
+      '<div class="tp-label">⭐ Top Pick</div>' +
       '<div class="tp-value">' + top.label + '</div>' +
       '<div class="tp-meta">' +
         '<div class="tp-prob">Probability: <strong>' + pct(top.prob) + '</strong></div>' +
@@ -720,31 +1416,31 @@ function renderSheet(d, explain, home, away, league, country, sofaData) {
     '<div class="markets-grid">' +
       '<div class="mcard">' +
         '<div class="mcard-title">Over / Under</div>' +
-        [['O 0.5',p.over_under.over_0_5],['O 1.5',p.over_under.over_1_5],['O 2.5',p.over_under.over_2_5],['O 3.5',p.over_under.over_3_5],['O 4.5',p.over_under.over_4_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+        [['O 0.5',p.over_under.over_0_5],['O 1.5',p.over_under.over_1_5],['O 2.5',p.over_under.over_2_5],['O 3.5',p.over_under.over_3_5],['O 4.5',p.over_under.over_4_5]].map(kv=>'<div class="mrow"><span class="mkey">'+kv[0]+'</span><span class="mval '+cls(kv[1])+'">'+pct(kv[1])+'</span></div>').join('') +
       '</div>' +
       '<div class="mcard">' +
         '<div class="mcard-title">' + home.split(' ')[0] + ' Goals</div>' +
-        [['O 0.5',p.home_team_goals.over_0_5],['O 1.5',p.home_team_goals.over_1_5],['O 2.5',p.home_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+        [['O 0.5',p.home_team_goals.over_0_5],['O 1.5',p.home_team_goals.over_1_5],['O 2.5',p.home_team_goals.over_2_5]].map(kv=>'<div class="mrow"><span class="mkey">'+kv[0]+'</span><span class="mval '+cls(kv[1])+'">'+pct(kv[1])+'</span></div>').join('') +
         '<div class="mcard-title" style="margin-top:8px">' + away.split(' ')[0] + ' Goals</div>' +
-        [['O 0.5',p.away_team_goals.over_0_5],['O 1.5',p.away_team_goals.over_1_5],['O 2.5',p.away_team_goals.over_2_5]].map(function(kv){ return '<div class="mrow"><span class="mkey">' + kv[0] + '</span><span class="mval ' + cls(kv[1]) + '">' + pct(kv[1]) + '</span></div>'; }).join('') +
+        [['O 0.5',p.away_team_goals.over_0_5],['O 1.5',p.away_team_goals.over_1_5],['O 2.5',p.away_team_goals.over_2_5]].map(kv=>'<div class="mrow"><span class="mkey">'+kv[0]+'</span><span class="mval '+cls(kv[1])+'">'+pct(kv[1])+'</span></div>').join('') +
       '</div>' +
     '</div>' +
 
     '<div class="sdiv"></div>' +
     '<div class="stitle">Correct Score</div>' +
     '<div class="scores-wrap">' +
-      scores.map(function(s,i){ return '<div class="sc-chip ' + (i===0?'top':'') + '"><div class="sc-val">' + s.score + '</div><div class="sc-pct">' + pct(s.probability) + '</div></div>'; }).join('') +
+      scores.map((s,i)=>'<div class="sc-chip '+(i===0?'top':'')+'"><div class="sc-val">'+s.score+'</div><div class="sc-pct">'+pct(s.probability)+'</div></div>').join('') +
     '</div>' +
 
     '<div class="sdiv"></div>' +
     '<div class="stitle">Recent Form</div>' +
     '<div class="form-section">' +
-      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(home, homeForm) + '</div></div>' +
-      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(away, awayForm) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + home.split(' ')[0] + '</div><div class="form-dots">' + formDots(home, homeForm || []) + '</div></div>' +
+      '<div class="form-row"><div class="form-team-label">' + away.split(' ')[0] + '</div><div class="form-dots">' + formDots(away, awayForm || []) + '</div></div>' +
     '</div>' +
 
     '<div class="sdiv"></div>' +
-    '<div class="stitle">Head to Head &middot; ' + h2hTotal + ' matches</div>' +
+    '<div class="stitle">Head to Head · ' + h2hTotal + ' matches</div>' +
     '<div class="h2h-section">' +
       '<div class="h2h-summary">' +
         '<div class="h2h-box"><div class="h2h-box-num h">' + h2hH + '</div><div class="h2h-box-lbl">' + home.split(' ')[0] + '</div></div>' +
@@ -753,15 +1449,13 @@ function renderSheet(d, explain, home, away, league, country, sofaData) {
       '</div>' +
     '</div>' +
 
-    (standings.length ? '<div class="sdiv"></div>' + renderStandings(standings, home, away) : '') +
+    renderStandings(standings, home, away) +
 
     '<div class="sdiv"></div>' +
     '<div class="stitle">AI Analysis</div>' +
     '<div class="ai-section">' +
       '<div class="ai-card">' +
-        '<div id="ai-content">' +
-          '<div class="ai-thinking"><div class="ai-spinner"></div> Groq is analysing this match...</div>' +
-        '</div>' +
+        '<div id="ai-content"><div class="ai-thinking"><div class="ai-spinner"></div>Groq is analysing...</div></div>' +
       '</div>' +
     '</div>';
 }
@@ -784,6 +1478,5 @@ async function init() {
 
 init();
 </script>
-
 </body>
 </html>
