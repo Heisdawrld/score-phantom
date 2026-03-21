@@ -644,14 +644,14 @@ async function sendChat() {
   input.value = '';
 
   const chatBox = document.getElementById('chat-messages');
-  chatBox.innerHTML += `<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">${msg}</span></div>`;
-  chatBox.innerHTML += `<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>`;
+  chatBox.innerHTML += '<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">' + msg + '</span></div>';
+  chatBox.innerHTML += '<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>';
   chatBox.scrollTop = chatBox.scrollHeight;
 
   chatHistory.push({ role: 'user', content: msg });
 
   try {
-    const res = await fetch(\`/api/predict/\${currentFixtureId}/chat\`, {
+    const res = await fetch('/api/predict/' + currentFixtureId + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
@@ -661,7 +661,7 @@ async function sendChat() {
     chatHistory.push({ role: 'assistant', content: reply });
 
     document.getElementById('typing')?.remove();
-    chatBox.innerHTML += `<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">${reply}</span></div>`;
+    chatBox.innerHTML += '<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">' + reply + '</span></div>';
     chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     document.getElementById('typing')?.remove();
