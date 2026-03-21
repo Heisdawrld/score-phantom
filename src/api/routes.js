@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../config/database.js';
 import { predict } from '../predictions/poissonEngine.js';
-import { explainPrediction } from '../explanations/groqExplainer.js';
+import { explainPrediction, chatAboutMatch } from '../explanations/groqExplainer.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
 
 const router = Router();
@@ -176,6 +176,52 @@ router.get('/stats', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
+// ── Match Chat ────────────────────────────────────────────────────────────────
+router.post('/predict/:fixtureId/chat', async (req, res) => {
+    try {
+        const { message, history = [] } = req.body;
+        if (!message) return res.status(400).json({ error: 'Message required' });
+
+        const result = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [req.params.fixtureId] });
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
+        const fixture = result.rows[0];
+
+        const [oddsResult, historyResult] = await Promise.all([
+            db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] }),
+            db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] }),
+        ]);
+
+        const oddsRow = oddsResult.rows[0] || null;
+        const odds = oddsRow ? {
+            home: oddsRow.home, draw: oddsRow.draw, away: oddsRow.away,
+            btts_yes: oddsRow.btts_yes, btts_no: oddsRow.btts_no,
+            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
+        } : null;
+
+        let meta = null;
+        try { meta = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta = {}; }
+
+        const toMatchObj = (m) => ({
+            home: m.home_team, away: m.away_team,
+            score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null,
+            date: m.date,
+        });
+
+        meta.homeForm = historyResult.rows.filter(m => m.type === 'home_form').map(toMatchObj);
+        meta.awayForm = historyResult.rows.filter(m => m.type === 'away_form').map(toMatchObj);
+        meta.h2h = historyResult.rows.filter(m => m.type === 'h2h').map(toMatchObj);
+
+        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
+        const fullPrediction = { ...prediction, odds, meta };
+
+        const reply = await chatAboutMatch(fullPrediction, history, message);
+        res.json({ reply });
+    } catch (err) {
+        console.error('[Chat] Failed:', err.message);
+        res.status(500).json({ error: 'Chat failed', detail: err.message });
     }
 });
 
