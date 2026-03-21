@@ -110,6 +110,14 @@ RULES:
 - Keep alternative_reasoning to 1-2 sentences
 - data_warning: mention only if data is genuinely too thin to be confident
 
+CRITICAL ANTI-SPAM RULES:
+- "Team X Over 0.5 Team Goals" is a LAST RESORT pick only — use it ONLY when absolutely no other market has a clear edge AND the team genuinely struggles to score
+- NEVER default to "Over 0.5 Team Goals" just because it has high probability — high probability does not equal value
+- If a strong team is heavily favored, pick their Win, DNB, or Handicap instead
+- If both teams score freely, pick Over 2.5 or BTTS instead
+- "Over 0.5" picks should appear in maybe 1 in 10 matches maximum
+- Ask yourself: would a sharp bettor actually place this bet? If it's too obvious, find a better edge
+
 Respond ONLY in valid JSON, no markdown, no explanation outside JSON:
 {
   "game_script": "...",
