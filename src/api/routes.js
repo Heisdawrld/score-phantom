@@ -111,7 +111,11 @@ router.get('/predict/:fixtureId', async (req, res) => {
         if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
         const fixture = result.rows[0];
 
-        const oddsResult = await db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] });
+        const [oddsResult, historyResult] = await Promise.all([
+            db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] }),
+            db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] }),
+        ]);
+
         const oddsRow = oddsResult.rows[0] || null;
         const odds = oddsRow ? {
             home: oddsRow.home, draw: oddsRow.draw, away: oddsRow.away,
@@ -119,8 +123,22 @@ router.get('/predict/:fixtureId', async (req, res) => {
             over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
         } : null;
 
+        // Build meta with form data from historical_matches
+        let meta = null;
+        try { meta = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta = {}; }
+        
+        const toMatchObj = (m) => ({
+            home: m.home_team, away: m.away_team,
+            score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null,
+            date: m.date,
+        });
+
+        meta.homeForm = historyResult.rows.filter(m => m.type === 'home_form').map(toMatchObj);
+        meta.awayForm = historyResult.rows.filter(m => m.type === 'away_form').map(toMatchObj);
+        meta.h2h = historyResult.rows.filter(m => m.type === 'h2h').map(toMatchObj);
+
         const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        res.json({ ...prediction, odds });
+        res.json({ ...prediction, odds, meta });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Prediction failed', detail: err.message });
@@ -141,9 +159,17 @@ router.get('/predict/:fixtureId/explain', async (req, res) => {
             over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
         } : null;
 
+        const historyResult2 = await db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] });
+        let meta2 = null;
+        try { meta2 = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta2 = {}; }
+        const toMatchObj2 = (m) => ({ home: m.home_team, away: m.away_team, score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null, date: m.date });
+        meta2.homeForm = historyResult2.rows.filter(m => m.type === 'home_form').map(toMatchObj2);
+        meta2.awayForm = historyResult2.rows.filter(m => m.type === 'away_form').map(toMatchObj2);
+        meta2.h2h = historyResult2.rows.filter(m => m.type === 'h2h').map(toMatchObj2);
+
         const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        const explanation = await explainPrediction({ ...prediction, odds, meta: fixture.meta || null });
-        res.json({ ...prediction, odds, explanation });
+        const explanation = await explainPrediction({ ...prediction, odds, meta: meta2 });
+        res.json({ ...prediction, odds, explanation, meta: meta2 });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Explain failed', detail: err.message });
