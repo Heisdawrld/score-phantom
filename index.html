@@ -1058,7 +1058,7 @@ async function init(){
   try{
     const res=await fetch(`${API}/fixtures?limit=2000`);
     const data=await res.json();
-    allFixtures=markFreeFixtures(data.fixtures||[]);
+    allFixtures=data.fixtures||[];
     applyFilters();
   }catch(err){
     document.getElementById('main').innerHTML='<div class="empty">Failed to load.</div>';
