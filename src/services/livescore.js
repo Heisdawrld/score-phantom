@@ -7,72 +7,74 @@ const BASE = 'https://livescore-api.com/api-client';
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function get(path, params = {}) {
-    await sleep(300 + Math.random() * 200);
-    const url = `${BASE}${path}`;
-    const res = await axios.get(url, {
+    await sleep(400 + Math.random() * 200);
+    const res = await axios.get(`${BASE}${path}`, {
         params: { key: KEY, secret: SECRET, ...params },
         timeout: 15000,
     });
     return res.data;
 }
 
-// ── Fetch fixtures by date ────────────────────────────────────────────────────
+// ── Fetch fixtures for a single date (all pages) ──────────────────────────────
 export async function fetchFixturesByDate(date) {
-    try {
-        const data = await get('/fixtures/matches.json', { date });
-        return (data.data?.fixtures || []).map(f => ({
-            match_id:             String(f.id),
-            home_team_id:         String(f.home_id),
-            home_team_name:       f.home_name,
-            home_team_short_name: f.home_name?.substring(0, 3).toUpperCase() || '',
-            away_team_id:         String(f.away_id),
-            away_team_name:       f.away_name,
-            away_team_short_name: f.away_name?.substring(0, 3).toUpperCase() || '',
-            tournament_id:        String(f.competition_id),
-            tournament_name:      f.competition?.name || f.league || '',
-            category_name:        f.competition?.country || '',
-            match_date:           f.date + 'T' + (f.time || '00:00:00'),
-            match_url:            String(f.id),
-            livescore_home_id:    String(f.home_id),
-            livescore_away_id:    String(f.away_id),
-        }));
-    } catch (err) {
-        console.error(`[LiveScore] Fixtures failed for ${date}:`, err.message);
-        return [];
-    }
-}
-
-// ── Fetch fixtures for date range ─────────────────────────────────────────────
-export async function fetchFixturesRange(days = 7) {
     const allFixtures = [];
-    const now = new Date();
-    for (let i = 0; i <= days; i++) {
-        const d = new Date(now);
-        d.setDate(now.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
-        console.log(`[LiveScore] Fetching ${dateStr}...`);
-        const fixtures = await fetchFixturesByDate(dateStr);
-        console.log(`  → ${fixtures.length} fixtures`);
-        allFixtures.push(...fixtures);
-        await sleep(500);
+    let page = 1;
+
+    while (true) {
+        try {
+            const data = await get('/fixtures/matches.json', { date, page });
+            const fixtures = data.data?.fixtures || [];
+            if (!fixtures.length) break;
+
+            for (const f of fixtures) {
+                allFixtures.push({
+                    match_id:             String(f.id),
+                    home_team_id:         String(f.home_id),
+                    home_team_name:       f.home_name,
+                    home_team_short_name: f.home_name?.substring(0, 3).toUpperCase() || '',
+                    away_team_id:         String(f.away_id),
+                    away_team_name:       f.away_name,
+                    away_team_short_name: f.away_name?.substring(0, 3).toUpperCase() || '',
+                    tournament_id:        String(f.competition_id),
+                    tournament_name:      f.competition?.name || '',
+                    category_name:        '', // livescore API doesn't provide country
+                    match_date:           f.date + 'T' + (f.time || '00:00:00'),
+                    match_url:            String(f.id),
+                    // Store odds from fixture directly
+                    odds_home:            f.odds?.pre?.['1'] || null,
+                    odds_draw:            f.odds?.pre?.['X'] || null,
+                    odds_away:            f.odds?.pre?.['2'] || null,
+                });
+            }
+
+            if (!data.data?.next_page) break;
+            page++;
+            await sleep(400);
+        } catch (err) {
+            console.error(`[LiveScore] Fixtures failed for ${date} page ${page}:`, err.message);
+            break;
+        }
     }
+
     return allFixtures;
 }
 
-// ── Fetch H2H ─────────────────────────────────────────────────────────────────
+// ── Fetch H2H + team form ─────────────────────────────────────────────────────
 export async function fetchH2H(homeTeamId, awayTeamId) {
     try {
-        const data = await get('/scores/h2h.json', {
+        const data = await get('/teams/head2head.json', {
             team1_id: homeTeamId,
             team2_id: awayTeamId,
         });
+
         const toMatch = (m) => ({
-            home:  m.home_name || '',
-            away:  m.away_name || '',
-            score: m.score || null,
-            date:  m.date || null,
-            competition: m.competition_name || '',
+            home:        m.home_name || '',
+            away:        m.away_name || '',
+            score:       m.score || null,
+            date:        m.date || null,
+            competition: m.competition_name || m.league || '',
         });
+
         return {
             h2h:      (data.data?.h2h || []).map(toMatch),
             homeForm: (data.data?.first_team_results || []).map(toMatch),
@@ -84,7 +86,7 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
     }
 }
 
-// ── Fetch last N matches for a team ──────────────────────────────────────────
+// ── Fetch team last N matches ─────────────────────────────────────────────────
 export async function fetchTeamForm(teamId, num = 10) {
     try {
         const data = await get('/scores/history.json', { team_id: teamId, num });
@@ -96,7 +98,7 @@ export async function fetchTeamForm(teamId, num = 10) {
             competition: m.competition_name || '',
         }));
     } catch (err) {
-        console.error(`[LiveScore] Team form failed for ${teamId}:`, err.message);
+        console.error(`[LiveScore] Team form failed:`, err.message);
         return [];
     }
 }
@@ -119,50 +121,46 @@ export async function fetchStandings(competitionId) {
             form:         r.recent_form || '',
         }));
     } catch (err) {
-        console.error(`[LiveScore] Standings failed for competition ${competitionId}:`, err.message);
+        console.error(`[LiveScore] Standings failed:`, err.message);
         return [];
     }
 }
 
-// ── Full match enrichment ─────────────────────────────────────────────────────
-export async function enrichMatchData(fixture) {
-    const homeTeamId  = fixture.home_team_id;
-    const awayTeamId  = fixture.away_team_id;
-    const compId      = fixture.tournament_id;
+// ── Compute momentum ──────────────────────────────────────────────────────────
+function momentum(form, teamName) {
+    let pts = 0, total = 0;
+    for (const m of (form || []).slice(0, 5)) {
+        if (!m.score) continue;
+        const parts = m.score.split('-');
+        if (parts.length < 2) continue;
+        const h = parseInt(parts[0]), a = parseInt(parts[1]);
+        const nameLower = teamName.toLowerCase();
+        const homeLower = (m.home || '').toLowerCase();
+        const isHome = homeLower.includes(nameLower.split(' ')[0]) || nameLower.includes(homeLower.split(' ')[0]);
+        const scored = isHome ? h : a, conceded = isHome ? a : h;
+        if (scored > conceded) pts += 3;
+        else if (scored === conceded) pts += 1;
+        total += 3;
+    }
+    return total > 0 ? ((pts / total) * 100).toFixed(1) : null;
+}
 
+// ── Full enrichment ───────────────────────────────────────────────────────────
+export async function enrichMatchData(fixture) {
     const [h2hData, standings] = await Promise.all([
-        fetchH2H(homeTeamId, awayTeamId),
-        fetchStandings(compId),
+        fetchH2H(fixture.home_team_id, fixture.away_team_id),
+        fetchStandings(fixture.tournament_id),
     ]);
 
-    // Compute momentum from form
-    function momentum(form, teamName) {
-        let pts = 0, total = 0;
-        for (const m of (form || []).slice(0, 5)) {
-            if (!m.score) continue;
-            const parts = m.score.split('-');
-            if (parts.length < 2) continue;
-            const h = parseInt(parts[0]), a = parseInt(parts[1]);
-            const nameLower = teamName.toLowerCase();
-            const homeLower = (m.home || '').toLowerCase();
-            const isHome = homeLower.includes(nameLower.split(' ')[0]) || nameLower.includes(homeLower.split(' ')[0]);
-            const scored = isHome ? h : a, conceded = isHome ? a : h;
-            if (scored > conceded) pts += 3;
-            else if (scored === conceded) pts += 1;
-            total += 3;
-        }
-        return total > 0 ? ((pts / total) * 100).toFixed(1) : null;
-    }
-
     return {
-        h2h:           h2hData.h2h,
-        homeForm:      h2hData.homeForm,
-        awayForm:      h2hData.awayForm,
+        h2h:          h2hData.h2h,
+        homeForm:     h2hData.homeForm,
+        awayForm:     h2hData.awayForm,
         standings,
-        homeMomentum:  momentum(h2hData.homeForm, fixture.home_team_name),
-        awayMomentum:  momentum(h2hData.awayForm, fixture.away_team_name),
-        homeStats:     null,
-        awayStats:     null,
-        odds:          null,
+        homeMomentum: momentum(h2hData.homeForm, fixture.home_team_name),
+        awayMomentum: momentum(h2hData.awayForm, fixture.away_team_name),
+        homeStats:    null,
+        awayStats:    null,
+        odds:         null, // odds stored at seed time
     };
 }
