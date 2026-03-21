@@ -77,8 +77,8 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
 
         return {
             h2h:      (data.data?.h2h || []).map(toMatch),
-            homeForm: (data.data?.first_team_results || []).map(toMatch),
-            awayForm: (data.data?.second_team_results || []).map(toMatch),
+            homeForm: (data.data?.team1_last_6 || data.data?.first_team_results || []).map(toMatch),
+            awayForm: (data.data?.team2_last_6 || data.data?.second_team_results || []).map(toMatch),
         };
     } catch (err) {
         console.error(`[LiveScore] H2H failed:`, err.message);
@@ -107,18 +107,18 @@ export async function fetchTeamForm(teamId, num = 10) {
 export async function fetchStandings(competitionId) {
     try {
         const data = await get('/leagues/table.json', { competition_id: competitionId });
-        return (data.data?.table || []).map(r => ({
-            position:     r.position,
-            team:         r.name,
-            played:       r.played,
-            wins:         r.won,
-            draws:        r.drawn,
-            losses:       r.lost,
-            goalsFor:     r.goals_for,
-            goalsAgainst: r.goals_against,
-            goalDiff:     r.goal_difference,
-            points:       r.points,
-            form:         r.recent_form || '',
+        return (data.data?.table || []).map((r, idx) => ({
+            position:     r.position || r.rank || r.pos || (idx + 1),
+            team:         r.name || r.team_name || '',
+            played:       r.played || r.gp || 0,
+            wins:         r.won || r.w || 0,
+            draws:        r.drawn || r.d || 0,
+            losses:       r.lost || r.l || 0,
+            goalsFor:     r.goals_for || r.gf || 0,
+            goalsAgainst: r.goals_against || r.ga || 0,
+            goalDiff:     r.goal_difference || r.gd || 0,
+            points:       r.points || r.pts || 0,
+            form:         r.recent_form || r.form || '',
         }));
     } catch (err) {
         console.error(`[LiveScore] Standings failed:`, err.message);
