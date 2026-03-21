@@ -639,7 +639,7 @@ async function sendChat() {
   chatHistory.push({ role: 'user', content: msg });
 
   try {
-    const res = await fetch(\`/api/predict/\${currentFixtureId}/chat\`, {
+    const res = await fetch('/api/predict/' + currentFixtureId + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
