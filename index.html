@@ -372,13 +372,7 @@ main { padding-bottom:80px; }
     <div class="live-badge"><div class="live-dot"></div>LIVE</div>
   </div>
   <div class="date-bar" id="dateTabs"></div>
-  <div class="market-bar" id="marketBar">
-    <div class="mktag active" onclick="setMarket('all',this)">All</div>
-    <div class="mktag" onclick="setMarket('1x2',this)">1X2</div>
-    <div class="mktag" onclick="setMarket('btts',this)">BTTS</div>
-    <div class="mktag" onclick="setMarket('over25',this)">Over/Under 2.5</div>
-    <div class="mktag" onclick="setMarket('dc',this)">Double Chance</div>
-  </div>
+
   <div class="search-bar">
     <div class="search-inner">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -405,7 +399,6 @@ main { padding-bottom:80px; }
 const API = '/api';
 let allFixtures = [];
 let activeDate = null;
-let activeMarket = 'all';
 
 function getDates() {
   const dates=[], now=new Date();
@@ -435,12 +428,7 @@ function setDate(key,el){
   applyFilters();
 }
 
-function setMarket(val,el){
-  activeMarket=val;
-  document.querySelectorAll('.mktag').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  applyFilters();
-}
+
 
 function applyFilters(){
   const q=document.getElementById('searchInput').value.toLowerCase();
@@ -644,14 +632,14 @@ async function sendChat() {
   input.value = '';
 
   const chatBox = document.getElementById('chat-messages');
-  chatBox.innerHTML += '<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">' + msg + '</span></div>';
-  chatBox.innerHTML += '<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>';
+  chatBox.innerHTML += `<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">${msg}</span></div>`;
+  chatBox.innerHTML += `<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>`;
   chatBox.scrollTop = chatBox.scrollHeight;
 
   chatHistory.push({ role: 'user', content: msg });
 
   try {
-    const res = await fetch('/api/predict/' + currentFixtureId + '/chat', {
+    const res = await fetch(\`/api/predict/\${currentFixtureId}/chat\`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
@@ -661,7 +649,7 @@ async function sendChat() {
     chatHistory.push({ role: 'assistant', content: reply });
 
     document.getElementById('typing')?.remove();
-    chatBox.innerHTML += '<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">' + reply + '</span></div>';
+    chatBox.innerHTML += `<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">${reply}</span></div>`;
     chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     document.getElementById('typing')?.remove();
