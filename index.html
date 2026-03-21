@@ -531,7 +531,8 @@ function cls(v){return v>=0.65?'hi':v>=0.45?'mid':'lo';}
 
 function formResult(m, teamName) {
   if (!m.score) return '?';
-  const [h,a] = m.score.split('-').map(Number);
+  const normalized = m.score.replace(/ - /g,'-').replace(/ /g,'').trim();
+  const [h,a] = normalized.split('-').map(Number);
   const hl = (m.home||'').toLowerCase(), nl = teamName.toLowerCase();
   const isHome = hl.includes(nl.split(' ')[0]) || nl.includes(hl.split(' ')[0]);
   const sc = isHome?h:a, cn = isHome?a:h;
@@ -539,15 +540,16 @@ function formResult(m, teamName) {
 }
 
 function renderFormMatches(matches, teamName) {
-  if (!matches||!matches.length) return '<div style="color:var(--text3);font-size:11px;padding:8px 0">Pending enrichment data</div>';
-  return matches.slice(0,6).map(m=>{
-    const r = formResult(m, teamName);
+  if (!matches||!matches.length) return '<div style="color:var(--text3);font-size:11px;padding:8px 0;font-style:italic">No recent match data</div>';
+  return matches.slice(0,8).map(m=>{
+    const normalized = (m.score||'').replace(/ - /g,'-').replace(/ /g,'').trim();
+    const r = formResult({...m, score: normalized}, teamName);
     const hl = (m.home||'').toLowerCase(), nl = teamName.toLowerCase();
     const isHome = hl.includes(nl.split(' ')[0]) || nl.includes(hl.split(' ')[0]);
-    const opponent = isHome ? m.away : m.home;
+    const displayScore = normalized || '?';
     return `<div class="form-match">
       <div class="form-match-teams"><span class="bold">${isHome?m.home:m.away}</span> vs ${isHome?m.away:m.home}</div>
-      <div class="form-score-pill ${r}">${m.score||'?'}</div>
+      <div class="form-score-pill ${r}">${displayScore}</div>
     </div>`;
   }).join('');
 }
@@ -729,35 +731,9 @@ function renderSheet(d, home, away, league, country) {
     <!-- PREVIEW TAB -->
     <div class="tab-panel active" data-tab="preview">
       <div style="padding:14px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Head to Head Statistics</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Key Stats</div>
         <div class="h2h-section" style="padding:0">
-          <div class="h2h-bar-wrap">
-            <div class="h2h-bar-labels">
-              <div class="h2h-bar-label">
-                <div class="h2h-bar-wins h">${h2hH} Wins</div>
-                <div class="h2h-bar-sub">${home.split(' ')[0]}</div>
-              </div>
-              <div class="h2h-bar-label" style="align-items:center">
-                <div class="h2h-bar-wins d">${h2hD} Draws</div>
-              </div>
-              <div class="h2h-bar-label right">
-                <div class="h2h-bar-wins a">${h2hA} Wins</div>
-                <div class="h2h-bar-sub">${away.split(' ')[0]}</div>
-              </div>
-            </div>
-            <div class="h2h-bar">
-              <div class="h2h-bar-h" style="flex:${h2hH||1}"></div>
-              <div class="h2h-bar-d" style="flex:${h2hD||1}"></div>
-              <div class="h2h-bar-a" style="flex:${h2hA||1}"></div>
-            </div>
-            <div class="h2h-bar-pcts">
-              <div class="h2h-bar-pct h">${h2hHP}%</div>
-              <div class="h2h-bar-pct d">${h2hDP}%</div>
-              <div class="h2h-bar-pct a">${h2hAP}%</div>
-            </div>
-          </div>
-          <div style="margin-top:14px">
-            <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Key Stats</div>
+          <div style="margin-top:0">
             <div class="metric-grid">
               ${metricCard(p.over_under.over_1_5, 'Over 1.5 Goals', `${Math.round(p.over_under.over_1_5*(hf.matches_available||10))}/${hf.matches_available||10} matches`, cls(p.over_under.over_1_5))}
               ${metricCard(p.over_under.over_2_5, 'Over 2.5 Goals', `${Math.round(p.over_under.over_2_5*(hf.matches_available||10))}/${hf.matches_available||10} matches`, cls(p.over_under.over_2_5))}
@@ -817,6 +793,34 @@ function renderSheet(d, home, away, league, country) {
 
     <!-- FORM TAB -->
     <div class="tab-panel" data-tab="form">
+      <div style="padding:14px 14px 0">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Head to Head</div>
+        <div class="h2h-bar-wrap" style="margin-bottom:16px">
+          <div class="h2h-bar-labels">
+            <div class="h2h-bar-label">
+              <div class="h2h-bar-wins h">${h2hH} Wins</div>
+              <div class="h2h-bar-sub">${home.split(' ')[0]}</div>
+            </div>
+            <div class="h2h-bar-label" style="align-items:center">
+              <div class="h2h-bar-wins d">${h2hD} Draws</div>
+            </div>
+            <div class="h2h-bar-label right">
+              <div class="h2h-bar-wins a">${h2hA} Wins</div>
+              <div class="h2h-bar-sub">${away.split(' ')[0]}</div>
+            </div>
+          </div>
+          <div class="h2h-bar">
+            <div class="h2h-bar-h" style="flex:${Math.max(h2hH,0.1)}"></div>
+            <div class="h2h-bar-d" style="flex:${Math.max(h2hD,0.1)}"></div>
+            <div class="h2h-bar-a" style="flex:${Math.max(h2hA,0.1)}"></div>
+          </div>
+          <div class="h2h-bar-pcts">
+            <div class="h2h-bar-pct h">${h2hHP}%</div>
+            <div class="h2h-bar-pct d">${h2hDP}%</div>
+            <div class="h2h-bar-pct a">${h2hAP}%</div>
+          </div>
+        </div>
+      </div>
       <div class="form-results">
         <div class="form-team-section">
           <div class="form-team-header">${home} — Recent Results</div>
