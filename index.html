@@ -568,8 +568,14 @@ async function openSheet(id, home, away, league, country) {
     if(!predRes.ok) throw new Error('Prediction failed');
     const pred = await predRes.json();
     renderSheet(pred, home, away, league, country);
+    // Set fixture context for chat
+    currentFixtureId = id;
+    currentHome = home;
+    currentAway = away;
+    chatHistory = [];
+
     fetch(`${API}/predict/${id}/explain`).then(r=>r.json()).then(data=>{
-      if(data.explanation) updateAI(data.explanation);
+      if(data.explanation) updateAI(data.explanation, id, home, away);
     }).catch(()=>{});
     const fx=allFixtures.find(f=>f.id===id);
     if(fx){fx.enriched=1;applyFilters();}
@@ -588,33 +594,78 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.tab===name));
 }
 
-function updateAI(explain) {
-  const el=document.getElementById('ai-content');
-  if(!el) return;
-  const insight=explain.top_insight||'';
-  const warning=explain.data_warning||'';
-  const recommended=explain.recommended_bet||'';
-  const isSkip=recommended.toLowerCase().includes('no clear')||recommended.toLowerCase().includes('skip');
-  const picks=[
-    explain.match_result?'Result: '+explain.match_result:null,
-    explain.goals?'Goals: '+explain.goals:null,
-    explain.btts?'BTTS: '+explain.btts:null,
-    explain.correct_score?'Score: '+explain.correct_score:null,
-  ].filter(Boolean);
+function updateAI(explain, fixtureId, home, away) {
+  if (!explain) return;
 
-  el.innerHTML=
-    (insight?`<div class="ai-insight">${insight}</div>`:'') +
-    (recommended?`<div class="ai-rec-box"><div class="ai-rec-lbl">⚡ Recommended Bet</div><div class="ai-rec-val">${recommended}</div></div>`:'') +
-    (picks.length?`<div class="ai-tags">${picks.map(x=>`<div class="ai-tag">${x}</div>`).join('')}</div>`:'') +
-    (warning?`<div class="ai-warn">⚠ ${warning}</div>`:'');
+  // Update recommendation strip
+  const rs = document.getElementById('rec-strip');
+  if (rs && explain.best_pick) {
+    rs.innerHTML = `<div class="rec-strip-left"><div class="rec-lbl">⚡ Best Pick</div><div class="rec-val">${explain.best_pick}</div></div><div class="rec-badge value">${explain.best_pick_confidence||''}%</div>`;
+  }
 
-  // Update rec strip
-  const rs=document.getElementById('rec-strip');
-  if(!rs||!recommended) return;
-  if(!isSkip){
-    rs.innerHTML=`<div class="rec-strip-left"><div class="rec-lbl">⚡ Recommendation</div><div class="rec-val">${recommended}</div></div><div class="rec-badge value">VALUE BET</div>`;
-  } else {
-    rs.innerHTML=`<div class="rec-strip-left"><div class="rec-lbl">⚡ Recommendation</div><div class="rec-val" style="font-size:18px;color:var(--text2)">No Clear Pick</div></div><div class="rec-badge skip">SKIP</div>`;
+  // Update preview tab with game script
+  const gs = document.getElementById('game-script-content');
+  if (gs && explain.game_script) {
+    gs.innerHTML = `<p style="font-size:13px;color:var(--text);line-height:1.7">${explain.game_script}</p>`;
+  }
+
+  // Update predictions tab
+  const pt = document.getElementById('predictions-content');
+  if (pt) {
+    pt.innerHTML = `
+      <div style="padding:14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Best Pick</div>
+        <div style="background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.2);border-radius:12px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green);letter-spacing:1px;margin-bottom:6px">${explain.best_pick||'Analysing...'}</div>
+          <div style="font-size:10px;color:var(--green);opacity:0.7;margin-bottom:8px">CONFIDENCE: ${explain.best_pick_confidence||0}%</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.best_pick_reasoning||''}</div>
+        </div>
+        ${explain.alternative_pick ? `
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Alternative Pick</div>
+        <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;margin-bottom:6px">${explain.alternative_pick}</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.alternative_reasoning||''}</div>
+        </div>` : ''}
+        ${explain.data_warning ? `<div class="ai-warn" style="margin-top:12px">⚠ ${explain.data_warning}</div>` : ''}
+      </div>`;
+  }
+}
+
+// Chat functionality
+let chatHistory = [];
+let currentFixtureId = null;
+let currentHome = null;
+let currentAway = null;
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const chatBox = document.getElementById('chat-messages');
+  chatBox.innerHTML += `<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">${msg}</span></div>`;
+  chatBox.innerHTML += `<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>`;
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  chatHistory.push({ role: 'user', content: msg });
+
+  try {
+    const res = await fetch(\`/api/predict/\${currentFixtureId}/chat\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
+    });
+    const data = await res.json();
+    const reply = data.reply || 'No response.';
+    chatHistory.push({ role: 'assistant', content: reply });
+
+    document.getElementById('typing')?.remove();
+    chatBox.innerHTML += `<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">${reply}</span></div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+  } catch(e) {
+    document.getElementById('typing')?.remove();
+    chatBox.innerHTML += `<div style="margin-bottom:8px"><span style="color:var(--red);font-size:12px">Error. Try again.</span></div>`;
   }
 }
 
@@ -730,63 +781,20 @@ function renderSheet(d, home, away, league, country) {
 
     <!-- PREVIEW TAB -->
     <div class="tab-panel active" data-tab="preview">
-      <div style="padding:14px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Key Stats</div>
-        <div class="h2h-section" style="padding:0">
-          <div style="margin-top:0">
-            <div class="metric-grid">
-              ${metricCard(p.over_under.over_1_5, 'Over 1.5 Goals', `${Math.round(p.over_under.over_1_5*(hf.matches_available||10))}/${hf.matches_available||10} matches`, cls(p.over_under.over_1_5))}
-              ${metricCard(p.over_under.over_2_5, 'Over 2.5 Goals', `${Math.round(p.over_under.over_2_5*(hf.matches_available||10))}/${hf.matches_available||10} matches`, cls(p.over_under.over_2_5))}
-              ${metricCard(p.btts.yes, 'Both Teams Score', `BTTS in recent form`, cls(p.btts.yes))}
-              ${metricCard(hf.clean_sheet_rate||0, home.split(' ')[0]+' Clean Sheet', `${Math.round((hf.clean_sheet_rate||0)*(hf.matches_available||10))}/${hf.matches_available||10} matches`, cls(hf.clean_sheet_rate||0))}
-              ${metricCard(af.clean_sheet_rate||0, away.split(' ')[0]+' Clean Sheet', `${Math.round((af.clean_sheet_rate||0)*(af.matches_available||10))}/${af.matches_available||10} matches`, cls(af.clean_sheet_rate||0))}
-              ${metricCard(p.over_under.over_3_5, 'Over 3.5 Goals', `High scoring match`, cls(p.over_under.over_3_5))}
-            </div>
-          </div>
+      <div style="padding:16px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Match Preview</div>
+        <div id="game-script-content" style="min-height:80px">
+          <div style="display:flex;align-items:center;gap:8px;color:var(--text3)"><div class="ai-spin" style="width:14px;height:14px;border:1.5px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div><span style="font-size:12px">Generating match preview...</span></div>
         </div>
       </div>
     </div>
 
     <!-- PREDICTIONS TAB -->
     <div class="tab-panel" data-tab="predictions">
-      <div class="markets-table">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;padding:12px 0 8px">Match Result</div>
-        <div class="market-row">
-          <div class="market-name">Home Win (${home.split(' ')[0]})</div>
-          <div class="market-values"><div class="market-val-chip ${cls(mr.home)}">${pct(mr.home)}</div></div>
-        </div>
-        <div class="market-row">
-          <div class="market-name">Draw</div>
-          <div class="market-values"><div class="market-val-chip ${cls(mr.draw)}">${pct(mr.draw)}</div></div>
-        </div>
-        <div class="market-row">
-          <div class="market-name">Away Win (${away.split(' ')[0]})</div>
-          <div class="market-values"><div class="market-val-chip ${cls(mr.away)}">${pct(mr.away)}</div></div>
-        </div>
-
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;padding:14px 0 8px">Goals</div>
-        ${[['Over 0.5',p.over_under.over_0_5],['Over 1.5',p.over_under.over_1_5],['Over 2.5',p.over_under.over_2_5],['Over 3.5',p.over_under.over_3_5],['Over 4.5',p.over_under.over_4_5],['Both Teams Score',p.btts.yes]].map(kv=>
-          `<div class="market-row"><div class="market-name">${kv[0]}</div><div class="market-values"><div class="market-val-chip ${cls(kv[1])}">${pct(kv[1])}</div></div></div>`
-        ).join('')}
-
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;padding:14px 0 8px">Correct Score</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:6px">
-          ${scores.map((s,i)=>`<div style="background:${i===0?'rgba(0,230,118,0.08)':'var(--surface2)'};border:1px solid ${i===0?'rgba(0,230,118,0.2)':'var(--border)'};border-radius:8px;padding:10px 6px;text-align:center">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:${i===0?'var(--green)':'var(--text)'};letter-spacing:1px">${s.score}</div>
-            <div style="font-size:9px;color:var(--text3);margin-top:2px">${pct(s.probability)}</div>
-          </div>`).join('')}
-        </div>
-
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;padding:14px 0 8px">Expected Goals</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-bottom:6px">
-          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green)">${m.lambdaHome}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:1px">${home.split(' ')[0]} xG</div>
-          </div>
-          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--blue)">${m.lambdaAway}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:1px">${away.split(' ')[0]} xG</div>
-          </div>
+      <div id="predictions-content">
+        <div style="padding:24px;text-align:center;color:var(--text3)">
+          <div class="ai-spin" style="width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px"></div>
+          <div style="font-size:12px">Generating predictions...</div>
         </div>
       </div>
     </div>
@@ -840,9 +848,23 @@ function renderSheet(d, home, away, league, country) {
 
     <!-- AI TAB -->
     <div class="tab-panel" data-tab="ai">
-      <div class="ai-body">
-        <div id="ai-content">
-          <div class="ai-thinking"><div class="ai-spin"></div>Groq is analysing...</div>
+      <div style="display:flex;flex-direction:column;height:460px">
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:4px">
+          <div style="text-align:center;padding:20px 0">
+            <div style="font-size:28px;margin-bottom:8px">🤖</div>
+            <div style="font-size:13px;color:var(--text2);font-weight:600">${home} vs ${away}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">Ask me anything about this match</div>
+          </div>
+        </div>
+        <div style="padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
+          <input id="chat-input" type="text" placeholder="Ask about this match..." 
+            style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;outline:none"
+            onkeydown="if(event.key==='Enter')sendChat()"
+            onfocus="this.style.borderColor='var(--green)'" 
+            onblur="this.style.borderColor='var(--border2)'">
+          <button onclick="sendChat()" style="background:var(--green);border:none;border-radius:8px;width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="16" height="16" fill="none" stroke="#000" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+          </button>
         </div>
       </div>
     </div>
