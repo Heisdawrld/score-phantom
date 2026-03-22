@@ -17,12 +17,17 @@ function sleep(ms) {
 
 // Generic GET wrapper with automatic key/secret injection
 async function get(path, params = {}) {
-  await sleep(400 + Math.random() * 200);
+  await sleep(350 + Math.random() * 150);
   const res = await axios.get(`${BASE}${path}`, {
     params: { key: KEY, secret: SECRET, ...params },
     timeout: 15000,
   });
   return res.data;
+}
+
+function safeNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // Fetch fixtures for a single date (all pages)
@@ -41,15 +46,13 @@ export async function fetchFixturesByDate(date) {
           match_id: String(f.id),
           home_team_id: String(f.home_id),
           home_team_name: f.home_name,
-          home_team_short_name:
-            f.home_name?.substring(0, 3).toUpperCase() || '',
+          home_team_short_name: f.home_name?.substring(0, 3).toUpperCase() || '',
           away_team_id: String(f.away_id),
           away_team_name: f.away_name,
-          away_team_short_name:
-            f.away_name?.substring(0, 3).toUpperCase() || '',
+          away_team_short_name: f.away_name?.substring(0, 3).toUpperCase() || '',
           tournament_id: String(f.competition_id),
           tournament_name: f.competition?.name || '',
-          category_name: '', // livescore API doesn't provide country
+          category_name: f.competition?.country || f.country || '',
           match_date: f.date + 'T' + (f.time || '00:00:00'),
           match_url: String(f.id),
           odds_home: f.odds?.pre?.['1'] || null,
@@ -60,12 +63,9 @@ export async function fetchFixturesByDate(date) {
 
       if (!data.data?.next_page) break;
       page++;
-      await sleep(400);
+      await sleep(300);
     } catch (err) {
-      console.error(
-        `[LiveScore] Fixtures failed for ${date} page ${page}:`,
-        err.message
-      );
+      console.error(`[LiveScore] Fixtures failed for ${date} page ${page}:`, err.message);
       break;
     }
   }
@@ -73,7 +73,7 @@ export async function fetchFixturesByDate(date) {
   return allFixtures;
 }
 
-// Fetch head‑to‑head and recent form
+// Fetch head-to-head and recent form
 export async function fetchH2H(homeTeamId, awayTeamId) {
   try {
     const data = await get('/teams/head2head.json', {
@@ -91,14 +91,8 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
 
     return {
       h2h: (data.data?.h2h || []).map(toMatch),
-      homeForm: (data.data?.team1_last_6 ||
-        data.data?.first_team_results ||
-        []
-      ).map(toMatch),
-      awayForm: (data.data?.team2_last_6 ||
-        data.data?.second_team_results ||
-        []
-      ).map(toMatch),
+      homeForm: (data.data?.team1_last_6 || data.data?.first_team_results || []).map(toMatch),
+      awayForm: (data.data?.team2_last_6 || data.data?.second_team_results || []).map(toMatch),
     };
   } catch (err) {
     console.error(`[LiveScore] H2H failed:`, err.message);
@@ -113,6 +107,7 @@ export async function fetchTeamForm(teamId, num = 10) {
       team_id: teamId,
       num,
     });
+
     return (data.data?.match || []).map((m) => ({
       home: m.home_name || '',
       away: m.away_name || '',
@@ -132,19 +127,40 @@ export async function fetchStandings(competitionId) {
     const data = await get('/leagues/table.json', {
       competition_id: competitionId,
     });
-    return (data.data?.table || []).map((r, idx) => ({
-      position: r.position || r.rank || r.pos || idx + 1,
-      team: r.name || r.team_name || '',
-      played: r.played || r.gp || 0,
-      wins: r.won || r.w || 0,
-      draws: r.drawn || r.d || 0,
-      losses: r.lost || r.l || 0,
-      goalsFor: r.goals_for || r.gf || 0,
-      goalsAgainst: r.goals_against || r.ga || 0,
-      goalDiff: r.goal_difference || r.gd || 0,
-      points: r.points || r.pts || 0,
-      form: r.recent_form || r.form || '',
-    }));
+
+    return (data.data?.table || []).map((r, idx) => {
+      const wins = safeNum(r.won ?? r.w ?? r.wins, 0);
+      const draws = safeNum(r.drawn ?? r.d ?? r.draws, 0);
+      const losses = safeNum(r.lost ?? r.l ?? r.losses, 0);
+
+      const playedRaw =
+        r.played ??
+        r.games_played ??
+        r.played_games ??
+        r.gp ??
+        r.pld ??
+        r.mp ??
+        r.matches ??
+        r.p;
+
+      const played = safeNum(playedRaw, 0) || (wins + draws + losses);
+
+      return {
+        position: safeNum(r.position ?? r.rank ?? r.pos, idx + 1),
+        team: r.name || r.team_name || r.team || '',
+        played,
+        games: played,
+        matches: played,
+        wins,
+        draws,
+        losses,
+        goalsFor: safeNum(r.goals_for ?? r.gf ?? r.goals_scored, 0),
+        goalsAgainst: safeNum(r.goals_against ?? r.ga ?? r.goals_conceded, 0),
+        goalDiff: safeNum(r.goal_difference ?? r.gd, safeNum(r.goals_for ?? r.gf, 0) - safeNum(r.goals_against ?? r.ga, 0)),
+        points: safeNum(r.points ?? r.pts, 0),
+        form: r.recent_form || r.form || '',
+      };
+    });
   } catch (err) {
     console.error(`[LiveScore] Standings failed:`, err.message);
     return [];
@@ -153,25 +169,34 @@ export async function fetchStandings(competitionId) {
 
 // Helper to compute momentum for a team’s last five games
 function momentum(form, teamName) {
-  let pts = 0,
-    total = 0;
+  let pts = 0;
+  let total = 0;
+
   for (const m of (form || []).slice(0, 5)) {
     if (!m.score) continue;
-    const parts = m.score.split('-');
+
+    const parts = String(m.score).split('-');
     if (parts.length < 2) continue;
-    const h = parseInt(parts[0]),
-      a = parseInt(parts[1]);
+
+    const h = parseInt(parts[0], 10);
+    const a = parseInt(parts[1], 10);
+    if (Number.isNaN(h) || Number.isNaN(a)) continue;
+
     const nameLower = teamName.toLowerCase();
     const homeLower = (m.home || '').toLowerCase();
     const isHome =
       homeLower.includes(nameLower.split(' ')[0]) ||
       nameLower.includes(homeLower.split(' ')[0]);
-    const scored = isHome ? h : a,
-      conceded = isHome ? a : h;
+
+    const scored = isHome ? h : a;
+    const conceded = isHome ? a : h;
+
     if (scored > conceded) pts += 3;
     else if (scored === conceded) pts += 1;
+
     total += 3;
   }
+
   return total > 0 ? ((pts / total) * 100).toFixed(1) : null;
 }
 
