@@ -933,21 +933,20 @@ let authToken = localStorage.getItem('scorephantom_token') || '';
 let currentPrediction = null;
 
 const PRIORITY_LEAGUES = [
-  'Premier League',
-  'LaLiga Santander',
-  'La Liga',
-  'Serie A',
-  'Bundesliga',
-  'Ligue 1',
-  'UEFA Champions League',
-  'Europa League',
-  'Eredivisie',
-  'Primeira Liga',
-  'Scottish Premiership',
-  'Turkish Super Lig',
-  'Belgian Pro League',
-  'Swiss Super League',
-  'Championship'
+  { country: "England", league: "Premier League" },
+  { country: "Spain", league: "LaLiga Santander" },
+  { country: "Spain", league: "La Liga" },
+  { country: "Italy", league: "Serie A" },
+  { country: "Germany", league: "Bundesliga" },
+  { country: "France", league: "Ligue 1" },
+  { country: "Netherlands", league: "Eredivisie" },
+  { country: "Portugal", league: "Primeira Liga" },
+  { country: "Scotland", league: "Scottish Premiership" },
+  { country: "Turkey", league: "Super Lig" },
+  { country: "Belgium", league: "Pro League" },
+  { country: "Switzerland", league: "Super League" },
+  { country: "Europe", league: "UEFA Champions League" },
+  { country: "Europe", league: "UEFA Europa League" }
 ];
 
 const authView = document.getElementById('authView');
@@ -1039,8 +1038,14 @@ function buildDateTabs() {
   });
 }
 
-function leaguePriority(name=''){
-  const idx = PRIORITY_LEAGUES.findIndex(l => l.toLowerCase() === String(name).toLowerCase());
+function leaguePriority(country = "", league = "") {
+  const c = String(country || "").toLowerCase().trim();
+  const l = String(league || "").toLowerCase().trim();
+
+  const idx = PRIORITY_LEAGUES.findIndex(item =>
+    item.country.toLowerCase() === c && item.league.toLowerCase() === l
+  );
+
   return idx === -1 ? 999 : idx;
 }
 
@@ -1048,21 +1053,30 @@ function groupByLeague(fixtures) {
   const groups = new Map();
 
   fixtures.forEach(f => {
-    const key = f.tournament_name || f.category_name || 'Other';
+    const tournamentId = String(f.tournament_id || f.tournament_name || "unknown");
+    const leagueName = f.tournament_name || "Other";
+    const countryName = f.category_name || "Other";
+    const key = `${tournamentId}__${countryName}__${leagueName}`;
+
     if (!groups.has(key)) {
       groups.set(key, {
-        league: key,
-        country: f.category_name || '',
+        key,
+        league: leagueName,
+        country: countryName,
+        tournamentId,
         fixtures: [],
       });
     }
+
     groups.get(key).fixtures.push(f);
   });
 
   return Array.from(groups.values()).sort((a, b) => {
-    const pa = leaguePriority(a.league);
-    const pb = leaguePriority(b.league);
+    const pa = leaguePriority(a.country, a.league);
+    const pb = leaguePriority(b.country, b.league);
+
     if (pa !== pb) return pa - pb;
+    if (a.country !== b.country) return a.country.localeCompare(b.country);
     return a.league.localeCompare(b.league);
   });
 }
