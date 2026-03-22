@@ -13,6 +13,10 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: LIVESCORE_API_KEY
+        sync: false      # <-- new, required
+      - key: LIVESCORE_API_SECRET
+        sync: false      # <-- new, required
       - key: DATABASE_URL
         value: ./scorephantom.db
       - key: PORT
