@@ -19,8 +19,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// serve public assets like /logo.png
+app.use(express.static(path.join(__dirname, "..", "public")));
+
 app.use("/api", routes);
-// Mount authentication routes only once under /api/auth. We no longer mount under /api/webhook
 app.use("/api/auth", authRoutes);
 
 app.get("/payment-success", (req, res) => {
@@ -51,7 +53,6 @@ app.listen(PORT, async () => {
   await autoSeed();
 });
 
-// Register the centralised error handler AFTER all routes
 app.use(errorHandler);
 
 export default app;
