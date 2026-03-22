@@ -48,7 +48,6 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
     meta.standings = [];
   }
 
-  // backend safety: force played if standings came with zeros
   meta.standings = meta.standings.map((r, idx) => {
     const wins = Number(r.wins || 0);
     const draws = Number(r.draws || 0);
@@ -150,12 +149,10 @@ async function ensureFixtureData(fixtureId) {
   };
 }
 
-// ── Health ────────────────────────────────────────────────────────────────────
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "ScorePhantom API" });
 });
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
 router.get("/fixtures", async (req, res) => {
   try {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
@@ -221,7 +218,6 @@ router.get("/fixtures/:id", async (req, res) => {
   }
 });
 
-// ── Predict ───────────────────────────────────────────────────────────────────
 router.get("/predict/:fixtureId", async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.fixtureId);
@@ -283,7 +279,6 @@ router.get("/predict/:fixtureId/explain", async (req, res) => {
   }
 });
 
-// ── Tournaments ───────────────────────────────────────────────────────────────
 router.get("/tournaments", async (req, res) => {
   try {
     const result = await db.execute(
@@ -300,7 +295,6 @@ router.get("/tournaments", async (req, res) => {
   }
 });
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
 router.get("/stats", async (req, res) => {
   try {
     const [total, enriched, historical, teams, tournaments] = await Promise.all([
@@ -330,7 +324,6 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-// ── Match Chat ────────────────────────────────────────────────────────────────
 router.post("/predict/:fixtureId/chat", async (req, res) => {
   try {
     const { message, history = [] } = req.body;
