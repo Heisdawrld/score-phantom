@@ -1,228 +1,342 @@
-import { Router } from 'express';
-import db from '../config/database.js';
-import { predict } from '../predictions/poissonEngine.js';
-import { explainPrediction, chatAboutMatch } from '../explanations/groqExplainer.js';
-import { enrichFixture } from '../enrichment/enrichOne.js';
+import { Router } from "express";
+import db from "../config/database.js";
+import { predict } from "../predictions/poissonEngine.js";
+import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
+import { enrichFixture } from "../enrichment/enrichOne.js";
 
 const router = Router();
 
-// -- Health --------------------------------------------------------------------
-router.get('/health', (req, res) => {
-    res.json({ status: 'ok', service: 'ScorePhantom API' });
+function safeJsonParse(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function mapHistoryRow(row) {
+  return {
+    home: row.home_team,
+    away: row.away_team,
+    score:
+      row.home_goals != null && row.away_goals != null
+        ? `${row.home_goals}-${row.away_goals}`
+        : null,
+    date: row.date,
+  };
+}
+
+function buildMetaFromFixtureAndHistory(fixture, historyRows) {
+  const meta = safeJsonParse(fixture.meta, {});
+
+  meta.homeForm = historyRows
+    .filter((m) => m.type === "home_form")
+    .map(mapHistoryRow);
+
+  meta.awayForm = historyRows
+    .filter((m) => m.type === "away_form")
+    .map(mapHistoryRow);
+
+  meta.h2h = historyRows
+    .filter((m) => m.type === "h2h")
+    .map(mapHistoryRow);
+
+  if (!Array.isArray(meta.standings)) {
+    meta.standings = [];
+  }
+
+  return meta;
+}
+
+async function getFixtureById(fixtureId) {
+  const result = await db.execute({
+    sql: `SELECT * FROM fixtures WHERE id = ?`,
+    args: [fixtureId],
+  });
+
+  if (!result.rows.length) return null;
+  return result.rows[0];
+}
+
+async function getHistoryRows(fixtureId) {
+  const result = await db.execute({
+    sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`,
+    args: [fixtureId],
+  });
+
+  return result.rows;
+}
+
+async function getOdds(fixtureId) {
+  const result = await db.execute({
+    sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`,
+    args: [fixtureId],
+  });
+
+  const oddsRow = result.rows[0] || null;
+  if (!oddsRow) return null;
+
+  return {
+    home: oddsRow.home,
+    draw: oddsRow.draw,
+    away: oddsRow.away,
+    btts_yes: oddsRow.btts_yes,
+    btts_no: oddsRow.btts_no,
+    over_under: oddsRow.over_under ? safeJsonParse(oddsRow.over_under, {}) : {},
+  };
+}
+
+function hasUsableHistory(historyRows) {
+  const h2hCount = historyRows.filter((m) => m.type === "h2h").length;
+  const homeCount = historyRows.filter((m) => m.type === "home_form").length;
+  const awayCount = historyRows.filter((m) => m.type === "away_form").length;
+
+  return h2hCount > 0 && homeCount > 0 && awayCount > 0;
+}
+
+async function ensureFixtureData(fixtureId) {
+  let fixture = await getFixtureById(fixtureId);
+  if (!fixture) return null;
+
+  let historyRows = await getHistoryRows(fixtureId);
+
+  if (!fixture.enriched || !hasUsableHistory(historyRows)) {
+    try {
+      await enrichFixture(fixture);
+      fixture = await getFixtureById(fixtureId);
+      historyRows = await getHistoryRows(fixtureId);
+    } catch (e) {
+      console.error("[Enrich] Failed:", e.message);
+    }
+  }
+
+  const odds = await getOdds(fixtureId);
+  const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
+
+  return {
+    fixture,
+    historyRows,
+    odds,
+    meta,
+  };
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+router.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "ScorePhantom API" });
 });
 
-// -- Fixtures ------------------------------------------------------------------
-router.get('/fixtures', async (req, res) => {
-    try {
-        const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
-        let query = `SELECT * FROM fixtures WHERE 1=1`;
-        const args = [];
-        if (date) { query += ` AND match_date LIKE ?`; args.push(`%${date}%`); }
-        if (tournament) { query += ` AND tournament_name LIKE ?`; args.push(`%${tournament}%`); }
-        if (enriched !== undefined) { query += ` AND enriched = ?`; args.push(enriched === 'true' ? 1 : 0); }
-        query += ` ORDER BY match_date ASC LIMIT ? OFFSET ?`;
-        args.push(parseInt(limit), parseInt(offset));
-        const result = await db.execute({ sql: query, args });
-        res.json({ total: result.rows.length, fixtures: result.rows });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch fixtures' });
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+router.get("/fixtures", async (req, res) => {
+  try {
+    const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
+
+    let query = `SELECT * FROM fixtures WHERE 1=1`;
+    const args = [];
+
+    if (date) {
+      query += ` AND match_date LIKE ?`;
+      args.push(`%${date}%`);
     }
+
+    if (tournament) {
+      query += ` AND tournament_name LIKE ?`;
+      args.push(`%${tournament}%`);
+    }
+
+    if (enriched !== undefined) {
+      query += ` AND enriched = ?`;
+      args.push(enriched === "true" ? 1 : 0);
+    }
+
+    query += ` ORDER BY match_date ASC LIMIT ? OFFSET ?`;
+    args.push(parseInt(limit, 10), parseInt(offset, 10));
+
+    const result = await db.execute({ sql: query, args });
+
+    res.json({
+      total: result.rows.length,
+      fixtures: result.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch fixtures" });
+  }
 });
 
-router.get('/fixtures/:id', async (req, res) => {
-    try {
-        const result = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [req.params.id] });
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
-        const fixture = result.rows[0];
-        const history = await db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [req.params.id] });
-        const h2h = history.rows.filter(m => m.type === 'h2h');
-        const homeForm = history.rows.filter(m => m.type === 'home_form');
-        const awayForm = history.rows.filter(m => m.type === 'away_form');
-        res.json({ fixture, history: { h2h, homeForm, awayForm } });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch fixture' });
+router.get("/fixtures/:id", async (req, res) => {
+  try {
+    const bundle = await ensureFixtureData(req.params.id);
+
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
     }
+
+    const { fixture, meta } = bundle;
+
+    res.json({
+      fixture,
+      h2h: meta.h2h || [],
+      homeForm: meta.homeForm || [],
+      awayForm: meta.awayForm || [],
+      history: {
+        h2h: meta.h2h || [],
+        homeForm: meta.homeForm || [],
+        awayForm: meta.awayForm || [],
+      },
+      meta,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch fixture", detail: err.message });
+  }
 });
 
-// -- Predict -------------------------------------------------------------------
-router.get('/predict/:fixtureId', async (req, res) => {
-    try {
-        const result = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [req.params.fixtureId] });
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
-        let fixture = result.rows[0];
+// ── Predict ───────────────────────────────────────────────────────────────────
+router.get("/predict/:fixtureId", async (req, res) => {
+  try {
+    const bundle = await ensureFixtureData(req.params.fixtureId);
 
-        // Enrich on demand if not yet enriched
-        if (!fixture.enriched) {
-            try {
-                await enrichFixture(fixture);
-                const updated = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [fixture.id] });
-                fixture = updated.rows[0];
-            } catch(e) {
-                console.error('[Enrich] Failed:', e.message);
-            }
-        }
-
-        const [oddsResult, historyResult] = await Promise.all([
-            db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] }),
-            db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] }),
-        ]);
-
-        const oddsRow = oddsResult.rows[0] || null;
-        const odds = oddsRow ? {
-            home: oddsRow.home, draw: oddsRow.draw, away: oddsRow.away,
-            btts_yes: oddsRow.btts_yes, btts_no: oddsRow.btts_no,
-            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
-        } : null;
-
-        let meta = null;
-        try { meta = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta = {}; }
-
-        const toMatchObj = (m) => ({
-            home: m.home_team, away: m.away_team,
-            score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null,
-            date: m.date,
-        });
-
-        meta.homeForm = historyResult.rows.filter(m => m.type === 'home_form').map(toMatchObj);
-        meta.awayForm = historyResult.rows.filter(m => m.type === 'away_form').map(toMatchObj);
-        meta.h2h = historyResult.rows.filter(m => m.type === 'h2h').map(toMatchObj);
-
-        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        res.json({ ...prediction, odds, meta });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Prediction failed', detail: err.message });
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
     }
+
+    const { fixture, odds, meta } = bundle;
+    const prediction = await predict(
+      fixture.id,
+      fixture.home_team_name,
+      fixture.away_team_name
+    );
+
+    res.json({
+      ...prediction,
+      odds,
+      meta,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Prediction failed", detail: err.message });
+  }
 });
 
-router.get('/predict/:fixtureId/explain', async (req, res) => {
-    try {
-        const result = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [req.params.fixtureId] });
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
-        let fixture = result.rows[0];
+router.get("/predict/:fixtureId/explain", async (req, res) => {
+  try {
+    const bundle = await ensureFixtureData(req.params.fixtureId);
 
-        // Enrich on demand if not yet enriched
-        if (!fixture.enriched) {
-            try {
-                await enrichFixture(fixture);
-                const updated = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [fixture.id] });
-                fixture = updated.rows[0];
-            } catch(e) {
-                console.error('[Enrich] Failed:', e.message);
-            }
-        }
-
-        const [oddsResult, historyResult] = await Promise.all([
-            db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] }),
-            db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] }),
-        ]);
-
-        const oddsRow = oddsResult.rows[0] || null;
-        const odds = oddsRow ? {
-            home: oddsRow.home, draw: oddsRow.draw, away: oddsRow.away,
-            btts_yes: oddsRow.btts_yes, btts_no: oddsRow.btts_no,
-            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
-        } : null;
-
-        let meta2 = null;
-        try { meta2 = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta2 = {}; }
-
-        const toMatchObj2 = (m) => ({
-            home: m.home_team, away: m.away_team,
-            score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null,
-            date: m.date,
-        });
-
-        meta2.homeForm = historyResult.rows.filter(m => m.type === 'home_form').map(toMatchObj2);
-        meta2.awayForm = historyResult.rows.filter(m => m.type === 'away_form').map(toMatchObj2);
-        meta2.h2h = historyResult.rows.filter(m => m.type === 'h2h').map(toMatchObj2);
-
-        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        const explanation = await explainPrediction({ ...prediction, odds, meta: meta2 });
-        res.json({ ...prediction, odds, explanation, meta: meta2 });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Explain failed', detail: err.message });
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
     }
+
+    const { fixture, odds, meta } = bundle;
+    const prediction = await predict(
+      fixture.id,
+      fixture.home_team_name,
+      fixture.away_team_name
+    );
+
+    const fullPayload = {
+      ...prediction,
+      odds,
+      meta,
+    };
+
+    const explanation = await explainPrediction(fullPayload);
+
+    res.json({
+      ...fullPayload,
+      explanation,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Explain failed", detail: err.message });
+  }
 });
 
-// -- Tournaments ---------------------------------------------------------------
-router.get('/tournaments', async (req, res) => {
-    try {
-        const result = await db.execute(`SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`);
-        res.json({ total: result.rows.length, tournaments: result.rows });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch tournaments' });
-    }
+// ── Tournaments ───────────────────────────────────────────────────────────────
+router.get("/tournaments", async (req, res) => {
+  try {
+    const result = await db.execute(
+      `SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`
+    );
+
+    res.json({
+      total: result.rows.length,
+      tournaments: result.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch tournaments" });
+  }
 });
 
-// -- Stats ---------------------------------------------------------------------
-router.get('/stats', async (req, res) => {
-    try {
-        const [total, enriched, historical, teams, tournaments] = await Promise.all([
-            db.execute(`SELECT COUNT(*) as count FROM fixtures`),
-            db.execute(`SELECT COUNT(*) as count FROM fixtures WHERE enriched = 1`),
-            db.execute(`SELECT COUNT(*) as count FROM historical_matches`),
-            db.execute(`SELECT COUNT(*) as count FROM teams`),
-            db.execute(`SELECT COUNT(*) as count FROM tournaments`),
-        ]);
-        res.json({
-            fixtures: { total: total.rows[0].count, enriched: enriched.rows[0].count, pending: total.rows[0].count - enriched.rows[0].count },
-            historical_matches: historical.rows[0].count,
-            teams: teams.rows[0].count,
-            tournaments: tournaments.rows[0].count,
-        });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch stats' });
-    }
+// ── Stats ─────────────────────────────────────────────────────────────────────
+router.get("/stats", async (req, res) => {
+  try {
+    const [total, enriched, historical, teams, tournaments] = await Promise.all([
+      db.execute(`SELECT COUNT(*) as count FROM fixtures`),
+      db.execute(`SELECT COUNT(*) as count FROM fixtures WHERE enriched = 1`),
+      db.execute(`SELECT COUNT(*) as count FROM historical_matches`),
+      db.execute(`SELECT COUNT(*) as count FROM teams`),
+      db.execute(`SELECT COUNT(*) as count FROM tournaments`),
+    ]);
+
+    const totalCount = Number(total.rows[0].count || 0);
+    const enrichedCount = Number(enriched.rows[0].count || 0);
+
+    res.json({
+      fixtures: {
+        total: totalCount,
+        enriched: enrichedCount,
+        pending: totalCount - enrichedCount,
+      },
+      historical_matches: Number(historical.rows[0].count || 0),
+      teams: Number(teams.rows[0].count || 0),
+      tournaments: Number(tournaments.rows[0].count || 0),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
 });
 
-// -- Match Chat ----------------------------------------------------------------
-router.post('/predict/:fixtureId/chat', async (req, res) => {
-    try {
-        const { message, history = [] } = req.body;
-        if (!message) return res.status(400).json({ error: 'Message required' });
+// ── Match Chat ────────────────────────────────────────────────────────────────
+router.post("/predict/:fixtureId/chat", async (req, res) => {
+  try {
+    const { message, history = [] } = req.body;
 
-        const result = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ?`, args: [req.params.fixtureId] });
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Fixture not found' });
-        const fixture = result.rows[0];
-
-        const [oddsResult, historyResult] = await Promise.all([
-            db.execute({ sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`, args: [fixture.id] }),
-            db.execute({ sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`, args: [fixture.id] }),
-        ]);
-
-        const oddsRow = oddsResult.rows[0] || null;
-        const odds = oddsRow ? {
-            home: oddsRow.home, draw: oddsRow.draw, away: oddsRow.away,
-            btts_yes: oddsRow.btts_yes, btts_no: oddsRow.btts_no,
-            over_under: oddsRow.over_under ? JSON.parse(oddsRow.over_under) : {},
-        } : null;
-
-        let meta = null;
-        try { meta = fixture.meta ? JSON.parse(fixture.meta) : {}; } catch(e) { meta = {}; }
-
-        const toMatchObj = (m) => ({
-            home: m.home_team, away: m.away_team,
-            score: m.home_goals != null && m.away_goals != null ? m.home_goals + '-' + m.away_goals : null,
-            date: m.date,
-        });
-
-        meta.homeForm = historyResult.rows.filter(m => m.type === 'home_form').map(toMatchObj);
-        meta.awayForm = historyResult.rows.filter(m => m.type === 'away_form').map(toMatchObj);
-        meta.h2h = historyResult.rows.filter(m => m.type === 'h2h').map(toMatchObj);
-
-        const prediction = await predict(fixture.id, fixture.home_team_name, fixture.away_team_name);
-        const fullPrediction = { ...prediction, odds, meta };
-
-        const reply = await chatAboutMatch(fullPrediction, history, message);
-        res.json({ reply });
-    } catch (err) {
-        console.error('[Chat] Failed:', err.message);
-        res.status(500).json({ error: 'Chat failed', detail: err.message });
+    if (!message) {
+      return res.status(400).json({ error: "Message required" });
     }
+
+    const bundle = await ensureFixtureData(req.params.fixtureId);
+
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
+    }
+
+    const { fixture, odds, meta } = bundle;
+    const prediction = await predict(
+      fixture.id,
+      fixture.home_team_name,
+      fixture.away_team_name
+    );
+
+    const fullPrediction = {
+      ...prediction,
+      odds,
+      meta,
+    };
+
+    const reply = await chatAboutMatch(fullPrediction, history, message);
+
+    res.json({ reply });
+  } catch (err) {
+    console.error("[Chat] Failed:", err.message);
+    res.status(500).json({ error: "Chat failed", detail: err.message });
+  }
 });
 
 export default router;
