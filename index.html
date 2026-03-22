@@ -149,83 +149,35 @@ main { padding-bottom:80px; }
 .sheet-handle { width:36px; height:3px; background:var(--border2); border-radius:2px; margin:10px auto 0; }
 
 /* ── MATCH TOP HERO ── */
-.match-hero {
-  padding: 14px 16px 0;
-}
-
-.match-hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.match-league-tag {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text2);
-  letter-spacing: 0.5px;
-}
-
+.match-hero { padding:14px 16px 0; }
+.match-hero-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.match-league-tag { font-size:10px; font-weight:600; color:var(--text2); letter-spacing:0.5px; }
 .sheet-close {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text2);
-  font-size: 12px;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  color:var(--text2);
+  font-size:12px;
 }
 .sheet-close:hover { border-color:var(--green); color:var(--green); }
 
-.match-teams-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
-}
+.match-teams-hero { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px; }
+.match-team-block { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.match-team-name { font-family:'Bebas Neue',sans-serif; font-size:18px; color:#fff; letter-spacing:1px; text-align:center; line-height:1.1; }
+.match-team-pct { font-size:22px; font-family:'Bebas Neue',sans-serif; line-height:1; }
+.match-team-pct.home { color:var(--green); }
+.match-team-pct.away { color:var(--blue); }
 
-.match-team-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.match-team-name {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 18px;
-  color: #fff;
-  letter-spacing: 1px;
-  text-align: center;
-  line-height: 1.1;
-}
-
-.match-team-pct {
-  font-size: 22px;
-  font-family: 'Bebas Neue', sans-serif;
-  line-height: 1;
-}
-.match-team-pct.home { color: var(--green); }
-.match-team-pct.away { color: var(--blue); }
-
-.match-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.match-vs { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 2px; }
-.match-draw-pct { font-size: 16px; font-family: 'Bebas Neue', sans-serif; color: var(--text2); }
-.match-draw-lbl { font-size: 9px; color: var(--text3); font-weight: 600; letter-spacing: 1px; }
+.match-center { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; }
+.match-vs { font-size:10px; font-weight:700; color:var(--text3); letter-spacing:2px; }
+.match-draw-pct { font-size:16px; font-family:'Bebas Neue',sans-serif; color:var(--text2); }
+.match-draw-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:1px; }
 
 /* Tri-bar */
 .tri-bar { display:flex; height:6px; width:100%; border-radius:3px; overflow:hidden; margin-top:6px; }
@@ -233,8 +185,48 @@ main { padding-bottom:80px; }
 .tri-draw { background:var(--yellow); }
 .tri-away { background:var(--blue); }
 
+.rec-strip {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin:14px 16px 0;
+  padding:12px 14px;
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(0,230,118,0.08), rgba(0,230,118,0.03));
+  border:1px solid rgba(0,230,118,0.15);
+}
+.rec-strip-left { min-width:0; }
+.rec-lbl {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:1.6px;
+  color:var(--text3);
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.rec-val {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;
+  letter-spacing:1px;
+  color:var(--text);
+  line-height:1;
+}
+.rec-badge {
+  flex-shrink:0;
+  padding:7px 10px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:1px;
+  border:1px solid var(--border2);
+}
+.rec-badge.value { background:rgba(0,230,118,0.12); color:var(--green); border-color:rgba(0,230,118,0.22); }
+.rec-badge.low { background:rgba(255,171,0,0.12); color:var(--yellow); border-color:rgba(255,171,0,0.22); }
+.rec-badge.warn { background:rgba(255,23,68,0.12); color:var(--red); border-color:rgba(255,23,68,0.22); }
+
 /* ── SHEET TABS ── */
-.tab-bar { display:flex; overflow-x:auto; scrollbar-width:none; background:var(--surface); border-top:1px solid var(--border); }
+.tab-bar { display:flex; overflow-x:auto; scrollbar-width:none; background:var(--surface); border-top:1px solid var(--border); margin-top:14px; }
 .tab-bar::-webkit-scrollbar { display:none; }
 .tab-btn { flex:1; padding:14px; text-align:center; color:var(--text3); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid transparent; cursor:pointer; transition:all .15s; }
 .tab-btn.active { color:var(--green); border-bottom-color:var(--green); }
@@ -250,33 +242,148 @@ main { padding-bottom:80px; }
 .standings-table .pts { font-weight:700; color:var(--text); }
 .standings-table .hl { background:var(--green-dim); }
 .standings-table .s-pos-cell { display:flex; align-items:center; gap:4px; }
+.s-dot { width:6px; height:6px; border-radius:50%; background:var(--text3); }
+.s-dot.hl { background:var(--green); }
+.form-dots-row { display:flex; gap:4px; justify-content:center; }
 
-/* H2H bar */
+/* H2H summary + cards */
+.h2h-summary-grid {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  margin-bottom:14px;
+}
+.h2h-stat-card {
+  padding:12px 10px;
+  border-radius:14px;
+  background:linear-gradient(180deg,var(--surface2),var(--surface));
+  border:1px solid var(--border2);
+  text-align:center;
+}
+.h2h-stat-card .big {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:28px;
+  letter-spacing:1px;
+  line-height:1;
+  margin-bottom:4px;
+}
+.h2h-stat-card .lbl {
+  font-size:10px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:1.4px;
+}
+.h2h-stat-card.home .big { color:var(--green); }
+.h2h-stat-card.draw .big { color:var(--yellow); }
+.h2h-stat-card.away .big { color:var(--blue); }
+
 .h2h-bar-wrap { margin-top:12px; }
 .h2h-bar-labels { display:flex; justify-content:space-between; align-items:flex-end; font-size:10px; font-weight:600; color:var(--text2); }
 .h2h-bar-label { display:flex; flex-direction:column; align-items:flex-start; }
 .h2h-bar-label.right { align-items:flex-end; }
 .h2h-bar-label .h2h-bar-wins { font-size:12px; font-weight:700; }
 .h2h-bar-label .h2h-bar-sub { font-size:9px; color:var(--text3); }
-.h2h-bar { display:flex; height:4px; width:100%; border-radius:2px; overflow:hidden; margin-top:4px; }
+.h2h-bar { display:flex; height:6px; width:100%; border-radius:999px; overflow:hidden; margin-top:6px; background:var(--surface3); }
 .h2h-bar-h { background:var(--green); }
 .h2h-bar-d { background:var(--yellow); }
 .h2h-bar-a { background:var(--blue); }
-.h2h-bar-pcts { display:flex; justify-content:space-between; margin-top:4px; font-size:9px; color:var(--text3); }
+.h2h-bar-pcts { display:flex; justify-content:space-between; margin-top:6px; font-size:9px; color:var(--text3); }
 
 /* Form results */
 .form-results { display:flex; flex-direction:column; gap:12px; padding:14px; }
-.form-team-section { display:flex; flex-direction:column; gap:6px; }
-.form-team-header { font-size:12px; font-weight:700; color:var(--text); }
-.form-matches { display:flex; flex-wrap:wrap; gap:6px; }
-.fdot-sm { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; line-height:1; color:var(--text); }
-.fdot-sm.W { background:var(--green); }
-.fdot-sm.D { background:var(--yellow); color:#333; }
-.fdot-sm.L { background:var(--red); color:#eee; }
+.form-team-section {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:14px;
+  border:1px solid var(--border2);
+  border-radius:16px;
+  background:linear-gradient(180deg,var(--surface2),var(--surface));
+}
+.form-team-header { font-size:12px; font-weight:700; color:var(--text); letter-spacing:0.3px; }
+.form-matches { display:flex; flex-direction:column; gap:0; }
+.form-match {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.form-match:last-child { border-bottom:none; }
+.form-match-teams {
+  min-width:0;
+  flex:1;
+  font-size:12px;
+  color:var(--text2);
+  line-height:1.45;
+}
+.form-match-teams .bold {
+  color:var(--text);
+  font-weight:700;
+}
+.form-score-pill {
+  flex-shrink:0;
+  min-width:52px;
+  padding:8px 10px;
+  border-radius:12px;
+  text-align:center;
+  font-family:'Bebas Neue',sans-serif;
+  letter-spacing:1px;
+  font-size:20px;
+  line-height:1;
+  border:1px solid var(--border2);
+  background:var(--surface3);
+  color:var(--text);
+}
+.form-score-pill.W { background:rgba(0,230,118,0.12); border-color:rgba(0,230,118,0.2); color:var(--green); }
+.form-score-pill.D { background:rgba(255,171,0,0.12); border-color:rgba(255,171,0,0.2); color:var(--yellow); }
+.form-score-pill.L { background:rgba(68,138,255,0.12); border-color:rgba(68,138,255,0.2); color:var(--blue); }
+
+/* Fetch state */
+.fetching {
+  min-height:55vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  text-align:center;
+  padding:20px;
+}
+.fetch-spin {
+  width:28px;
+  height:28px;
+  border:2px solid var(--border2);
+  border-top-color:var(--green);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+.fetch-lbl {
+  font-size:11px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--text2);
+  font-weight:700;
+}
+.fetch-sub {
+  font-size:13px;
+  color:var(--text3);
+}
 
 .ai-spin { border-radius:50%; border-right-color:transparent; border-left-color:transparent; border-top-color:inherit; border-bottom-color:inherit; }
 
 .pad-bottom { padding-bottom:40px; }
+
+.ai-warn {
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(255,171,0,0.1);
+  border:1px solid rgba(255,171,0,0.18);
+  color:var(--yellow);
+  font-size:12px;
+  line-height:1.5;
+}
 </style>
 </head>
 <body>
@@ -289,6 +396,18 @@ main { padding-bottom:80px; }
     <div class="live-badge"><span class="live-dot"></span>LIVE</div>
   </div>
   <div class="date-bar" id="dateBar"></div>
+  <div class="market-bar">
+    <div class="mktag active" data-mkt="all" onclick="setMarket('all')">ALL</div>
+    <div class="mktag" data-mkt="1x2" onclick="setMarket('1x2')">1X2</div>
+    <div class="mktag" data-mkt="ou25" onclick="setMarket('ou25')">O/U 2.5</div>
+    <div class="mktag" data-mkt="btts" onclick="setMarket('btts')">BTTS</div>
+  </div>
+  <div class="search-bar">
+    <div class="search-inner">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <input id="searchInput" type="text" placeholder="Search by team or league" oninput="applyFilters()">
+    </div>
+  </div>
 </div>
 
 <div id="main">
@@ -336,90 +455,139 @@ const API = '/api';
 let allFixtures = [];
 let activeDate = null;
 let activeMarket = 'all';
+let authMode = 'signup';
+let currentUser = null;
+let chatHistory = [];
+let currentFixtureId = null;
+let currentHome = null;
+let currentAway = null;
 
 function getDates() {
-  const dates=[], now=new Date();
-  for(let i=-1;i<=5;i++){const d=new Date(now);d.setDate(now.getDate()+i);dates.push(d);}return dates;
+  const dates = [];
+  const now = new Date();
+  for (let i = -1; i <= 5; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
 }
-function fmtKey(d){return d.toISOString().split('T')[0];}
+
+function fmtKey(d){ return d.toISOString().split('T')[0]; }
+
 function fmtDay(d){
-  const diff=Math.round((new Date(fmtKey(d))-new Date(fmtKey(new Date())))/86400000);
-  if(diff===0)return'TODAY';if(diff===-1)return'YEST';if(diff===1)return'TMR';
-  return d.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase();
+  const diff = Math.round((new Date(fmtKey(d)) - new Date(fmtKey(new Date()))) / 86400000);
+  if(diff === 0) return 'TODAY';
+  if(diff === -1) return 'YEST';
+  if(diff === 1) return 'TMR';
+  return d.toLocaleDateString('en-GB', { weekday:'short' }).toUpperCase();
 }
 
 function buildDateTabs(){
-  const dates=getDates(),today=fmtKey(new Date());
-  activeDate=today;
-  document.getElementById('dateBar').innerHTML=dates.map(d=>{
-    const key=fmtKey(d);
-    return `<div class="date-tab ${key===today?'active':''}" onclick="selectDate('${key}')"><span class="dn">${fmtDay(d)}</span><span class="dd">${d.getDate()}</span></div>`;
+  const dates = getDates();
+  const today = fmtKey(new Date());
+  activeDate = activeDate || today;
+  document.getElementById('dateBar').innerHTML = dates.map(d => {
+    const key = fmtKey(d);
+    return `
+      <div class="date-tab ${key===activeDate?'active':''}" onclick="selectDate('${key}')">
+        <span class="dn">${fmtDay(d)}</span>
+        <span class="dd">${d.getDate()}</span>
+      </div>
+    `;
   }).join('');
 }
 
 function selectDate(key){
-  activeDate=key;
-  document.querySelectorAll('.date-tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.date-tab').forEach(t=>{if(t.textContent.includes(key.split('-')[2])) t.classList.add('active');});
+  activeDate = key;
+  buildDateTabs();
   applyFilters();
 }
 
 function setMarket(val){
-  activeMarket=val;
-  document.querySelectorAll('.mktag').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.mktag').forEach(t=>{if(t.getAttribute('data-mkt')===val) t.classList.add('active');});
+  activeMarket = val;
+  document.querySelectorAll('.mktag').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.mktag').forEach(t => { if(t.getAttribute('data-mkt') === val) t.classList.add('active'); });
   applyFilters();
 }
 
 function applyFilters(){
-  const q=document.getElementById('searchInput')?.value?.toLowerCase()||'';
-  let list=allFixtures;
-  if(activeDate) list=list.filter(f=>f.match_date&&f.match_date.startsWith(activeDate));
-  if(q) list=list.filter(f=>
-    f.home_team_name?.toLowerCase().includes(q)||
-    f.away_team_name?.toLowerCase().includes(q)||
-    f.tournament_name?.toLowerCase().includes(q)
-  );
+  const q = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  let list = allFixtures;
+
+  if(activeDate) {
+    list = list.filter(f => f.match_date && f.match_date.startsWith(activeDate));
+  }
+
+  if(q) {
+    list = list.filter(f =>
+      (f.home_team_name || '').toLowerCase().includes(q) ||
+      (f.away_team_name || '').toLowerCase().includes(q) ||
+      (f.tournament_name || '').toLowerCase().includes(q)
+    );
+  }
+
+  if(activeMarket !== 'all') {
+    list = list.filter(f => {
+      const tip = getTip(f);
+      if(!tip) return false;
+      if(activeMarket === '1x2') return tip.market === '1X2';
+      if(activeMarket === 'ou25') return tip.label.includes('2.5');
+      if(activeMarket === 'btts') return tip.label.includes('BTTS');
+      return true;
+    });
+  }
+
   renderGroups(list);
 }
 
-// Derive tip label from fixture meta
 function getTip(f){
   try {
-    const meta = f.meta ? (typeof f.meta==='string'?JSON.parse(f.meta):f.meta) : null;
+    const meta = f.meta ? (typeof f.meta === 'string' ? JSON.parse(f.meta) : f.meta) : null;
     if (!meta) return null;
-    const hm = parseFloat(meta.homeMomentum||0);
-    const am = parseFloat(meta.awayMomentum||0);
+
+    const hm = parseFloat(meta.homeMomentum || 0);
+    const am = parseFloat(meta.awayMomentum || 0);
     const diff = hm - am;
-    if (diff > 25) return {label:'HOME WIN', market:'1X2'};
-    if (diff < -25) return {label:'AWAY WIN', market:'1X2'};
+
+    if (diff > 25) return { label:'HOME WIN', market:'1X2' };
+    if (diff < -25) return { label:'AWAY WIN', market:'1X2' };
+
     const hs = meta.homeStats, as2 = meta.awayStats;
     if (hs && as2) {
-      const avgG = (parseFloat(hs.avgGoalsScored||1.2)+parseFloat(as2.avgGoalsScored||1.0));
-      if (avgG > 2.8) return {label:'OVER 2.5', market:'O/U'};
-      if (avgG < 1.8) return {label:'UNDER 2.5', market:'O/U'};
+      const avgG = (parseFloat(hs.avgGoalsScored || 1.2) + parseFloat(as2.avgGoalsScored || 1.0));
+      if (avgG > 2.8) return { label:'OVER 2.5', market:'O/U' };
+      if (avgG < 1.8) return { label:'UNDER 2.5', market:'O/U' };
     }
+
+    return { label:'BTTS YES', market:'BTTS' };
+  } catch(e) {
     return null;
-  } catch(e) { return null; }
+  }
 }
 
 function renderGroups(fixtures){
-  const main=document.getElementById('main');
-  if(!fixtures.length){main.innerHTML='<div class="empty">No fixtures found</div>';return;}
-  const groups={};
+  const main = document.getElementById('main');
+  if(!fixtures.length){
+    main.innerHTML = '<div class="empty">No fixtures found</div>';
+    return;
+  }
+
+  const groups = {};
   for(const f of fixtures){
-    const key=f.tournament_id||f.tournament_name;
-    if(!groups[key]) groups[key]={name:f.tournament_name,country:f.category_name,fixtures:[]};
+    const key = f.tournament_id || f.tournament_name || 'unknown';
+    if(!groups[key]) groups[key] = { name:f.tournament_name, country:f.category_name, fixtures:[] };
     groups[key].fixtures.push(f);
   }
-  main.innerHTML=Object.values(groups).map(g=>`
+
+  main.innerHTML = Object.values(groups).map(g => `
     <div class="league-group">
       <div class="league-header" onclick="toggleGroup(this)">
         <div class="lh-left">
           <div class="lh-flag">${flag(g.country)}</div>
           <div class="lh-info">
-            <div class="lh-country">${g.country||''}</div>
-            <div class="lh-name">${g.name||'Unknown'}</div>
+            <div class="lh-country">${g.country || ''}</div>
+            <div class="lh-name">${g.name || 'Unknown'}</div>
           </div>
         </div>
         <div class="lh-right">
@@ -428,208 +596,489 @@ function renderGroups(fixtures){
         </div>
       </div>
       <div class="league-fixtures">
-        ${g.fixtures.map(f=>{
-          const time=f.match_date?new Date(f.match_date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'--';
-          const tip=getTip(f);
-          return `<div class="fixture-card ${f.enriched?'enriched':''}" onclick="openSheet('${f.id}','${escapeHTML(f.home_team_name)}','${escapeHTML(f.away_team_name)}','${escapeHTML(f.tournament_name)}','${escapeHTML(f.category_name)}')">
-            <div class="fixture-main">
-              <div class="fixture-time-col"><div class="fixture-time">${time}</div></div>
-              <div class="fixture-teams-col">
-                <div class="fixture-team-row"><div class="team-dot home"></div><div class="team-name-text">${escapeHTML(f.home_team_name)}</div></div>
-                <div class="fixture-team-row"><div class="team-dot away"></div><div class="team-name-text">${escapeHTML(f.away_team_name)}</div></div>
-              </div>
-              <div class="fixture-tip">
-                ${tip?`<div class="tip-pill"><div class="tip-label">${tip.market}</div><div class="tip-market">${tip.label}</div></div>`:'<div class="tip-arrow">›</div>'}
+        ${g.fixtures.map(f => {
+          const time = f.match_date ? new Date(f.match_date).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : '--';
+          const tip = getTip(f);
+          return `
+            <div class="fixture-card ${f.enriched ? 'enriched' : ''}" onclick="openSheet('${f.id}','${escapeHTML(f.home_team_name)}','${escapeHTML(f.away_team_name)}','${escapeHTML(f.tournament_name)}','${escapeHTML(f.category_name)}')">
+              <div class="fixture-main">
+                <div class="fixture-time-col">
+                  <div class="fixture-time">${time}</div>
+                </div>
+                <div class="fixture-teams-col">
+                  <div class="fixture-team-row">
+                    <div class="team-dot home"></div>
+                    <div class="team-name-text">${escapeHTML(f.home_team_name)}</div>
+                  </div>
+                  <div class="fixture-team-row">
+                    <div class="team-dot away"></div>
+                    <div class="team-name-text">${escapeHTML(f.away_team_name)}</div>
+                  </div>
+                </div>
+                <div class="fixture-tip">
+                  ${tip ? `<div class="tip-pill"><div class="tip-label">${tip.market}</div><div class="tip-market">${tip.label}</div></div>` : '<div class="tip-arrow">›</div>'}
+                </div>
               </div>
             </div>
-          </div>`;
+          `;
         }).join('')}
       </div>
     </div>
   `).join('');
 }
 
-function toggleGroup(h){h.closest('.league-group').classList.toggle('collapsed');}
+function toggleGroup(h){
+  h.closest('.league-group').classList.toggle('collapsed');
+}
 
-const FLAGS={'England':'🏴','Spain':'🇪🇸','Germany':'🇩🇪','France':'🇫🇷','Italy':'🇮🇹','Portugal':'🇵🇹','Netherlands':'🇳🇱','Belgium':'🇧🇪','Turkey':'🇹🇷','Brazil':'🇧🇷','Argentina':'🇦🇷','USA':'🇺🇸','Mexico':'🇲🇽','Saudi Arabia':'🇸🇦','Scotland':'🏴','Norway':'🇳🇴','Sweden':'🇸🇪','Denmark':'🇩🇰','Poland':'🇵🇱','Czech Republic':'🇨🇿','Romania':'🇷🇴','Austria':'🇦🇹','Greece':'🇬🇷','Ukraine':'🇺🇦','Colombia':'🇨🇴','Europe':'🇪🇺'};
-function flag(c){return FLAGS[c]||'🌍';}
-function escapeHTML(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function pct(v){return(v*100).toFixed(0)+'%';}
-function cls(v){return v>=0.65?'hi':v>=0.45?'mid':'lo';}
+const FLAGS = {
+  'England':'🏴','Spain':'🇪🇸','Germany':'🇩🇪','France':'🇫🇷','Italy':'🇮🇹','Portugal':'🇵🇹',
+  'Netherlands':'🇳🇱','Belgium':'🇧🇪','Turkey':'🇹🇷','Brazil':'🇧🇷','Argentina':'🇦🇷',
+  'USA':'🇺🇸','Mexico':'🇲🇽','Saudi Arabia':'🇸🇦','Scotland':'🏴','Norway':'🇳🇴',
+  'Sweden':'🇸🇪','Denmark':'🇩🇰','Poland':'🇵🇱','Czech Republic':'🇨🇿','Romania':'🇷🇴',
+  'Austria':'🇦🇹','Greece':'🇬🇷','Ukraine':'🇺🇦','Colombia':'🇨🇴','Europe':'🇪🇺'
+};
+
+function flag(c){ return FLAGS[c] || '🌍'; }
+
+function escapeHTML(s){
+  if(!s) return '';
+  return s
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function pct(v){ return (v * 100).toFixed(0) + '%'; }
+
+function normalizeScore(score) {
+  return (score || '').replace(/ - /g, '-').replace(/\s+/g, '').trim();
+}
+
+function parseScore(score) {
+  const s = normalizeScore(score);
+  if (!s.includes('-')) return null;
+  const [a, b] = s.split('-').map(Number);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return { home: a, away: b };
+}
+
+function getTeamShort(name) {
+  return (name || '').trim().split(' ')[0] || '';
+}
+
+function detectPerspective(match, homeTeam, awayTeam) {
+  const matchHome = (match.home || '').toLowerCase();
+  const homeKey = getTeamShort(homeTeam).toLowerCase();
+  const awayKey = getTeamShort(awayTeam).toLowerCase();
+
+  if (matchHome.includes(homeKey)) return 'home';
+  if (matchHome.includes(awayKey)) return 'away';
+  return 'home';
+}
+
+function computeH2HSummary(list, homeTeam, awayTeam) {
+  let homeWins = 0;
+  let awayWins = 0;
+  let draws = 0;
+
+  const rows = (list || []).slice(0, 6);
+
+  for (const match of rows) {
+    const parsed = parseScore(match.score);
+    if (!parsed) continue;
+
+    const perspective = detectPerspective(match, homeTeam, awayTeam);
+
+    let homeGoals;
+    let awayGoals;
+
+    if (perspective === 'home') {
+      homeGoals = parsed.home;
+      awayGoals = parsed.away;
+    } else {
+      homeGoals = parsed.away;
+      awayGoals = parsed.home;
+    }
+
+    if (homeGoals > awayGoals) homeWins++;
+    else if (awayGoals > homeGoals) awayWins++;
+    else draws++;
+  }
+
+  const total = Math.max(rows.length, homeWins + awayWins + draws, 1);
+
+  return {
+    homeWins,
+    awayWins,
+    draws,
+    total,
+    homePct: Math.round((homeWins / total) * 100),
+    drawPct: Math.round((draws / total) * 100),
+    awayPct: Math.round((awayWins / total) * 100)
+  };
+}
 
 function formResult(m, teamName) {
   if (!m.score) return '?';
-  const normalized = m.score.replace(/ - /g,'-').replace(/ /g,'').trim();
-  const [h,a] = normalized.split('-').map(Number);
-  const hl = (m.home||'').toLowerCase(), nl = teamName.toLowerCase();
+  const normalized = normalizeScore(m.score);
+  const parsed = parseScore(normalized);
+  if (!parsed) return '?';
+
+  const hl = (m.home || '').toLowerCase();
+  const nl = (teamName || '').toLowerCase();
   const isHome = hl.includes(nl.split(' ')[0]) || nl.includes(hl.split(' ')[0]);
-  const sc = isHome?h:a, cn = isHome?a:h;
-  return sc>cn?'W':sc===cn?'D':'L';
+
+  const sc = isHome ? parsed.home : parsed.away;
+  const cn = isHome ? parsed.away : parsed.home;
+
+  if (sc > cn) return 'W';
+  if (sc === cn) return 'D';
+  return 'L';
 }
 
 function renderFormMatches(matches, teamName) {
-  if (!matches||!matches.length) return '<div style="color:var(--text3);font-size:11px;padding:8px 0;font-style:italic">No recent match data</div>';
-  return matches.slice(0,8).map(m=>{
-    const normalized = (m.score||'').replace(/ - /g,'-').replace(/ /g,'').trim();
-    const r = formResult({...m, score: normalized}, teamName);
-    const hl = (m.home||'').toLowerCase(), nl = teamName.toLowerCase();
+  if (!matches || !matches.length) {
+    return '<div style="color:var(--text3);font-size:11px;padding:8px 0;font-style:italic">No recent match data</div>';
+  }
+
+  return matches.slice(0, 8).map(m => {
+    const normalized = normalizeScore(m.score || '');
+    const r = formResult({ ...m, score: normalized }, teamName);
+    const hl = (m.home || '').toLowerCase();
+    const nl = (teamName || '').toLowerCase();
     const isHome = hl.includes(nl.split(' ')[0]) || nl.includes(hl.split(' ')[0]);
     const displayScore = normalized || '?';
-    return `<div class="form-match">
-      <div class="form-match-teams"><span class="bold">${escapeHTML(isHome?m.home:m.away)}</span> vs ${escapeHTML(isHome?m.away:m.home)}</div>
-      <div class="form-score-pill ${r}">${displayScore}</div>
-    </div>`;
+
+    return `
+      <div class="form-match">
+        <div class="form-match-teams">
+          <span class="bold">${escapeHTML(isHome ? m.home : m.away)}</span> vs ${escapeHTML(isHome ? m.away : m.home)}
+          ${m.date ? `<div style="font-size:10px;color:var(--text3);margin-top:4px">${escapeHTML(m.date)}</div>` : ''}
+        </div>
+        <div class="form-score-pill ${r}">${displayScore}</div>
+      </div>
+    `;
   }).join('');
 }
 
-// Render a list of head‑to‑head matches. Each entry shows the teams and the score
-// and uses the `formResult` helper to color the score pill from the perspective
-// of the current home/away team. Only the first 6 matches are shown.
 function renderH2HMatches(list, homeTeam, awayTeam) {
   if (!list || !list.length) {
-    return '<div style="color:var(--text3);font-size:11px;padding:8px 14px;font-style:italic">No head‑to‑head data</div>';
+    return `
+      <div style="padding:12px 14px;border:1px solid var(--border2);border-radius:14px;background:var(--surface2);color:var(--text3);font-size:12px">
+        No head-to-head data
+      </div>
+    `;
   }
-  // normalise names for comparison
-  const homeKey = homeTeam.toLowerCase().split(' ')[0];
-  const awayKey = awayTeam.toLowerCase().split(' ')[0];
-  return list.slice(0, 6).map(m => {
-    const normalized = (m.score || '').replace(/ - /g,'-').replace(/ /g,'').trim();
-    // decide which team in this h2h corresponds to current homeTeam
-    const mHomeLower = (m.home || '').toLowerCase();
-    const isHome = mHomeLower.includes(homeKey) || homeKey.includes(mHomeLower.split(' ')[0]);
-    const resultPerspective = isHome ? homeTeam : awayTeam;
-    const resultClass = formResult({ ...m, score: normalized }, resultPerspective);
-    // display teams with the one from the perspective bolded first
-    const teamsHTML = isHome
-      ? `<span class="bold">${escapeHTML(m.home)}</span> vs ${escapeHTML(m.away)}`
-      : `<span class="bold">${escapeHTML(m.away)}</span> vs ${escapeHTML(m.home)}`;
-    return `<div class="form-match">
-      <div class="form-match-teams">${teamsHTML}</div>
-      <div class="form-score-pill ${resultClass}">${normalized || '?'}</div>
-    </div>`;
+
+  return list.slice(0, 6).map((m) => {
+    const score = normalizeScore(m.score) || '?';
+    const parsed = parseScore(score);
+    const perspective = detectPerspective(m, homeTeam, awayTeam);
+
+    let result = 'D';
+    if (parsed) {
+      let homeGoals;
+      let awayGoals;
+
+      if (perspective === 'home') {
+        homeGoals = parsed.home;
+        awayGoals = parsed.away;
+      } else {
+        homeGoals = parsed.away;
+        awayGoals = parsed.home;
+      }
+
+      if (homeGoals > awayGoals) result = 'W';
+      else if (homeGoals < awayGoals) result = 'L';
+    }
+
+    const pillBg =
+      result === 'W' ? 'rgba(0,230,118,0.12)' :
+      result === 'L' ? 'rgba(68,138,255,0.12)' :
+      'rgba(255,171,0,0.12)';
+
+    const pillColor =
+      result === 'W' ? 'var(--green)' :
+      result === 'L' ? 'var(--blue)' :
+      'var(--yellow)';
+
+    return `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:12px 14px;
+        border:1px solid var(--border2);
+        border-radius:14px;
+        background:linear-gradient(180deg,var(--surface2),var(--surface));
+        margin-bottom:10px;
+      ">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;font-weight:700;color:var(--text);line-height:1.4">
+            ${escapeHTML(m.home || homeTeam)}
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin:2px 0">vs</div>
+          <div style="font-size:12px;font-weight:700;color:var(--text2);line-height:1.4">
+            ${escapeHTML(m.away || awayTeam)}
+          </div>
+          ${m.date ? `<div style="font-size:10px;color:var(--text3);margin-top:6px">${escapeHTML(m.date)}</div>` : ''}
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <div style="
+            padding:8px 12px;
+            border-radius:10px;
+            background:${pillBg};
+            color:${pillColor};
+            font-size:12px;
+            font-weight:800;
+            letter-spacing:0.5px;
+            min-width:38px;
+            text-align:center;
+          ">
+            ${result}
+          </div>
+
+          <div style="
+            font-family:'Bebas Neue',sans-serif;
+            font-size:26px;
+            line-height:1;
+            color:var(--text);
+            min-width:48px;
+            text-align:center;
+            letter-spacing:1px;
+          ">
+            ${score}
+          </div>
+        </div>
+      </div>
+    `;
   }).join('');
+}
+
+function buildBasePreview(home, away, mr, hf, af, summary) {
+  const fav =
+    mr.home > mr.away ? home :
+    mr.away > mr.home ? away :
+    'Neither side';
+
+  const tone =
+    Math.abs(mr.home - mr.away) >= 0.12
+      ? `${fav} comes in with the stronger edge on the model.`
+      : `This looks close on the model with no dominant edge.`;
+
+  return `
+    <div style="padding:14px;border:1px solid var(--border2);border-radius:14px;background:var(--surface2)">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px">Model View</div>
+      <p style="font-size:13px;color:var(--text);line-height:1.75;margin-bottom:12px">
+        ${tone} ${home} win probability is ${(mr.home * 100).toFixed(0)}%, draw ${(mr.draw * 100).toFixed(0)}%, and ${away} win ${(mr.away * 100).toFixed(0)}%.
+      </p>
+      <p style="font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:0">
+        Recent head-to-head split from the six displayed matches: ${summary.homeWins} wins for ${home}, ${summary.draws} draws, and ${summary.awayWins} wins for ${away}. Home momentum: ${hf?.momentumScore ?? hf?.momentum ?? 'N/A'} · Away momentum: ${af?.momentumScore ?? af?.momentum ?? 'N/A'}.
+      </p>
+    </div>
+  `;
+}
+
+function buildBasePredictions(home, away, mr) {
+  const picks = [
+    { label: `${home} Win`, p: mr.home },
+    { label: `Draw`, p: mr.draw },
+    { label: `${away} Win`, p: mr.away }
+  ].sort((a, b) => b.p - a.p);
+
+  const best = picks[0];
+  const alt = picks[1];
+
+  const conf =
+    best.p >= 0.62 ? 'HIGH' :
+    best.p >= 0.50 ? 'MEDIUM' :
+    'LOW';
+
+  return `
+    <div style="padding:14px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Recommended Pick</div>
+      <div style="background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.2);border-radius:14px;padding:16px;margin-bottom:14px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green);letter-spacing:1px;margin-bottom:8px">${best.label}</div>
+        <div style="font-size:11px;color:var(--green);opacity:0.85;margin-bottom:8px">MODEL PROBABILITY: ${(best.p * 100).toFixed(0)}% · ${conf}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          This is the strongest base edge from the current 1X2 model output.
+        </div>
+      </div>
+
+      <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Alternative Pick</div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;margin-bottom:8px">${alt.label}</div>
+        <div style="font-size:11px;color:var(--text2);opacity:0.85;margin-bottom:8px">MODEL PROBABILITY: ${(alt.p * 100).toFixed(0)}%</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          Secondary outcome from the same probability distribution.
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 async function openSheet(id, home, away, league, country) {
   document.getElementById('overlay').classList.add('open');
-  document.getElementById('sheetContent').innerHTML=`
+  document.getElementById('sheetContent').innerHTML = `
     <div class="fetching">
       <div class="fetch-spin"></div>
       <div class="fetch-lbl">Analysing</div>
       <div class="fetch-sub">${home} vs ${away}</div>
-    </div>`;
+    </div>
+  `;
 
   try {
     const predRes = await fetch(`${API}/predict/${id}`);
-    if(!predRes.ok) throw new Error('Prediction failed');
+    if (!predRes.ok) throw new Error('Prediction failed');
+
     const pred = await predRes.json();
-    // Ensure meta fields are populated. Some matches lack meta.h2h/homeForm/awayForm
+
     try {
-      // If meta is a JSON string, parse it
       let meta = pred.meta;
       if (typeof meta === 'string') {
-        try { meta = JSON.parse(meta); } catch(e) { meta = {}; }
+        try { meta = JSON.parse(meta); } catch { meta = {}; }
       }
       meta = meta || {};
-      // If any of h2h, homeForm or awayForm are missing or empty, fetch fixture details
-      if (!meta.h2h || !meta.h2h.length || !meta.homeForm || !meta.homeForm.length || !meta.awayForm || !meta.awayForm.length) {
+
+      if (!meta.h2h?.length || !meta.homeForm?.length || !meta.awayForm?.length || !meta.standings?.length) {
         const fixtureRes = await fetch(`${API}/fixtures/${id}`);
         if (fixtureRes.ok) {
           const fxData = await fixtureRes.json();
-          // Always fallback to h2h/homeForm/awayForm from fixtures if missing
-          if (!meta.h2h || !meta.h2h.length) meta.h2h = fxData.h2h || [];
-          if (!meta.homeForm || !meta.homeForm.length) meta.homeForm = fxData.homeForm || [];
-          if (!meta.awayForm || !meta.awayForm.length) meta.awayForm = fxData.awayForm || [];
+
+          if (!meta.h2h?.length) {
+            meta.h2h = fxData?.history?.h2h || fxData?.h2h || [];
+          }
+          if (!meta.homeForm?.length) {
+            meta.homeForm = fxData?.history?.homeForm || fxData?.homeForm || [];
+          }
+          if (!meta.awayForm?.length) {
+            meta.awayForm = fxData?.history?.awayForm || fxData?.awayForm || [];
+          }
+          if (!meta.standings?.length) {
+            meta.standings = fxData?.meta?.standings || [];
+          }
         }
       }
+
       pred.meta = meta;
-    } catch(e) {
-      // ignore meta errors silently
-    }
+    } catch(e) {}
+
     renderSheet(pred, home, away, league, country);
+
     currentFixtureId = id;
     currentHome = home;
     currentAway = away;
     chatHistory = [];
 
-    fetch(`${API}/predict/${id}/explain`).then(r=>r.json()).then(data=>{
-      if(data.explanation) updateAI(data.explanation, id, home, away);
-    }).catch(()=>{});
-    const fx=allFixtures.find(f=>f.id===id);
-    if(fx){fx.enriched=1;applyFilters();}
+    fetch(`${API}/predict/${id}/explain`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.explanation) updateAI(data.explanation, id, home, away);
+      })
+      .catch(() => {});
   } catch(err) {
-    document.getElementById('sheetContent').innerHTML=`
+    document.getElementById('sheetContent').innerHTML = `
       <div class="fetching">
         <div style="font-size:32px">⚠️</div>
         <div class="fetch-lbl" style="color:var(--red)">Failed</div>
         <div class="fetch-sub">${err.message}</div>
-      </div>`;
+      </div>
+    `;
   }
 }
 
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.tab===name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === name));
 }
 
 function updateAI(explain, fixtureId, home, away) {
   if (!explain) return;
+
   const rs = document.getElementById('rec-strip');
   if (rs && explain.best_pick) {
-    rs.innerHTML = `<div class="rec-strip-left"><div class="rec-lbl">⚡ Best Pick</div><div class="rec-val">${explain.best_pick}</div></div><div class="rec-badge value">${explain.best_pick_confidence||''}%</div>`;
+    const confVal = Number(explain.best_pick_confidence || 0);
+    const badgeClass = confVal >= 65 ? 'value' : confVal >= 50 ? 'low' : 'warn';
+    rs.innerHTML = `
+      <div class="rec-strip-left">
+        <div class="rec-lbl">⚡ Best Pick</div>
+        <div class="rec-val">${explain.best_pick}</div>
+      </div>
+      <div class="rec-badge ${badgeClass}">${confVal ? `${confVal}%` : 'MODEL'}</div>
+    `;
   }
+
   const gs = document.getElementById('game-script-content');
   if (gs && explain.game_script) {
     gs.innerHTML = `<p style="font-size:13px;color:var(--text);line-height:1.7">${explain.game_script}</p>`;
   }
+
   const pt = document.getElementById('predictions-content');
   if (pt) {
     pt.innerHTML = `
       <div style="padding:14px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Best Pick</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Recommended Pick</div>
         <div style="background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.2);border-radius:12px;padding:16px;margin-bottom:14px">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green);letter-spacing:1px;margin-bottom:6px">${explain.best_pick||'Analysing...'}</div>
-          <div style="font-size:10px;color:var(--green);opacity:0.7;margin-bottom:8px">CONFIDENCE: ${explain.best_pick_confidence||0}%</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.best_pick_reasoning||''}</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green);letter-spacing:1px;margin-bottom:6px">${explain.best_pick || 'Analysing...'}</div>
+          <div style="font-size:10px;color:var(--green);opacity:0.7;margin-bottom:8px">CONFIDENCE: ${explain.best_pick_confidence || 0}%</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.best_pick_reasoning || ''}</div>
         </div>
         ${explain.alternative_pick ? `
         <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Alternative Pick</div>
         <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px">
           <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;margin-bottom:6px">${explain.alternative_pick}</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.alternative_reasoning||''}</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.alternative_reasoning || ''}</div>
         </div>` : ''}
         ${explain.data_warning ? `<div class="ai-warn" style="margin-top:12px">⚠ ${explain.data_warning}</div>` : ''}
-      </div>`;
+      </div>
+    `;
   }
 }
-
-// Chat functionality
-let chatHistory = [];
-let currentFixtureId = null;
-let currentHome = null;
-let currentAway = null;
 
 async function sendChat() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
   if (!msg) return;
+
   input.value = '';
   const chatBox = document.getElementById('chat-messages');
-  chatBox.innerHTML += `<div style="text-align:right;margin-bottom:8px"><span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">${msg}</span></div>`;
+
+  chatBox.innerHTML += `
+    <div style="text-align:right;margin-bottom:8px">
+      <span style="background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--green);display:inline-block;max-width:80%">
+        ${escapeHTML(msg)}
+      </span>
+    </div>
+  `;
   chatBox.innerHTML += `<div id="typing" style="margin-bottom:8px"><span style="font-size:12px;color:var(--text3);font-style:italic">Analysing...</span></div>`;
   chatBox.scrollTop = chatBox.scrollHeight;
-  chatHistory.push({ role: 'user', content: msg });
+
+  chatHistory.push({ role:'user', content:msg });
+
   try {
     const res = await fetch(`/api/predict/${currentFixtureId}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ message:msg, history:chatHistory.slice(-10) })
     });
+
     const data = await res.json();
     const reply = data.reply || 'No response.';
-    chatHistory.push({ role: 'assistant', content: reply });
+    chatHistory.push({ role:'assistant', content:reply });
+
     document.getElementById('typing')?.remove();
-    chatBox.innerHTML += `<div style="margin-bottom:8px"><span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">${reply}</span></div>`;
+    chatBox.innerHTML += `
+      <div style="margin-bottom:8px">
+        <span style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);display:inline-block;max-width:90%;line-height:1.5">
+          ${escapeHTML(reply)}
+        </span>
+      </div>
+    `;
     chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     document.getElementById('typing')?.remove();
@@ -637,61 +1086,83 @@ async function sendChat() {
   }
 }
 
-function standingsHTML(){
-  return '';
-}
-
 function renderSheet(d, home, away, league, country) {
-  const p=d.predictions, f=d.features, m=d.model, mr=p.match_result;
-  const hf=f.homeFeatures, af=f.awayFeatures, h2h=f.h2hFeatures;
-  let standings=[], homeForm=null, awayForm=null, h2hMatches=[];
-  try {
-    const meta=d.meta?(typeof d.meta==='string'?JSON.parse(d.meta):d.meta):null;
-    standings=meta?.standings||[];
-    homeForm=meta?.homeForm||null;
-    awayForm=meta?.awayForm||null;
-    h2hMatches=meta?.h2h||[];
-  } catch(e){}
-  const h2hTotal=h2h.matches_available||0;
-  const h2hH=Math.round((h2h.home_win_rate||0)*h2hTotal);
-  const h2hD=Math.round((h2h.draw_rate||0)*h2hTotal);
-  const h2hA=h2hTotal-h2hH-h2hD;
-  const h2hHP=h2hTotal?Math.round(h2hH/h2hTotal*100):0;
-  const h2hDP=h2hTotal?Math.round(h2hD/h2hTotal*100):0;
-  const h2hAP=100-h2hHP-h2hDP;
+  const p = d.predictions || {};
+  const f = d.features || {};
+  const mr = p.match_result || { home:0.33, draw:0.27, away:0.40 };
+  const hf = f.homeFeatures || {};
+  const af = f.awayFeatures || {};
+  const meta = d.meta || {};
+  const h2hMatches = Array.isArray(meta.h2h) ? meta.h2h : [];
+  const homeForm = Array.isArray(meta.homeForm) ? meta.homeForm : [];
+  const awayForm = Array.isArray(meta.awayForm) ? meta.awayForm : [];
+  const standings = Array.isArray(meta.standings) ? meta.standings : [];
+
+  const summary = computeH2HSummary(h2hMatches, home, away);
+  const basePreviewHTML = buildBasePreview(home, away, mr, hf, af, summary);
+  const basePredictionsHTML = buildBasePredictions(home, away, mr);
+
   function standingsHTML(){
-    if(!standings.length) return '<div style="padding:14px;color:var(--text3);font-size:12px">No standings data</div>';
-    const hRow=standings.find(r=>r.team===home);
-    const aRow=standings.find(r=>r.team===away);
-    if(!hRow&&!aRow) return '<div style="padding:14px;color:var(--text3);font-size:12px">Teams not found in standings</div>';
-    const positions=[hRow?.position,aRow?.position].filter(Boolean);
-    const nearby=standings.filter(r=>positions.some(pp=>Math.abs(r.position-pp)<=2));
-    const toShow=[...new Map([...(hRow?[hRow]:[]),...(aRow?[aRow]:[]),...nearby].map(r=>[r.team,r])).values()]
-      .sort((a,b)=>a.position-b.position).slice(0,8);
-    const isHL=r=>r.team===home||r.team===away;
-    return `<table class="standings-table" style="width:100%">
-      <tr><th>Pos</th><th>Team</th><th class="num">G</th><th class="num">W</th><th class="num">D</th><th class="num">L</th><th class="num">Pts</th><th class="num">Form</th></tr>
-      ${toShow.map(r=>{
-        const formStr=(r.form||'').slice(-5).split('');
-        return `<tr class="${isHL(r)?'hl':''}">
-          <td><div class="s-pos-cell"><div class="s-dot ${isHL(r)?'hl':''}"></div>${r.position}</div></td>
-          <td>${escapeHTML(r.team)}</td>
-          <td class="num">${r.played||0}</td>
-          <td class="num">${r.wins||0}</td>
-          <td class="num">${r.draws||0}</td>
-          <td class="num">${r.losses||0}</td>
-          <td class="pts">${r.points||0}</td>
-          <td class="num"><div class="form-dots-row">${formStr.map(x=>`<div class="fdot-sm ${x==='W'?'W':x==='D'?'D':'L'}">${x}</div>`).join('')}</div></td>
-        </tr>`;
-      }).join('')}
-    </table>`;
+    if(!standings.length) {
+      return '<div style="padding:14px;color:var(--text3);font-size:12px">No standings data</div>';
+    }
+
+    const hRow = standings.find(r => r.team === home);
+    const aRow = standings.find(r => r.team === away);
+
+    if(!hRow && !aRow) {
+      return '<div style="padding:14px;color:var(--text3);font-size:12px">Teams not found in standings</div>';
+    }
+
+    const positions = [hRow?.position, aRow?.position].filter(Boolean);
+    const nearby = standings.filter(r => positions.some(pp => Math.abs(r.position - pp) <= 2));
+
+    const toShow = [...new Map([...(hRow ? [hRow] : []), ...(aRow ? [aRow] : []), ...nearby].map(r => [r.team, r])).values()]
+      .sort((a,b) => a.position - b.position)
+      .slice(0, 8);
+
+    const isHL = r => r.team === home || r.team === away;
+
+    return `
+      <table class="standings-table" style="width:100%">
+        <tr>
+          <th>Pos</th>
+          <th>Team</th>
+          <th class="num">G</th>
+          <th class="num">W</th>
+          <th class="num">D</th>
+          <th class="num">L</th>
+          <th class="num">Pts</th>
+          <th class="num">Form</th>
+        </tr>
+        ${toShow.map(r => {
+          const formStr = (r.form || '').slice(-5).split('');
+          const played = r.played ?? r.games ?? r.matches ?? ((r.wins || 0) + (r.draws || 0) + (r.losses || 0));
+
+          return `
+            <tr class="${isHL(r) ? 'hl' : ''}">
+              <td><div class="s-pos-cell"><div class="s-dot ${isHL(r)?'hl':''}"></div>${r.position}</div></td>
+              <td>${escapeHTML(r.team)}</td>
+              <td class="num">${played || 0}</td>
+              <td class="num">${r.wins || 0}</td>
+              <td class="num">${r.draws || 0}</td>
+              <td class="num">${r.losses || 0}</td>
+              <td class="pts">${r.points || 0}</td>
+              <td class="num"><div class="form-dots-row">${formStr.map(x => `<div class="fdot-sm ${x==='W'?'W':x==='D'?'D':'L'}">${x}</div>`).join('')}</div></td>
+            </tr>
+          `;
+        }).join('')}
+      </table>
+    `;
   }
-  document.getElementById('sheetContent').innerHTML=`
+
+  document.getElementById('sheetContent').innerHTML = `
     <div class="match-hero">
       <div class="match-hero-top">
         <div class="match-league-tag">${league} · ${country}</div>
         <div class="sheet-close" onclick="closeSheet()">✕</div>
       </div>
+
       <div class="match-teams-hero">
         <div class="match-team-block">
           <div class="match-team-name">${home}</div>
@@ -707,6 +1178,7 @@ function renderSheet(d, home, away, league, country) {
           <div class="match-team-pct away">${pct(mr.away)}</div>
         </div>
       </div>
+
       <div class="tri-bar">
         <div class="tri-home" style="flex:${mr.home}"></div>
         <div class="tri-draw" style="flex:${mr.draw}"></div>
@@ -719,7 +1191,7 @@ function renderSheet(d, home, away, league, country) {
         <div class="rec-lbl">⭐ Top Pick</div>
         <div class="rec-val">${mr.home>=mr.away&&mr.home>=mr.draw?home+' Win':mr.away>mr.home&&mr.away>=mr.draw?away+' Win':'Draw'}</div>
       </div>
-      <div class="rec-badge value">${mr.confidence||'LOW'}</div>
+      <div class="rec-badge ${Math.max(mr.home, mr.draw, mr.away) >= 0.50 ? 'value' : 'low'}">${Math.max(mr.home, mr.draw, mr.away) >= 0.50 ? 'EDGE' : 'LEAN'}</div>
     </div>
 
     <div class="tab-bar">
@@ -730,65 +1202,74 @@ function renderSheet(d, home, away, league, country) {
       <div class="tab-btn" data-tab="ai" onclick="switchTab('ai')">AI Analysis</div>
     </div>
 
-    <!-- PREVIEW TAB -->
     <div class="tab-panel active" data-tab="preview">
       <div style="padding:16px">
         <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Match Preview</div>
-        <div id="game-script-content" style="min-height:80px">
-          <div style="display:flex;align-items:center;gap:8px;color:var(--text3)"><div class="ai-spin" style="width:14px;height:14px;border:1.5px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div><span style="font-size:12px">Generating match preview...</span></div>
-        </div>
+        <div id="game-script-content">${basePreviewHTML}</div>
       </div>
     </div>
 
-    <!-- PREDICTIONS TAB -->
     <div class="tab-panel" data-tab="predictions">
-      <div id="predictions-content">
-        <div style="padding:24px;text-align:center;color:var(--text3)">
-          <div class="ai-spin" style="width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px"></div>
-          <div style="font-size:12px">Generating predictions...</div>
-        </div>
-      </div>
+      <div id="predictions-content">${basePredictionsHTML}</div>
     </div>
 
-    <!-- FORM TAB -->
     <div class="tab-panel" data-tab="form">
-      <div style="padding:14px 14px 0">
+      <div style="padding:14px">
         <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Head to Head</div>
+
+        <div class="h2h-summary-grid">
+          <div class="h2h-stat-card home">
+            <div class="big">${summary.homeWins}</div>
+            <div class="lbl">${home}</div>
+          </div>
+          <div class="h2h-stat-card draw">
+            <div class="big">${summary.draws}</div>
+            <div class="lbl">Draws</div>
+          </div>
+          <div class="h2h-stat-card away">
+            <div class="big">${summary.awayWins}</div>
+            <div class="lbl">${away}</div>
+          </div>
+        </div>
+
         <div class="h2h-bar-wrap" style="margin-bottom:16px">
           <div class="h2h-bar-labels">
             <div class="h2h-bar-label">
-              <div class="h2h-bar-wins h">${h2hH} Wins</div>
+              <div class="h2h-bar-wins">${summary.homeWins} Wins</div>
               <div class="h2h-bar-sub">${home.split(' ')[0]}</div>
             </div>
             <div class="h2h-bar-label" style="align-items:center">
-              <div class="h2h-bar-wins d">${h2hD} Draws</div>
+              <div class="h2h-bar-wins">${summary.draws} Draws</div>
             </div>
             <div class="h2h-bar-label right">
-              <div class="h2h-bar-wins a">${h2hA} Wins</div>
+              <div class="h2h-bar-wins">${summary.awayWins} Wins</div>
               <div class="h2h-bar-sub">${away.split(' ')[0]}</div>
             </div>
           </div>
           <div class="h2h-bar">
-            <div class="h2h-bar-h" style="flex:${Math.max(h2hH,0.1)}"></div>
-            <div class="h2h-bar-d" style="flex:${Math.max(h2hD,0.1)}"></div>
-            <div class="h2h-bar-a" style="flex:${Math.max(h2hA,0.1)}"></div>
+            <div class="h2h-bar-h" style="flex:${Math.max(summary.homeWins,0.1)}"></div>
+            <div class="h2h-bar-d" style="flex:${Math.max(summary.draws,0.1)}"></div>
+            <div class="h2h-bar-a" style="flex:${Math.max(summary.awayWins,0.1)}"></div>
           </div>
           <div class="h2h-bar-pcts">
-            <div class="h2h-bar-pct h">${h2hHP}%</div>
-            <div class="h2h-bar-pct d">${h2hDP}%</div>
-            <div class="h2h-bar-pct a">${h2hAP}%</div>
+            <div>${summary.homePct}%</div>
+            <div>${summary.drawPct}%</div>
+            <div>${summary.awayPct}%</div>
           </div>
         </div>
       </div>
+
       <div class="form-results">
         <div class="form-team-section">
           <div class="form-team-header">H2H Matches</div>
           <div class="form-matches">${renderH2HMatches(h2hMatches, home, away)}</div>
         </div>
+
         <div class="form-team-section">
           <div class="form-team-header">${home} — Recent Results</div>
           <div class="form-matches">${renderFormMatches(homeForm, home)}</div>
         </div>
+
         <div class="form-team-section">
           <div class="form-team-header">${away} — Recent Results</div>
           <div class="form-matches">${renderFormMatches(awayForm, away)}</div>
@@ -796,12 +1277,10 @@ function renderSheet(d, home, away, league, country) {
       </div>
     </div>
 
-    <!-- TABLE TAB -->
     <div class="tab-panel" data-tab="standings">
-      <div style="overflow-x:auto">${standingsHTML()}</div>
+      <div style="overflow-x:auto;padding:14px">${standingsHTML()}</div>
     </div>
 
-    <!-- AI TAB -->
     <div class="tab-panel" data-tab="ai">
       <div style="display:flex;flex-direction:column;height:460px">
         <div id="chat-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:4px">
@@ -812,10 +1291,10 @@ function renderSheet(d, home, away, league, country) {
           </div>
         </div>
         <div style="padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
-          <input id="chat-input" type="text" placeholder="Ask about this match..." 
+          <input id="chat-input" type="text" placeholder="Ask about this match..."
             style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;outline:none"
             onkeydown="if(event.key==='Enter')sendChat()"
-            onfocus="this.style.borderColor='var(--green)'" 
+            onfocus="this.style.borderColor='var(--green)'"
             onblur="this.style.borderColor='var(--border2)'">
           <button onclick="sendChat()" style="background:var(--green);border:none;border-radius:8px;width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <svg width="16" height="16" fill="none" stroke="#000" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
@@ -823,26 +1302,170 @@ function renderSheet(d, home, away, league, country) {
         </div>
       </div>
     </div>
+
     <div class="pad-bottom"></div>
   `;
 }
 
-function closeSheet(){document.getElementById('overlay').classList.remove('open');}
-function handleOverlay(e){if(e.target===document.getElementById('overlay'))closeSheet();}
+function switchAuthTab(mode) {
+  authMode = mode;
+  const signupTab = document.getElementById('signupTab');
+  const loginTab = document.getElementById('loginTab');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  const errorBox = document.getElementById('authError');
 
-async function init(){
-  buildDateTabs();
-  try{
-    const res=await fetch(`${API}/fixtures?limit=2000`);
-    const data=await res.json();
-    allFixtures=data.fixtures||[];
-    applyFilters();
-  }catch(err){
-    document.getElementById('main').innerHTML='<div class="empty">Failed to load.</div>';
+  signupTab.classList.toggle('active', mode === 'signup');
+  loginTab.classList.toggle('active', mode === 'login');
+  submitBtn.textContent = mode === 'signup' ? 'Create Free Account' : 'Login';
+  errorBox.style.display = 'none';
+  errorBox.textContent = '';
+}
+
+function showAuthError(message) {
+  const errorBox = document.getElementById('authError');
+  errorBox.textContent = message || 'Something went wrong';
+  errorBox.style.display = 'block';
+}
+
+function hideAuthError() {
+  const errorBox = document.getElementById('authError');
+  errorBox.textContent = '';
+  errorBox.style.display = 'none';
+}
+
+async function submitAuth() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+  const btn = document.getElementById('authSubmitBtn');
+
+  hideAuthError();
+
+  if (!email || !password) {
+    showAuthError('Email and password are required');
+    return;
+  }
+
+  if (authMode === 'signup' && password.length < 6) {
+    showAuthError('Password must be at least 6 characters');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = authMode === 'signup' ? 'Creating...' : 'Logging in...';
+
+  try {
+    const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+    const res = await fetch(endpoint, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Authentication failed');
+    }
+
+    localStorage.setItem('sp_token', data.token);
+    currentUser = data.user || null;
+    updateUserUI(currentUser);
+    document.getElementById('authOverlay').style.display = 'none';
+    await init();
+  } catch (err) {
+    showAuthError(err.message || 'Authentication failed');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'signup' ? 'Create Free Account' : 'Login';
   }
 }
 
-init();
+async function checkAuth() {
+  const token = localStorage.getItem('sp_token');
+  if (!token) {
+    document.getElementById('authOverlay').style.display = 'flex';
+    return false;
+  }
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers:{ Authorization:'Bearer ' + token }
+    });
+
+    if (!res.ok) throw new Error('Session expired');
+
+    const user = await res.json();
+    currentUser = user;
+    updateUserUI(user);
+    document.getElementById('authOverlay').style.display = 'none';
+    return true;
+  } catch (err) {
+    localStorage.removeItem('sp_token');
+    currentUser = null;
+    document.getElementById('authOverlay').style.display = 'flex';
+    return false;
+  }
+}
+
+function logout() {
+  localStorage.removeItem('sp_token');
+  currentUser = null;
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('userStatusBadge').style.display = 'none';
+  document.getElementById('authOverlay').style.display = 'flex';
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  switchAuthTab('signup');
+}
+
+function updateUserUI(user) {
+  const badge = document.getElementById('userStatusBadge');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  if (!user) {
+    badge.style.display = 'none';
+    logoutBtn.style.display = 'none';
+    return;
+  }
+
+  logoutBtn.style.display = 'inline-block';
+  badge.style.display = 'inline-block';
+
+  if (user.status === 'active') {
+    badge.textContent = 'ACTIVE';
+    badge.style.background = 'rgba(0,230,118,0.12)';
+    badge.style.color = '#00e676';
+    badge.style.border = '1px solid rgba(0,230,118,0.25)';
+  } else if (user.status === 'trial') {
+    badge.textContent = 'TRIAL';
+    badge.style.background = 'rgba(0,188,212,0.12)';
+    badge.style.color = '#00bcd4';
+    badge.style.border = '1px solid rgba(0,188,212,0.25)';
+  } else {
+    badge.textContent = 'EXPIRED';
+    badge.style.background = 'rgba(255,23,68,0.12)';
+    badge.style.color = '#ff1744';
+    badge.style.border = '1px solid rgba(255,23,68,0.25)';
+  }
+}
+
+function closeSheet(){ document.getElementById('overlay').classList.remove('open'); }
+function handleOverlay(e){ if(e.target === document.getElementById('overlay')) closeSheet(); }
+
+async function init(){
+  buildDateTabs();
+
+  try {
+    const res = await fetch(`${API}/fixtures?limit=2000`);
+    const data = await res.json();
+    allFixtures = data.fixtures || [];
+    applyFilters();
+  } catch(err) {
+    document.getElementById('main').innerHTML = '<div class="empty">Failed to load.</div>';
+  }
+}
+
+checkAuth().then(authed => { if (authed) init(); });
 </script>
 </body>
 </html>
