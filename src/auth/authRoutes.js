@@ -1,6 +1,3 @@
-// ============================================================
-// FILE 1: src/auth/authRoutes.js
-// ============================================================
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -163,7 +160,8 @@ router.post('/payment/initialize', async (req, res) => {
 });
 
 // ── Paystack Webhook ──────────────────────────────────────────
-router.post('/webhook/paystack', async (req, res) => {
+// Note: expose webhook under /paystack/webhook when mounted on /api/auth.
+router.post('/paystack/webhook', async (req, res) => {
     try {
         const hash = crypto.createHmac('sha512', PAYSTACK_SECRET)
             .update(JSON.stringify(req.body))
