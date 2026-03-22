@@ -473,120 +473,6 @@ main { padding-bottom:80px; }
 const API = '/api';
 let allFixtures = [];
 let activeDate = null;
-let currentUser = null;
-let authMode = 'signup';
-
-// ── AUTH FUNCTIONS ────────────────────────────────────────────
-function switchAuthTab(mode) {
-  authMode = mode;
-  document.getElementById('signupTab').classList.toggle('active', mode === 'signup');
-  document.getElementById('loginTab').classList.toggle('active', mode === 'login');
-  document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create Free Account' : 'Login';
-  document.getElementById('authError').textContent = '';
-}
-
-async function submitAuth() {
-  const email = document.getElementById('authEmail').value.trim();
-  const password = document.getElementById('authPassword').value;
-  const errEl = document.getElementById('authError');
-  const btn = document.getElementById('authSubmitBtn');
-
-  if (!email || !password) { errEl.textContent = 'Email and password required'; return; }
-  if (authMode === 'signup' && password.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return; }
-
-  btn.textContent = authMode === 'signup' ? 'Creating account...' : 'Logging in...';
-  btn.disabled = true;
-  errEl.textContent = '';
-
-  try {
-    const res = await fetch(API + '/auth/' + authMode, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Something went wrong'; return; }
-    localStorage.setItem('sp_token', data.token);
-    localStorage.setItem('sp_user', JSON.stringify(data.user));
-    currentUser = data.user;
-    document.getElementById('authOverlay').style.display = 'none';
-    updateUserBadge();
-    init();
-  } catch(e) {
-    errEl.textContent = 'Network error. Try again.';
-  } finally {
-    btn.textContent = authMode === 'signup' ? 'Create Free Account' : 'Login';
-    btn.disabled = false;
-  }
-}
-
-async function checkAuth() {
-  const token = localStorage.getItem('sp_token');
-  if (!token) return false;
-  try {
-    const res = await fetch(API + '/auth/me', { headers: { Authorization: 'Bearer ' + token } });
-    if (!res.ok) { localStorage.removeItem('sp_token'); localStorage.removeItem('sp_user'); return false; }
-    currentUser = await res.json();
-    localStorage.setItem('sp_user', JSON.stringify(currentUser));
-    updateUserBadge();
-    return true;
-  } catch(e) { return false; }
-}
-
-function updateUserBadge() {
-  const badge = document.getElementById('userStatusBadge');
-  const logoutBtn = document.getElementById('logoutBtn');
-  if (!currentUser) { badge.style.display = 'none'; logoutBtn.style.display = 'none'; return; }
-  badge.style.display = 'block';
-  logoutBtn.style.display = 'block';
-  if (currentUser.status === 'active') {
-    badge.textContent = 'PRO';
-    badge.style.background = 'rgba(0,230,118,0.15)';
-    badge.style.color = '#00e676';
-    badge.style.border = '1px solid rgba(0,230,118,0.3)';
-  } else if (currentUser.status === 'trial') {
-    const daysLeft = currentUser.trial_ends_at
-      ? Math.max(0, Math.ceil((new Date(currentUser.trial_ends_at) - new Date()) / 86400000))
-      : 0;
-    badge.textContent = 'TRIAL ' + daysLeft + 'd';
-    badge.style.background = 'rgba(255,193,7,0.15)';
-    badge.style.color = '#ffc107';
-    badge.style.border = '1px solid rgba(255,193,7,0.3)';
-  } else {
-    badge.textContent = 'EXPIRED';
-    badge.style.background = 'rgba(255,82,82,0.15)';
-    badge.style.color = '#ff5252';
-    badge.style.border = '1px solid rgba(255,82,82,0.3)';
-  }
-}
-
-function logout() {
-  localStorage.removeItem('sp_token');
-  localStorage.removeItem('sp_user');
-  currentUser = null;
-  document.getElementById('authOverlay').style.display = 'flex';
-  document.getElementById('userStatusBadge').style.display = 'none';
-  document.getElementById('logoutBtn').style.display = 'none';
-}
-
-async function initPayment() {
-  const token = localStorage.getItem('sp_token');
-  if (!token) return;
-  try {
-    const res = await fetch(API + '/auth/payment/initialize', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
-    if (data.authorization_url) window.location.href = data.authorization_url;
-  } catch(e) { alert('Payment failed. Try again.'); }
-}
-
-function isAccessAllowed(fixture) {
-  if (!currentUser) return false;
-  if (currentUser.status === 'active' || currentUser.status === 'trial') return true;
-  return false; // expired — locked
-}
 
 function getDates() {
   const dates=[], now=new Date();
@@ -1058,7 +944,7 @@ async function init(){
   try{
     const res=await fetch(`${API}/fixtures?limit=2000`);
     const data=await res.json();
-    allFixtures=data.fixtures||[];
+    allFixtures=markFreeFixtures(data.fixtures||[]);
     applyFilters();
   }catch(err){
     document.getElementById('main').innerHTML='<div class="empty">Failed to load.</div>';
@@ -1066,14 +952,7 @@ async function init(){
 }
 
 // Start with auth check
-checkAuth().then(authed => {
-  if (authed) {
-    document.getElementById('authOverlay').style.display = 'none';
-    init();
-  } else {
-    document.getElementById('authOverlay').style.display = 'flex';
-  }
-});
+checkAuth().then(authed => { if (authed) init(); });
 </script>
 </body>
 </html>
