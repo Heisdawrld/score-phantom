@@ -3,6 +3,7 @@ import db from "../config/database.js";
 import { predict } from "../predictions/poissonEngine.js";
 import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
+import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
 
 const router = Router();
 
@@ -227,12 +228,19 @@ router.get("/predict/:fixtureId", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
+
+    let prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
+
+    prediction = await evaluatePrediction({
+      ...prediction,
+      odds,
+      meta,
+    });
 
     res.json({
       ...prediction,
@@ -254,18 +262,19 @@ router.get("/predict/:fixtureId/explain", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
+
+    let prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
 
-    const fullPayload = {
+    const fullPayload = await evaluatePrediction({
       ...prediction,
       odds,
       meta,
-    };
+    });
 
     const explanation = await explainPrediction(fullPayload);
 
@@ -339,18 +348,19 @@ router.post("/predict/:fixtureId/chat", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
+
+    let prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
 
-    const fullPrediction = {
+    const fullPrediction = await evaluatePrediction({
       ...prediction,
       odds,
       meta,
-    };
+    });
 
     const reply = await chatAboutMatch(fullPrediction, history, message);
 
