@@ -884,7 +884,56 @@ function buildBasePreview(home, away, mr, hf, af, summary) {
   `;
 }
 
-function buildBasePredictions(home, away, mr) {
+function buildBasePredictions(home, away, predictionBlock, mr) {
+  const rec = predictionBlock?.recommendation;
+
+  if (rec) {
+    const conf =
+      rec.confidence === 'HIGH' ? 'HIGH' :
+      rec.confidence === 'MEDIUM' ? 'MEDIUM' :
+      rec.confidence === 'LEAN' ? 'LEAN' :
+      'LOW';
+
+    const badgeColor =
+      rec.no_clear_edge ? 'var(--yellow)' :
+      rec.confidence === 'HIGH' ? 'var(--green)' :
+      rec.confidence === 'MEDIUM' ? 'var(--teal)' :
+      rec.confidence === 'LEAN' ? 'var(--yellow)' :
+      'var(--red)';
+
+    return `
+      <div style="padding:14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">
+          ${rec.no_clear_edge ? 'Market Verdict' : 'Recommended Pick'}
+        </div>
+
+        <div style="background:${rec.no_clear_edge ? 'rgba(255,171,0,0.08)' : 'rgba(0,230,118,0.06)'};border:1px solid ${rec.no_clear_edge ? 'rgba(255,171,0,0.22)' : 'rgba(0,230,118,0.2)'};border-radius:14px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:${badgeColor};letter-spacing:1px;margin-bottom:8px">
+            ${rec.pick}
+          </div>
+          <div style="font-size:11px;color:${badgeColor};opacity:0.88;margin-bottom:8px">
+            ${rec.market} · ${(rec.probability * 100).toFixed(0)}% · ${conf}
+          </div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7">
+            ${rec.rationale || 'Best fit based on the engine output and match profile.'}
+          </div>
+        </div>
+
+        ${rec.alternative ? `
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:12px">Alternative Pick</div>
+          <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:16px">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;margin-bottom:8px">
+              ${rec.alternative}
+            </div>
+            <div style="font-size:11px;color:var(--text2);opacity:0.85;margin-bottom:8px">
+              ${rec.alternative_market || 'Secondary angle'} · ${rec.alternative_probability ? `${(rec.alternative_probability * 100).toFixed(0)}%` : 'N/A'} · ${rec.alternative_confidence || 'LOW'}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   const picks = [
     { label: `${home} Win`, p: mr.home },
     { label: `Draw`, p: mr.draw },
@@ -914,9 +963,6 @@ function buildBasePredictions(home, away, mr) {
       <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:16px">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;margin-bottom:8px">${alt.label}</div>
         <div style="font-size:11px;color:var(--text2);opacity:0.85;margin-bottom:8px">MODEL PROBABILITY: ${(alt.p * 100).toFixed(0)}%</div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.7">
-          Secondary outcome from the same probability distribution.
-        </div>
       </div>
     </div>
   `;
@@ -1035,8 +1081,7 @@ function updateAI(explain, fixtureId, home, away) {
           <div style="font-size:12px;color:var(--text2);line-height:1.6">${explain.alternative_reasoning || ''}</div>
         </div>` : ''}
         ${explain.data_warning ? `<div class="ai-warn" style="margin-top:12px">⚠ ${explain.data_warning}</div>` : ''}
-      </div>
-    `;
+      </div>`;
   }
 }
 
@@ -1100,7 +1145,7 @@ function renderSheet(d, home, away, league, country) {
 
   const summary = computeH2HSummary(h2hMatches, home, away);
   const basePreviewHTML = buildBasePreview(home, away, mr, hf, af, summary);
-  const basePredictionsHTML = buildBasePredictions(home, away, mr);
+  const basePredictionsHTML = buildBasePredictions(home, away, d.predictions || {}, mr);
 
   function standingsHTML(){
     if(!standings.length) {
@@ -1189,7 +1234,7 @@ function renderSheet(d, home, away, league, country) {
     <div class="rec-strip" id="rec-strip">
       <div class="rec-strip-left">
         <div class="rec-lbl">⭐ Top Pick</div>
-        <div class="rec-val">${mr.home>=mr.away&&mr.home>=mr.draw?home+' Win':mr.away>mr.home&&mr.away>=mr.draw?away+' Win':'Draw'}</div>
+        <div class="rec-val">${d?.predictions?.recommendation?.pick || (mr.home>=mr.away&&mr.home>=mr.draw?home+' Win':mr.away>mr.home&&mr.away>=mr.draw?away+' Win':'Draw')}</div>
       </div>
       <div class="rec-badge ${Math.max(mr.home, mr.draw, mr.away) >= 0.50 ? 'value' : 'low'}">${Math.max(mr.home, mr.draw, mr.away) >= 0.50 ? 'EDGE' : 'LEAN'}</div>
     </div>
