@@ -4,7 +4,6 @@ dotenv.config();
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Remove common prompt-injection patterns from strings
 function sanitizeContext(str) {
   if (!str) return '';
   const patterns = [
@@ -44,34 +43,19 @@ function parseScore(score) {
   return { home: a, away: b };
 }
 
-function fmtPercent(prob) {
-  const n = typeof prob === 'number' ? prob : parseFloat(String(prob).replace('%', ''));
-  if (Number.isNaN(n)) return 'N/A';
-  return `${n.toFixed(1)}%`;
-}
-
-function confidenceFromProbability(probPercent) {
-  const n = typeof probPercent === 'number' ? probPercent : parseFloat(String(probPercent).replace('%', ''));
-  if (Number.isNaN(n)) return 'LOW';
-  if (n >= 70) return 'HIGH';
-  if (n >= 60) return 'MEDIUM';
-  if (n >= 55) return 'LEAN';
-  return 'LOW';
-}
-
-function deterministicAlternative(predictions, bestPick) {
+function deterministicAlternative(predictions, lockedPick) {
   const ranked = Array.isArray(predictions?.ranked_markets) ? predictions.ranked_markets : [];
-  const best = (bestPick || '').trim().toLowerCase();
+  const locked = String(lockedPick || '').trim().toLowerCase();
 
-  const bestCategory =
-    ranked.find((m) => String(m.pick || '').trim().toLowerCase() === best)?.market || null;
+  const lockedCategory =
+    ranked.find((m) => String(m.pick || '').trim().toLowerCase() === locked)?.market || null;
 
   const alt = ranked.find((m) => {
     const pick = String(m.pick || '').trim().toLowerCase();
-    if (!pick || pick === best) return false;
-    if (bestCategory && m.market === bestCategory) return false;
+    if (!pick || pick === locked) return false;
+    if (lockedCategory && m.market === lockedCategory) return false;
     return true;
-  }) || ranked.find((m) => String(m.pick || '').trim().toLowerCase() !== best);
+  }) || ranked.find((m) => String(m.pick || '').trim().toLowerCase() !== locked);
 
   if (!alt) return null;
 
@@ -84,48 +68,35 @@ function deterministicAlternative(predictions, bestPick) {
 
 function buildFallbackExplanation(prediction) {
   const { fixture, predictions, features, meta } = prediction;
-  const parsedMeta = safeJsonParse(meta, {});
-  const standings = Array.isArray(parsedMeta?.standings) ? parsedMeta.standings : [];
-
+  const rec = predictions?.recommendation || {};
   const home = fixture.homeTeam;
   const away = fixture.awayTeam;
-  const mr = predictions?.match_result || {};
-  const ranked = Array.isArray(predictions?.ranked_markets) ? predictions.ranked_markets : [];
-  const engineTop = ranked[0] || null;
-
-  const homePct = (mr.home ?? 0) * 100;
-  const drawPct = (mr.draw ?? 0) * 100;
-  const awayPct = (mr.away ?? 0) * 100;
-
-  const homeRow = standings.find((r) => r.team === home);
-  const awayRow = standings.find((r) => r.team === away);
-
   const hf = features?.homeFeatures || {};
   const af = features?.awayFeatures || {};
-  const h2h = features?.h2hFeatures || {};
-
-  const alternative = deterministicAlternative(predictions, engineTop?.pick);
+  const tc = features?.tableContext || {};
+  const alt = rec.alternative
+    ? {
+        pick: rec.alternative,
+        market: rec.alternative_market,
+        probability: rec.alternative_probability != null ? `${(rec.alternative_probability * 100).toFixed(1)}%` : null,
+      }
+    : deterministicAlternative(predictions, rec.pick);
 
   return {
-    game_script: `${home} vs ${away} projects with ${homePct.toFixed(0)}% home, ${drawPct.toFixed(0)}% draw, and ${awayPct.toFixed(0)}% away on the current engine. The match profile is driven by recent form, scoring rates, and the stored head-to-head sample. This explanation is fallback-generated because the AI enhancement is unavailable, so the engine output is being shown directly.`,
-    engine_verdict: 'CONFIRMED',
-    best_pick: engineTop?.pick || 'No Clear Edge',
-    best_pick_confidence: parseFloat(String(engineTop?.probability || '0').replace('%', '')) || 0,
-    best_pick_reasoning:
-      engineTop
-        ? `The engine's top-ranked market is ${engineTop.pick} at ${engineTop.probability}. Home form averages ${hf.avg_scored ?? 'N/A'} scored / ${hf.avg_conceded ?? 'N/A'} conceded, away form averages ${af.avg_scored ?? 'N/A'} scored / ${af.avg_conceded ?? 'N/A'} conceded, and the H2H goal environment is ${h2h.avg_total_goals ?? 'N/A'} total goals per game.`
-        : 'No clear ranked market is available from the engine output.',
-    alternative_pick: alternative?.pick || null,
-    alternative_reasoning: alternative
-      ? `Alternative angle from a different market category: ${alternative.pick} at ${alternative.probability}.`
-      : null,
-    data_warning: 'AI enhancement unavailable. Showing engine-aligned explanation only.',
+    game_script: `${home} vs ${away} has been evaluated using form, venue splits, standings, momentum, H2H, and the ranked market board. The final pick is locked to the evaluator result, not invented by the explainer. This fallback explanation is being shown because richer AI wording is unavailable.`,
+    engine_verdict: "CONFIRMED",
+    best_pick: rec.pick || "No Clear Edge",
+    best_pick_confidence: rec.probability != null ? Math.round(rec.probability * 100) : 0,
+    best_pick_reasoning: rec.rationale || `${home} averages ${hf.avg_scored ?? "N/A"} scored and ${hf.avg_conceded ?? "N/A"} conceded at home form level, while ${away} averages ${af.avg_scored ?? "N/A"} scored and ${af.avg_conceded ?? "N/A"} conceded away. Table and momentum gap are ${tc.points_gap ?? "N/A"} points and ${tc.momentum_gap ?? "N/A"} momentum.`,
+    alternative_pick: alt?.pick || null,
+    alternative_reasoning: alt ? `Alternative angle from the ranked market board: ${alt.pick}${alt.probability ? ` at ${alt.probability}` : ""}.` : null,
+    data_warning: "AI wording unavailable. Showing evaluator-aligned explanation.",
   };
 }
 
 function buildContext(prediction) {
   const { fixture, model, predictions, features, odds, meta } = prediction;
-  const { homeFeatures: hf = {}, awayFeatures: af = {}, h2hFeatures: h2h = {} } = features || {};
+  const { homeFeatures: hf = {}, awayFeatures: af = {}, h2hFeatures: h2h = {}, tableContext: tc = {} } = features || {};
 
   const parsedMeta = safeJsonParse(meta, {});
   const standings = Array.isArray(parsedMeta?.standings) ? parsedMeta.standings : [];
@@ -133,7 +104,6 @@ function buildContext(prediction) {
   const awayMomentum = parsedMeta?.awayMomentum ?? null;
   const homeForm = Array.isArray(parsedMeta?.homeForm) ? parsedMeta.homeForm : [];
   const awayForm = Array.isArray(parsedMeta?.awayForm) ? parsedMeta.awayForm : [];
-  const h2hRows = Array.isArray(parsedMeta?.h2h) ? parsedMeta.h2h : [];
 
   const home = sanitizeContext(fixture.homeTeam);
   const away = sanitizeContext(fixture.awayTeam);
@@ -164,91 +134,95 @@ function buildContext(prediction) {
     : 'No odds';
 
   const rankedMarkets = Array.isArray(predictions?.ranked_markets) ? predictions.ranked_markets : [];
-  const engineTop = rankedMarkets[0] || null;
-  const alternative = deterministicAlternative(predictions, engineTop?.pick);
+  const rec = predictions?.recommendation || {};
+  const alt = rec.alternative
+    ? {
+        pick: rec.alternative,
+        market: rec.alternative_market,
+        probability: rec.alternative_probability != null ? `${(rec.alternative_probability * 100).toFixed(1)}%` : null,
+      }
+    : deterministicAlternative(predictions, rec.pick);
 
   const rankedMarketsStr = rankedMarkets
     .map((m, i) => `${i + 1}. [${m.market}] ${m.pick} - ${m.probability}`)
     .join('\n');
 
   return {
+    lockedRecommendation: rec,
     summaryText: `MATCH: ${home} vs ${away}
 
-ENGINE TOP PICK (SOURCE OF TRUTH):
-${engineTop ? `${engineTop.pick} [${engineTop.market}] at ${engineTop.probability}` : 'No ranked engine pick'}
+LOCKED OFFICIAL PICK:
+${rec.pick || "No Clear Edge"} [${rec.market || "No Edge"}] ${rec.probability != null ? `${(rec.probability * 100).toFixed(1)}%` : ""}
 
-OPTIONAL ALTERNATIVE PICK:
-${alternative ? `${alternative.pick} [${alternative.market}] at ${alternative.probability}` : 'None'}
+ALTERNATIVE:
+${alt ? `${alt.pick} [${alt.market}] ${alt.probability || ""}` : "None"}
 
 STANDINGS:
 ${fmtStanding(homeRow)}
 ${fmtStanding(awayRow)}
 
-MOMENTUM:
-${home}: ${homeMomentum ?? 'N/A'} | ${away}: ${awayMomentum ?? 'N/A'}
+TABLE CONTEXT:
+Points gap: ${tc.points_gap ?? 'N/A'}
+Position gap: ${tc.position_gap ?? 'N/A'}
+Momentum gap: ${tc.momentum_gap ?? 'N/A'}
+Home context: ${tc.home_context ?? 'N/A'}
+Away context: ${tc.away_context ?? 'N/A'}
 
 RECENT FORM:
 ${home}: ${fmtForm(homeForm, home)}
 ${away}: ${fmtForm(awayForm, away)}
 
-H2H SUMMARY:
-Home wins: ${h2h.home_win_rate !== null && h2h.home_win_rate !== undefined ? (h2h.home_win_rate * 100).toFixed(0) + '%' : 'N/A'}
-Draws: ${h2h.draw_rate !== null && h2h.draw_rate !== undefined ? (h2h.draw_rate * 100).toFixed(0) + '%' : 'N/A'}
-Away wins: ${h2h.away_win_rate !== null && h2h.away_win_rate !== undefined ? (h2h.away_win_rate * 100).toFixed(0) + '%' : 'N/A'}
-Avg total goals: ${h2h.avg_total_goals ?? 'N/A'}
-BTTS rate: ${h2h.btts_rate !== null && h2h.btts_rate !== undefined ? (h2h.btts_rate * 100).toFixed(0) + '%' : 'N/A'}
-
 POISSON OUTPUT:
 Home ${((predictions?.match_result?.home ?? 0) * 100).toFixed(1)}%
 Draw ${((predictions?.match_result?.draw ?? 0) * 100).toFixed(1)}%
 Away ${((predictions?.match_result?.away ?? 0) * 100).toFixed(1)}%
-Over 2.5 ${((predictions?.over_under?.over_2_5 ?? 0) * 100).toFixed(1)}%
-BTTS Yes ${((predictions?.btts?.yes ?? 0) * 100).toFixed(1)}%
+
+MODEL:
+Lambda home ${model?.lambdaHome ?? 'N/A'}
+Lambda away ${model?.lambdaAway ?? 'N/A'}
+Expected total goals ${model?.expectedTotalGoals ?? 'N/A'}
 
 TEAM FORM STATS:
 ${home}: Avg scored ${hf.avg_scored ?? 'N/A'} | Avg conceded ${hf.avg_conceded ?? 'N/A'} | Win rate ${hf.win_rate != null ? (hf.win_rate * 100).toFixed(0) + '%' : 'N/A'}
 ${away}: Avg scored ${af.avg_scored ?? 'N/A'} | Avg conceded ${af.avg_conceded ?? 'N/A'} | Win rate ${af.win_rate != null ? (af.win_rate * 100).toFixed(0) + '%' : 'N/A'}
+
+H2H:
+Avg total goals ${h2h.avg_total_goals ?? 'N/A'}
+BTTS ${h2h.btts_rate != null ? (h2h.btts_rate * 100).toFixed(0) + '%' : 'N/A'}
 
 ODDS:
 ${oddsStr}
 
 RANKED MARKETS:
 ${rankedMarketsStr || 'Not available'}`,
-    engineTop,
-    alternative,
   };
 }
 
-const SYSTEM_PROMPT = `You are ScorePhantom's AI EXPLAINER.
+const SYSTEM_PROMPT = `You are ScorePhantom's AI explainer.
 
-You are NOT selecting a new main pick.
-You are NOT overriding the engine.
-You are NOT inventing a different confidence.
-The engine's top-ranked market is the SOURCE OF TRUTH.
+You are NOT selecting a new pick.
+You are NOT overriding the evaluator.
+The locked official recommendation is the final source of truth.
 
-YOUR JOB:
-1. Explain the engine's top pick clearly and sharply.
-2. Mention why it fits the form, standings, momentum, H2H, and probabilities.
-3. Suggest one alternative pick ONLY from the supplied ranked markets, preferably from a different market category.
-4. Never contradict, replace, or override the engine's top pick.
-5. If data is thin, say so briefly.
+Your job:
+1. Explain the locked official recommendation sharply.
+2. Explain why it fits form, standings, momentum, H2H, and probabilities.
+3. Mention the alternative briefly if present.
+4. Never contradict the official pick.
+5. If the official pick is "No Clear Edge", explain why forcing a market would be weak.
 
-STRICT RULES:
-- best_pick MUST exactly equal the engine top pick from context
-- best_pick_confidence should stay close to engine probability and must not be inflated wildly
+STRICT:
+- best_pick must exactly equal the locked official recommendation
 - engine_verdict must always be "CONFIRMED"
-- alternative_pick must come from the supplied alternative or another ranked market, not invented
-- Do not claim certainty that the data does not support
-- Do not mention you are an AI model
-- Keep game_script to 3-4 sharp sentences
-- Keep best_pick_reasoning concise and specific
-- Keep alternative_reasoning to 1-2 sentences
+- do not invent a new market
+- do not inflate confidence wildly
+- return only valid JSON
 
-Respond ONLY in valid JSON:
+JSON:
 {
   "game_script": "...",
   "engine_verdict": "CONFIRMED",
-  "best_pick": "exact engine top pick",
+  "best_pick": "...",
   "best_pick_confidence": 62,
   "best_pick_reasoning": "...",
   "alternative_pick": "...",
@@ -257,66 +231,55 @@ Respond ONLY in valid JSON:
 }`;
 
 export async function explainPrediction(prediction) {
-  const context = buildContext(prediction);
-
-  // If there is no engine top pick, return deterministic fallback immediately
-  if (!context.engineTop?.pick) {
+  const rec = prediction?.predictions?.recommendation || {};
+  if (!rec.pick) {
     return buildFallbackExplanation(prediction);
   }
 
+  const context = buildContext(prediction);
+
   try {
     const response = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'llama-3.1-8b-instant',
       temperature: 0.2,
-      max_tokens: 650,
+      max_tokens: 420,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: context.summaryText },
       ],
     });
 
-    const raw = response.choices[0]?.message?.content || '';
+    const raw = response.choices?.[0]?.message?.content || '';
     const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
 
-    try {
-      const parsed = JSON.parse(cleaned);
+    parsed.engine_verdict = 'CONFIRMED';
+    parsed.best_pick = rec.pick;
+    parsed.best_pick_confidence = rec.probability != null
+      ? Math.min(Number(parsed.best_pick_confidence || Math.round(rec.probability * 100)), Math.round(rec.probability * 100) + 5)
+      : Number(parsed.best_pick_confidence || 0);
 
-      // Hard-lock the main pick to the engine top pick
-      parsed.engine_verdict = 'CONFIRMED';
-      parsed.best_pick = context.engineTop.pick;
-
-      const topProb = parseFloat(String(context.engineTop.probability || '0').replace('%', '')) || 0;
-      if (
-        parsed.best_pick_confidence == null ||
-        Number.isNaN(Number(parsed.best_pick_confidence))
-      ) {
-        parsed.best_pick_confidence = topProb;
-      } else {
-        // Don't let Groq inflate confidence wildly beyond engine probability
-        parsed.best_pick_confidence = Math.min(Number(parsed.best_pick_confidence), topProb + 6);
-      }
-
-      if (!parsed.best_pick_reasoning) {
-        parsed.best_pick_reasoning = `This confirms the engine's top-ranked market: ${context.engineTop.pick} at ${context.engineTop.probability}.`;
-      }
-
-      if (!parsed.alternative_pick && context.alternative?.pick) {
-        parsed.alternative_pick = context.alternative.pick;
-        parsed.alternative_reasoning = `Alternative angle from the engine's ranked markets: ${context.alternative.pick} at ${context.alternative.probability}.`;
-      }
-
-      return parsed;
-    } catch {
-      return buildFallbackExplanation(prediction);
+    if (!parsed.best_pick_reasoning) {
+      parsed.best_pick_reasoning = rec.rationale || 'This pick is locked to the evaluator result.';
     }
+
+    if (!parsed.alternative_pick && rec.alternative) {
+      parsed.alternative_pick = rec.alternative;
+      parsed.alternative_reasoning = rec.alternative_market
+        ? `Alternative from evaluator: ${rec.alternative} [${rec.alternative_market}].`
+        : `Alternative from evaluator: ${rec.alternative}.`;
+    }
+
+    return parsed;
   } catch (err) {
-    console.error('Groq failed:', err.message);
+    console.error('Groq explain failed:', err.message);
     return buildFallbackExplanation(prediction);
   }
 }
 
 export async function chatAboutMatch(prediction, chatHistory, userMessage) {
   const context = buildContext(prediction);
+
   const systemPrompt = `You are ScorePhantom's match analyst for ONE fixture only: ${prediction.fixture.homeTeam} vs ${prediction.fixture.awayTeam}.
 
 LOCKED MATCH DATA:
@@ -325,25 +288,25 @@ ${context.summaryText}
 RULES:
 - Discuss only this match
 - If asked about another match, reply: "I can only discuss ${prediction.fixture.homeTeam} vs ${prediction.fixture.awayTeam} in this session."
-- Keep answers sharp, data-driven, and concise
-- Maximum 4 sentences unless the user explicitly asks for a detailed breakdown
-- You may discuss tactics, markets, risk, form, standings, H2H, and the engine pick
-- Do not contradict the engine's official top pick without clearly framing it as a risk discussion, not a replacement`;
+- Keep answers sharp and data-driven
+- Maximum 5 sentences unless the user asks for full detail
+- Respect the locked official recommendation, but you may discuss risk and alternatives`;
 
   try {
     const response = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.35,
-      max_tokens: 350,
+      model: 'llama-3.1-8b-instant',
+      temperature: 0.3,
+      max_tokens: 300,
       messages: [
         { role: 'system', content: systemPrompt },
         ...chatHistory,
         { role: 'user', content: sanitizeContext(userMessage) },
       ],
     });
-    return response.choices[0]?.message?.content || 'Unable to respond.';
+
+    return response.choices?.[0]?.message?.content || 'Unable to respond.';
   } catch (err) {
     console.error('Groq chat failed:', err.message);
-    return 'AI analysis is temporarily unavailable. The engine pick remains active.';
+    return 'AI analysis is temporarily unavailable. The locked evaluator pick remains active.';
   }
 }
