@@ -6,6 +6,7 @@ import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import db from "./config/database.js";
+import errorHandler from "./middlewares/errorHandler.js";
 
 dotenv.config();
 
@@ -23,31 +24,34 @@ app.use("/api/auth", authRoutes);
 app.use("/api/webhook", authRoutes);
 
 app.get("/payment-success", (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "index.html"));
+  res.sendFile(path.join(__dirname, "..", "index.html"));
 });
 
 app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "index.html"));
+  res.sendFile(path.join(__dirname, "..", "index.html"));
 });
 
 async function autoSeed() {
-    try {
-        const result = await db.execute("SELECT COUNT(*) as count FROM fixtures");
-        const count = result.rows[0].count;
-        if (count > 0) {
-            console.log("DB already has " + count + " fixtures, skipping seed.");
-            return;
-        }
-        console.warn("No fixtures found. Run the seed script manually.");
-    } catch (err) {
-        console.error("Auto-seed check failed:", err.message);
+  try {
+    const result = await db.execute("SELECT COUNT(*) as count FROM fixtures");
+    const count = result.rows[0].count;
+    if (count > 0) {
+      console.log("DB already has " + count + " fixtures, skipping seed.");
+      return;
     }
+    console.warn("No fixtures found. Run the seed script manually.");
+  } catch (err) {
+    console.error("Auto-seed check failed:", err.message);
+  }
 }
 
 app.listen(PORT, async () => {
-    console.log("ScorePhantom running on port " + PORT);
-    await initUsersTable();
-    await autoSeed();
+  console.log("ScorePhantom running on port " + PORT);
+  await initUsersTable();
+  await autoSeed();
 });
+
+// Register the centralised error handler AFTER all routes
+app.use(errorHandler);
 
 export default app;
