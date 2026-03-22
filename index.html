@@ -82,7 +82,7 @@ main { padding-bottom:80px; }
 .league-group { margin-bottom:4px; }
 .league-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surface); border-radius:8px; margin:0 8px; cursor:pointer; user-select:none; }
 .league-header:hover { background:var(--surface2); }
-.lh-left { display:flex; align.items:center; gap:10px; }
+.lh-left { display:flex; align-items:center; gap:10px; }
 .lh-flag { font-size:16px; }
 .lh-info { display:flex; flex-direction:column; gap:1px; }
 .lh-country { font-size:9px; font-weight:700; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; }
@@ -95,16 +95,9 @@ main { padding-bottom:80px; }
 .league-fixtures { padding:4px 8px 0; display:flex; flex-direction:column; gap:4px; margin-bottom:4px; }
 
 /* ── FIXTURE CARD ── */
-.fixture-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: border-color .15s, background .12s;
-  overflow: hidden;
-}
-.fixture-card:hover { border-color: var(--border2); background: var(--surface2); }
-.fixture-card.enriched { border-left: 3px solid var(--green); }
+.fixture-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .12s; overflow:hidden; }
+.fixture-card:hover { border-color:var(--border2); background:var(--surface2); }
+.fixture-card.enriched { border-left:3px solid var(--green); }
 
 .fixture-main { display:flex; align-items:center; padding:10px 12px; gap:10px; }
 .fixture-time-col { width:42px; flex-shrink:0; text-align:center; }
@@ -117,25 +110,8 @@ main { padding-bottom:80px; }
 .team-name-text { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* VALUE BET PILL on fixture */
-.fixture-tip {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-.tip-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: var(--teal-dim);
-  border: 1px solid rgba(0,188,212,0.25);
-  border-radius: 8px;
-  padding: 5px 10px;
-  min-width: 60px;
-}
-
+.fixture-tip { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+.tip-pill { display:flex; flex-direction:column; align-items:center; background:var(--teal-dim); border:1px solid rgba(0,188,212,0.25); border-radius:8px; padding:5px 10px; min-width:60px; }
 .tip-label { font-size:8px; font-weight:700; letter-spacing:1.5px; color:var(--teal); text-transform:uppercase; }
 .tip-market { font-size:10px; font-weight:700; color:var(--text); text-align:center; line-height:1.3; margin-top:1px; }
 .tip-arrow { font-size:14px; color:var(--text3); }
@@ -149,87 +125,25 @@ main { padding-bottom:80px; }
 .sheet-handle { width:36px; height:3px; background:var(--border2); border-radius:2px; margin:10px auto 0; }
 
 /* ── MATCH TOP HERO ── */
-.match-hero {
-  padding: 14px 16px 0;
-}
-
-.match-hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.match-league-tag {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text2);
-  letter-spacing: 0.5px;
-}
-
-.sheet-close {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text2);
-  font-size: 12px;
-}
+.match-hero { padding:14px 16px 0; }
+.match-hero-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.match-league-tag { font-size:10px; font-weight:600; color:var(--text2); letter-spacing:0.5px; }
+.sheet-close { width:28px; height:28px; border-radius:50%; background:var(--surface2); border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text2); font-size:12px; }
 .sheet-close:hover { border-color:var(--green); color:var(--green); }
 
-.match-teams-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.match-team-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.match-team-name {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 18px;
-  color: #fff;
-  letter-spacing: 1px;
-  text-align: center;
-  line-height: 1.1;
-}
-
-.match-team-pct {
-  font-size: 22px;
-  font-family: 'Bebas Neue', sans-serif;
-  line-height: 1;
-}
-.match-team-pct.home { color: var(--green); }
-.match-team-pct.away { color: var(--blue); }
-
-.match-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.match-vs { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 2px; }
-.match-draw-pct { font-size: 16px; font-family: 'Bebas Neue', sans-serif; color: var(--text2); }
-.match-draw-lbl { font.size: 9px; color: var(--text3); font-weight: 600; letter-spacing: 1px; }
+.match-teams-hero { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px; }
+.match-team-block { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.match-team-name { font-family:'Bebas Neue',sans-serif; font-size:18px; color:#fff; letter-spacing:1px; text-align:center; line-height:1.1; }
+.match-team-pct { font-size:22px; font-family:'Bebas Neue',sans-serif; line-height:1; }
+.match-team-pct.home { color:var(--green); }
+.match-team-pct.away { color:var(--blue); }
+.match-center { display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; }
+.match-vs { font-size:10px; font-weight:700; color:var(--text3); letter-spacing:2px; }
+.match-draw-pct { font-size:16px; font-family:'Bebas Neue',sans-serif; color:var(--text2); }
+.match-draw-lbl { font-size:9px; color:var(--text3); font-weight:600; letter-spacing:1px; }
 
 /* Tri-bar */
 .tri-bar { display:flex; height:6px; width:100%; border-radius:3px; overflow:hidden; margin-top:6px; }
-
 .tri-home { background:var(--green); }
 .tri-draw { background:var(--yellow); }
 .tri-away { background:var(--blue); }
@@ -256,7 +170,7 @@ main { padding-bottom:80px; }
 .h2h-bar-wrap { margin-top:12px; }
 .h2h-bar-labels { display:flex; justify-content:space-between; align-items:flex-end; font-size:10px; font-weight:600; color:var(--text2); }
 .h2h-bar-label { display:flex; flex-direction:column; align-items:flex-start; }
-.h2h-bar-label.right { align.items:flex-end; }
+.h2h-bar-label.right { align-items:flex-end; }
 .h2h-bar-label .h2h-bar-wins { font-size:12px; font-weight:700; }
 .h2h-bar-label .h2h-bar-sub { font-size:9px; color:var(--text3); }
 .h2h-bar { display:flex; height:4px; width:100%; border-radius:2px; overflow:hidden; margin-top:4px; }
@@ -335,11 +249,13 @@ main { padding-bottom:80px; }
 <script>
 const API = '/api';
 
+// Global state variables
 let allFixtures = [];
 let selectedDateIndex = 0;
 let selectedMarket = null;
 let searchQuery = '';
 
+// Build the date tabs for the next two weeks
 function buildDateTabs() {
   const bar = document.getElementById('dateBar');
   const now = new Date();
@@ -361,38 +277,50 @@ function buildDateTabs() {
   `).join('');
 }
 
+// Set the currently selected date index
 function selectDate(idx) {
   selectedDateIndex = idx;
   buildDateTabs();
   applyFilters();
 }
 
+// Set the market filter
 function setMarket(mkt) {
-  selectedMarket = mkt;
+  selectedMarket = mkt === 'all' ? null : mkt;
   document.querySelectorAll('.mktag').forEach(tag => {
-    tag.classList.toggle('active', tag.getAttribute('data-mkt') === mkt);
+    tag.classList.toggle('active', tag.getAttribute('data-mkt') === (mkt || 'all'));
   });
   applyFilters();
 }
 
+// Update the search query
 function setSearch(val) {
   searchQuery = val.toLowerCase();
   applyFilters();
 }
 
+// Apply date, market, and search filters to the fixtures
 function applyFilters() {
-  const date = document.querySelectorAll('.date-tab')[selectedDateIndex].textContent.trim().split('\n')[1];
-  const fixturesByDate = allFixtures.filter(f => f.match_date.startsWith(date));
+  // Compute the full YYYY-MM-DD date string from today plus selectedDateIndex
+  const base = new Date();
+  const d = new Date(base);
+  d.setDate(base.getDate() + selectedDateIndex);
+  const dateKey = d.toISOString().split('T')[0];
+  // Filter fixtures by the computed date key
+  let fixturesByDate = allFixtures.filter(f => f.match_date && f.match_date.startsWith(dateKey));
+  // Apply market filter if selected
   let filtered = fixturesByDate;
   if (selectedMarket) {
     filtered = filtered.filter(f => f.market === selectedMarket);
   }
+  // Apply search filter if any
   if (searchQuery) {
     filtered = filtered.filter(f => (f.home_team_name + f.away_team_name).toLowerCase().includes(searchQuery));
   }
   renderFixtures(filtered);
 }
 
+// Render fixtures list into the page
 function renderFixtures(fixtures) {
   const main = document.getElementById('main');
   if (!fixtures.length) {
@@ -427,22 +355,23 @@ function renderFixtures(fixtures) {
   `).join('');
 }
 
+// Open a fixture sheet (left as truncated placeholder)
 async function openFixture(id) {
-  // Function truncated for brevity
+  // To keep this example concise, the implementation is omitted.
+  // In your real app, fetch additional data for the selected fixture
+  // and populate the sheetContent element before opening the overlay.
+  console.warn('openFixture called with id', id);
 }
 
-function closeSheet(){document.getElementById('overlay').classList.remove('open');}
-function handleOverlay(e){if(e.target===document.getElementById('overlay'))closeSheet();}
+function closeSheet(){ document.getElementById('overlay').classList.remove('open'); }
+function handleOverlay(e){ if(e.target===document.getElementById('overlay')) closeSheet(); }
 
 // =====================================================================
 // Authentication and user session helpers
 // =====================================================================
-// Keep track of whether the auth overlay is in signup or login mode
 let authMode = 'signup';
-// Persist the current user in memory so UI can react to status changes
 let currentUser = null;
 
-// Switch between signup and login modes when the tabs are clicked
 function switchAuthTab(mode) {
   authMode = mode;
   const signupTab = document.getElementById('signupTab');
@@ -456,21 +385,18 @@ function switchAuthTab(mode) {
   errorBox.textContent = '';
 }
 
-// Display an authentication error message
 function showAuthError(message) {
   const errorBox = document.getElementById('authError');
   errorBox.textContent = message || 'Something went wrong';
   errorBox.classList.add('show');
 }
 
-// Hide any visible authentication error message
 function hideAuthError() {
   const errorBox = document.getElementById('authError');
   errorBox.textContent = '';
   errorBox.classList.remove('show');
 }
 
-// Submit the signup or login form. Sends a POST request to the appropriate endpoint
 async function submitAuth() {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value.trim();
@@ -497,7 +423,6 @@ async function submitAuth() {
     if (!res.ok) {
       throw new Error(data.error || 'Authentication failed');
     }
-    // Store JWT in localStorage and update the UI
     localStorage.setItem('sp_token', data.token);
     currentUser = data.user || null;
     updateUserUI(currentUser);
@@ -511,7 +436,6 @@ async function submitAuth() {
   }
 }
 
-// Validate the current token with the backend to check if the user is still authenticated
 async function checkAuth() {
   const token = localStorage.getItem('sp_token');
   if (!token) {
@@ -538,7 +462,6 @@ async function checkAuth() {
   }
 }
 
-// Remove the session token and reset the UI
 function logout() {
   localStorage.removeItem('sp_token');
   currentUser = null;
@@ -550,13 +473,6 @@ function logout() {
   switchAuthTab('signup');
 }
 
-// Determine whether the current user has trial or active status
-function isUserActive() {
-  if (!currentUser) return false;
-  return currentUser.status === 'trial' || currentUser.status === 'active';
-}
-
-// Update UI elements based on the current user's subscription status
 function updateUserUI(user) {
   const badge = document.getElementById('userStatusBadge');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -591,7 +507,7 @@ function markFreeFixtures(fixtures) {
   return fixtures.map((f, i) => ({ ...f, _isFree: i < 3 }));
 }
 
-// Initiate the payment flow by calling the backend and redirecting to Paystack
+// Initiate payment
 async function initPayment() {
   const token = localStorage.getItem('sp_token');
   if (!token) {
@@ -621,9 +537,7 @@ async function initPayment() {
   }
 }
 
-// =====================================================================
-// Main app initializer. Builds the date tabs and loads fixtures once auth passes
-// =====================================================================
+// Initialize the app: build tabs and fetch fixtures
 async function init(){
   buildDateTabs();
   try{
@@ -636,7 +550,7 @@ async function init(){
   }
 }
 
-// Start with auth check
+// Kick off the auth check and initialization
 checkAuth().then(authed => { if (authed) init(); });
 </script>
 </body>
