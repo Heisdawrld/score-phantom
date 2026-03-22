@@ -48,6 +48,27 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
     meta.standings = [];
   }
 
+  // backend safety: force played if standings came with zeros
+  meta.standings = meta.standings.map((r, idx) => {
+    const wins = Number(r.wins || 0);
+    const draws = Number(r.draws || 0);
+    const losses = Number(r.losses || 0);
+    const computedPlayed = wins + draws + losses;
+    const played = Number(r.played || r.games || r.matches || 0) || computedPlayed;
+
+    return {
+      ...r,
+      position: Number(r.position || idx + 1),
+      played,
+      games: played,
+      matches: played,
+      wins,
+      draws,
+      losses,
+      points: Number(r.points || 0),
+    };
+  });
+
   return meta;
 }
 
@@ -71,22 +92,27 @@ async function getHistoryRows(fixtureId) {
 }
 
 async function getOdds(fixtureId) {
-  const result = await db.execute({
-    sql: `SELECT * FROM fixture_odds WHERE fixture_id = ?`,
-    args: [fixtureId],
-  });
+  try {
+    const result = await db.execute({
+      sql: `SELECT home, draw, away, btts_yes, btts_no, over_under FROM fixture_odds WHERE fixture_id = ? LIMIT 1`,
+      args: [fixtureId],
+    });
 
-  const oddsRow = result.rows[0] || null;
-  if (!oddsRow) return null;
+    const oddsRow = result.rows?.[0] || null;
+    if (!oddsRow) return null;
 
-  return {
-    home: oddsRow.home,
-    draw: oddsRow.draw,
-    away: oddsRow.away,
-    btts_yes: oddsRow.btts_yes,
-    btts_no: oddsRow.btts_no,
-    over_under: oddsRow.over_under ? safeJsonParse(oddsRow.over_under, {}) : {},
-  };
+    return {
+      home: oddsRow.home,
+      draw: oddsRow.draw,
+      away: oddsRow.away,
+      btts_yes: oddsRow.btts_yes,
+      btts_no: oddsRow.btts_no,
+      over_under: oddsRow.over_under ? safeJsonParse(oddsRow.over_under, {}) : {},
+    };
+  } catch (err) {
+    console.error("[Odds] Failed:", err.message);
+    return null;
+  }
 }
 
 function hasUsableHistory(historyRows) {
@@ -208,7 +234,8 @@ router.get("/predict/:fixtureId", async (req, res) => {
     const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
-      fixture.away_team_name
+      fixture.away_team_name,
+      meta
     );
 
     res.json({
@@ -234,7 +261,8 @@ router.get("/predict/:fixtureId/explain", async (req, res) => {
     const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
-      fixture.away_team_name
+      fixture.away_team_name,
+      meta
     );
 
     const fullPayload = {
@@ -321,7 +349,8 @@ router.post("/predict/:fixtureId/chat", async (req, res) => {
     const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
-      fixture.away_team_name
+      fixture.away_team_name,
+      meta
     );
 
     const fullPrediction = {
