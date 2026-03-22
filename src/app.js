@@ -20,8 +20,8 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api", routes);
+// Mount authentication routes only once under /api/auth. We no longer mount under /api/webhook
 app.use("/api/auth", authRoutes);
-app.use("/api/webhook", authRoutes);
 
 app.get("/payment-success", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "index.html"));
