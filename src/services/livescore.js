@@ -156,7 +156,10 @@ export async function fetchStandings(competitionId) {
         losses,
         goalsFor: safeNum(r.goals_for ?? r.gf ?? r.goals_scored, 0),
         goalsAgainst: safeNum(r.goals_against ?? r.ga ?? r.goals_conceded, 0),
-        goalDiff: safeNum(r.goal_difference ?? r.gd, safeNum(r.goals_for ?? r.gf, 0) - safeNum(r.goals_against ?? r.ga, 0)),
+        goalDiff: safeNum(
+          r.goal_difference ?? r.gd,
+          safeNum(r.goals_for ?? r.gf, 0) - safeNum(r.goals_against ?? r.ga, 0)
+        ),
         points: safeNum(r.points ?? r.pts, 0),
         form: r.recent_form || r.form || '',
       };
@@ -216,6 +219,6 @@ export async function enrichMatchData(fixture) {
     awayMomentum: momentum(h2hData.awayForm, fixture.away_team_name),
     homeStats: null,
     awayStats: null,
-    odds: null, // odds stored at seed time
+    odds: null,
   };
 }
