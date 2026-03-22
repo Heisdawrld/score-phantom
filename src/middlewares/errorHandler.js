@@ -1,3 +1,4 @@
+// src/middlewares/errorHandler.js
 // Centralised error handler — logs the error and returns JSON response
 export default function errorHandler(err, req, res, next) {
   console.error(err.stack);
