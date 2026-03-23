@@ -228,6 +228,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
     res.json({
       authorization_url: data.data.authorization_url,
       reference,
+      test_mode: String(PAYSTACK_SECRET_KEY).startsWith("sk_test_"),
     });
   } catch (err) {
     console.error("Payment Init Error:", err);
@@ -265,7 +266,11 @@ router.get("/payment/verify", requireAuth, async (req, res) => {
     }
 
     if (payment.status === "success") {
-      return res.json({ success: true, already_verified: true });
+      return res.json({
+        success: true,
+        already_verified: true,
+        test_mode: String(PAYSTACK_SECRET_KEY).startsWith("sk_test_"),
+      });
     }
 
     const verifyRes = await fetch(
