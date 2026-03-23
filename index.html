@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -39,375 +40,426 @@
     button,input,textarea{font:inherit}
     .hidden{display:none!important}
 
-    .app-shell{min-height:100vh;padding-bottom:28px}
-    .topbar{
-      position:sticky;top:0;z-index:30;
-      background:rgba(7,9,13,.9);
-      backdrop-filter:blur(12px);
-      border-bottom:1px solid var(--line2);
-    }
-    .topbar-inner{padding:14px 14px 10px}
-    .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .brand{display:flex;align-items:center;gap:10px;min-width:0}
-    .brand-badge{
-      width:42px;height:42px;border-radius:13px;
-      background:linear-gradient(180deg,#0f141a,#0b1015);
-      border:1px solid rgba(16,231,116,.12);
-      box-shadow:0 0 20px rgba(16,231,116,.15);
-      display:grid;place-items:center;overflow:hidden;flex-shrink:0;
-    }
-    .brand-badge img{width:100%;height:100%;object-fit:cover}
-    .brand-fallback{
-      font-family:'Bebas Neue',sans-serif;
-      color:var(--green);
-      font-size:24px;
-      letter-spacing:1px;
-    }
-    .brand-name{
-      font-family:'Bebas Neue',sans-serif;
-      font-size:24px;line-height:1;letter-spacing:1.5px;white-space:nowrap;
-    }
-    .brand-name .green{color:var(--green)}
+```
+.app-shell{min-height:100vh;padding-bottom:28px}
+.topbar{
+  position:sticky;top:0;z-index:30;
+  background:rgba(7,9,13,.9);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line2);
+}
+.topbar-inner{padding:14px 14px 10px}
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-badge{
+  width:42px;height:42px;border-radius:13px;
+  background:linear-gradient(180deg,#0f141a,#0b1015);
+  border:1px solid rgba(16,231,116,.12);
+  box-shadow:0 0 20px rgba(16,231,116,.15);
+  display:grid;place-items:center;overflow:hidden;flex-shrink:0;
+}
+.brand-badge img{width:100%;height:100%;object-fit:cover}
+.brand-fallback{
+  font-family:'Bebas Neue',sans-serif;
+  color:var(--green);
+  font-size:24px;
+  letter-spacing:1px;
+}
+.brand-name{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:24px;line-height:1;letter-spacing:1.5px;white-space:nowrap;
+}
+.brand-name .green{color:var(--green)}
 
-    .top-actions{display:flex;align-items:center;gap:8px}
-    .live-pill{
-      display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border-radius:14px;
-      border:1px solid rgba(16,231,116,.22);background:rgba(16,231,116,.06);
-      color:var(--green);font-size:11px;font-weight:800;letter-spacing:.18em;
-    }
-    .live-pill::before{
-      content:"";width:8px;height:8px;border-radius:999px;background:var(--green);
-      box-shadow:0 0 10px rgba(16,231,116,.75);
-    }
-    .menu-btn{
-      width:42px;height:42px;border:none;border-radius:13px;
-      background:rgba(255,255,255,.03);border:1px solid var(--line);
-      color:var(--text);font-size:18px;
-    }
+.top-actions{display:flex;align-items:center;gap:8px}
+.live-pill{
+  display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border-radius:14px;
+  border:1px solid rgba(16,231,116,.22);background:rgba(16,231,116,.06);
+  color:var(--green);font-size:11px;font-weight:800;letter-spacing:.18em;
+}
+.live-pill::before{
+  content:"";width:8px;height:8px;border-radius:999px;background:var(--green);
+  box-shadow:0 0 10px rgba(16,231,116,.75);
+}
+.menu-btn{
+  width:42px;height:42px;border:none;border-radius:13px;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);
+  color:var(--text);font-size:18px;
+}
 
-    .date-strip{
-      margin-top:12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
-    }
-    .date-strip::-webkit-scrollbar{display:none}
-    .date-tab{
-      min-width:66px;padding:9px 6px 10px;border-radius:16px;text-align:center;
-      color:var(--muted);border:1px solid transparent;
-      cursor:pointer;
-    }
-    .date-tab small{
-      display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;
-    }
-    .date-tab strong{
-      display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;letter-spacing:1px;
-    }
-    .date-tab.active{
-      color:var(--green);
-      background:linear-gradient(180deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
-      border-color:rgba(16,231,116,.16);
-    }
+.date-strip{
+  margin-top:12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
+}
+.date-strip::-webkit-scrollbar{display:none}
+.date-tab{
+  min-width:66px;padding:9px 6px 10px;border-radius:16px;text-align:center;
+  color:var(--muted);border:1px solid transparent;
+  cursor:pointer;
+}
+.date-tab small{
+  display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;
+}
+.date-tab strong{
+  display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;letter-spacing:1px;
+}
+.date-tab.active{
+  color:var(--green);
+  background:linear-gradient(180deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
+  border-color:rgba(16,231,116,.16);
+}
 
-    .search-wrap{padding:12px 14px 8px}
-    .search-box{
-      display:flex;align-items:center;gap:10px;padding:14px 15px;border-radius:18px;
-      border:1px solid var(--line);
-      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
-    }
-    .search-box svg{width:18px;height:18px;fill:var(--muted2)}
-    .search-box input{
-      flex:1;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;
-    }
-    .search-box input::placeholder{color:var(--muted2)}
+.search-wrap{padding:12px 14px 8px}
+.search-box{
+  display:flex;align-items:center;gap:10px;padding:14px 15px;border-radius:18px;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+}
+.search-box svg{width:18px;height:18px;fill:var(--muted2)}
+.search-box input{
+  flex:1;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;
+}
+.search-box input::placeholder{color:var(--muted2)}
 
-    .section-head{
-      padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;
-    }
-    .section-head .label{
-      font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);
-    }
-    .section-head .meta{font-size:12px;color:var(--muted)}
-    .board{padding:0 14px}
+.section-head{
+  padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.section-head .label{
+  font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);
+}
+.section-head .meta{font-size:12px;color:var(--muted)}
+.board{padding:0 14px}
 
-    .league-row{
-      border:1px solid var(--line);
-      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.012));
-      border-radius:18px;padding:14px;
-      display:flex;align-items:center;justify-content:space-between;gap:10px;
-      margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;
-    }
-    .league-row-left{display:flex;align-items:center;gap:12px;min-width:0}
-    .league-emoji{
-      width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
-      background:rgba(79,137,255,.08);border:1px solid rgba(79,137,255,.15);
-      font-size:18px;flex-shrink:0;
-    }
-    .league-info{min-width:0}
-    .league-name{
-      font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    }
-    .league-country{
-      margin-top:3px;color:var(--muted);font-size:12px;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    }
-    .league-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
-    .fixture-count{
-      min-width:34px;height:34px;padding:0 10px;border-radius:11px;display:grid;place-items:center;
-      background:rgba(255,255,255,.05);color:var(--text);font-weight:800;font-size:14px;
-    }
-    .chevron{color:var(--muted2);font-size:15px}
+.league-row{
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.012));
+  border-radius:18px;padding:14px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;
+}
+.league-row-left{display:flex;align-items:center;gap:12px;min-width:0}
+.league-emoji{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(79,137,255,.08);border:1px solid rgba(79,137,255,.15);
+  font-size:18px;flex-shrink:0;
+}
+.league-info{min-width:0}
+.league-name{
+  font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.league-country{
+  margin-top:3px;color:var(--muted);font-size:12px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.league-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.fixture-count{
+  min-width:34px;height:34px;padding:0 10px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(255,255,255,.05);color:var(--text);font-weight:800;font-size:14px;
+}
+.chevron{color:var(--muted2);font-size:15px}
 
-    .loading,.empty-state,.error-state{
-      text-align:center;color:var(--muted);padding:30px 16px;
-    }
-    .spinner{
-      width:32px;height:32px;border-radius:999px;
-      border:3px solid rgba(255,255,255,.08);
-      border-top-color:var(--green);
-      animation:spin 1s linear infinite;
-      margin:0 auto 10px;
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
+.loading,.empty-state,.error-state{
+  text-align:center;color:var(--muted);padding:30px 16px;
+}
+.spinner{
+  width:32px;height:32px;border-radius:999px;
+  border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--green);
+  animation:spin 1s linear infinite;
+  margin:0 auto 10px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-    .profile-backdrop,.panel-backdrop,.modal-backdrop{
-      position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:70;display:none;
-    }
-    .profile-backdrop.active,.panel-backdrop.active,.modal-backdrop.active{display:block}
+.profile-backdrop,.panel-backdrop,.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:70;display:none;
+}
+.profile-backdrop.active,.panel-backdrop.active,.modal-backdrop.active{display:block}
 
-    .profile-menu{
-      position:fixed;top:66px;right:14px;width:220px;z-index:80;border-radius:18px;
-      background:linear-gradient(180deg,#0f141a,#0b1015);border:1px solid var(--line);
-      box-shadow:0 18px 42px rgba(0,0,0,.42);padding:8px;display:none;
-    }
-    .profile-menu.active{display:block}
-    .profile-action{
-      width:100%;border:none;background:transparent;color:var(--text);
-      padding:13px 14px;border-radius:14px;text-align:left;font-size:14px;font-weight:700;
-    }
-    .profile-action + .profile-action{margin-top:4px}
-    .profile-action.primary{
-      color:var(--green);background:rgba(16,231,116,.06);border:1px solid rgba(16,231,116,.16);
-    }
-    .profile-action.danger{
-      background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);
-    }
+.profile-menu{
+  position:fixed;top:66px;right:14px;width:220px;z-index:80;border-radius:18px;
+  background:linear-gradient(180deg,#0f141a,#0b1015);border:1px solid var(--line);
+  box-shadow:0 18px 42px rgba(0,0,0,.42);padding:8px;display:none;
+}
+.profile-menu.active{display:block}
+.profile-action{
+  width:100%;border:none;background:transparent;color:var(--text);
+  padding:13px 14px;border-radius:14px;text-align:left;font-size:14px;font-weight:700;
+}
+.profile-action + .profile-action{margin-top:4px}
+.profile-action.primary{
+  color:var(--green);background:rgba(16,231,116,.06);border:1px solid rgba(16,231,116,.16);
+}
+.profile-action.danger{
+  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);
+}
 
-    .panel{
-      position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
-      background:linear-gradient(180deg,#0b0f14,#080b10);
-      border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
-      box-shadow:0 -18px 50px rgba(0,0,0,.46);
-      transform:translateY(106%);transition:transform .26s ease;overflow:hidden;
-    }
-    .panel.active{transform:translateY(0)}
-    .panel-handle{width:78px;height:6px;border-radius:999px;background:#3a414e;margin:10px auto 0}
-    .panel-close{
-      position:absolute;top:16px;right:14px;width:46px;height:46px;border:none;border-radius:999px;
-      background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);font-size:26px;
-    }
-    .panel-scroll{max-height:calc(88vh - 10px);overflow-y:auto;padding-bottom:26px}
-    .panel-head{padding:16px 16px 14px;border-bottom:1px solid var(--line2)}
-    .panel-kicker{color:var(--muted);font-size:12px;letter-spacing:.12em}
-    .panel-title{margin-top:6px;font-size:22px;font-weight:800;line-height:1.15}
-    .panel-sub{color:var(--muted);font-size:13px;margin-top:4px}
+.panel{
+  position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
+  background:linear-gradient(180deg,#0b0f14,#080b10);
+  border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
+  box-shadow:0 -18px 50px rgba(0,0,0,.46);
+  transform:translateY(106%);transition:transform .26s ease;overflow:hidden;
+}
+.panel.active{transform:translateY(0)}
+.panel-handle{width:78px;height:6px;border-radius:999px;background:#3a414e;margin:10px auto 0}
+.panel-close{
+  position:absolute;top:16px;right:14px;width:46px;height:46px;border:none;border-radius:999px;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);font-size:26px;
+}
+.panel-scroll{max-height:calc(88vh - 10px);overflow-y:auto;padding-bottom:26px}
+.panel-head{padding:16px 16px 14px;border-bottom:1px solid var(--line2)}
+.panel-kicker{color:var(--muted);font-size:12px;letter-spacing:.12em}
+.panel-title{margin-top:6px;font-size:22px;font-weight:800;line-height:1.15}
+.panel-sub{color:var(--muted);font-size:13px;margin-top:4px}
 
-    .league-panel-list{padding:12px 12px 0}
-    .match-row{
-      display:grid;grid-template-columns:58px 1fr 40px;gap:10px;align-items:center;
-      padding:12px;border-radius:16px;background:rgba(255,255,255,.015);
-      border:1px solid var(--line2);margin-bottom:9px;cursor:pointer;
-    }
-    .match-time{color:var(--muted);font-weight:800;font-size:13px;text-align:center}
-    .match-main{min-width:0}
-    .match-team{display:flex;align-items:center;gap:8px;min-width:0}
-    .match-team + .match-team{margin-top:7px}
-    .dot{width:8px;height:8px;border-radius:999px;background:var(--green);flex-shrink:0}
-    .dot.away{background:#4b5569}
-    .match-team-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .match-open{
-      width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);
-      background:rgba(255,255,255,.02);color:var(--muted);font-size:18px;
-    }
+.league-panel-list{padding:12px 12px 0}
+.match-row{
+  display:grid;grid-template-columns:58px 1fr 40px;gap:10px;align-items:center;
+  padding:12px;border-radius:16px;background:rgba(255,255,255,.015);
+  border:1px solid var(--line2);margin-bottom:9px;cursor:pointer;
+}
+.match-time{color:var(--muted);font-weight:800;font-size:13px;text-align:center}
+.match-main{min-width:0}
+.match-team{display:flex;align-items:center;gap:8px;min-width:0}
+.match-team + .match-team{margin-top:7px}
+.dot{width:8px;height:8px;border-radius:999px;background:var(--green);flex-shrink:0}
+.dot.away{background:#4b5569}
+.match-team-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-open{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);
+  background:rgba(255,255,255,.02);color:var(--muted);font-size:18px;
+}
 
-    .sheet-head{padding:14px 14px 10px}
-    .sheet-league{font-size:12px;color:var(--muted)}
-    .prob-grid{margin-top:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
-    .team-prob{text-align:center;min-width:0}
-    .team-prob .name{
-      font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1;letter-spacing:.8px;word-break:break-word;
-    }
-    .team-prob .pct{margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1}
-    .team-prob.home .pct{color:var(--green)}
-    .team-prob.away .pct{color:var(--blue)}
-    .draw-prob{text-align:center;color:var(--muted)}
-    .draw-prob .vs{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
-    .draw-prob .pct{margin-top:5px;font-family:'Bebas Neue',sans-serif;font-size:18px}
-    .draw-prob .lbl{font-size:12px;margin-top:2px}
-    .prob-bar{margin-top:12px;height:12px;border-radius:999px;overflow:hidden;display:flex;background:#161b23}
-    .prob-home{background:var(--green)}
-    .prob-draw{background:var(--orange)}
-    .prob-away{background:var(--blue)}
-    .best-pick{
-      margin-top:12px;border:1px solid rgba(16,231,116,.18);
-      background:linear-gradient(135deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
-      border-radius:18px;padding:14px;
-    }
-    .best-pick .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
-    .best-pick-row{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .best-pick-title{
-      font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;letter-spacing:1px;
-    }
-    .best-pick-badge{
-      flex-shrink:0;min-width:88px;text-align:center;padding:12px 10px;border-radius:14px;
-      border:1px solid rgba(16,231,116,.18);background:rgba(16,231,116,.07);
-    }
-    .best-pick-badge .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;color:var(--green)}
-    .best-pick-badge .small{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-top:4px}
+.sheet-head{padding:14px 14px 10px}
+.sheet-league{font-size:12px;color:var(--muted)}
+.prob-grid{margin-top:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.team-prob{text-align:center;min-width:0}
+.team-prob .name{
+  font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1;letter-spacing:.8px;word-break:break-word;
+}
+.team-prob .pct{margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1}
+.team-prob.home .pct{color:var(--green)}
+.team-prob.away .pct{color:var(--blue)}
+.draw-prob{text-align:center;color:var(--muted)}
+.draw-prob .vs{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
+.draw-prob .pct{margin-top:5px;font-family:'Bebas Neue',sans-serif;font-size:18px}
+.draw-prob .lbl{font-size:12px;margin-top:2px}
+.prob-bar{margin-top:12px;height:12px;border-radius:999px;overflow:hidden;display:flex;background:#161b23}
+.prob-home{background:var(--green)}
+.prob-draw{background:var(--orange)}
+.prob-away{background:var(--blue)}
+.best-pick{
+  margin-top:12px;border:1px solid rgba(16,231,116,.18);
+  background:linear-gradient(135deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
+  border-radius:18px;padding:14px;
+}
+.best-pick .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.best-pick-row{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.best-pick-title{
+  font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;letter-spacing:1px;
+}
+.best-pick-badge{
+  flex-shrink:0;min-width:88px;text-align:center;padding:12px 10px;border-radius:14px;
+  border:1px solid rgba(16,231,116,.18);background:rgba(16,231,116,.07);
+}
+.best-pick-badge .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;color:var(--green)}
+.best-pick-badge .small{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-top:4px}
 
-    .tabs{
-      margin-top:12px;display:flex;gap:0;overflow-x:auto;border-top:1px solid var(--line2);
-      border-bottom:1px solid var(--line2);scrollbar-width:none;
-    }
-    .tabs::-webkit-scrollbar{display:none}
-    .tab{
-      flex:1;min-width:82px;padding:13px 8px;text-align:center;color:var(--muted2);font-size:12px;
-      font-weight:700;letter-spacing:.08em;position:relative;cursor:pointer;
-    }
-    .tab.active{color:var(--green)}
-    .tab.active::after{
-      content:"";position:absolute;left:14%;right:14%;bottom:0;height:3px;border-radius:999px;background:var(--green);
-    }
+.tabs{
+  margin-top:12px;display:flex;gap:0;overflow-x:auto;border-top:1px solid var(--line2);
+  border-bottom:1px solid var(--line2);scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex:1;min-width:82px;padding:13px 8px;text-align:center;color:var(--muted2);font-size:12px;
+  font-weight:700;letter-spacing:.08em;position:relative;cursor:pointer;
+}
+.tab.active{color:var(--green)}
+.tab.active::after{
+  content:"";position:absolute;left:14%;right:14%;bottom:0;height:3px;border-radius:999px;background:var(--green);
+}
 
-    .sheet-section{padding:14px 14px 0}
-    .sheet-label{
-      font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px;
-    }
-    .card{
-      border-radius:18px;border:1px solid var(--line);
-      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
-      padding:14px;margin-bottom:12px;
-    }
-    .card.primary{
-      border-color:rgba(16,231,116,.18);
-      background:linear-gradient(135deg,rgba(16,231,116,.09),rgba(16,231,116,.03));
-    }
-    .card h3{
-      margin:0 0 8px;font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;letter-spacing:1px;
-    }
-    .card .sub{color:var(--green);font-size:13px;margin-bottom:10px}
-    .card p{margin:0;color:#bcc4d1;font-size:14px;line-height:1.65}
+.sheet-section{padding:14px 14px 0}
+.sheet-label{
+  font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px;
+}
+.card{
+  border-radius:18px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+  padding:14px;margin-bottom:12px;
+}
+.card.primary{
+  border-color:rgba(16,231,116,.18);
+  background:linear-gradient(135deg,rgba(16,231,116,.09),rgba(16,231,116,.03));
+}
+.card h3{
+  margin:0 0 8px;font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;letter-spacing:1px;
+}
+.card .sub{color:var(--green);font-size:13px;margin-bottom:10px}
+.card p{margin:0;color:#bcc4d1;font-size:14px;line-height:1.65}
 
-    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-    .metric{
-      border:1px solid var(--line);background:rgba(255,255,255,.015);border-radius:14px;padding:12px 8px;text-align:center;
-    }
-    .metric .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1}
-    .metric .small{margin-top:6px;font-size:11px;color:var(--muted2);letter-spacing:.14em;text-transform:uppercase}
-    .progress{display:flex;height:10px;overflow:hidden;border-radius:999px;background:#171c24;margin-bottom:12px}
-    .mini-list{display:flex;flex-direction:column;gap:9px}
-    .mini-item{
-      display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line2);
-      border-radius:15px;background:rgba(255,255,255,.013);padding:12px;
-    }
-    .mini-a{font-size:14px;font-weight:700}
-    .mini-b{margin-top:4px;font-size:12px;color:var(--muted)}
-    .score-pill{
-      min-width:54px;height:48px;padding:0 10px;border-radius:14px;background:rgba(79,137,255,.11);
-      color:var(--blue);display:grid;place-items:center;font-size:20px;font-weight:800;
-    }
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.metric{
+  border:1px solid var(--line);background:rgba(255,255,255,.015);border-radius:14px;padding:12px 8px;text-align:center;
+}
+.metric .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1}
+.metric .small{margin-top:6px;font-size:11px;color:var(--muted2);letter-spacing:.14em;text-transform:uppercase}
+.progress{display:flex;height:10px;overflow:hidden;border-radius:999px;background:#171c24;margin-bottom:12px}
+.mini-list{display:flex;flex-direction:column;gap:9px}
+.mini-item{
+  display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line2);
+  border-radius:15px;background:rgba(255,255,255,.013);padding:12px;
+}
+.mini-a{font-size:14px;font-weight:700}
+.mini-b{margin-top:4px;font-size:12px;color:var(--muted)}
+.score-pill{
+  min-width:54px;height:48px;padding:0 10px;border-radius:14px;background:rgba(79,137,255,.11);
+  color:var(--blue);display:grid;place-items:center;font-size:20px;font-weight:800;
+}
 
-    .table-wrap{border-radius:16px;border:1px solid var(--line);overflow:auto}
-    .table-wrap table{width:100%;border-collapse:collapse;min-width:560px}
-    .table-wrap th,.table-wrap td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
-    .table-wrap th{
-      font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2);background:rgba(255,255,255,.02);
-    }
-    .table-wrap tr.highlight{background:rgba(16,231,116,.08)}
-    .table-wrap tr:last-child td{border-bottom:none}
+.table-wrap{border-radius:16px;border:1px solid var(--line);overflow:auto}
+.table-wrap table{width:100%;border-collapse:collapse;min-width:560px}
+.table-wrap th,.table-wrap td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+.table-wrap th{
+  font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2);background:rgba(255,255,255,.02);
+}
+.table-wrap tr.highlight{background:rgba(16,231,116,.08)}
+.table-wrap tr:last-child td{border-bottom:none}
 
-    .ai-box{border-radius:18px;border:1px solid var(--line);overflow:hidden;background:rgba(255,255,255,.015)}
-    .ai-log{max-height:260px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
-    .msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.6}
-    .msg.user{align-self:flex-end;background:rgba(16,231,116,.12);border:1px solid rgba(16,231,116,.18)}
-    .msg.bot{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid var(--line)}
-    .ai-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
-    .ai-input input{
-      flex:1;border:none;outline:none;border-radius:14px;background:#0c1117;color:var(--text);
-      border:1px solid var(--line);padding:12px 14px;font-size:13px;
-    }
-    .ai-input button{
-      border:none;border-radius:14px;background:var(--green);color:#052014;font-weight:900;padding:12px 14px;
-    }
+.ai-box{border-radius:18px;border:1px solid var(--line);overflow:hidden;background:rgba(255,255,255,.015)}
+.ai-log{max-height:260px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.6}
+.msg.user{align-self:flex-end;background:rgba(16,231,116,.12);border:1px solid rgba(16,231,116,.18)}
+.msg.bot{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.ai-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+.ai-input input{
+  flex:1;border:none;outline:none;border-radius:14px;background:#0c1117;color:var(--text);
+  border:1px solid var(--line);padding:12px 14px;font-size:13px;
+}
+.ai-input button{
+  border:none;border-radius:14px;background:var(--green);color:#052014;font-weight:900;padding:12px 14px;
+}
 
-    .auth-wrap{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
-    .auth-card{
-      width:100%;max-width:420px;border-radius:26px;padding:22px;border:1px solid var(--line);
-      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));box-shadow:var(--shadow);
-    }
-    .auth-logo{text-align:center;margin-bottom:16px}
-    .auth-logo img{
-      width:68px;height:68px;object-fit:cover;border-radius:18px;box-shadow:0 0 24px rgba(16,231,116,.15);
-    }
-    .auth-fallback{
-      width:68px;height:68px;display:grid;place-items:center;margin:0 auto;border-radius:18px;
-      background:linear-gradient(180deg,#0f141a,#0b1015);border:1px solid rgba(16,231,116,.12);
-      box-shadow:0 0 24px rgba(16,231,116,.15);font-family:'Bebas Neue',sans-serif;font-size:34px;color:var(--green);
-    }
-    .auth-title{margin-top:12px;font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px}
-    .auth-title .green{color:var(--green)}
-    .auth-copy{color:var(--muted);font-size:14px;line-height:1.65;margin-top:8px}
-    .auth-switch{
-      margin-top:18px;display:flex;gap:6px;border:1px solid var(--line);
-      background:rgba(255,255,255,.03);border-radius:18px;padding:5px;
-    }
-    .auth-tab{flex:1;text-align:center;padding:13px 10px;border-radius:13px;font-weight:700;color:var(--muted2);cursor:pointer}
-    .auth-tab.active{background:rgba(255,255,255,.06);color:var(--text)}
-    .field{margin-top:12px}
-    .field input{
-      width:100%;border:none;outline:none;padding:16px 16px;font-size:15px;color:var(--text);
-      border-radius:16px;background:#0a0e13;border:1px solid var(--line);
-    }
-    .auth-btn{
-      width:100%;margin-top:16px;border:none;border-radius:18px;padding:16px;font-size:16px;
-      font-weight:900;background:linear-gradient(180deg,#14e677,#09c864);color:#04180f;cursor:pointer;
-    }
-    .auth-note{text-align:center;color:var(--muted);font-size:13px;line-height:1.7;margin-top:14px}
-    .auth-msg{text-align:center;color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
+.auth-wrap{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:24px 16px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(16,231,116,.08), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(79,137,255,.06), transparent 40%),
+    #07090d;
+}
+.auth-card{
+  width:100%;max-width:420px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:28px;padding:32px 28px;
+  box-shadow:0 32px 80px rgba(0,0,0,.5);
+}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo img{
+  width:68px;height:68px;border-radius:18px;object-fit:cover;
+  border:1px solid rgba(16,231,116,.2);
+  box-shadow:0 0 30px rgba(16,231,116,.2);
+}
+.auth-fallback{
+  width:68px;height:68px;border-radius:18px;margin:0 auto;display:grid;place-items:center;
+  background:rgba(16,231,116,.1);border:1px solid rgba(16,231,116,.2);
+  font-family:'Bebas Neue',sans-serif;color:var(--green);font-size:28px;
+}
+.auth-title{
+  margin-top:14px;font-family:'Bebas Neue',sans-serif;font-size:32px;
+  letter-spacing:3px;color:#fff;
+}
+.auth-title .green{color:var(--green)}
+.auth-copy{
+  color:var(--muted);font-size:13px;line-height:1.7;margin-top:6px;
+}
+.auth-switch{
+  display:flex;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  border-radius:16px;padding:4px;margin-bottom:24px;gap:4px;
+}
+.auth-tab{
+  flex:1;text-align:center;padding:12px 10px;border-radius:13px;
+  font-weight:700;color:var(--muted);cursor:pointer;font-size:14px;
+  transition:all .15s;
+}
+.auth-tab.active{
+  background:linear-gradient(180deg,rgba(16,231,116,.12),rgba(16,231,116,.05));
+  color:var(--green);border:1px solid rgba(16,231,116,.18);
+}
+.field{margin-bottom:12px}
+.field input{
+  width:100%;padding:15px 16px;border-radius:16px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  color:var(--text);font-size:15px;outline:none;
+  transition:border-color .15s;
+}
+.field input:focus{border-color:rgba(16,231,116,.4);background:rgba(16,231,116,.03)}
+.field input::placeholder{color:var(--muted2)}
+.auth-btn{
+  width:100%;padding:16px;border:none;border-radius:16px;
+  background:linear-gradient(135deg,#10e774,#09c864);
+  color:#03150a;font-size:15px;font-weight:900;cursor:pointer;margin-top:6px;
+  box-shadow:0 8px 24px rgba(16,231,116,.25);
+  transition:opacity .15s, transform .1s;
+}
+.auth-btn:hover{opacity:.92;transform:translateY(-1px)}
+.auth-btn:active{transform:translateY(0)}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.auth-note{
+  text-align:center;color:var(--muted);font-size:12px;line-height:1.8;margin-top:16px;
+}
+.auth-msg{
+  text-align:center;color:var(--danger);font-size:13px;margin-top:10px;
+  min-height:18px;font-weight:600;
+}
+.auth-divider{
+  display:flex;align-items:center;gap:12px;margin:16px 0;
+}
+.auth-divider span{color:var(--muted2);font-size:12px;white-space:nowrap}
+.auth-divider::before,.auth-divider::after{
+  content:'';flex:1;height:1px;background:rgba(255,255,255,.06);
+}
+.match-locked{opacity:.5}
+.match-locked .match-open{font-size:14px}.auth-msg{text-align:center;color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
 
-    .modal{
-      position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-      z-index:95;width:min(92vw,430px);border-radius:22px;border:1px solid var(--line);
-      background:linear-gradient(180deg,#0f141a,#0b1015);box-shadow:0 20px 60px rgba(0,0,0,.55);
-      display:none;overflow:hidden;
-    }
-    .modal.active{display:block}
-    .modal-head{
-      padding:16px 18px;border-bottom:1px solid var(--line);
-      display:flex;align-items:center;justify-content:space-between;gap:10px;
-    }
-    .modal-title{font-size:18px;font-weight:800}
-    .modal-close{
-      width:34px;height:34px;border:none;border-radius:12px;background:rgba(255,255,255,.03);
-      border:1px solid var(--line);color:var(--muted);font-size:20px;cursor:pointer;
-    }
-    .modal-body{padding:16px 18px}
-    .kv{
-      display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:start;margin-bottom:10px;
-    }
-    .kv .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
-    .kv .v{font-size:14px;font-weight:700;word-break:break-word}
-    .notice{
-      border:1px solid rgba(255,180,0,.2);background:rgba(255,180,0,.08);color:#ffd277;
-      border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
-    }
-    .success{
-      border:1px solid rgba(16,231,116,.2);background:rgba(16,231,116,.08);color:#9df3c3;
-      border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
-    }
-    .modal-actions{display:flex;gap:8px;margin-top:14px}
-    .modal-btn{
-      flex:1;border:none;border-radius:14px;padding:13px 14px;font-size:14px;font-weight:800;cursor:pointer;
-    }
-    .modal-btn.primary{background:var(--green);color:#072114}
-    .modal-btn.secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line)}
+.modal{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:95;width:min(92vw,430px);border-radius:22px;border:1px solid var(--line);
+  background:linear-gradient(180deg,#0f141a,#0b1015);box-shadow:0 20px 60px rgba(0,0,0,.55);
+  display:none;overflow:hidden;
+}
+.modal.active{display:block}
+.modal-head{
+  padding:16px 18px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.modal-title{font-size:18px;font-weight:800}
+.modal-close{
+  width:34px;height:34px;border:none;border-radius:12px;background:rgba(255,255,255,.03);
+  border:1px solid var(--line);color:var(--muted);font-size:20px;cursor:pointer;
+}
+.modal-body{padding:16px 18px}
+.kv{
+  display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:start;margin-bottom:10px;
+}
+.kv .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+.kv .v{font-size:14px;font-weight:700;word-break:break-word}
+.notice{
+  border:1px solid rgba(255,180,0,.2);background:rgba(255,180,0,.08);color:#ffd277;
+  border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+}
+.success{
+  border:1px solid rgba(16,231,116,.2);background:rgba(16,231,116,.08);color:#9df3c3;
+  border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
+.modal-btn{
+  flex:1;border:none;border-radius:14px;padding:13px 14px;font-size:14px;font-weight:800;cursor:pointer;
+}
+.modal-btn.primary{background:var(--green);color:#072114}
+.modal-btn.secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line)}
+```
+
   </style>
 </head>
 <body>
@@ -420,25 +472,28 @@
         <div class="auth-copy">Sharper football reasoning, cleaner match boards, and premium market presentation.</div>
       </div>
 
-      <div class="auth-switch">
-        <div id="tabSignup" class="auth-tab active">Sign Up</div>
-        <div id="tabLogin" class="auth-tab">Login</div>
-      </div>
+```
+  <div class="auth-switch">
+    <div id="tabSignup" class="auth-tab active">Sign Up</div>
+    <div id="tabLogin" class="auth-tab">Login</div>
+  </div>
 
-      <div class="field">
-        <input id="authEmail" type="email" placeholder="Email address">
-      </div>
-      <div class="field">
-        <input id="authPassword" type="password" placeholder="Password">
-      </div>
-      <div id="confirmField" class="field">
-        <input id="authConfirmPassword" type="password" placeholder="Confirm password">
-      </div>
+  <div class="field">
+    <input id="authEmail" type="email" placeholder="Email address">
+  </div>
+  <div class="field">
+    <input id="authPassword" type="password" placeholder="Password">
+  </div>
+  <div id="confirmField" class="field">
+    <input id="authConfirmPassword" type="password" placeholder="Confirm password">
+  </div>
 
-      <button id="authSubmit" class="auth-btn">Create Free Account</button>
-      <div class="auth-note">Free 3-day trial • Full access to all predictions<br>Then ₦3,000/month for continued access</div>
-      <div id="authMsg" class="auth-msg"></div>
-    </div>
+  <button id="authSubmit" class="auth-btn">Create Free Account</button>
+  <div class="auth-note">Free 3-day trial • Full access to all predictions<br>Then ₦3,000/month for continued access</div>
+  <div id="authMsg" class="auth-msg"></div>
+</div>
+```
+
   </div>
 
   <div id="appView" class="app-shell hidden">
@@ -453,34 +508,37 @@
             <div class="brand-name">SCORE<span class="green">PHANTOM</span></div>
           </div>
 
-          <div class="top-actions">
-            <div class="live-pill">LIVE</div>
-            <button id="menuBtn" class="menu-btn">☰</button>
-          </div>
-        </div>
-
-        <div id="dateStrip" class="date-strip"></div>
+```
+      <div class="top-actions">
+        <div class="live-pill">LIVE</div>
+        <button id="menuBtn" class="menu-btn">☰</button>
       </div>
     </div>
 
-    <div class="search-wrap">
-      <div class="search-box">
-        <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 105.02 13.07l4.7 4.71 1.41-1.41-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z"/></svg>
-        <input id="searchInput" type="text" placeholder="Search by team or league">
-      </div>
-    </div>
+    <div id="dateStrip" class="date-strip"></div>
+  </div>
+</div>
 
-    <div class="section-head">
-      <div class="label">Fixture Board</div>
-      <div class="meta" id="boardMeta">Top leagues prioritized first</div>
-    </div>
+<div class="search-wrap">
+  <div class="search-box">
+    <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 105.02 13.07l4.7 4.71 1.41-1.41-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z"/></svg>
+    <input id="searchInput" type="text" placeholder="Search by team or league">
+  </div>
+</div>
 
-    <div class="board" id="leagueContainer">
-      <div class="loading">
-        <div class="spinner"></div>
-        Loading fixtures...
-      </div>
-    </div>
+<div class="section-head">
+  <div class="label">Fixture Board</div>
+  <div class="meta" id="boardMeta">Top leagues prioritized first</div>
+</div>
+
+<div class="board" id="leagueContainer">
+  <div class="loading">
+    <div class="spinner"></div>
+    Loading fixtures...
+  </div>
+</div>
+```
+
   </div>
 
   <div id="profileBackdrop" class="profile-backdrop"></div>
@@ -512,142 +570,145 @@
       <div class="sheet-head">
         <div id="sheetLeague" class="sheet-league">League</div>
 
-        <div class="prob-grid">
-          <div class="team-prob home">
-            <div id="sheetHomeName" class="name">HOME</div>
-            <div id="sheetHomePct" class="pct">0%</div>
-          </div>
-          <div class="draw-prob">
-            <div class="vs">VS</div>
-            <div id="sheetDrawPct" class="pct">0%</div>
-            <div class="lbl">Draw</div>
-          </div>
-          <div class="team-prob away">
-            <div id="sheetAwayName" class="name">AWAY</div>
-            <div id="sheetAwayPct" class="pct">0%</div>
-          </div>
-        </div>
-
-        <div class="prob-bar">
-          <div id="probHomeBar" class="prob-home" style="width:33%"></div>
-          <div id="probDrawBar" class="prob-draw" style="width:34%"></div>
-          <div id="probAwayBar" class="prob-away" style="width:33%"></div>
-        </div>
-
-        <div class="best-pick">
-          <div class="eyebrow">Best Pick</div>
-          <div class="best-pick-row">
-            <div id="heroPickTitle" class="best-pick-title">Loading...</div>
-            <div class="best-pick-badge">
-              <div id="heroPickPct" class="big">0%</div>
-              <div class="small">Confidence</div>
-            </div>
-          </div>
-        </div>
+```
+    <div class="prob-grid">
+      <div class="team-prob home">
+        <div id="sheetHomeName" class="name">HOME</div>
+        <div id="sheetHomePct" class="pct">0%</div>
       </div>
-
-      <div class="tabs">
-        <div class="tab active" data-tab="preview">Preview</div>
-        <div class="tab" data-tab="predictions">Picks</div>
-        <div class="tab" data-tab="form">Form</div>
-        <div class="tab" data-tab="table">Table</div>
-        <div class="tab" data-tab="ai">AI</div>
+      <div class="draw-prob">
+        <div class="vs">VS</div>
+        <div id="sheetDrawPct" class="pct">0%</div>
+        <div class="lbl">Draw</div>
       </div>
-
-      <div id="tab-preview" class="sheet-section">
-        <div class="sheet-label">Match Preview</div>
-        <div id="previewBox" class="card">Loading preview...</div>
+      <div class="team-prob away">
+        <div id="sheetAwayName" class="name">AWAY</div>
+        <div id="sheetAwayPct" class="pct">0%</div>
       </div>
+    </div>
 
-      <div id="tab-predictions" class="sheet-section hidden">
-        <div class="sheet-label">Recommended Pick</div>
-        <div class="card primary">
-          <h3 id="predictionMain">Loading...</h3>
-          <div id="predictionMeta" class="sub"></div>
-          <p id="predictionReason">Loading reasoning...</p>
-        </div>
+    <div class="prob-bar">
+      <div id="probHomeBar" class="prob-home" style="width:33%"></div>
+      <div id="probDrawBar" class="prob-draw" style="width:34%"></div>
+      <div id="probAwayBar" class="prob-away" style="width:33%"></div>
+    </div>
 
-        <div class="sheet-label">Alternative Pick</div>
-        <div class="card">
-          <h3 id="alternativeMain">Loading...</h3>
-          <div id="alternativeMeta" class="sub"></div>
-          <p id="alternativeReason">Loading...</p>
-        </div>
-      </div>
-
-      <div id="tab-form" class="sheet-section hidden">
-        <div class="sheet-label">Head To Head</div>
-        <div class="metrics">
-          <div class="metric">
-            <div id="h2hHomeWins" class="big">0</div>
-            <div id="h2hHomeLbl" class="small">Home</div>
-          </div>
-          <div class="metric">
-            <div id="h2hDraws" class="big">0</div>
-            <div class="small">Draws</div>
-          </div>
-          <div class="metric">
-            <div id="h2hAwayWins" class="big">0</div>
-            <div id="h2hAwayLbl" class="small">Away</div>
-          </div>
-        </div>
-
-        <div class="progress">
-          <div id="h2hHomeBar" class="prob-home" style="width:33%"></div>
-          <div id="h2hDrawBar" class="prob-draw" style="width:34%"></div>
-          <div id="h2hAwayBar" class="prob-away" style="width:33%"></div>
-        </div>
-
-        <div class="card">
-          <h3 style="font-size:22px">H2H Matches</h3>
-          <div id="h2hList" class="mini-list"></div>
-        </div>
-
-        <div class="card">
-          <h3 id="homeRecentTitle" style="font-size:22px">Home — Recent Results</h3>
-          <div id="homeFormList" class="mini-list"></div>
-        </div>
-
-        <div class="card">
-          <h3 id="awayRecentTitle" style="font-size:22px">Away — Recent Results</h3>
-          <div id="awayFormList" class="mini-list"></div>
-        </div>
-      </div>
-
-      <div id="tab-table" class="sheet-section hidden">
-        <div class="sheet-label">League Table</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Pos</th>
-                <th>Team</th>
-                <th>G</th>
-                <th>W</th>
-                <th>D</th>
-                <th>L</th>
-                <th>Pts</th>
-                <th>Form</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="tab-ai" class="sheet-section hidden">
-        <div class="sheet-label">AI Analysis</div>
-        <div class="ai-box">
-          <div id="aiLog" class="ai-log">
-            <div class="msg bot">Ask about this specific match only.</div>
-          </div>
-          <div class="ai-input">
-            <input id="aiInput" type="text" placeholder="Ask about this match...">
-            <button id="aiSend">Send</button>
-          </div>
+    <div class="best-pick">
+      <div class="eyebrow">Best Pick</div>
+      <div class="best-pick-row">
+        <div id="heroPickTitle" class="best-pick-title">Loading...</div>
+        <div class="best-pick-badge">
+          <div id="heroPickPct" class="big">0%</div>
+          <div class="small">Confidence</div>
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="preview">Preview</div>
+    <div class="tab" data-tab="predictions">Picks</div>
+    <div class="tab" data-tab="form">Form</div>
+    <div class="tab" data-tab="table">Table</div>
+    <div class="tab" data-tab="ai">AI</div>
+  </div>
+
+  <div id="tab-preview" class="sheet-section">
+    <div class="sheet-label">Match Preview</div>
+    <div id="previewBox" class="card">Loading preview...</div>
+  </div>
+
+  <div id="tab-predictions" class="sheet-section hidden">
+    <div class="sheet-label">Recommended Pick</div>
+    <div class="card primary">
+      <h3 id="predictionMain">Loading...</h3>
+      <div id="predictionMeta" class="sub"></div>
+      <p id="predictionReason">Loading reasoning...</p>
+    </div>
+
+    <div class="sheet-label">Alternative Pick</div>
+    <div class="card">
+      <h3 id="alternativeMain">Loading...</h3>
+      <div id="alternativeMeta" class="sub"></div>
+      <p id="alternativeReason">Loading...</p>
+    </div>
+  </div>
+
+  <div id="tab-form" class="sheet-section hidden">
+    <div class="sheet-label">Head To Head</div>
+    <div class="metrics">
+      <div class="metric">
+        <div id="h2hHomeWins" class="big">0</div>
+        <div id="h2hHomeLbl" class="small">Home</div>
+      </div>
+      <div class="metric">
+        <div id="h2hDraws" class="big">0</div>
+        <div class="small">Draws</div>
+      </div>
+      <div class="metric">
+        <div id="h2hAwayWins" class="big">0</div>
+        <div id="h2hAwayLbl" class="small">Away</div>
+      </div>
+    </div>
+
+    <div class="progress">
+      <div id="h2hHomeBar" class="prob-home" style="width:33%"></div>
+      <div id="h2hDrawBar" class="prob-draw" style="width:34%"></div>
+      <div id="h2hAwayBar" class="prob-away" style="width:33%"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:22px">H2H Matches</h3>
+      <div id="h2hList" class="mini-list"></div>
+    </div>
+
+    <div class="card">
+      <h3 id="homeRecentTitle" style="font-size:22px">Home — Recent Results</h3>
+      <div id="homeFormList" class="mini-list"></div>
+    </div>
+
+    <div class="card">
+      <h3 id="awayRecentTitle" style="font-size:22px">Away — Recent Results</h3>
+      <div id="awayFormList" class="mini-list"></div>
+    </div>
+  </div>
+
+  <div id="tab-table" class="sheet-section hidden">
+    <div class="sheet-label">League Table</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Pos</th>
+            <th>Team</th>
+            <th>G</th>
+            <th>W</th>
+            <th>D</th>
+            <th>L</th>
+            <th>Pts</th>
+            <th>Form</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-ai" class="sheet-section hidden">
+    <div class="sheet-label">AI Analysis</div>
+    <div class="ai-box">
+      <div id="aiLog" class="ai-log">
+        <div class="msg bot">Ask about this specific match only.</div>
+      </div>
+      <div class="ai-input">
+        <input id="aiInput" type="text" placeholder="Ask about this match...">
+        <button id="aiSend">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
   </div>
 
   <div id="modalBackdrop" class="modal-backdrop"></div>
@@ -683,6 +744,56 @@
   let authToken = localStorage.getItem('sp_token') || '';
   let currentAuthMode = 'signup';
   let allFixtures = [];
+  let currentUser = null;
+
+  function isActiveSub() {
+    if (!currentUser) return false;
+    if (currentUser.status === 'premium') {
+      return !currentUser.premium_expires_at || new Date(currentUser.premium_expires_at) > new Date();
+    }
+    return false;
+  }
+
+  function isTrialActive() {
+    if (!currentUser) return false;
+    if (currentUser.status === 'trial') {
+      return !currentUser.trial_ends_at || new Date(currentUser.trial_ends_at) > new Date();
+    }
+    return false;
+  }
+
+  function hasAnyAccess() {
+    return isActiveSub() || isTrialActive();
+  }
+
+  function markFreeFixtures(fixtures) {
+    const leagueCounts = {};
+    const sorted = [...fixtures].sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
+    for (const f of sorted) {
+      const key = String(f.tournament_id);
+      if (!leagueCounts[key]) leagueCounts[key] = 0;
+      f._isFree = leagueCounts[key] < 2;
+      if (f._isFree) leagueCounts[key]++;
+    }
+    return fixtures;
+  }
+
+  function updateMenuBadge() {
+    if (!currentUser) return;
+    const trialBtn2 = document.getElementById('trialBtn');
+    if (!trialBtn2) return;
+    if (isActiveSub()) {
+      trialBtn2.textContent = 'Premium Active';
+      trialBtn2.style.color = 'var(--green)';
+    } else if (isTrialActive()) {
+      const ends = new Date(currentUser.trial_ends_at);
+      const daysLeft = Math.max(0, Math.ceil((ends - new Date()) / 86400000));
+      trialBtn2.textContent = 'Trial: ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left';
+    } else {
+      trialBtn2.textContent = 'Trial Expired';
+      trialBtn2.style.color = 'var(--danger)';
+    }
+  }
   let groupedFixtures = [];
   let selectedDate = null;
   let selectedLeague = null;
@@ -934,7 +1045,7 @@
 
     try {
       const data = await apiFetch('/fixtures?limit=2000');
-      allFixtures = Array.isArray(data.fixtures) ? data.fixtures : [];
+      allFixtures = markFreeFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
       groupedFixtures = groupByLeague(allFixtures);
       renderHomeLeagues();
     } catch (err) {
@@ -1042,8 +1153,9 @@
         ? new Date(f.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
         : '--:--';
 
+      const locked = !hasAnyAccess() && !f._isFree;
       return `
-        <div class="match-row" data-fixture-id="${f.id}">
+        <div class="match-row${locked ? ' match-locked' : ''}" data-fixture-id="${f.id}">
           <div class="match-time">${time}</div>
           <div class="match-main">
             <div class="match-team">
@@ -1055,7 +1167,7 @@
               <div class="match-team-name">${escapeHtml(f.away_team_name || '')}</div>
             </div>
           </div>
-          <div class="match-open">→</div>
+          <div class="match-open">${locked ? '🔒' : '→'}</div>
         </div>
       `;
     }).join('');
@@ -1063,7 +1175,13 @@
     leaguePanelList.querySelectorAll('.match-row').forEach(row => {
       row.addEventListener('click', () => {
         const fixture = allFixtures.find(f => String(f.id) === String(row.dataset.fixtureId));
-        if (fixture) openMatchPanel(fixture);
+        if (!fixture) return;
+        if (!hasAnyAccess() && !fixture._isFree) {
+          closeOverlay(leaguePanel);
+          openSubscribeModal();
+          return;
+        }
+        openMatchPanel(fixture);
       });
     });
 
@@ -1071,6 +1189,24 @@
   }
 
   function activateMatchTab(tabName) {
+    // Block AI tab for trial users
+    if (tabName === 'ai' && !isActiveSub()) {
+      const aiSection = document.getElementById('tab-ai');
+      if (aiSection) {
+        aiSection.innerHTML = `
+          <div style="padding:32px 16px;text-align:center">
+            <div style="font-size:40px;margin-bottom:12px">🔒</div>
+            <div style="font-weight:800;font-size:16px;margin-bottom:8px">Premium Feature</div>
+            <div style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:20px">
+              AI match chat is available to premium subscribers only.<br>
+              Subscribe for full access.
+            </div>
+            <button onclick="openSubscribeModal()" style="padding:13px 28px;background:var(--green);border:none;border-radius:14px;color:#04180f;font-weight:900;font-size:14px;cursor:pointer">
+              Subscribe — ₦3,000/mo
+            </button>
+          </div>`;
+      }
+    }
     document.querySelectorAll('.tab').forEach(tab => {
       tab.classList.toggle('active', tab.dataset.tab === tabName);
     });
@@ -1337,11 +1473,18 @@
     }
   }
 
-  function showApp() {
+  async function showApp() {
     authView.classList.add('hidden');
     appView.classList.remove('hidden');
     buildDateTabs();
-    loadFixtures();
+    // Fetch fresh user data
+    try {
+      currentUser = await apiFetch('/auth/me');
+      updateMenuBadge();
+    } catch(e) {
+      console.warn('Could not fetch user:', e.message);
+    }
+    await loadFixtures();
   }
 
   function showAuth() {
@@ -1583,5 +1726,6 @@
     await checkAuth();
   })();
 </script>
+
 </body>
 </html>
