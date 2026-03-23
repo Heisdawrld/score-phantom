@@ -12,17 +12,46 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
 const PLAN_AMOUNT_KOBO = 300000;
 const PLAN_DURATION_DAYS = 30;
 
+async function ensureColumn(tableName, columnName, alterSql) {
+  const info = await db.execute(`PRAGMA table_info(${tableName})`);
+  const rows = info.rows || [];
+  const exists = rows.some((row) => String(row.name).toLowerCase() === String(columnName).toLowerCase());
+  if (!exists) {
+    await db.execute(alterSql);
+  }
+}
+
 export async function initUsersTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
-      password TEXT,
-      status TEXT DEFAULT 'trial',
-      trial_ends_at TEXT,
-      premium_expires_at TEXT
+      email TEXT UNIQUE
     )
   `);
+
+  await ensureColumn(
+    "users",
+    "password",
+    `ALTER TABLE users ADD COLUMN password TEXT`
+  );
+
+  await ensureColumn(
+    "users",
+    "status",
+    `ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'trial'`
+  );
+
+  await ensureColumn(
+    "users",
+    "trial_ends_at",
+    `ALTER TABLE users ADD COLUMN trial_ends_at TEXT`
+  );
+
+  await ensureColumn(
+    "users",
+    "premium_expires_at",
+    `ALTER TABLE users ADD COLUMN premium_expires_at TEXT`
+  );
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
@@ -144,6 +173,10 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    if (!user.password) {
+      return res.status(400).json({ error: "Account password is not set. Create a new account." });
     }
 
     const ok = await bcrypt.compare(String(password || ""), String(user.password || ""));
