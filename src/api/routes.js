@@ -1,11 +1,12 @@
 import { Router } from "express";
+import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { predict } from "../predictions/poissonEngine.js";
 import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
-import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'scorephantom_secret_2026';
 
 function safeJsonParse(value, fallback = {}) {
   if (!value) return fallback;
@@ -70,6 +71,73 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
   });
 
   return meta;
+}
+
+function getTokenFromRequest(req) {
+  const auth = req.headers.authorization || '';
+  const parts = auth.split(' ');
+  if (parts.length === 2 && parts[0] === 'Bearer') return parts[1];
+  return null;
+}
+
+async function getCurrentUser(req) {
+  const token = getTokenFromRequest(req);
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const result = await db.execute({
+      sql: `SELECT * FROM users WHERE id = ? LIMIT 1`,
+      args: [decoded.id],
+    });
+    return result.rows?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function computeAccessStatus(user) {
+  const now = new Date();
+
+  const trialActive =
+    user?.trial_ends_at && new Date(user.trial_ends_at) > now;
+
+  const subActive =
+    user?.subscription_expires_at && new Date(user.subscription_expires_at) > now;
+
+  let status = 'expired';
+  if (subActive) status = 'active';
+  else if (trialActive) status = 'trial';
+
+  return {
+    status,
+    trial_active: !!trialActive,
+    subscription_active: !!subActive,
+    has_full_access: !!trialActive || !!subActive,
+  };
+}
+
+async function requirePremiumAccess(req, res, next) {
+  const user = await getCurrentUser(req);
+
+  if (!user) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const access = computeAccessStatus(user);
+  req.user = user;
+  req.access = access;
+
+  if (!access.has_full_access) {
+    return res.status(403).json({
+      error: 'Subscription required',
+      code: 'subscription_required',
+      access_status: access.status,
+      subscription_code: user.subscription_code || null,
+    });
+  }
+
+  next();
 }
 
 async function getFixtureById(fixtureId) {
@@ -154,7 +222,7 @@ router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "ScorePhantom API" });
 });
 
-router.get("/fixtures", async (req, res) => {
+router.get("/fixtures", requirePremiumAccess, async (req, res) => {
   try {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
 
@@ -184,6 +252,7 @@ router.get("/fixtures", async (req, res) => {
     res.json({
       total: result.rows.length,
       fixtures: result.rows,
+      access_status: req.access.status,
     });
   } catch (err) {
     console.error(err);
@@ -191,7 +260,7 @@ router.get("/fixtures", async (req, res) => {
   }
 });
 
-router.get("/fixtures/:id", async (req, res) => {
+router.get("/fixtures/:id", requirePremiumAccess, async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.id);
 
@@ -219,7 +288,7 @@ router.get("/fixtures/:id", async (req, res) => {
   }
 });
 
-router.get("/predict/:fixtureId", async (req, res) => {
+router.get("/predict/:fixtureId", requirePremiumAccess, async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.fixtureId);
 
@@ -228,19 +297,12 @@ router.get("/predict/:fixtureId", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-
-    let prediction = await predict(
+    const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
-
-    prediction = await evaluatePrediction({
-      ...prediction,
-      odds,
-      meta,
-    });
 
     res.json({
       ...prediction,
@@ -253,7 +315,7 @@ router.get("/predict/:fixtureId", async (req, res) => {
   }
 });
 
-router.get("/predict/:fixtureId/explain", async (req, res) => {
+router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.fixtureId);
 
@@ -262,19 +324,18 @@ router.get("/predict/:fixtureId/explain", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-
-    let prediction = await predict(
+    const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
 
-    const fullPayload = await evaluatePrediction({
+    const fullPayload = {
       ...prediction,
       odds,
       meta,
-    });
+    };
 
     const explanation = await explainPrediction(fullPayload);
 
@@ -288,7 +349,7 @@ router.get("/predict/:fixtureId/explain", async (req, res) => {
   }
 });
 
-router.get("/tournaments", async (req, res) => {
+router.get("/tournaments", requirePremiumAccess, async (req, res) => {
   try {
     const result = await db.execute(
       `SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`
@@ -304,7 +365,7 @@ router.get("/tournaments", async (req, res) => {
   }
 });
 
-router.get("/stats", async (req, res) => {
+router.get("/stats", requirePremiumAccess, async (req, res) => {
   try {
     const [total, enriched, historical, teams, tournaments] = await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM fixtures`),
@@ -333,7 +394,7 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-router.post("/predict/:fixtureId/chat", async (req, res) => {
+router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) => {
   try {
     const { message, history = [] } = req.body;
 
@@ -348,19 +409,18 @@ router.post("/predict/:fixtureId/chat", async (req, res) => {
     }
 
     const { fixture, odds, meta } = bundle;
-
-    let prediction = await predict(
+    const prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta
     );
 
-    const fullPrediction = await evaluatePrediction({
+    const fullPrediction = {
       ...prediction,
       odds,
       meta,
-    });
+    };
 
     const reply = await chatAboutMatch(fullPrediction, history, message);
 
