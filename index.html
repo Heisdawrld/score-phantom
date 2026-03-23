@@ -678,891 +678,910 @@
     </div>
   </div>
 
-  <script>
-    const API = '/api';
-    let allFixtures = [];
-    let groupedFixtures = [];
-    let selectedFixture = null;
-    let selectedLeague = null;
-    let selectedDate = null;
-    let currentAuthMode = 'signup';
-    let currentPrediction = null;
-    let authToken = localStorage.getItem('sp_token') || '';
+<script>
+  const API = '/api';
+  let authToken = localStorage.getItem('sp_token') || '';
+  let currentAuthMode = 'signup';
+  let allFixtures = [];
+  let groupedFixtures = [];
+  let selectedDate = null;
+  let selectedLeague = null;
+  let selectedFixture = null;
 
-    const PRIORITY_LEAGUES = [
-      { country: "England", league: "Premier League" },
-      { country: "Spain", league: "LaLiga Santander" },
-      { country: "Spain", league: "La Liga" },
-      { country: "Italy", league: "Serie A" },
-      { country: "Germany", league: "Bundesliga" },
-      { country: "France", league: "Ligue 1" },
-      { country: "Netherlands", league: "Eredivisie" },
-      { country: "Portugal", league: "Primeira Liga" },
-      { country: "Scotland", league: "Championship" },
-      { country: "Scotland", league: "Scottish Premiership" },
-      { country: "Austria", league: "Bundesliga" },
-      { country: "Europe", league: "UEFA Champions League" },
-      { country: "Europe", league: "UEFA Europa League" }
-    ];
+  const PRIORITY_LEAGUES = [
+    { country: "England", league: "Premier League" },
+    { country: "Spain", league: "LaLiga Santander" },
+    { country: "Spain", league: "La Liga" },
+    { country: "Italy", league: "Serie A" },
+    { country: "Germany", league: "Bundesliga" },
+    { country: "France", league: "Ligue 1" },
+    { country: "Netherlands", league: "Eredivisie" },
+    { country: "Portugal", league: "Primeira Liga" },
+    { country: "Scotland", league: "Championship" },
+    { country: "Scotland", league: "Scottish Premiership" },
+    { country: "Austria", league: "Bundesliga" },
+    { country: "Europe", league: "UEFA Champions League" },
+    { country: "Europe", league: "UEFA Europa League" }
+  ];
 
-    const authView = document.getElementById('authView');
-    const appView = document.getElementById('appView');
-    const tabSignup = document.getElementById('tabSignup');
-    const tabLogin = document.getElementById('tabLogin');
-    const authSubmit = document.getElementById('authSubmit');
-    const authMsg = document.getElementById('authMsg');
-    const authEmail = document.getElementById('authEmail');
-    const authPassword = document.getElementById('authPassword');
-    const authConfirmPassword = document.getElementById('authConfirmPassword');
-    const confirmField = document.getElementById('confirmField');
+  const authView = document.getElementById('authView');
+  const appView = document.getElementById('appView');
+  const tabSignup = document.getElementById('tabSignup');
+  const tabLogin = document.getElementById('tabLogin');
+  const authSubmit = document.getElementById('authSubmit');
+  const authMsg = document.getElementById('authMsg');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authConfirmPassword = document.getElementById('authConfirmPassword');
+  const confirmField = document.getElementById('confirmField');
 
-    const dateStrip = document.getElementById('dateStrip');
-    const leagueContainer = document.getElementById('leagueContainer');
-    const searchInput = document.getElementById('searchInput');
-    const boardMeta = document.getElementById('boardMeta');
+  const dateStrip = document.getElementById('dateStrip');
+  const leagueContainer = document.getElementById('leagueContainer');
+  const searchInput = document.getElementById('searchInput');
+  const boardMeta = document.getElementById('boardMeta');
 
-    const menuBtn = document.getElementById('menuBtn');
-    const profileBackdrop = document.getElementById('profileBackdrop');
-    const profileMenu = document.getElementById('profileMenu');
-    const subscribeBtn = document.getElementById('subscribeBtn');
-    const trialBtn = document.getElementById('trialBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
+  const menuBtn = document.getElementById('menuBtn');
+  const profileBackdrop = document.getElementById('profileBackdrop');
+  const profileMenu = document.getElementById('profileMenu');
+  const subscribeBtn = document.getElementById('subscribeBtn');
+  const trialBtn = document.getElementById('trialBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
 
-    const panelBackdrop = document.getElementById('panelBackdrop');
-    const modalBackdrop = document.getElementById('modalBackdrop');
+  const panelBackdrop = document.getElementById('panelBackdrop');
+  const modalBackdrop = document.getElementById('modalBackdrop');
 
-    const leaguePanel = document.getElementById('leaguePanel');
-    const leaguePanelClose = document.getElementById('leaguePanelClose');
-    const leaguePanelTitle = document.getElementById('leaguePanelTitle');
-    const leaguePanelCountry = document.getElementById('leaguePanelCountry');
-    const leaguePanelSub = document.getElementById('leaguePanelSub');
-    const leaguePanelList = document.getElementById('leaguePanelList');
+  const leaguePanel = document.getElementById('leaguePanel');
+  const leaguePanelClose = document.getElementById('leaguePanelClose');
+  const leaguePanelTitle = document.getElementById('leaguePanelTitle');
+  const leaguePanelCountry = document.getElementById('leaguePanelCountry');
+  const leaguePanelSub = document.getElementById('leaguePanelSub');
+  const leaguePanelList = document.getElementById('leaguePanelList');
 
-    const matchPanel = document.getElementById('matchPanel');
-    const matchPanelClose = document.getElementById('matchPanelClose');
+  const matchPanel = document.getElementById('matchPanel');
+  const matchPanelClose = document.getElementById('matchPanelClose');
 
-    const previewBox = document.getElementById('previewBox');
-    const predictionMain = document.getElementById('predictionMain');
-    const predictionMeta = document.getElementById('predictionMeta');
-    const predictionReason = document.getElementById('predictionReason');
-    const alternativeMain = document.getElementById('alternativeMain');
-    const alternativeMeta = document.getElementById('alternativeMeta');
-    const alternativeReason = document.getElementById('alternativeReason');
+  const previewBox = document.getElementById('previewBox');
+  const predictionMain = document.getElementById('predictionMain');
+  const predictionMeta = document.getElementById('predictionMeta');
+  const predictionReason = document.getElementById('predictionReason');
+  const alternativeMain = document.getElementById('alternativeMain');
+  const alternativeMeta = document.getElementById('alternativeMeta');
+  const alternativeReason = document.getElementById('alternativeReason');
+  const aiLog = document.getElementById('aiLog');
+  const aiInput = document.getElementById('aiInput');
+  const aiSend = document.getElementById('aiSend');
 
-    const aiLog = document.getElementById('aiLog');
-    const aiInput = document.getElementById('aiInput');
-    const aiSend = document.getElementById('aiSend');
+  const subscribeModal = document.getElementById('subscribeModal');
+  const trialModal = document.getElementById('trialModal');
 
-    const subscribeModal = document.getElementById('subscribeModal');
-    const trialModal = document.getElementById('trialModal');
+  function safeNum(v, fallback = 0) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
 
-    function safeNum(v, fallback = 0) {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
+  function escapeHtml(s = '') {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function getTodayDateString(offset = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function formatDayLabel(offset) {
+    if (offset === -1) return 'YEST';
+    if (offset === 0) return 'TODAY';
+    if (offset === 1) return 'TMR';
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  }
+
+  function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function countryToFlagEmoji(country = '') {
+    const map = {
+      andorra: '🇦🇩', argentina: '🇦🇷', armenia: '🇦🇲', australia: '🇦🇺', austria: '🇦🇹',
+      belgium: '🇧🇪', brazil: '🇧🇷', bulgaria: '🇧🇬', canada: '🇨🇦', chile: '🇨🇱',
+      china: '🇨🇳', colombia: '🇨🇴', croatia: '🇭🇷', cyprus: '🇨🇾', "czech republic": '🇨🇿',
+      denmark: '🇩🇰', egypt: '🇪🇬', england: '🏴', estonia: '🇪🇪', europe: '🇪🇺',
+      finland: '🇫🇮', france: '🇫🇷', germany: '🇩🇪', greece: '🇬🇷', hungary: '🇭🇺',
+      iceland: '🇮🇸', india: '🇮🇳', indonesia: '🇮🇩', ireland: '🇮🇪', israel: '🇮🇱',
+      italy: '🇮🇹', jamaica: '🇯🇲', japan: '🇯🇵', kazakhstan: '🇰🇿', latvia: '🇱🇻',
+      lithuania: '🇱🇹', mexico: '🇲🇽', morocco: '🇲🇦', netherlands: '🇳🇱', "new zealand": '🇳🇿',
+      nigeria: '🇳🇬', norway: '🇳🇴', paraguay: '🇵🇾', peru: '🇵🇪', poland: '🇵🇱',
+      portugal: '🇵🇹', qatar: '🇶🇦', romania: '🇷🇴', "saudi arabia": '🇸🇦', scotland: '🏴',
+      serbia: '🇷🇸', slovakia: '🇸🇰', slovenia: '🇸🇮', "south africa": '🇿🇦',
+      "south korea": '🇰🇷', spain: '🇪🇸', sweden: '🇸🇪', switzerland: '🇨🇭',
+      turkey: '🇹🇷', ukraine: '🇺🇦', "united states": '🇺🇸', usa: '🇺🇸',
+      uruguay: '🇺🇾', wales: '🏴'
+    };
+    return map[String(country || '').trim().toLowerCase()] || '🌍';
+  }
+
+  function inferCountryFromLeague(league = '') {
+    const l = String(league || '').trim().toLowerCase();
+    if (l === 'serie a') return 'Italy';
+    if (l === 'ligue 1') return 'France';
+    if (l === 'eredivisie') return 'Netherlands';
+    if (l === 'primeira liga') return 'Portugal';
+    if (l === 'super lig') return 'Turkey';
+    if (l === 'la liga' || l === 'laliga santander') return 'Spain';
+    if (l === 'uefa champions league' || l === 'champions league') return 'Europe';
+    if (l === 'uefa europa league') return 'Europe';
+    return '';
+  }
+
+  function displayCountryForGroup(group) {
+    const raw = String(group.country || '').trim();
+    if (raw && raw.toLowerCase() !== 'other') return raw;
+    const inferred = inferCountryFromLeague(group.league);
+    if (inferred) return inferred;
+    return 'Unclassified';
+  }
+
+  function leaguePriority(country = '', league = '') {
+    const c = String(country || '').toLowerCase().trim();
+    const l = String(league || '').toLowerCase().trim();
+    const idx = PRIORITY_LEAGUES.findIndex(item =>
+      item.country.toLowerCase() === c && item.league.toLowerCase() === l
+    );
+    return idx === -1 ? 999 : idx;
+  }
+
+  async function apiFetch(path, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    if (!headers['Content-Type'] && options.method && options.method !== 'GET') {
+      headers['Content-Type'] = 'application/json';
     }
 
-    function escapeHtml(s = '') {
-      return String(s)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
+    const res = await fetch(`${API}${path}`, { ...options, headers });
+    const raw = await res.text();
+
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      data = { error: raw || `HTTP ${res.status}` };
     }
 
-    function getTodayDateString(offset = 0) {
-      const d = new Date();
-      d.setDate(d.getDate() + offset);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
+    if (!res.ok) throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+    return data;
+  }
 
-    function formatDayLabel(offset) {
-      if (offset === -1) return 'YEST';
-      if (offset === 0) return 'TODAY';
-      if (offset === 1) return 'TMR';
-      const d = new Date();
-      d.setDate(d.getDate() + offset);
-      return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-    }
-
-    function formatDateTime(value) {
-      if (!value) return '-';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return String(value);
-      return d.toLocaleString([], {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    }
-
-    function countryToFlagEmoji(country = '') {
-      const map = {
-        andorra: '🇦🇩',
-        argentina: '🇦🇷',
-        armenia: '🇦🇲',
-        australia: '🇦🇺',
-        austria: '🇦🇹',
-        belgium: '🇧🇪',
-        brazil: '🇧🇷',
-        bulgaria: '🇧🇬',
-        canada: '🇨🇦',
-        chile: '🇨🇱',
-        china: '🇨🇳',
-        colombia: '🇨🇴',
-        croatia: '🇭🇷',
-        cyprus: '🇨🇾',
-        "czech republic": '🇨🇿',
-        denmark: '🇩🇰',
-        egypt: '🇪🇬',
-        england: '🏴',
-        estonia: '🇪🇪',
-        europe: '🇪🇺',
-        finland: '🇫🇮',
-        france: '🇫🇷',
-        germany: '🇩🇪',
-        greece: '🇬🇷',
-        hungary: '🇭🇺',
-        iceland: '🇮🇸',
-        india: '🇮🇳',
-        indonesia: '🇮🇩',
-        ireland: '🇮🇪',
-        israel: '🇮🇱',
-        italy: '🇮🇹',
-        jamaica: '🇯🇲',
-        japan: '🇯🇵',
-        kazakhstan: '🇰🇿',
-        latvia: '🇱🇻',
-        lithuania: '🇱🇹',
-        mexico: '🇲🇽',
-        morocco: '🇲🇦',
-        netherlands: '🇳🇱',
-        "new zealand": '🇳🇿',
-        nigeria: '🇳🇬',
-        norway: '🇳🇴',
-        paraguay: '🇵🇾',
-        peru: '🇵🇪',
-        poland: '🇵🇱',
-        portugal: '🇵🇹',
-        qatar: '🇶🇦',
-        romania: '🇷🇴',
-        "saudi arabia": '🇸🇦',
-        scotland: '🏴',
-        serbia: '🇷🇸',
-        slovakia: '🇸🇰',
-        slovenia: '🇸🇮',
-        "south africa": '🇿🇦',
-        "south korea": '🇰🇷',
-        spain: '🇪🇸',
-        sweden: '🇸🇪',
-        switzerland: '🇨🇭',
-        turkey: '🇹🇷',
-        ukraine: '🇺🇦',
-        "united states": '🇺🇸',
-        usa: '🇺🇸',
-        uruguay: '🇺🇾',
-        wales: '🏴'
-      };
-      return map[String(country || '').trim().toLowerCase()] || '🌍';
-    }
-
-    function inferCountryFromLeague(league = '') {
-      const l = String(league || '').trim().toLowerCase();
-      if (l === 'serie a') return 'Italy';
-      if (l === 'ligue 1') return 'France';
-      if (l === 'eredivisie') return 'Netherlands';
-      if (l === 'primeira liga') return 'Portugal';
-      if (l === 'super lig') return 'Turkey';
-      if (l === 'la liga' || l === 'laliga santander') return 'Spain';
-      if (l === 'uefa champions league' || l === 'champions league') return 'Europe';
-      if (l === 'uefa europa league') return 'Europe';
-      return '';
-    }
-
-    function displayCountryForGroup(group) {
-      const raw = String(group.country || '').trim();
-      if (raw && raw.toLowerCase() !== 'other') return raw;
-      const inferred = inferCountryFromLeague(group.league);
-      if (inferred) return inferred;
-      return 'Unclassified';
-    }
-
-    function leaguePriority(country = '', league = '') {
-      const c = String(country || '').toLowerCase().trim();
-      const l = String(league || '').toLowerCase().trim();
-      const idx = PRIORITY_LEAGUES.findIndex(item =>
-        item.country.toLowerCase() === c && item.league.toLowerCase() === l
-      );
-      return idx === -1 ? 999 : idx;
-    }
-
-    function buildDateTabs() {
-      const offsets = [-1, 0, 1, 2, 3, 4];
-      dateStrip.innerHTML = offsets.map(offset => {
-        const date = getTodayDateString(offset);
-        const active = date === selectedDate ? 'active' : '';
-        return `
-          <div class="date-tab ${active}" data-date="${date}">
-            <small>${formatDayLabel(offset)}</small>
-            <strong>${date.slice(-2)}</strong>
-          </div>
-        `;
-      }).join('');
-
-      dateStrip.querySelectorAll('.date-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          selectedDate = tab.dataset.date;
-          buildDateTabs();
-          renderHomeLeagues();
-        });
-      });
-    }
-
-    function groupByLeague(fixtures) {
-      const groups = new Map();
-
-      fixtures.forEach(f => {
-        const tournamentId = String(f.tournament_id || f.tournament_name || 'unknown');
-        const leagueName = f.tournament_name || 'Unknown Competition';
-        const countryName = f.category_name || '';
-        const key = `${tournamentId}__${countryName}__${leagueName}`;
-
-        if (!groups.has(key)) {
-          groups.set(key, {
-            key,
-            league: leagueName,
-            country: countryName,
-            tournamentId,
-            fixtures: []
-          });
-        }
-        groups.get(key).fixtures.push(f);
-      });
-
-      return Array.from(groups.values()).sort((a, b) => {
-        const ac = displayCountryForGroup(a);
-        const bc = displayCountryForGroup(b);
-        const pa = leaguePriority(ac, a.league);
-        const pb = leaguePriority(bc, b.league);
-        if (pa !== pb) return pa - pb;
-        if (ac !== bc) return ac.localeCompare(bc);
-        return a.league.localeCompare(b.league);
-      });
-    }
-
-    async function apiFetch(path, options = {}) {
-      const headers = { ...(options.headers || {}) };
-      if (authToken) headers.Authorization = `Bearer ${authToken}`;
-      if (!headers['Content-Type'] && options.method && options.method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-      }
-
-      const res = await fetch(`${API}${path}`, { ...options, headers });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.detail || 'Request failed');
-      return data;
-    }
-
-    async function loadFixtures() {
-      leagueContainer.innerHTML = `
-        <div class="loading">
-          <div class="spinner"></div>
-          Loading fixtures...
+  function buildDateTabs() {
+    const offsets = [-1, 0, 1, 2, 3, 4];
+    dateStrip.innerHTML = offsets.map(offset => {
+      const date = getTodayDateString(offset);
+      const active = date === selectedDate ? 'active' : '';
+      return `
+        <div class="date-tab ${active}" data-date="${date}">
+          <small>${formatDayLabel(offset)}</small>
+          <strong>${date.slice(-2)}</strong>
         </div>
       `;
+    }).join('');
 
-      try {
-        const data = await apiFetch('/fixtures?limit=2000');
-        allFixtures = Array.isArray(data.fixtures) ? data.fixtures : [];
-        groupedFixtures = groupByLeague(allFixtures);
+    dateStrip.querySelectorAll('.date-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        selectedDate = tab.dataset.date;
+        buildDateTabs();
         renderHomeLeagues();
-      } catch (err) {
-        leagueContainer.innerHTML = `<div class="error-state">Failed to load fixtures</div>`;
-      }
-    }
+      });
+    });
+  }
 
-    function renderHomeLeagues() {
-      const q = searchInput.value.trim().toLowerCase();
+  function groupByLeague(fixtures) {
+    const groups = new Map();
 
-      let filtered = groupedFixtures;
+    fixtures.forEach(f => {
+      const tournamentId = String(f.tournament_id || f.tournament_name || 'unknown');
+      const leagueName = f.tournament_name || 'Unknown Competition';
+      const countryName = f.category_name || '';
+      const key = `${tournamentId}__${countryName}__${leagueName}`;
 
-      if (selectedDate) {
-        filtered = filtered
-          .map(group => ({
-            ...group,
-            fixtures: group.fixtures.filter(f => String(f.match_date || '').startsWith(selectedDate))
-          }))
-          .filter(group => group.fixtures.length > 0);
-      }
-
-      if (q) {
-        filtered = filtered.filter(group => {
-          const displayCountry = displayCountryForGroup(group);
-          const s = `${group.league} ${displayCountry}`.toLowerCase();
-          if (s.includes(q)) return true;
-          return group.fixtures.some(f =>
-            `${f.home_team_name || ''} ${f.away_team_name || ''}`.toLowerCase().includes(q)
-          );
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          league: leagueName,
+          country: countryName,
+          tournamentId,
+          fixtures: []
         });
       }
+      groups.get(key).fixtures.push(f);
+    });
 
-      boardMeta.textContent = `${filtered.length} leagues`;
+    return Array.from(groups.values()).sort((a, b) => {
+      const ac = displayCountryForGroup(a);
+      const bc = displayCountryForGroup(b);
+      const pa = leaguePriority(ac, a.league);
+      const pb = leaguePriority(bc, b.league);
+      if (pa !== pb) return pa - pb;
+      if (ac !== bc) return ac.localeCompare(bc);
+      return a.league.localeCompare(b.league);
+    });
+  }
 
-      if (!filtered.length) {
-        leagueContainer.innerHTML = `<div class="empty-state">No leagues found.</div>`;
-        return;
-      }
+  async function loadFixtures() {
+    leagueContainer.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        Loading fixtures...
+      </div>
+    `;
 
-      leagueContainer.innerHTML = filtered.map(group => {
+    try {
+      const data = await apiFetch('/fixtures?limit=2000');
+      allFixtures = Array.isArray(data.fixtures) ? data.fixtures : [];
+      groupedFixtures = groupByLeague(allFixtures);
+      renderHomeLeagues();
+    } catch (err) {
+      leagueContainer.innerHTML = `<div class="error-state">${escapeHtml(err.message || 'Failed to load fixtures')}</div>`;
+    }
+  }
+
+  function renderHomeLeagues() {
+    const q = searchInput.value.trim().toLowerCase();
+
+    let filtered = groupedFixtures;
+
+    if (selectedDate) {
+      filtered = filtered
+        .map(group => ({
+          ...group,
+          fixtures: group.fixtures.filter(f => String(f.match_date || '').startsWith(selectedDate))
+        }))
+        .filter(group => group.fixtures.length > 0);
+    }
+
+    if (q) {
+      filtered = filtered.filter(group => {
         const displayCountry = displayCountryForGroup(group);
-        const flag = countryToFlagEmoji(displayCountry);
-
-        return `
-          <div class="league-row" data-league-key="${escapeHtml(group.key)}">
-            <div class="league-row-left">
-              <div class="league-emoji">${flag}</div>
-              <div class="league-info">
-                <div class="league-name">${escapeHtml(group.league)}</div>
-                <div class="league-country">${escapeHtml(displayCountry)}</div>
-              </div>
-            </div>
-            <div class="league-row-right">
-              <div class="fixture-count">${group.fixtures.length}</div>
-              <div class="chevron">▶</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      document.querySelectorAll('.league-row').forEach(row => {
-        row.addEventListener('click', () => {
-          const group = filtered.find(g => g.key === row.dataset.leagueKey);
-          if (group) openLeaguePanel(group);
-        });
+        const s = `${group.league} ${displayCountry}`.toLowerCase();
+        if (s.includes(q)) return true;
+        return group.fixtures.some(f =>
+          `${f.home_team_name || ''} ${f.away_team_name || ''}`.toLowerCase().includes(q)
+        );
       });
     }
 
-    function openOverlay(panel) {
-      panel.classList.add('active');
-      panelBackdrop.classList.add('active');
+    boardMeta.textContent = `${filtered.length} leagues`;
+
+    if (!filtered.length) {
+      leagueContainer.innerHTML = `<div class="empty-state">No leagues found.</div>`;
+      return;
     }
 
-    function closeOverlay(panel) {
-      panel.classList.remove('active');
-      if (!leaguePanel.classList.contains('active') && !matchPanel.classList.contains('active')) {
-        panelBackdrop.classList.remove('active');
-      }
-    }
-
-    function openModal(modal) {
-      modal.classList.add('active');
-      modalBackdrop.classList.add('active');
-      profileMenu.classList.remove('active');
-      profileBackdrop.classList.remove('active');
-    }
-
-    function closeModal(modal) {
-      modal.classList.remove('active');
-      if (!subscribeModal.classList.contains('active') && !trialModal.classList.contains('active')) {
-        modalBackdrop.classList.remove('active');
-      }
-    }
-
-    function openLeaguePanel(group) {
-      selectedLeague = group;
+    leagueContainer.innerHTML = filtered.map(group => {
       const displayCountry = displayCountryForGroup(group);
+      const flag = countryToFlagEmoji(displayCountry);
 
-      leaguePanelCountry.textContent = displayCountry;
-      leaguePanelTitle.textContent = group.league;
-      leaguePanelSub.textContent = `${group.fixtures.length} fixtures`;
-
-      leaguePanelList.innerHTML = group.fixtures.map(f => {
-        const time = f.match_date
-          ? new Date(f.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-          : '--:--';
-
-        return `
-          <div class="match-row" data-fixture-id="${f.id}">
-            <div class="match-time">${time}</div>
-            <div class="match-main">
-              <div class="match-team">
-                <div class="dot"></div>
-                <div class="match-team-name">${escapeHtml(f.home_team_name || '')}</div>
-              </div>
-              <div class="match-team">
-                <div class="dot away"></div>
-                <div class="match-team-name">${escapeHtml(f.away_team_name || '')}</div>
-              </div>
+      return `
+        <div class="league-row" data-league-key="${escapeHtml(group.key)}">
+          <div class="league-row-left">
+            <div class="league-emoji">${flag}</div>
+            <div class="league-info">
+              <div class="league-name">${escapeHtml(group.league)}</div>
+              <div class="league-country">${escapeHtml(displayCountry)}</div>
             </div>
-            <div class="match-open">→</div>
           </div>
-        `;
-      }).join('');
+          <div class="league-row-right">
+            <div class="fixture-count">${group.fixtures.length}</div>
+            <div class="chevron">▶</div>
+          </div>
+        </div>
+      `;
+    }).join('');
 
-      leaguePanelList.querySelectorAll('.match-row').forEach(row => {
-        row.addEventListener('click', () => {
-          const fixture = allFixtures.find(f => String(f.id) === String(row.dataset.fixtureId));
-          if (fixture) openMatchPanel(fixture);
-        });
+    document.querySelectorAll('.league-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const group = filtered.find(g => g.key === row.dataset.leagueKey);
+        if (group) openLeaguePanel(group);
       });
+    });
+  }
 
-      openOverlay(leaguePanel);
+  function openOverlay(panel) {
+    panel.classList.add('active');
+    panelBackdrop.classList.add('active');
+  }
+
+  function closeOverlay(panel) {
+    panel.classList.remove('active');
+    if (!leaguePanel.classList.contains('active') && !matchPanel.classList.contains('active')) {
+      panelBackdrop.classList.remove('active');
     }
+  }
 
-    function activateMatchTab(tabName) {
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.tab === tabName);
-      });
+  function openModal(modal) {
+    modal.classList.add('active');
+    modalBackdrop.classList.add('active');
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+  }
 
-      ['preview','predictions','form','table','ai'].forEach(name => {
-        document.getElementById(`tab-${name}`).classList.toggle('hidden', name !== tabName);
-      });
+  function closeModal(modal) {
+    modal.classList.remove('active');
+    if (!subscribeModal.classList.contains('active') && !trialModal.classList.contains('active')) {
+      modalBackdrop.classList.remove('active');
     }
+  }
 
-    function renderPredictionHero(prediction) {
-      const rec = prediction?.predictions?.recommendation || {};
-      const mr = prediction?.predictions?.match_result || {};
-      const homePct = safeNum(mr.home, 0) * 100;
-      const drawPct = safeNum(mr.draw, 0) * 100;
-      const awayPct = safeNum(mr.away, 0) * 100;
+  function openLeaguePanel(group) {
+    selectedLeague = group;
+    const displayCountry = displayCountryForGroup(group);
 
-      document.getElementById('sheetLeague').textContent =
-        `${selectedFixture?.category_name || displayCountryForGroup(selectedLeague || {})} • ${selectedFixture?.tournament_name || 'League'}`;
+    leaguePanelCountry.textContent = displayCountry;
+    leaguePanelTitle.textContent = group.league;
+    leaguePanelSub.textContent = `${group.fixtures.length} fixtures`;
 
-      document.getElementById('sheetHomeName').textContent = selectedFixture?.home_team_name || 'HOME';
-      document.getElementById('sheetAwayName').textContent = selectedFixture?.away_team_name || 'AWAY';
-      document.getElementById('sheetHomePct').textContent = `${homePct.toFixed(0)}%`;
-      document.getElementById('sheetDrawPct').textContent = `${drawPct.toFixed(0)}%`;
-      document.getElementById('sheetAwayPct').textContent = `${awayPct.toFixed(0)}%`;
+    leaguePanelList.innerHTML = group.fixtures.map(f => {
+      const time = f.match_date
+        ? new Date(f.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+        : '--:--';
 
-      document.getElementById('probHomeBar').style.width = `${homePct}%`;
-      document.getElementById('probDrawBar').style.width = `${drawPct}%`;
-      document.getElementById('probAwayBar').style.width = `${awayPct}%`;
-
-      document.getElementById('heroPickTitle').textContent = rec.pick || 'No Clear Edge';
-      document.getElementById('heroPickPct').textContent =
-        rec.probability != null ? `${(safeNum(rec.probability, 0) * 100).toFixed(1)}%` : '0%';
-    }
-
-    function renderPredictionTab(prediction, explanation) {
-      const rec = prediction?.predictions?.recommendation || {};
-      predictionMain.textContent = rec.pick || 'No Clear Edge';
-      predictionMeta.textContent =
-        `${rec.market || 'No Edge'} • ${rec.probability != null ? `${(safeNum(rec.probability, 0) * 100).toFixed(1)}%` : '0%'}${rec.confidence ? ` • ${rec.confidence}` : ''}`;
-      predictionReason.textContent =
-        explanation?.best_pick_reasoning || rec.rationale || 'No detailed reasoning available.';
-
-      if (rec.alternative) {
-        alternativeMain.textContent = rec.alternative;
-        alternativeMeta.textContent =
-          `${rec.alternative_market || 'Alternative'}${rec.alternative_probability != null ? ` • ${(safeNum(rec.alternative_probability, 0) * 100).toFixed(1)}%` : ''}`;
-        alternativeReason.textContent =
-          explanation?.alternative_reasoning || 'Alternative angle from the model board.';
-      } else {
-        alternativeMain.textContent = 'No Alternative';
-        alternativeMeta.textContent = '';
-        alternativeReason.textContent = 'No alternative angle available.';
-      }
-    }
-
-    function renderPreviewTab(prediction) {
-      const rec = prediction?.predictions?.recommendation || {};
-      const home = selectedFixture?.home_team_name || 'Home';
-      const away = selectedFixture?.away_team_name || 'Away';
-      const table = prediction?.features?.tableContext || {};
-      const model = prediction?.model || {};
-
-      previewBox.textContent =
-        `${home} vs ${away}. ${rec.pick || 'No Clear Edge'} is the official match angle. ` +
-        `Expected total goals: ${safeNum(model.expectedTotalGoals, 0).toFixed(2)}. ` +
-        `Table gap: ${safeNum(table.points_gap, 0)} points. Momentum gap: ${safeNum(table.momentum_gap, 0)}.`;
-    }
-
-    function h2hWinSplit(h2hList) {
-      const home = selectedFixture?.home_team_name || '';
-      const away = selectedFixture?.away_team_name || '';
-
-      let homeWins = 0;
-      let awayWins = 0;
-      let draws = 0;
-
-      (h2hList || []).slice(0, 6).forEach(match => {
-        const score = String(match.score || '');
-        const parts = score.split('-').map(n => parseInt(n, 10));
-        if (parts.length < 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return;
-
-        const listedHome = String(match.home || '').toLowerCase();
-        const isHomePerspective =
-          listedHome.includes(home.toLowerCase().split(' ')[0]) ||
-          !listedHome.includes(away.toLowerCase().split(' ')[0]);
-
-        const hg = isHomePerspective ? parts[0] : parts[1];
-        const ag = isHomePerspective ? parts[1] : parts[0];
-
-        if (hg > ag) homeWins++;
-        else if (ag > hg) awayWins++;
-        else draws++;
-      });
-
-      const total = homeWins + awayWins + draws || 1;
-      return { homeWins, awayWins, draws, total };
-    }
-
-    function renderFormTab(data) {
-      const h2h = Array.isArray(data?.meta?.h2h) ? data.meta.h2h : [];
-      const homeForm = Array.isArray(data?.meta?.homeForm) ? data.meta.homeForm : [];
-      const awayForm = Array.isArray(data?.meta?.awayForm) ? data.meta.awayForm : [];
-      const split = h2hWinSplit(h2h);
-
-      document.getElementById('h2hHomeWins').textContent = split.homeWins;
-      document.getElementById('h2hDraws').textContent = split.draws;
-      document.getElementById('h2hAwayWins').textContent = split.awayWins;
-      document.getElementById('h2hHomeLbl').textContent = selectedFixture?.home_team_name || 'Home';
-      document.getElementById('h2hAwayLbl').textContent = selectedFixture?.away_team_name || 'Away';
-
-      document.getElementById('h2hHomeBar').style.width = `${(split.homeWins / split.total) * 100}%`;
-      document.getElementById('h2hDrawBar').style.width = `${(split.draws / split.total) * 100}%`;
-      document.getElementById('h2hAwayBar').style.width = `${(split.awayWins / split.total) * 100}%`;
-
-      const renderMiniList = (items) => {
-        if (!items.length) return `<div class="empty-state">No data available</div>`;
-        return items.slice(0, 6).map(m => `
-          <div class="mini-item">
-            <div>
-              <div class="mini-a">${escapeHtml(m.home || '')}</div>
-              <div class="mini-b">vs ${escapeHtml(m.away || '')}<br>${escapeHtml(m.date || '')}</div>
+      return `
+        <div class="match-row" data-fixture-id="${f.id}">
+          <div class="match-time">${time}</div>
+          <div class="match-main">
+            <div class="match-team">
+              <div class="dot"></div>
+              <div class="match-team-name">${escapeHtml(f.home_team_name || '')}</div>
             </div>
-            <div class="score-pill">${escapeHtml(m.score || '-')}</div>
+            <div class="match-team">
+              <div class="dot away"></div>
+              <div class="match-team-name">${escapeHtml(f.away_team_name || '')}</div>
+            </div>
           </div>
-        `).join('');
-      };
+          <div class="match-open">→</div>
+        </div>
+      `;
+    }).join('');
 
-      document.getElementById('h2hList').innerHTML = renderMiniList(h2h);
-      document.getElementById('homeRecentTitle').textContent = `${selectedFixture?.home_team_name || 'Home'} — Recent Results`;
-      document.getElementById('awayRecentTitle').textContent = `${selectedFixture?.away_team_name || 'Away'} — Recent Results`;
-      document.getElementById('homeFormList').innerHTML = renderMiniList(homeForm);
-      document.getElementById('awayFormList').innerHTML = renderMiniList(awayForm);
-    }
+    leaguePanelList.querySelectorAll('.match-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const fixture = allFixtures.find(f => String(f.id) === String(row.dataset.fixtureId));
+        if (fixture) openMatchPanel(fixture);
+      });
+    });
 
-    function renderTableTab(data) {
-      const standings = Array.isArray(data?.meta?.standings) ? data.meta.standings : [];
-      const home = selectedFixture?.home_team_name;
-      const away = selectedFixture?.away_team_name;
+    openOverlay(leaguePanel);
+  }
 
-      const rows = standings.map(row => {
-        const highlight = row.team === home || row.team === away ? 'highlight' : '';
-        return `
-          <tr class="${highlight}">
-            <td>${row.position ?? ''}</td>
-            <td>${escapeHtml(row.team ?? '')}</td>
-            <td>${row.played ?? row.games ?? row.matches ?? 0}</td>
-            <td>${row.wins ?? 0}</td>
-            <td>${row.draws ?? 0}</td>
-            <td>${row.losses ?? 0}</td>
-            <td><strong>${row.points ?? 0}</strong></td>
-            <td>${escapeHtml(row.form || '')}</td>
-          </tr>
-        `;
-      }).join('');
+  function activateMatchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
 
-      document.getElementById('tableBody').innerHTML =
-        rows || `<tr><td colspan="8">No table data</td></tr>`;
-    }
+    ['preview','predictions','form','table','ai'].forEach(name => {
+      document.getElementById(`tab-${name}`).classList.toggle('hidden', name !== tabName);
+    });
+  }
 
-    async function loadPrediction(fixtureId) {
-      const prediction = await apiFetch(`/predict/${fixtureId}/explain`);
-      currentPrediction = prediction;
-      renderPredictionHero(prediction);
-      renderPredictionTab(prediction, prediction.explanation || {});
-      renderPreviewTab(prediction);
-      renderFormTab(prediction);
-      renderTableTab(prediction);
-    }
+  function renderPredictionHero(prediction) {
+    const rec = prediction?.predictions?.recommendation || {};
+    const mr = prediction?.predictions?.match_result || {};
+    const homePct = safeNum(mr.home, 0) * 100;
+    const drawPct = safeNum(mr.draw, 0) * 100;
+    const awayPct = safeNum(mr.away, 0) * 100;
 
-    async function openMatchPanel(fixture) {
-      selectedFixture = fixture;
-      activateMatchTab('preview');
+    document.getElementById('sheetLeague').textContent =
+      `${selectedFixture?.category_name || displayCountryForGroup(selectedLeague || {})} • ${selectedFixture?.tournament_name || 'League'}`;
 
-      previewBox.textContent = 'Loading preview...';
-      predictionMain.textContent = 'Loading...';
-      predictionMeta.textContent = '';
-      predictionReason.textContent = 'Loading reasoning...';
-      alternativeMain.textContent = 'Loading...';
+    document.getElementById('sheetHomeName').textContent = selectedFixture?.home_team_name || 'HOME';
+    document.getElementById('sheetAwayName').textContent = selectedFixture?.away_team_name || 'AWAY';
+    document.getElementById('sheetHomePct').textContent = `${homePct.toFixed(0)}%`;
+    document.getElementById('sheetDrawPct').textContent = `${drawPct.toFixed(0)}%`;
+    document.getElementById('sheetAwayPct').textContent = `${awayPct.toFixed(0)}%`;
+
+    document.getElementById('probHomeBar').style.width = `${homePct}%`;
+    document.getElementById('probDrawBar').style.width = `${drawPct}%`;
+    document.getElementById('probAwayBar').style.width = `${awayPct}%`;
+
+    document.getElementById('heroPickTitle').textContent = rec.pick || 'No Clear Edge';
+    document.getElementById('heroPickPct').textContent =
+      rec.probability != null ? `${(safeNum(rec.probability, 0) * 100).toFixed(1)}%` : '0%';
+  }
+
+  function renderPredictionTab(prediction, explanation) {
+    const rec = prediction?.predictions?.recommendation || {};
+    predictionMain.textContent = rec.pick || 'No Clear Edge';
+    predictionMeta.textContent =
+      `${rec.market || 'No Edge'} • ${rec.probability != null ? `${(safeNum(rec.probability, 0) * 100).toFixed(1)}%` : '0%'}${rec.confidence ? ` • ${rec.confidence}` : ''}`;
+    predictionReason.textContent =
+      explanation?.best_pick_reasoning || rec.rationale || 'No detailed reasoning available.';
+
+    if (rec.alternative) {
+      alternativeMain.textContent = rec.alternative;
+      alternativeMeta.textContent =
+        `${rec.alternative_market || 'Alternative'}${rec.alternative_probability != null ? ` • ${(safeNum(rec.alternative_probability, 0) * 100).toFixed(1)}%` : ''}`;
+      alternativeReason.textContent =
+        explanation?.alternative_reasoning || 'Alternative angle from the model board.';
+    } else {
+      alternativeMain.textContent = 'No Alternative';
       alternativeMeta.textContent = '';
-      alternativeReason.textContent = 'Loading...';
-      document.getElementById('h2hList').innerHTML = '';
-      document.getElementById('homeFormList').innerHTML = '';
-      document.getElementById('awayFormList').innerHTML = '';
-      document.getElementById('tableBody').innerHTML = '';
-      aiLog.innerHTML = `<div class="msg bot">Ask about this specific match only.</div>`;
-
-      openOverlay(matchPanel);
-
-      try {
-        await loadPrediction(fixture.id);
-      } catch (err) {
-        previewBox.textContent = 'Failed to load match.';
-        predictionMain.textContent = 'Failed';
-        predictionReason.textContent = err.message || 'Prediction failed.';
-      }
+      alternativeReason.textContent = 'No alternative angle available.';
     }
+  }
 
-    function setAuthMode(mode) {
-      currentAuthMode = mode;
-      tabSignup.classList.toggle('active', mode === 'signup');
-      tabLogin.classList.toggle('active', mode === 'login');
-      confirmField.classList.toggle('hidden', mode !== 'signup');
-      authSubmit.textContent = mode === 'signup' ? 'Create Free Account' : 'Login';
-      authMsg.textContent = '';
-    }
+  function renderPreviewTab(prediction) {
+    const rec = prediction?.predictions?.recommendation || {};
+    const home = selectedFixture?.home_team_name || 'Home';
+    const away = selectedFixture?.away_team_name || 'Away';
+    const table = prediction?.features?.tableContext || {};
+    const model = prediction?.model || {};
 
-    async function submitAuth() {
-      authMsg.textContent = '';
+    previewBox.textContent =
+      `${home} vs ${away}. ${rec.pick || 'No Clear Edge'} is the official match angle. ` +
+      `Expected total goals: ${safeNum(model.expectedTotalGoals, 0).toFixed(2)}. ` +
+      `Table gap: ${safeNum(table.points_gap, 0)} points. Momentum gap: ${safeNum(table.momentum_gap, 0)}.`;
+  }
 
-      const email = authEmail.value.trim();
-      const password = authPassword.value.trim();
-      const confirmPassword = authConfirmPassword.value.trim();
+  function h2hWinSplit(h2hList) {
+    const home = selectedFixture?.home_team_name || '';
+    const away = selectedFixture?.away_team_name || '';
 
-      if (!email || !password || (currentAuthMode === 'signup' && !confirmPassword)) {
-        authMsg.textContent = 'Complete all required fields.';
-        return;
-      }
+    let homeWins = 0;
+    let awayWins = 0;
+    let draws = 0;
 
-      if (currentAuthMode === 'signup' && password !== confirmPassword) {
-        authMsg.textContent = 'Passwords do not match.';
-        return;
-      }
+    (h2hList || []).slice(0, 6).forEach(match => {
+      const score = String(match.score || '');
+      const parts = score.split('-').map(n => parseInt(n, 10));
+      if (parts.length < 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return;
 
-      if (currentAuthMode === 'signup' && password.length < 6) {
-        authMsg.textContent = 'Password must be at least 6 characters.';
-        return;
-      }
+      const listedHome = String(match.home || '').toLowerCase();
+      const isHomePerspective =
+        listedHome.includes(home.toLowerCase().split(' ')[0]) ||
+        !listedHome.includes(away.toLowerCase().split(' ')[0]);
 
-      authSubmit.disabled = true;
-      authSubmit.textContent = currentAuthMode === 'signup' ? 'Creating...' : 'Logging in...';
+      const hg = isHomePerspective ? parts[0] : parts[1];
+      const ag = isHomePerspective ? parts[1] : parts[0];
 
-      try {
-        const path = currentAuthMode === 'signup' ? '/auth/signup' : '/auth/login';
-        const data = await apiFetch(path, {
-          method: 'POST',
-          body: JSON.stringify({ email, password })
-        });
-
-        authToken = data.token;
-        localStorage.setItem('sp_token', authToken);
-        showApp();
-      } catch (err) {
-        authMsg.textContent = err.message || 'Authentication failed';
-      } finally {
-        authSubmit.disabled = false;
-        authSubmit.textContent = currentAuthMode === 'signup' ? 'Create Free Account' : 'Login';
-      }
-    }
-
-    async function checkAuth() {
-      if (!authToken) {
-        showAuth();
-        return false;
-      }
-
-      try {
-        await apiFetch('/auth/me');
-        showApp();
-        return true;
-      } catch {
-        localStorage.removeItem('sp_token');
-        authToken = '';
-        showAuth();
-        return false;
-      }
-    }
-
-    function showApp() {
-      authView.classList.add('hidden');
-      appView.classList.remove('hidden');
-      buildDateTabs();
-      loadFixtures();
-    }
-
-    function showAuth() {
-      appView.classList.add('hidden');
-      authView.classList.remove('hidden');
-    }
-
-    async function openSubscribeModal() {
-      openModal(subscribeModal);
-      const box = document.getElementById('subscribeContent');
-      box.innerHTML = `
-        <div class="loading">
-          <div class="spinner"></div>
-          Preparing payment...
-        </div>
-      `;
-
-      try {
-        const me = await apiFetch('/auth/me');
-        box.innerHTML = `
-          <div class="kv"><div class="k">Account</div><div class="v">${escapeHtml(me.email || '-')}</div></div>
-          <div class="kv"><div class="k">Plan</div><div class="v">₦3,000 / month</div></div>
-          <div class="kv"><div class="k">Status</div><div class="v">${escapeHtml((me.status || '-').toUpperCase())}</div></div>
-          <div class="notice">
-            Payment is handled through Paystack. Tap continue and you will be redirected to the secure checkout page.
-          </div>
-          <div class="modal-actions">
-            <button id="continuePaymentBtn" class="modal-btn primary">Continue to Paystack</button>
-            <button class="modal-btn secondary" data-close-modal="subscribeModal">Close</button>
-          </div>
-        `;
-
-        document.getElementById('continuePaymentBtn').addEventListener('click', async () => {
-          const btn = document.getElementById('continuePaymentBtn');
-          btn.disabled = true;
-          btn.textContent = 'Redirecting...';
-          try {
-            const data = await apiFetch('/auth/payment/initialize', { method: 'POST' });
-            if (data.authorization_url) {
-              window.location.href = data.authorization_url;
-              return;
-            }
-            throw new Error('Payment link unavailable');
-          } catch (err) {
-            btn.disabled = false;
-            btn.textContent = 'Continue to Paystack';
-            alert(err.message || 'Failed to start payment');
-          }
-        });
-
-        box.querySelectorAll('[data-close-modal]').forEach(btn => {
-          btn.addEventListener('click', () => closeModal(subscribeModal));
-        });
-      } catch (err) {
-        box.innerHTML = `<div class="error-state">${escapeHtml(err.message || 'Failed to load subscription info')}</div>`;
-      }
-    }
-
-    async function openTrialModal() {
-      openModal(trialModal);
-      const box = document.getElementById('trialContent');
-      box.innerHTML = `
-        <div class="loading">
-          <div class="spinner"></div>
-          Loading account status...
-        </div>
-      `;
-
-      try {
-        const me = await apiFetch('/auth/me');
-        let msg = 'Your account status is being enforced from the backend.';
-        if (me.status === 'trial') msg = 'Your free trial is active. Once it ends, you will need to subscribe.';
-        if (me.status === 'active') msg = 'Your premium access is active.';
-        if (me.status === 'expired') msg = 'Your access has expired. Subscribe to continue.';
-
-        box.innerHTML = `
-          <div class="kv"><div class="k">Email</div><div class="v">${escapeHtml(me.email || '-')}</div></div>
-          <div class="kv"><div class="k">Status</div><div class="v">${escapeHtml((me.status || '-').toUpperCase())}</div></div>
-          <div class="kv"><div class="k">Trial Ends</div><div class="v">${escapeHtml(formatDateTime(me.trial_ends_at))}</div></div>
-          <div class="kv"><div class="k">Subscription Ends</div><div class="v">${escapeHtml(formatDateTime(me.subscription_expires_at))}</div></div>
-          <div class="notice">${escapeHtml(msg)}</div>
-          <div class="modal-actions">
-            <button id="trialOpenSubscribeBtn" class="modal-btn primary">Open Subscribe</button>
-            <button class="modal-btn secondary" data-close-modal="trialModal">Close</button>
-          </div>
-        `;
-
-        document.getElementById('trialOpenSubscribeBtn').addEventListener('click', () => {
-          closeModal(trialModal);
-          openSubscribeModal();
-        });
-
-        box.querySelectorAll('[data-close-modal]').forEach(btn => {
-          btn.addEventListener('click', () => closeModal(trialModal));
-        });
-      } catch (err) {
-        box.innerHTML = `<div class="error-state">${escapeHtml(err.message || 'Failed to load account status')}</div>`;
-      }
-    }
-
-    async function sendChat() {
-      const message = aiInput.value.trim();
-      if (!message || !selectedFixture) return;
-
-      aiLog.innerHTML += `<div class="msg user">${escapeHtml(message)}</div>`;
-      aiInput.value = '';
-      aiLog.scrollTop = aiLog.scrollHeight;
-
-      try {
-        const data = await apiFetch(`/predict/${selectedFixture.id}/chat`, {
-          method: 'POST',
-          body: JSON.stringify({ message, history: [] })
-        });
-        aiLog.innerHTML += `<div class="msg bot">${escapeHtml(data.reply || 'No reply')}</div>`;
-      } catch {
-        aiLog.innerHTML += `<div class="msg bot">AI analysis unavailable.</div>`;
-      }
-
-      aiLog.scrollTop = aiLog.scrollHeight;
-    }
-
-    tabSignup.addEventListener('click', () => setAuthMode('signup'));
-    tabLogin.addEventListener('click', () => setAuthMode('login'));
-    authSubmit.addEventListener('click', submitAuth);
-    searchInput.addEventListener('input', renderHomeLeagues);
-
-    menuBtn.addEventListener('click', () => {
-      profileMenu.classList.toggle('active');
-      profileBackdrop.classList.toggle('active');
+      if (hg > ag) homeWins++;
+      else if (ag > hg) awayWins++;
+      else draws++;
     });
 
-    profileBackdrop.addEventListener('click', () => {
-      profileMenu.classList.remove('active');
-      profileBackdrop.classList.remove('active');
-    });
+    const total = homeWins + awayWins + draws || 1;
+    return { homeWins, awayWins, draws, total };
+  }
 
-    subscribeBtn.addEventListener('click', openSubscribeModal);
-    trialBtn.addEventListener('click', openTrialModal);
+  function renderFormTab(data) {
+    const h2h = Array.isArray(data?.meta?.h2h) ? data.meta.h2h : [];
+    const homeForm = Array.isArray(data?.meta?.homeForm) ? data.meta.homeForm : [];
+    const awayForm = Array.isArray(data?.meta?.awayForm) ? data.meta.awayForm : [];
+    const split = h2hWinSplit(h2h);
 
-    logoutBtn.addEventListener('click', () => {
+    document.getElementById('h2hHomeWins').textContent = split.homeWins;
+    document.getElementById('h2hDraws').textContent = split.draws;
+    document.getElementById('h2hAwayWins').textContent = split.awayWins;
+    document.getElementById('h2hHomeLbl').textContent = selectedFixture?.home_team_name || 'Home';
+    document.getElementById('h2hAwayLbl').textContent = selectedFixture?.away_team_name || 'Away';
+
+    document.getElementById('h2hHomeBar').style.width = `${(split.homeWins / split.total) * 100}%`;
+    document.getElementById('h2hDrawBar').style.width = `${(split.draws / split.total) * 100}%`;
+    document.getElementById('h2hAwayBar').style.width = `${(split.awayWins / split.total) * 100}%`;
+
+    const renderMiniList = (items) => {
+      if (!items.length) return `<div class="empty-state">No data available</div>`;
+      return items.slice(0, 6).map(m => `
+        <div class="mini-item">
+          <div>
+            <div class="mini-a">${escapeHtml(m.home || '')}</div>
+            <div class="mini-b">vs ${escapeHtml(m.away || '')}<br>${escapeHtml(m.date || '')}</div>
+          </div>
+          <div class="score-pill">${escapeHtml(m.score || '-')}</div>
+        </div>
+      `).join('');
+    };
+
+    document.getElementById('h2hList').innerHTML = renderMiniList(h2h);
+    document.getElementById('homeRecentTitle').textContent = `${selectedFixture?.home_team_name || 'Home'} — Recent Results`;
+    document.getElementById('awayRecentTitle').textContent = `${selectedFixture?.away_team_name || 'Away'} — Recent Results`;
+    document.getElementById('homeFormList').innerHTML = renderMiniList(homeForm);
+    document.getElementById('awayFormList').innerHTML = renderMiniList(awayForm);
+  }
+
+  function renderTableTab(data) {
+    const standings = Array.isArray(data?.meta?.standings) ? data.meta.standings : [];
+    const home = selectedFixture?.home_team_name;
+    const away = selectedFixture?.away_team_name;
+
+    const rows = standings.map(row => {
+      const highlight = row.team === home || row.team === away ? 'highlight' : '';
+      return `
+        <tr class="${highlight}">
+          <td>${row.position ?? ''}</td>
+          <td>${escapeHtml(row.team ?? '')}</td>
+          <td>${row.played ?? row.games ?? row.matches ?? 0}</td>
+          <td>${row.wins ?? 0}</td>
+          <td>${row.draws ?? 0}</td>
+          <td>${row.losses ?? 0}</td>
+          <td><strong>${row.points ?? 0}</strong></td>
+          <td>${escapeHtml(row.form || '')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    document.getElementById('tableBody').innerHTML =
+      rows || `<tr><td colspan="8">No table data</td></tr>`;
+  }
+
+  async function loadPrediction(fixtureId) {
+    const prediction = await apiFetch(`/predict/${fixtureId}/explain`);
+    renderPredictionHero(prediction);
+    renderPredictionTab(prediction, prediction.explanation || {});
+    renderPreviewTab(prediction);
+    renderFormTab(prediction);
+    renderTableTab(prediction);
+  }
+
+  async function openMatchPanel(fixture) {
+    selectedFixture = fixture;
+    activateMatchTab('preview');
+
+    previewBox.textContent = 'Loading preview...';
+    predictionMain.textContent = 'Loading...';
+    predictionMeta.textContent = '';
+    predictionReason.textContent = 'Loading reasoning...';
+    alternativeMain.textContent = 'Loading...';
+    alternativeMeta.textContent = '';
+    alternativeReason.textContent = 'Loading...';
+    document.getElementById('h2hList').innerHTML = '';
+    document.getElementById('homeFormList').innerHTML = '';
+    document.getElementById('awayFormList').innerHTML = '';
+    document.getElementById('tableBody').innerHTML = '';
+    aiLog.innerHTML = `<div class="msg bot">Ask about this specific match only.</div>`;
+
+    openOverlay(matchPanel);
+
+    try {
+      await loadPrediction(fixture.id);
+    } catch (err) {
+      previewBox.textContent = 'Failed to load match.';
+      predictionMain.textContent = 'Failed';
+      predictionReason.textContent = err.message || 'Prediction failed.';
+    }
+  }
+
+  function setAuthMode(mode) {
+    currentAuthMode = mode;
+    tabSignup.classList.toggle('active', mode === 'signup');
+    tabLogin.classList.toggle('active', mode === 'login');
+    confirmField.classList.toggle('hidden', mode !== 'signup');
+    authSubmit.textContent = mode === 'signup' ? 'Create Free Account' : 'Login';
+    authMsg.textContent = '';
+  }
+
+  async function submitAuth() {
+    authMsg.textContent = '';
+
+    const email = authEmail.value.trim();
+    const password = authPassword.value.trim();
+    const confirmPassword = authConfirmPassword.value.trim();
+
+    if (!email || !password || (currentAuthMode === 'signup' && !confirmPassword)) {
+      authMsg.textContent = 'Complete all required fields.';
+      return;
+    }
+
+    if (currentAuthMode === 'signup' && password !== confirmPassword) {
+      authMsg.textContent = 'Passwords do not match.';
+      return;
+    }
+
+    if (currentAuthMode === 'signup' && password.length < 6) {
+      authMsg.textContent = 'Password must be at least 6 characters.';
+      return;
+    }
+
+    authSubmit.disabled = true;
+    authSubmit.textContent = currentAuthMode === 'signup' ? 'Creating...' : 'Logging in...';
+
+    try {
+      const path = currentAuthMode === 'signup' ? '/auth/signup' : '/auth/login';
+      const data = await apiFetch(path, {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+
+      authToken = data.token;
+      localStorage.setItem('sp_token', authToken);
+      showApp();
+    } catch (err) {
+      authMsg.textContent = err.message || 'Authentication failed';
+    } finally {
+      authSubmit.disabled = false;
+      authSubmit.textContent = currentAuthMode === 'signup' ? 'Create Free Account' : 'Login';
+    }
+  }
+
+  async function checkAuth() {
+    if (!authToken) {
+      showAuth();
+      return false;
+    }
+
+    try {
+      await apiFetch('/auth/me');
+      showApp();
+      return true;
+    } catch {
       localStorage.removeItem('sp_token');
       authToken = '';
-      profileMenu.classList.remove('active');
-      profileBackdrop.classList.remove('active');
       showAuth();
-    });
+      return false;
+    }
+  }
 
-    leaguePanelClose.addEventListener('click', () => closeOverlay(leaguePanel));
-    matchPanelClose.addEventListener('click', () => closeOverlay(matchPanel));
-    panelBackdrop.addEventListener('click', () => {
-      closeOverlay(leaguePanel);
-      closeOverlay(matchPanel);
-    });
+  function showApp() {
+    authView.classList.add('hidden');
+    appView.classList.remove('hidden');
+    buildDateTabs();
+    loadFixtures();
+  }
 
-    document.querySelectorAll('[data-close-modal]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        closeModal(document.getElementById(btn.getAttribute('data-close-modal')));
+  function showAuth() {
+    appView.classList.add('hidden');
+    authView.classList.remove('hidden');
+  }
+
+  async function openSubscribeModal() {
+    openModal(subscribeModal);
+    const box = document.getElementById('subscribeContent');
+    box.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        Preparing payment...
+      </div>
+    `;
+
+    try {
+      const me = await apiFetch('/auth/me');
+      box.innerHTML = `
+        <div class="kv"><div class="k">Account</div><div class="v">${escapeHtml(me.email || '-')}</div></div>
+        <div class="kv"><div class="k">Plan</div><div class="v">₦3,000 / month</div></div>
+        <div class="kv"><div class="k">Status</div><div class="v">${escapeHtml((me.status || '-').toUpperCase())}</div></div>
+        <div class="notice">
+          Payment is handled through Paystack. Test mode means no real money is sent.
+        </div>
+        <div class="modal-actions">
+          <button id="continuePaymentBtn" class="modal-btn primary">Continue to Paystack</button>
+          <button class="modal-btn secondary" data-close-modal="subscribeModal">Close</button>
+        </div>
+      `;
+
+      document.getElementById('continuePaymentBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('continuePaymentBtn');
+        btn.disabled = true;
+        btn.textContent = 'Redirecting...';
+        try {
+          const data = await apiFetch('/auth/payment/initialize', { method: 'POST' });
+          if (data.authorization_url) {
+            window.location.href = data.authorization_url;
+            return;
+          }
+          throw new Error('Payment link unavailable');
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Continue to Paystack';
+          alert(err.message || 'Failed to start payment');
+        }
       });
-    });
 
-    modalBackdrop.addEventListener('click', () => {
-      closeModal(subscribeModal);
-      closeModal(trialModal);
-    });
+      box.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => closeModal(subscribeModal));
+      });
+    } catch (err) {
+      box.innerHTML = `<div class="error-state">${escapeHtml(err.message || 'Failed to load subscription info')}</div>`;
+    }
+  }
 
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => activateMatchTab(tab.dataset.tab));
-    });
+  async function openTrialModal() {
+    openModal(trialModal);
+    const box = document.getElementById('trialContent');
+    box.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        Loading account status...
+      </div>
+    `;
 
-    aiSend.addEventListener('click', sendChat);
-    aiInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendChat();
-    });
+    try {
+      const me = await apiFetch('/auth/me');
+      let msg = 'Your account status is being enforced from the backend.';
+      if (me.status === 'trial') msg = 'Your free trial is active. Once it ends, you will need to subscribe.';
+      if (me.status === 'premium') msg = 'Your premium access is active.';
+      if (me.status === 'expired') msg = 'Your access has expired. Subscribe to continue.';
 
-    selectedDate = getTodayDateString(0);
-    checkAuth();
-  </script>
+      box.innerHTML = `
+        <div class="kv"><div class="k">Email</div><div class="v">${escapeHtml(me.email || '-')}</div></div>
+        <div class="kv"><div class="k">Status</div><div class="v">${escapeHtml((me.status || '-').toUpperCase())}</div></div>
+        <div class="kv"><div class="k">Trial Ends</div><div class="v">${escapeHtml(formatDateTime(me.trial_ends_at))}</div></div>
+        <div class="kv"><div class="k">Premium Ends</div><div class="v">${escapeHtml(formatDateTime(me.premium_expires_at))}</div></div>
+        <div class="notice">${escapeHtml(msg)}</div>
+        <div class="modal-actions">
+          <button id="trialOpenSubscribeBtn" class="modal-btn primary">Open Subscribe</button>
+          <button class="modal-btn secondary" data-close-modal="trialModal">Close</button>
+        </div>
+      `;
+
+      document.getElementById('trialOpenSubscribeBtn').addEventListener('click', () => {
+        closeModal(trialModal);
+        openSubscribeModal();
+      });
+
+      box.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => closeModal(trialModal));
+      });
+    } catch (err) {
+      box.innerHTML = `<div class="error-state">${escapeHtml(err.message || 'Failed to load account status')}</div>`;
+    }
+  }
+
+  async function handlePaymentSuccessPage() {
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get('reference');
+
+    if (path !== '/payment-success' || !reference) return;
+
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#07090d;color:#fff;font-family:Outfit,sans-serif">
+        <div style="width:100%;max-width:420px;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:24px;background:#0f141b">
+          <h2 style="margin:0 0 12px">Verifying payment...</h2>
+          <p style="color:#97a0b2;line-height:1.6">Please wait while ScorePhantom confirms your payment.</p>
+        </div>
+      </div>
+    `;
+
+    try {
+      if (!authToken) {
+        throw new Error('Login required before verification');
+      }
+
+      const data = await apiFetch(`/auth/payment/verify?reference=${encodeURIComponent(reference)}`);
+
+      const testNote = data.test_mode
+        ? '<p style="color:#ffcc66;line-height:1.6">This was a Paystack test transaction. No real money was sent.</p>'
+        : '';
+
+      document.body.innerHTML = `
+        <div style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#07090d;color:#fff;font-family:Outfit,sans-serif">
+          <div style="width:100%;max-width:420px;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:24px;background:#0f141b">
+            <h2 style="margin:0 0 12px;color:#10e774">Payment verified</h2>
+            <p style="color:#97a0b2;line-height:1.6">Your account has been upgraded successfully.</p>
+            ${testNote}
+            <p style="color:#97a0b2;line-height:1.6">Premium ends: ${escapeHtml(formatDateTime(data.premium_expires_at))}</p>
+            <button id="goHomeBtn" style="margin-top:16px;width:100%;padding:14px;border:none;border-radius:16px;background:#10e774;color:#04180f;font-weight:900">Go to app</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('goHomeBtn').addEventListener('click', () => {
+        window.location.href = '/';
+      });
+    } catch (err) {
+      document.body.innerHTML = `
+        <div style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#07090d;color:#fff;font-family:Outfit,sans-serif">
+          <div style="width:100%;max-width:420px;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:24px;background:#0f141b">
+            <h2 style="margin:0 0 12px;color:#ff6b6b">Verification failed</h2>
+            <p style="color:#97a0b2;line-height:1.6">${escapeHtml(err.message || 'Could not verify payment')}</p>
+            <button id="goBackBtn" style="margin-top:16px;width:100%;padding:14px;border:none;border-radius:16px;background:#1b2330;color:#fff;font-weight:800">Back to app</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('goBackBtn').addEventListener('click', () => {
+        window.location.href = '/';
+      });
+    }
+  }
+
+  async function sendChat() {
+    const message = aiInput.value.trim();
+    if (!message || !selectedFixture) return;
+
+    aiLog.innerHTML += `<div class="msg user">${escapeHtml(message)}</div>`;
+    aiInput.value = '';
+    aiLog.scrollTop = aiLog.scrollHeight;
+
+    try {
+      const data = await apiFetch(`/predict/${selectedFixture.id}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ message, history: [] })
+      });
+      aiLog.innerHTML += `<div class="msg bot">${escapeHtml(data.reply || 'No reply')}</div>`;
+    } catch {
+      aiLog.innerHTML += `<div class="msg bot">AI analysis unavailable.</div>`;
+    }
+
+    aiLog.scrollTop = aiLog.scrollHeight;
+  }
+
+  tabSignup.addEventListener('click', () => setAuthMode('signup'));
+  tabLogin.addEventListener('click', () => setAuthMode('login'));
+  authSubmit.addEventListener('click', submitAuth);
+  searchInput.addEventListener('input', renderHomeLeagues);
+
+  menuBtn.addEventListener('click', () => {
+    profileMenu.classList.toggle('active');
+    profileBackdrop.classList.toggle('active');
+  });
+
+  profileBackdrop.addEventListener('click', () => {
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+  });
+
+  subscribeBtn.addEventListener('click', openSubscribeModal);
+  trialBtn.addEventListener('click', openTrialModal);
+
+  logoutBtn.addEventListener('click', () => {
+    localStorage.removeItem('sp_token');
+    authToken = '';
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+    window.location.href = '/';
+  });
+
+  leaguePanelClose.addEventListener('click', () => closeOverlay(leaguePanel));
+  matchPanelClose.addEventListener('click', () => closeOverlay(matchPanel));
+  panelBackdrop.addEventListener('click', () => {
+    closeOverlay(leaguePanel);
+    closeOverlay(matchPanel);
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      closeModal(document.getElementById(btn.getAttribute('data-close-modal')));
+    });
+  });
+
+  modalBackdrop.addEventListener('click', () => {
+    closeModal(subscribeModal);
+    closeModal(trialModal);
+  });
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => activateMatchTab(tab.dataset.tab));
+  });
+
+  aiSend.addEventListener('click', sendChat);
+  aiInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendChat();
+  });
+
+  selectedDate = getTodayDateString(0);
+
+  (async function boot() {
+    await handlePaymentSuccessPage();
+    if (window.location.pathname === '/payment-success') return;
+    await checkAuth();
+  })();
+</script>
 </body>
 </html>
