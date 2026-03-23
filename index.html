@@ -24,14 +24,12 @@
   --blue:#4f89ff;
   --orange:#ffb400;
   --danger:#ff4d6d;
+  --warning:#ffb400;
   --shadow:0 12px 34px rgba(0,0,0,.34);
 }
-
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{
-  margin:0;
-  padding:0;
-  min-height:100%;
+  margin:0;padding:0;min-height:100%;
   background:
     radial-gradient(circle at top, rgba(16,231,116,.05), transparent 22%),
     radial-gradient(circle at 88% 8%, rgba(79,137,255,.05), transparent 18%),
@@ -40,137 +38,64 @@ html,body{
   font-family:'Outfit',sans-serif;
 }
 body{overflow-x:hidden}
+button,input,textarea{font:inherit}
 .hidden{display:none!important}
 
-button,input{font:inherit}
-
-.app-shell{
-  min-height:100vh;
-  padding-bottom:26px;
-}
-
+.app-shell{min-height:100vh;padding-bottom:26px}
 .topbar{
-  position:sticky;
-  top:0;
-  z-index:30;
+  position:sticky;top:0;z-index:30;
   background:rgba(5,7,10,.88);
   backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line2);
 }
-
-.topbar-inner{
-  padding:14px 14px 10px;
-}
-
-.brand-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.brand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:0;
-}
-
+.topbar-inner{padding:14px 14px 10px}
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
 .brand-badge{
-  width:40px;
-  height:40px;
-  border-radius:12px;
+  width:40px;height:40px;border-radius:12px;
   background:linear-gradient(180deg,#0f141a,#0b1015);
   border:1px solid rgba(16,231,116,.12);
   box-shadow:0 0 18px rgba(16,231,116,.14);
-  display:grid;
-  place-items:center;
-  overflow:hidden;
-  flex-shrink:0;
+  display:grid;place-items:center;overflow:hidden;flex-shrink:0;
 }
-.brand-badge img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
+.brand-badge img{width:100%;height:100%;object-fit:cover}
 .brand-fallback{
-  font-family:'Bebas Neue',sans-serif;
-  color:var(--green);
-  font-size:24px;
-  letter-spacing:1px;
+  font-family:'Bebas Neue',sans-serif;color:var(--green);
+  font-size:24px;letter-spacing:1px;
 }
-
 .brand-name{
   font-family:'Bebas Neue',sans-serif;
-  font-size:24px;
-  line-height:1;
-  letter-spacing:1.5px;
-  white-space:nowrap;
+  font-size:24px;line-height:1;letter-spacing:1.5px;white-space:nowrap;
 }
 .brand-name .green{color:var(--green)}
-
-.top-actions{
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-
+.top-actions{display:flex;align-items:center;gap:8px}
 .live-pill{
-  display:inline-flex;
-  align-items:center;
-  gap:7px;
-  padding:9px 12px;
-  border-radius:14px;
-  border:1px solid rgba(16,231,116,.22);
-  background:rgba(16,231,116,.06);
-  color:var(--green);
-  font-size:11px;
-  font-weight:800;
-  letter-spacing:.18em;
+  display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border-radius:14px;
+  border:1px solid rgba(16,231,116,.22);background:rgba(16,231,116,.06);
+  color:var(--green);font-size:11px;font-weight:800;letter-spacing:.18em;
 }
 .live-pill::before{
-  content:"";
-  width:8px;height:8px;border-radius:999px;
-  background:var(--green);
+  content:"";width:8px;height:8px;border-radius:999px;background:var(--green);
   box-shadow:0 0 10px rgba(16,231,116,.75);
 }
 .menu-btn{
   width:40px;height:40px;border:none;border-radius:13px;
-  background:rgba(255,255,255,.03);
-  border:1px solid var(--line);
-  color:var(--text);
-  font-size:18px;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);
+  color:var(--text);font-size:18px;
 }
-
 .date-strip{
-  margin-top:12px;
-  display:flex;
-  gap:6px;
-  overflow-x:auto;
-  scrollbar-width:none;
+  margin-top:12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
 }
 .date-strip::-webkit-scrollbar{display:none}
 .date-tab{
-  min-width:66px;
-  padding:9px 6px 10px;
-  border-radius:16px;
-  text-align:center;
-  color:var(--muted);
-  border:1px solid transparent;
+  min-width:66px;padding:9px 6px 10px;border-radius:16px;text-align:center;
+  color:var(--muted);border:1px solid transparent;
 }
 .date-tab small{
-  display:block;
-  font-size:10px;
-  letter-spacing:.2em;
-  text-transform:uppercase;
-  margin-bottom:4px;
+  display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;
 }
 .date-tab strong{
-  display:block;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:22px;
-  line-height:1;
-  letter-spacing:1px;
+  display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;letter-spacing:1px;
 }
 .date-tab.active{
   color:var(--green);
@@ -178,747 +103,290 @@ button,input{font:inherit}
   border-color:rgba(16,231,116,.16);
 }
 
-.search-wrap{
-  padding:12px 14px 8px;
-}
+.search-wrap{padding:12px 14px 8px}
 .search-box{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:14px 15px;
-  border-radius:18px;
+  display:flex;align-items:center;gap:10px;padding:14px 15px;border-radius:18px;
   border:1px solid var(--line);
   background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
 }
 .search-box svg{width:18px;height:18px;fill:var(--muted2)}
 .search-box input{
-  flex:1;
-  border:none;
-  outline:none;
-  background:transparent;
-  color:var(--text);
-  font-size:14px;
+  flex:1;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;
 }
 .search-box input::placeholder{color:var(--muted2)}
-
 .section-head{
-  padding:10px 14px 8px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
+  padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;
 }
 .section-head .label{
-  font-size:12px;
-  letter-spacing:.24em;
-  text-transform:uppercase;
-  color:var(--muted2);
+  font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);
 }
-.section-head .meta{
-  font-size:12px;
-  color:var(--muted);
-}
-
-.board{
-  padding:0 14px;
-}
-
+.section-head .meta{font-size:12px;color:var(--muted)}
+.board{padding:0 14px}
 .league-row{
   border:1px solid var(--line);
   background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.012));
-  border-radius:18px;
-  padding:14px 14px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:10px;
-  box-shadow:var(--shadow);
+  border-radius:18px;padding:14px 14px;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:10px;box-shadow:var(--shadow);
 }
-.league-row-left{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-width:0;
-}
+.league-row-left{display:flex;align-items:center;gap:12px;min-width:0}
 .league-emoji{
-  width:38px;height:38px;border-radius:12px;
-  display:grid;place-items:center;
-  background:rgba(79,137,255,.08);
-  border:1px solid rgba(79,137,255,.15);
-  font-size:18px;
-  flex-shrink:0;
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(79,137,255,.08);border:1px solid rgba(79,137,255,.15);
+  font-size:18px;flex-shrink:0;
 }
-.league-info{
-  min-width:0;
-}
+.league-info{min-width:0}
 .league-name{
-  font-size:15px;
-  font-weight:800;
-  line-height:1.2;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.league-country{
-  margin-top:3px;
-  color:var(--muted);
-  font-size:12px;
-}
-.league-row-right{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-shrink:0;
-}
+.league-country{margin-top:3px;color:var(--muted);font-size:12px}
+.league-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .fixture-count{
-  min-width:34px;
-  height:34px;
-  padding:0 10px;
-  border-radius:11px;
-  display:grid;
-  place-items:center;
-  background:rgba(255,255,255,.05);
-  color:var(--text);
-  font-weight:800;
-  font-size:14px;
+  min-width:34px;height:34px;padding:0 10px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(255,255,255,.05);color:var(--text);font-weight:800;font-size:14px;
 }
-.chevron{
-  color:var(--muted2);
-  font-size:15px;
-}
+.chevron{color:var(--muted2);font-size:15px}
 
-.profile-backdrop,
-.panel-backdrop{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.58);
-  z-index:70;
-  display:none;
+.profile-backdrop,.panel-backdrop,.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:70;display:none;
 }
-.profile-backdrop.active,
-.panel-backdrop.active{display:block}
-
+.profile-backdrop.active,.panel-backdrop.active,.modal-backdrop.active{display:block}
 .profile-menu{
-  position:fixed;
-  top:66px;
-  right:14px;
-  width:210px;
-  z-index:80;
-  border-radius:18px;
-  background:linear-gradient(180deg,#0f141a,#0b1015);
-  border:1px solid var(--line);
-  box-shadow:0 18px 42px rgba(0,0,0,.42);
-  padding:8px;
-  display:none;
+  position:fixed;top:66px;right:14px;width:210px;z-index:80;border-radius:18px;
+  background:linear-gradient(180deg,#0f141a,#0b1015);border:1px solid var(--line);
+  box-shadow:0 18px 42px rgba(0,0,0,.42);padding:8px;display:none;
 }
 .profile-menu.active{display:block}
 .profile-action{
-  width:100%;
-  border:none;
-  background:transparent;
-  color:var(--text);
-  padding:13px 14px;
-  border-radius:14px;
-  text-align:left;
-  font-size:14px;
-  font-weight:700;
+  width:100%;border:none;background:transparent;color:var(--text);padding:13px 14px;border-radius:14px;
+  text-align:left;font-size:14px;font-weight:700;
 }
 .profile-action + .profile-action{margin-top:4px}
 .profile-action.primary{
-  color:var(--green);
-  background:rgba(16,231,116,.06);
-  border:1px solid rgba(16,231,116,.16);
+  color:var(--green);background:rgba(16,231,116,.06);border:1px solid rgba(16,231,116,.16);
 }
 .profile-action.danger{
-  background:rgba(255,255,255,.02);
-  border:1px solid rgba(255,255,255,.05);
+  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);
 }
 
 .panel{
-  position:fixed;
-  left:0;right:0;bottom:0;
-  z-index:90;
-  max-height:88vh;
+  position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
   background:linear-gradient(180deg,#0b0f14,#080b10);
-  border-top-left-radius:24px;
-  border-top-right-radius:24px;
-  border:1px solid var(--line);
-  box-shadow:0 -18px 50px rgba(0,0,0,.46);
-  transform:translateY(106%);
-  transition:transform .26s ease;
-  overflow:hidden;
+  border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
+  box-shadow:0 -18px 50px rgba(0,0,0,.46);transform:translateY(106%);
+  transition:transform .26s ease;overflow:hidden;
 }
 .panel.active{transform:translateY(0)}
-.panel-handle{
-  width:78px;height:6px;border-radius:999px;background:#3a414e;
-  margin:10px auto 0;
-}
+.panel-handle{width:78px;height:6px;border-radius:999px;background:#3a414e;margin:10px auto 0}
 .panel-close{
-  position:absolute;
-  top:16px;
-  right:14px;
-  width:46px;height:46px;
-  border:none;
-  border-radius:999px;
-  background:rgba(255,255,255,.03);
-  border:1px solid var(--line);
-  color:var(--muted);
-  font-size:26px;
+  position:absolute;top:16px;right:14px;width:46px;height:46px;border:none;border-radius:999px;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);font-size:26px;
 }
-.panel-scroll{
-  max-height:calc(88vh - 10px);
-  overflow-y:auto;
-  padding-bottom:26px;
-}
-
-.panel-head{
-  padding:16px 16px 14px;
-  border-bottom:1px solid var(--line2);
-}
-.panel-kicker{
-  color:var(--muted);
-  font-size:12px;
-  letter-spacing:.12em;
-}
-.panel-title{
-  margin-top:6px;
-  font-size:22px;
-  font-weight:800;
-  line-height:1.15;
-}
-.panel-sub{
-  color:var(--muted);
-  font-size:13px;
-  margin-top:4px;
-}
-
-.league-panel-list{
-  padding:12px 12px 0;
-}
+.panel-scroll{max-height:calc(88vh - 10px);overflow-y:auto;padding-bottom:26px}
+.panel-head{padding:16px 16px 14px;border-bottom:1px solid var(--line2)}
+.panel-kicker{color:var(--muted);font-size:12px;letter-spacing:.12em}
+.panel-title{margin-top:6px;font-size:22px;font-weight:800;line-height:1.15}
+.panel-sub{color:var(--muted);font-size:13px;margin-top:4px}
+.league-panel-list{padding:12px 12px 0}
 .match-row{
-  display:grid;
-  grid-template-columns:58px 1fr 40px;
-  gap:10px;
-  align-items:center;
-  padding:12px;
-  border-radius:16px;
-  background:rgba(255,255,255,.015);
-  border:1px solid var(--line2);
-  margin-bottom:9px;
+  display:grid;grid-template-columns:58px 1fr 40px;gap:10px;align-items:center;padding:12px;
+  border-radius:16px;background:rgba(255,255,255,.015);border:1px solid var(--line2);margin-bottom:9px;
 }
-.match-time{
-  color:var(--muted);
-  font-weight:800;
-  font-size:13px;
-  text-align:center;
-}
+.match-time{color:var(--muted);font-weight:800;font-size:13px;text-align:center}
 .match-main{min-width:0}
-.match-team{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-}
+.match-team{display:flex;align-items:center;gap:8px;min-width:0}
 .match-team + .match-team{margin-top:7px}
-.dot{
-  width:8px;height:8px;border-radius:999px;background:var(--green);flex-shrink:0;
-}
+.dot{width:8px;height:8px;border-radius:999px;background:var(--green);flex-shrink:0}
 .dot.away{background:#4b5569}
-.match-team-name{
-  font-size:14px;
-  font-weight:700;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
+.match-team-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .match-open{
-  width:38px;height:38px;border-radius:12px;
-  display:grid;place-items:center;
-  border:1px solid var(--line);
-  background:rgba(255,255,255,.02);
-  color:var(--muted);
-  font-size:18px;
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);
+  background:rgba(255,255,255,.02);color:var(--muted);font-size:18px;
 }
 
-.sheet-head{
-  padding:14px 14px 10px;
-}
-.sheet-league{
-  font-size:12px;
-  color:var(--muted);
-}
-.prob-grid{
-  margin-top:8px;
-  display:grid;
-  grid-template-columns:1fr auto 1fr;
-  gap:8px;
-  align-items:end;
-}
-.team-prob{
-  text-align:center;
-  min-width:0;
-}
+.sheet-head{padding:14px 14px 10px}
+.sheet-league{font-size:12px;color:var(--muted)}
+.prob-grid{margin-top:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.team-prob{text-align:center;min-width:0}
 .team-prob .name{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:18px;
-  line-height:1;
-  letter-spacing:.8px;
-  word-break:break-word;
+  font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1;letter-spacing:.8px;word-break:break-word;
 }
-.team-prob .pct{
-  margin-top:6px;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:18px;
-  line-height:1;
-}
+.team-prob .pct{margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1}
 .team-prob.home .pct{color:var(--green)}
 .team-prob.away .pct{color:var(--blue)}
-
-.draw-prob{
-  text-align:center;
-  color:var(--muted);
-}
-.draw-prob .vs{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:18px;
-  letter-spacing:1px;
-}
-.draw-prob .pct{
-  margin-top:5px;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:18px;
-}
-.draw-prob .lbl{
-  font-size:12px;
-  margin-top:2px;
-}
-
-.prob-bar{
-  margin-top:12px;
-  height:12px;
-  border-radius:999px;
-  overflow:hidden;
-  display:flex;
-  background:#161b23;
-}
+.draw-prob{text-align:center;color:var(--muted)}
+.draw-prob .vs{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
+.draw-prob .pct{margin-top:5px;font-family:'Bebas Neue',sans-serif;font-size:18px}
+.draw-prob .lbl{font-size:12px;margin-top:2px}
+.prob-bar{margin-top:12px;height:12px;border-radius:999px;overflow:hidden;display:flex;background:#161b23}
 .prob-home{background:var(--green)}
 .prob-draw{background:var(--orange)}
 .prob-away{background:var(--blue)}
-
 .best-pick{
-  margin-top:12px;
-  border:1px solid rgba(16,231,116,.18);
+  margin-top:12px;border:1px solid rgba(16,231,116,.18);
   background:linear-gradient(135deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
-  border-radius:18px;
-  padding:14px;
+  border-radius:18px;padding:14px;
 }
-.best-pick .eyebrow{
-  font-size:11px;
-  letter-spacing:.22em;
-  text-transform:uppercase;
-  color:var(--muted);
-}
-.best-pick-row{
-  margin-top:8px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-.best-pick-title{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:26px;
-  line-height:1;
-  letter-spacing:1px;
-}
+.best-pick .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.best-pick-row{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.best-pick-title{font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;letter-spacing:1px}
 .best-pick-badge{
-  flex-shrink:0;
-  min-width:88px;
-  text-align:center;
-  padding:12px 10px;
-  border-radius:14px;
-  border:1px solid rgba(16,231,116,.18);
-  background:rgba(16,231,116,.07);
+  flex-shrink:0;min-width:88px;text-align:center;padding:12px 10px;border-radius:14px;
+  border:1px solid rgba(16,231,116,.18);background:rgba(16,231,116,.07);
 }
-.best-pick-badge .big{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:24px;
-  line-height:1;
-  color:var(--green);
-}
-.best-pick-badge .small{
-  font-size:10px;
-  color:var(--muted);
-  letter-spacing:.18em;
-  text-transform:uppercase;
-  margin-top:4px;
-}
-
+.best-pick-badge .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;color:var(--green)}
+.best-pick-badge .small{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-top:4px}
 .tabs{
-  margin-top:12px;
-  display:flex;
-  gap:0;
-  overflow-x:auto;
-  border-top:1px solid var(--line2);
-  border-bottom:1px solid var(--line2);
-  scrollbar-width:none;
+  margin-top:12px;display:flex;gap:0;overflow-x:auto;border-top:1px solid var(--line2);
+  border-bottom:1px solid var(--line2);scrollbar-width:none;
 }
 .tabs::-webkit-scrollbar{display:none}
 .tab{
-  flex:1;
-  min-width:82px;
-  padding:13px 8px;
-  text-align:center;
-  color:var(--muted2);
-  font-size:12px;
-  font-weight:700;
-  letter-spacing:.08em;
-  position:relative;
+  flex:1;min-width:82px;padding:13px 8px;text-align:center;color:var(--muted2);font-size:12px;
+  font-weight:700;letter-spacing:.08em;position:relative;
 }
 .tab.active{color:var(--green)}
 .tab.active::after{
-  content:"";
-  position:absolute;
-  left:14%;
-  right:14%;
-  bottom:0;
-  height:3px;
-  border-radius:999px;
-  background:var(--green);
+  content:"";position:absolute;left:14%;right:14%;bottom:0;height:3px;border-radius:999px;background:var(--green);
 }
-
-.sheet-section{
-  padding:14px 14px 0;
-}
-.sheet-label{
-  font-size:11px;
-  letter-spacing:.24em;
-  text-transform:uppercase;
-  color:var(--muted2);
-  margin-bottom:10px;
-}
+.sheet-section{padding:14px 14px 0}
+.sheet-label{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px}
 .card{
-  border-radius:18px;
-  border:1px solid var(--line);
+  border-radius:18px;border:1px solid var(--line);
   background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
-  padding:14px;
-  margin-bottom:12px;
+  padding:14px;margin-bottom:12px;
 }
 .card.primary{
   border-color:rgba(16,231,116,.18);
   background:linear-gradient(135deg,rgba(16,231,116,.09),rgba(16,231,116,.03));
 }
-.card h3{
-  margin:0 0 8px;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:24px;
-  line-height:1;
-  letter-spacing:1px;
-}
-.card .sub{
-  color:var(--green);
-  font-size:13px;
-  margin-bottom:10px;
-}
-.card p{
-  margin:0;
-  color:#bcc4d1;
-  font-size:14px;
-  line-height:1.65;
-}
-
-.metrics{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:8px;
-  margin-bottom:12px;
-}
+.card h3{margin:0 0 8px;font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;letter-spacing:1px}
+.card .sub{color:var(--green);font-size:13px;margin-bottom:10px}
+.card p{margin:0;color:#bcc4d1;font-size:14px;line-height:1.65}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .metric{
-  border:1px solid var(--line);
-  background:rgba(255,255,255,.015);
-  border-radius:14px;
-  padding:12px 8px;
-  text-align:center;
+  border:1px solid var(--line);background:rgba(255,255,255,.015);border-radius:14px;padding:12px 8px;text-align:center;
 }
-.metric .big{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:24px;
-  line-height:1;
-}
-.metric .small{
-  margin-top:6px;
-  font-size:11px;
-  color:var(--muted2);
-  letter-spacing:.14em;
-  text-transform:uppercase;
-}
-
-.progress{
-  display:flex;
-  height:10px;
-  overflow:hidden;
-  border-radius:999px;
-  background:#171c24;
-  margin-bottom:12px;
-}
-
-.mini-list{
-  display:flex;
-  flex-direction:column;
-  gap:9px;
-}
+.metric .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1}
+.metric .small{margin-top:6px;font-size:11px;color:var(--muted2);letter-spacing:.14em;text-transform:uppercase}
+.progress{display:flex;height:10px;overflow:hidden;border-radius:999px;background:#171c24;margin-bottom:12px}
+.mini-list{display:flex;flex-direction:column;gap:9px}
 .mini-item{
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:10px;
-  align-items:center;
-  border:1px solid var(--line2);
-  border-radius:15px;
-  background:rgba(255,255,255,.013);
-  padding:12px;
+  display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line2);
+  border-radius:15px;background:rgba(255,255,255,.013);padding:12px;
 }
-.mini-a{
-  font-size:14px;
-  font-weight:700;
-}
-.mini-b{
-  margin-top:4px;
-  font-size:12px;
-  color:var(--muted);
-}
+.mini-a{font-size:14px;font-weight:700}
+.mini-b{margin-top:4px;font-size:12px;color:var(--muted)}
 .score-pill{
-  min-width:54px;
-  height:48px;
-  padding:0 10px;
-  border-radius:14px;
-  background:rgba(79,137,255,.11);
-  color:var(--blue);
-  display:grid;
-  place-items:center;
-  font-size:20px;
-  font-weight:800;
+  min-width:54px;height:48px;padding:0 10px;border-radius:14px;background:rgba(79,137,255,.11);
+  color:var(--blue);display:grid;place-items:center;font-size:20px;font-weight:800;
 }
-
-.table-wrap{
-  border-radius:16px;
-  border:1px solid var(--line);
-  overflow:auto;
-}
-.table-wrap table{
-  width:100%;
-  border-collapse:collapse;
-  min-width:560px;
-}
-.table-wrap th,
-.table-wrap td{
-  padding:12px 10px;
-  border-bottom:1px solid var(--line);
-  text-align:left;
-  font-size:13px;
-}
+.table-wrap{border-radius:16px;border:1px solid var(--line);overflow:auto}
+.table-wrap table{width:100%;border-collapse:collapse;min-width:560px}
+.table-wrap th,.table-wrap td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
 .table-wrap th{
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.18em;
-  color:var(--muted2);
-  background:rgba(255,255,255,.02);
+  font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2);background:rgba(255,255,255,.02);
 }
-.table-wrap tr.highlight{
-  background:rgba(16,231,116,.08);
-}
+.table-wrap tr.highlight{background:rgba(16,231,116,.08)}
 .table-wrap tr:last-child td{border-bottom:none}
-
-.ai-box{
-  border-radius:18px;
-  border:1px solid var(--line);
-  overflow:hidden;
-  background:rgba(255,255,255,.015);
-}
-.ai-log{
-  max-height:260px;
-  overflow-y:auto;
-  padding:12px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.msg{
-  max-width:88%;
-  padding:10px 12px;
-  border-radius:14px;
-  font-size:13px;
-  line-height:1.6;
-}
-.msg.user{
-  align-self:flex-end;
-  background:rgba(16,231,116,.12);
-  border:1px solid rgba(16,231,116,.18);
-}
-.msg.bot{
-  align-self:flex-start;
-  background:rgba(255,255,255,.03);
-  border:1px solid var(--line);
-}
-.ai-input{
-  display:flex;
-  gap:8px;
-  padding:12px;
-  border-top:1px solid var(--line);
-}
+.ai-box{border-radius:18px;border:1px solid var(--line);overflow:hidden;background:rgba(255,255,255,.015)}
+.ai-log{max-height:260px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.6}
+.msg.user{align-self:flex-end;background:rgba(16,231,116,.12);border:1px solid rgba(16,231,116,.18)}
+.msg.bot{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.ai-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
 .ai-input input{
-  flex:1;
-  border:none;
-  outline:none;
-  border-radius:14px;
-  background:#0c1117;
-  color:var(--text);
-  border:1px solid var(--line);
-  padding:12px 14px;
-  font-size:13px;
+  flex:1;border:none;outline:none;border-radius:14px;background:#0c1117;color:var(--text);
+  border:1px solid var(--line);padding:12px 14px;font-size:13px;
 }
 .ai-input button{
-  border:none;
-  border-radius:14px;
-  background:var(--green);
-  color:#052014;
-  font-weight:900;
-  padding:12px 14px;
+  border:none;border-radius:14px;background:var(--green);color:#052014;font-weight:900;padding:12px 14px;
 }
-
-.loading,.empty-state,.error-state{
-  text-align:center;
-  color:var(--muted);
-  padding:28px 16px;
-}
+.loading,.empty-state,.error-state{text-align:center;color:var(--muted);padding:28px 16px}
 .spinner{
-  width:32px;height:32px;border-radius:999px;
-  border:3px solid rgba(255,255,255,.08);
-  border-top-color:var(--green);
-  animation:spin 1s linear infinite;
-  margin:0 auto 10px;
+  width:32px;height:32px;border-radius:999px;border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--green);animation:spin 1s linear infinite;margin:0 auto 10px;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.auth-wrap{
-  min-height:100vh;
-  display:grid;
-  place-items:center;
-  padding:24px 16px;
-}
+.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
 .auth-card{
-  width:100%;
-  max-width:420px;
-  border-radius:26px;
-  padding:22px;
-  border:1px solid var(--line);
-  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
-  box-shadow:var(--shadow);
+  width:100%;max-width:420px;border-radius:26px;padding:22px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));box-shadow:var(--shadow);
 }
-.auth-logo{
-  text-align:center;
-  margin-bottom:16px;
-}
+.auth-logo{text-align:center;margin-bottom:16px}
 .auth-logo img{
-  width:68px;height:68px;object-fit:cover;border-radius:18px;
-  box-shadow:0 0 24px rgba(16,231,116,.15);
+  width:68px;height:68px;object-fit:cover;border-radius:18px;box-shadow:0 0 24px rgba(16,231,116,.15);
 }
-.auth-title{
-  margin-top:12px;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:34px;
-  letter-spacing:2px;
-}
+.auth-title{margin-top:12px;font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px}
 .auth-title .green{color:var(--green)}
-.auth-copy{
-  color:var(--muted);
-  font-size:14px;
-  line-height:1.65;
-  margin-top:8px;
-}
-
+.auth-copy{color:var(--muted);font-size:14px;line-height:1.65;margin-top:8px}
 .auth-switch{
-  margin-top:18px;
-  display:flex;
-  gap:6px;
-  border:1px solid var(--line);
-  background:rgba(255,255,255,.03);
-  border-radius:18px;
-  padding:5px;
+  margin-top:18px;display:flex;gap:6px;border:1px solid var(--line);
+  background:rgba(255,255,255,.03);border-radius:18px;padding:5px;
 }
-.auth-tab{
-  flex:1;
-  text-align:center;
-  padding:13px 10px;
-  border-radius:13px;
-  font-weight:700;
-  color:var(--muted2);
-}
-.auth-tab.active{
-  background:rgba(255,255,255,.06);
-  color:var(--text);
-}
-
+.auth-tab{flex:1;text-align:center;padding:13px 10px;border-radius:13px;font-weight:700;color:var(--muted2)}
+.auth-tab.active{background:rgba(255,255,255,.06);color:var(--text)}
 .field{margin-top:12px}
 .field input{
-  width:100%;
-  border:none;
-  outline:none;
-  padding:16px 16px;
-  font-size:15px;
-  color:var(--text);
-  border-radius:16px;
-  background:#0a0e13;
-  border:1px solid var(--line);
+  width:100%;border:none;outline:none;padding:16px 16px;font-size:15px;color:var(--text);
+  border-radius:16px;background:#0a0e13;border:1px solid var(--line);
 }
 .auth-btn{
-  width:100%;
-  margin-top:16px;
-  border:none;
-  border-radius:18px;
-  padding:16px;
-  font-size:16px;
-  font-weight:900;
-  background:linear-gradient(180deg,#14e677,#09c864);
-  color:#04180f;
+  width:100%;margin-top:16px;border:none;border-radius:18px;padding:16px;font-size:16px;
+  font-weight:900;background:linear-gradient(180deg,#14e677,#09c864);color:#04180f;
 }
-.auth-note{
-  text-align:center;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.7;
-  margin-top:14px;
-}
-.auth-msg{
-  text-align:center;
-  color:var(--danger);
-  font-size:13px;
-  margin-top:10px;
-}
+.auth-note{text-align:center;color:var(--muted);font-size:13px;line-height:1.7;margin-top:14px}
+.auth-msg{text-align:center;color:var(--danger);font-size:13px;margin-top:10px}
 
-.subscribe-bar{
-  margin-top:12px;
-  display:flex;
-  gap:8px;
+.modal{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:95;width:min(92vw,430px);border-radius:22px;border:1px solid var(--line);
+  background:linear-gradient(180deg,#0f141a,#0b1015);box-shadow:0 20px 60px rgba(0,0,0,.55);
+  display:none;overflow:hidden;
 }
-.subscribe-btn,
-.demo-btn{
-  flex:1;
-  border:none;
-  border-radius:14px;
-  padding:12px 14px;
-  font-weight:800;
-  font-size:13px;
+.modal.active{display:block}
+.modal-head{
+  padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;
 }
-.subscribe-btn{
-  background:rgba(16,231,116,.10);
-  color:var(--green);
-  border:1px solid rgba(16,231,116,.18);
+.modal-title{font-size:18px;font-weight:800}
+.modal-close{
+  width:34px;height:34px;border:none;border-radius:12px;background:rgba(255,255,255,.03);
+  border:1px solid var(--line);color:var(--muted);font-size:20px;
 }
-.demo-btn{
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  border:1px solid var(--line);
+.modal-body{padding:16px 18px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:8px 10px;align-items:start;margin-bottom:10px}
+.kv .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+.kv .v{font-size:14px;font-weight:700;word-break:break-word}
+.notice{
+  border:1px solid rgba(255,180,0,.2);background:rgba(255,180,0,.08);color:#ffd277;
+  border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+}
+.success{
+  border:1px solid rgba(16,231,116,.2);background:rgba(16,231,116,.08);color:#9df3c3;
+  border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+}
+.modal-form .field{margin-top:10px}
+.modal-form textarea{
+  width:100%;min-height:84px;border:none;outline:none;padding:14px 14px;font-size:14px;color:var(--text);
+  border-radius:16px;background:#0a0e13;border:1px solid var(--line);resize:vertical;
+}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
+.modal-btn{
+  flex:1;border:none;border-radius:14px;padding:13px 14px;font-size:14px;font-weight:800;
+}
+.modal-btn.primary{background:var(--green);color:#072114}
+.modal-btn.secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line)}
+.muted-list{margin:0;padding-left:18px;color:#c7cfda;font-size:13px;line-height:1.7}
+.small-history{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+.small-history-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;margin-bottom:8px}
+.small-history-item{
+  border:1px solid var(--line2);background:rgba(255,255,255,.02);border-radius:14px;padding:10px 12px;margin-bottom:8px;
+}
+.small-history-item strong{display:block;font-size:13px}
+.small-history-item span{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.copy-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:12px;
+  border:1px solid rgba(16,231,116,.18);background:rgba(16,231,116,.07);color:var(--green);font-size:12px;font-weight:800;cursor:pointer;
 }
 </style>
 </head>
@@ -948,12 +416,6 @@ button,input{font:inherit}
     </div>
 
     <button id="authSubmit" class="auth-btn">Create Free Account</button>
-
-    <div class="subscribe-bar">
-      <button id="subscribeInfoBtn" class="subscribe-btn">Subscribe</button>
-      <button id="demoInfoBtn" class="demo-btn">Trial Info</button>
-    </div>
-
     <div class="auth-note">Free 3-day trial • Full access to all predictions<br>Then ₦3,000/month for continued access</div>
     <div id="authMsg" class="auth-msg"></div>
   </div>
@@ -1168,6 +630,96 @@ button,input{font:inherit}
   </div>
 </div>
 
+<div id="modalBackdrop" class="modal-backdrop"></div>
+
+<div id="subscribeModal" class="modal">
+  <div class="modal-head">
+    <div class="modal-title">Subscribe</div>
+    <button class="modal-close" data-close-modal="subscribeModal">×</button>
+  </div>
+  <div class="modal-body">
+    <div id="subscribeInfoBlock" class="loading">
+      <div class="spinner"></div>
+      Loading subscription info...
+    </div>
+
+    <div id="subscribeLoaded" class="hidden">
+      <div class="kv"><div class="k">Amount</div><div class="v" id="subAmount">₦3,000</div></div>
+      <div class="kv"><div class="k">Duration</div><div class="v" id="subDuration">30 days</div></div>
+      <div class="kv"><div class="k">Email</div><div class="v" id="subEmail">-</div></div>
+      <div class="kv">
+        <div class="k">Reference</div>
+        <div class="v">
+          <span id="subReference">-</span>
+          <div style="margin-top:8px">
+            <button id="copyRefBtn" class="copy-chip">Copy Reference</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="notice">
+        Add your real bank details in the marked section inside <strong>index.html</strong>.
+        For now this modal is already wired to the backend and payment submission flow.
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="kv"><div class="k">Bank</div><div class="v" id="bankName">YOUR BANK NAME</div></div>
+        <div class="kv"><div class="k">Account Name</div><div class="v" id="accountName">YOUR ACCOUNT NAME</div></div>
+        <div class="kv"><div class="k">Account Number</div><div class="v" id="accountNumber">YOUR ACCOUNT NUMBER</div></div>
+      </div>
+
+      <div class="sheet-label" style="margin-top:14px">How it works</div>
+      <ul id="subInstructions" class="muted-list"></ul>
+
+      <div class="sheet-label" style="margin-top:14px">I have paid</div>
+      <div class="modal-form">
+        <div class="field"><input id="paymentReferenceInput" placeholder="Payment reference used"></div>
+        <div class="field"><input id="paymentSenderInput" placeholder="Sender name"></div>
+        <div class="field"><input id="paymentAmountInput" placeholder="Amount paid" type="number"></div>
+        <div class="field"><textarea id="paymentNoteInput" placeholder="Optional note"></textarea></div>
+
+        <div class="modal-actions">
+          <button id="submitPaymentBtn" class="modal-btn primary">Submit Payment</button>
+          <button class="modal-btn secondary" data-close-modal="subscribeModal">Close</button>
+        </div>
+
+        <div id="paymentSubmitMsg"></div>
+      </div>
+
+      <div class="small-history">
+        <div class="small-history-title">My payment submissions</div>
+        <div id="mySubmissionsList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="trialModal" class="modal">
+  <div class="modal-head">
+    <div class="modal-title">Trial Status</div>
+    <button class="modal-close" data-close-modal="trialModal">×</button>
+  </div>
+  <div class="modal-body">
+    <div id="trialInfoBlock" class="loading">
+      <div class="spinner"></div>
+      Loading account status...
+    </div>
+
+    <div id="trialLoaded" class="hidden">
+      <div class="kv"><div class="k">Status</div><div class="v" id="trialStatusValue">-</div></div>
+      <div class="kv"><div class="k">Trial Ends</div><div class="v" id="trialEndsValue">-</div></div>
+      <div class="kv"><div class="k">Subscription Ends</div><div class="v" id="subEndsValue">-</div></div>
+      <div class="kv"><div class="k">Reference</div><div class="v" id="trialRefValue">-</div></div>
+      <div id="trialStatusMessage" class="notice"></div>
+
+      <div class="modal-actions">
+        <button id="trialOpenSubscribeBtn" class="modal-btn primary">Open Subscribe</button>
+        <button class="modal-btn secondary" data-close-modal="trialModal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '';
 let allFixtures = [];
@@ -1178,6 +730,12 @@ let selectedDate = null;
 let currentAuthMode = 'signup';
 let authToken = localStorage.getItem('scorephantom_token') || '';
 let currentPrediction = null;
+
+const BANK_DETAILS = {
+  bankName: 'OPAY',
+  accountName: 'CHUKWUNENYE DAVID CHIMAEZE',
+  accountNumber: '8117024699'
+};
 
 const PRIORITY_LEAGUES = [
   { country: "England", league: "Premier League" },
@@ -1192,6 +750,7 @@ const PRIORITY_LEAGUES = [
   { country: "Turkey", league: "Super Lig" },
   { country: "Belgium", league: "Pro League" },
   { country: "Switzerland", league: "Super League" },
+  { country: "Austria", league: "Bundesliga" },
   { country: "Europe", league: "UEFA Champions League" },
   { country: "Europe", league: "UEFA Europa League" }
 ];
@@ -1220,6 +779,7 @@ const trialBtn = document.getElementById('trialBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 
 const panelBackdrop = document.getElementById('panelBackdrop');
+const modalBackdrop = document.getElementById('modalBackdrop');
 
 const leaguePanel = document.getElementById('leaguePanel');
 const leaguePanelClose = document.getElementById('leaguePanelClose');
@@ -1243,12 +803,8 @@ const aiLog = document.getElementById('aiLog');
 const aiInput = document.getElementById('aiInput');
 const aiSend = document.getElementById('aiSend');
 
-document.getElementById('subscribeInfoBtn').addEventListener('click', () => {
-  alert('Subscription flow comes next. For now, this is the button entry point.');
-});
-document.getElementById('demoInfoBtn').addEventListener('click', () => {
-  alert('Free 3-day trial. Then paid access can be enforced from the backend.');
-});
+const subscribeModal = document.getElementById('subscribeModal');
+const trialModal = document.getElementById('trialModal');
 
 function handleLogoFallback(img){
   img.classList.add('hidden');
@@ -1279,6 +835,74 @@ function formatDayLabel(offset) {
   return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
 }
 
+function formatDateTime(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function countryToFlagEmoji(country = '') {
+  const map = {
+    andorra:'🇦🇩', argentina:'🇦🇷', armenia:'🇦🇲', australia:'🇦🇺', austria:'🇦🇹', belgium:'🇧🇪',
+    brazil:'🇧🇷', bulgaria:'🇧🇬', canada:'🇨🇦', chile:'🇨🇱', china:'🇨🇳', colombia:'🇨🇴',
+    croatia:'🇭🇷', cyprus:'🇨🇾', czech republic:'🇨🇿', denmark:'🇩🇰', egypt:'🇪🇬',
+    england:'🏴', estonia:'🇪🇪', europe:'🇪🇺', finland:'🇫🇮', france:'🇫🇷', germany:'🇩🇪',
+    greece:'🇬🇷', hungary:'🇭🇺', iceland:'🇮🇸', india:'🇮🇳', indonesia:'🇮🇩', ireland:'🇮🇪',
+    israel:'🇮🇱', italy:'🇮🇹', jamaica:'🇯🇲', japan:'🇯🇵', kazakhstan:'🇰🇿', latvia:'🇱🇻',
+    lithuania:'🇱🇹', mexico:'🇲🇽', morocco:'🇲🇦', netherlands:'🇳🇱', new zealand:'🇳🇿',
+    nigeria:'🇳🇬', norway:'🇳🇴', paraguay:'🇵🇾', peru:'🇵🇪', poland:'🇵🇱', portugal:'🇵🇹',
+    qatar:'🇶🇦', romania:'🇷🇴', saudi arabia:'🇸🇦', scotland:'🏴', serbia:'🇷🇸', slovakia:'🇸🇰',
+    slovenia:'🇸🇮', south africa:'🇿🇦', south korea:'🇰🇷', spain:'🇪🇸', sweden:'🇸🇪',
+    switzerland:'🇨🇭', turkey:'🇹🇷', ukraine:'🇺🇦', united states:'🇺🇸', usa:'🇺🇸',
+    uruguay:'🇺🇾', wales:'🏴'
+  };
+  return map[String(country || '').trim().toLowerCase()] || '🌍';
+}
+
+function inferCountryFromLeague(league = '', tournamentId = '') {
+  const l = String(league || '').trim().toLowerCase();
+  const exact = {
+    'premier league': null,
+    'bundesliga': null,
+    'serie a': 'Italy',
+    'ligue 1': 'France',
+    'eredivisie': 'Netherlands',
+    'primeira liga': 'Portugal',
+    'super lig': 'Turkey',
+    'champions league': 'Europe',
+    'uefa champions league': 'Europe',
+    'uefa europa league': 'Europe',
+    'la liga': 'Spain',
+    'laliga santander': 'Spain'
+  };
+  if (exact[l]) return exact[l];
+  return '';
+}
+
+function displayCountryForGroup(group) {
+  const raw = String(group.country || '').trim();
+  if (raw && raw.toLowerCase() !== 'other') return raw;
+  const inferred = inferCountryFromLeague(group.league, group.tournamentId);
+  if (inferred) return inferred;
+  return 'Unclassified';
+}
+
+function leaguePriority(country = "", league = "") {
+  const c = String(country || "").toLowerCase().trim();
+  const l = String(league || "").toLowerCase().trim();
+  const idx = PRIORITY_LEAGUES.findIndex(item =>
+    item.country.toLowerCase() === c && item.league.toLowerCase() === l
+  );
+  return idx === -1 ? 999 : idx;
+}
+
 function buildDateTabs() {
   const offsets = [-1, 0, 1, 2, 3, 4];
   dateStrip.innerHTML = offsets.map(offset => {
@@ -1301,22 +925,13 @@ function buildDateTabs() {
   });
 }
 
-function leaguePriority(country = "", league = "") {
-  const c = String(country || "").toLowerCase().trim();
-  const l = String(league || "").toLowerCase().trim();
-  const idx = PRIORITY_LEAGUES.findIndex(item =>
-    item.country.toLowerCase() === c && item.league.toLowerCase() === l
-  );
-  return idx === -1 ? 999 : idx;
-}
-
 function groupByLeague(fixtures) {
   const groups = new Map();
 
   fixtures.forEach(f => {
     const tournamentId = String(f.tournament_id || f.tournament_name || 'unknown');
     const leagueName = f.tournament_name || 'Other';
-    const countryName = f.category_name || 'Other';
+    const countryName = f.category_name || '';
     const key = `${tournamentId}__${countryName}__${leagueName}`;
 
     if (!groups.has(key)) {
@@ -1332,10 +947,12 @@ function groupByLeague(fixtures) {
   });
 
   return Array.from(groups.values()).sort((a, b) => {
-    const pa = leaguePriority(a.country, a.league);
-    const pb = leaguePriority(b.country, b.league);
+    const ac = displayCountryForGroup(a);
+    const bc = displayCountryForGroup(b);
+    const pa = leaguePriority(ac, a.league);
+    const pb = leaguePriority(bc, b.league);
     if (pa !== pb) return pa - pb;
-    if (a.country !== b.country) return a.country.localeCompare(b.country);
+    if (ac !== bc) return ac.localeCompare(bc);
     return a.league.localeCompare(b.league);
   });
 }
@@ -1357,7 +974,8 @@ function renderHomeLeagues() {
   const q = searchInput.value.trim().toLowerCase();
 
   const filtered = groupedFixtures.filter(group => {
-    const s = `${group.league} ${group.country}`.toLowerCase();
+    const displayCountry = displayCountryForGroup(group);
+    const s = `${group.league} ${displayCountry}`.toLowerCase();
     if (s.includes(q)) return true;
     return group.fixtures.some(f => `${f.home_team_name} ${f.away_team_name}`.toLowerCase().includes(q));
   });
@@ -1369,21 +987,26 @@ function renderHomeLeagues() {
     return;
   }
 
-  leagueContainer.innerHTML = filtered.map(group => `
-    <div class="league-row" data-league-key="${group.key}">
-      <div class="league-row-left">
-        <div class="league-emoji">🌍</div>
-        <div class="league-info">
-          <div class="league-name">${group.league}</div>
-          <div class="league-country">${group.country}</div>
+  leagueContainer.innerHTML = filtered.map(group => {
+    const displayCountry = displayCountryForGroup(group);
+    const flag = countryToFlagEmoji(displayCountry);
+
+    return `
+      <div class="league-row" data-league-key="${group.key}">
+        <div class="league-row-left">
+          <div class="league-emoji">${flag}</div>
+          <div class="league-info">
+            <div class="league-name">${group.league}</div>
+            <div class="league-country">${displayCountry}</div>
+          </div>
+        </div>
+        <div class="league-row-right">
+          <div class="fixture-count">${group.fixtures.length}</div>
+          <div class="chevron">▶</div>
         </div>
       </div>
-      <div class="league-row-right">
-        <div class="fixture-count">${group.fixtures.length}</div>
-        <div class="chevron">▶</div>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   document.querySelectorAll('.league-row').forEach(row => {
     row.addEventListener('click', () => {
@@ -1407,6 +1030,10 @@ async function loadFixtures() {
     groupedFixtures = groupByLeague(allFixtures);
     renderHomeLeagues();
   } catch (err) {
+    if ((err.message || '').toLowerCase().includes('subscription required')) {
+      leagueContainer.innerHTML = `<div class="error-state">Your trial/subscription has expired. Open the menu and tap Subscribe.</div>`;
+      return;
+    }
     leagueContainer.innerHTML = `<div class="error-state">Failed to load fixtures</div>`;
   }
 }
@@ -1423,9 +1050,24 @@ function closeOverlay(panel) {
   }
 }
 
+function openModal(modal) {
+  modal.classList.add('active');
+  modalBackdrop.classList.add('active');
+  profileMenu.classList.remove('active');
+  profileBackdrop.classList.remove('active');
+}
+
+function closeModal(modal) {
+  modal.classList.remove('active');
+  if (!subscribeModal.classList.contains('active') && !trialModal.classList.contains('active')) {
+    modalBackdrop.classList.remove('active');
+  }
+}
+
 function openLeaguePanel(group) {
   selectedLeague = group;
-  leaguePanelCountry.textContent = group.country || 'Other';
+  const displayCountry = displayCountryForGroup(group);
+  leaguePanelCountry.textContent = displayCountry;
   leaguePanelTitle.textContent = group.league;
   leaguePanelSub.textContent = `${group.fixtures.length} fixtures`;
 
@@ -1479,7 +1121,7 @@ function renderPredictionHero(prediction) {
   const drawPct = safeNum(mr.draw, 0) * 100;
   const awayPct = safeNum(mr.away, 0) * 100;
 
-  document.getElementById('sheetLeague').textContent = selectedFixture?.tournament_name || 'League';
+  document.getElementById('sheetLeague').textContent = `${selectedFixture?.category_name || displayCountryForGroup(selectedLeague || {})} • ${selectedFixture?.tournament_name || 'League'}`;
   document.getElementById('sheetHomeName').textContent = selectedFixture?.home_team_name || 'HOME';
   document.getElementById('sheetAwayName').textContent = selectedFixture?.away_team_name || 'AWAY';
   document.getElementById('sheetHomePct').textContent = `${homePct.toFixed(0)}%`;
@@ -1704,6 +1346,123 @@ function showAuth() {
   authView.classList.remove('hidden');
 }
 
+async function openSubscribeModal() {
+  openModal(subscribeModal);
+
+  document.getElementById('subscribeInfoBlock').classList.remove('hidden');
+  document.getElementById('subscribeLoaded').classList.add('hidden');
+  document.getElementById('paymentSubmitMsg').innerHTML = '';
+
+  try {
+    const me = await apiFetch('/api/auth/me');
+    const info = await apiFetch('/api/auth/subscription-info');
+    const mine = await apiFetch('/api/auth/payment-submissions/mine');
+
+    document.getElementById('subAmount').textContent = `₦${Number(info.amount_ngn || 3000).toLocaleString()}`;
+    document.getElementById('subDuration').textContent = `${info.duration_days || 30} days`;
+    document.getElementById('subEmail').textContent = me.email || '-';
+    document.getElementById('subReference').textContent = info.subscription_code || '-';
+
+    document.getElementById('bankName').textContent = BANK_DETAILS.bankName;
+    document.getElementById('accountName').textContent = BANK_DETAILS.accountName;
+    document.getElementById('accountNumber').textContent = BANK_DETAILS.accountNumber;
+
+    document.getElementById('paymentReferenceInput').value = info.subscription_code || '';
+
+    const instructionsEl = document.getElementById('subInstructions');
+    instructionsEl.innerHTML = (info.instructions || []).map(x => `<li>${x}</li>`).join('');
+
+    const submissionsEl = document.getElementById('mySubmissionsList');
+    const submissions = mine.submissions || [];
+    submissionsEl.innerHTML = submissions.length
+      ? submissions.slice(0, 5).map(item => `
+          <div class="small-history-item">
+            <strong>${item.payment_reference}</strong>
+            <span>Status: ${item.status} • ${formatDateTime(item.created_at)}</span>
+          </div>
+        `).join('')
+      : `<div class="small-history-item"><span>No payment submissions yet.</span></div>`;
+
+    document.getElementById('subscribeInfoBlock').classList.add('hidden');
+    document.getElementById('subscribeLoaded').classList.remove('hidden');
+  } catch (err) {
+    document.getElementById('subscribeInfoBlock').innerHTML = `<div class="error-state">${err.message || 'Failed to load subscription info'}</div>`;
+  }
+}
+
+async function openTrialModal() {
+  openModal(trialModal);
+
+  document.getElementById('trialInfoBlock').classList.remove('hidden');
+  document.getElementById('trialLoaded').classList.add('hidden');
+
+  try {
+    const me = await apiFetch('/api/auth/me');
+
+    document.getElementById('trialStatusValue').textContent = String(me.status || '-').toUpperCase();
+    document.getElementById('trialEndsValue').textContent = formatDateTime(me.trial_ends_at);
+    document.getElementById('subEndsValue').textContent = formatDateTime(me.subscription_expires_at);
+    document.getElementById('trialRefValue').textContent = me.subscription_code || '-';
+
+    let msg = 'Your account access is being enforced from the backend.';
+    if (me.status === 'trial') msg = 'Your free trial is still active. Once it ends, premium routes will lock automatically.';
+    if (me.status === 'active') msg = 'Your premium subscription is active. Access will expire automatically on the date shown above.';
+    if (me.status === 'expired') msg = 'Your trial/subscription has expired. Open Subscribe to renew access.';
+
+    document.getElementById('trialStatusMessage').textContent = msg;
+    document.getElementById('trialInfoBlock').classList.add('hidden');
+    document.getElementById('trialLoaded').classList.remove('hidden');
+  } catch (err) {
+    document.getElementById('trialInfoBlock').innerHTML = `<div class="error-state">${err.message || 'Failed to load account status'}</div>`;
+  }
+}
+
+async function submitPayment() {
+  const payment_reference = document.getElementById('paymentReferenceInput').value.trim();
+  const sender_name = document.getElementById('paymentSenderInput').value.trim();
+  const amount_paid = document.getElementById('paymentAmountInput').value.trim();
+  const note = document.getElementById('paymentNoteInput').value.trim();
+
+  const msgEl = document.getElementById('paymentSubmitMsg');
+  msgEl.innerHTML = '';
+
+  if (!payment_reference) {
+    msgEl.innerHTML = `<div class="notice">Payment reference is required.</div>`;
+    return;
+  }
+
+  try {
+    const data = await apiFetch('/api/auth/payment-submissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_reference,
+        sender_name,
+        amount_paid: amount_paid ? Number(amount_paid) : null,
+        note
+      })
+    });
+
+    msgEl.innerHTML = `<div class="success">${data.message || 'Payment submitted successfully.'}</div>`;
+    document.getElementById('paymentSenderInput').value = '';
+    document.getElementById('paymentAmountInput').value = '';
+    document.getElementById('paymentNoteInput').value = '';
+    openSubscribeModal();
+  } catch (err) {
+    msgEl.innerHTML = `<div class="notice">${err.message || 'Payment submission failed.'}</div>`;
+  }
+}
+
+async function copyReference() {
+  const ref = document.getElementById('subReference').textContent.trim();
+  if (!ref || ref === '-') return;
+  try {
+    await navigator.clipboard.writeText(ref);
+    alert('Reference copied');
+  } catch {
+    alert('Copy failed');
+  }
+}
+
 tabSignup.addEventListener('click', () => setAuthMode('signup'));
 tabLogin.addEventListener('click', () => setAuthMode('login'));
 authSubmit.addEventListener('click', submitAuth);
@@ -1719,12 +1478,9 @@ profileBackdrop.addEventListener('click', () => {
   profileBackdrop.classList.remove('active');
 });
 
-subscribeBtn.addEventListener('click', () => {
-  alert('Next step: wire this to your payment / subscription backend.');
-});
-trialBtn.addEventListener('click', () => {
-  alert('Trial status check can be connected to the backend next.');
-});
+subscribeBtn.addEventListener('click', openSubscribeModal);
+trialBtn.addEventListener('click', openTrialModal);
+
 logoutBtn.addEventListener('click', () => {
   authToken = '';
   localStorage.removeItem('scorephantom_token');
@@ -1738,6 +1494,25 @@ matchPanelClose.addEventListener('click', () => closeOverlay(matchPanel));
 panelBackdrop.addEventListener('click', () => {
   closeOverlay(leaguePanel);
   closeOverlay(matchPanel);
+});
+
+document.querySelectorAll('[data-close-modal]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const id = btn.getAttribute('data-close-modal');
+    closeModal(document.getElementById(id));
+  });
+});
+
+modalBackdrop.addEventListener('click', () => {
+  closeModal(subscribeModal);
+  closeModal(trialModal);
+});
+
+document.getElementById('submitPaymentBtn').addEventListener('click', submitPayment);
+document.getElementById('copyRefBtn').addEventListener('click', copyReference);
+document.getElementById('trialOpenSubscribeBtn').addEventListener('click', () => {
+  closeModal(trialModal);
+  openSubscribeModal();
 });
 
 document.querySelectorAll('.tab').forEach(tab => {
