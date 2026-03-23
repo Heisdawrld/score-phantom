@@ -9,7 +9,7 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
-const PLAN_AMOUNT_KOBO = 300000; // ₦3000
+const PLAN_AMOUNT_KOBO = 300000;
 const PLAN_DURATION_DAYS = 30;
 
 export async function initUsersTable() {
@@ -79,11 +79,11 @@ router.post("/signup", async (req, res) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    if (password.length < 6) {
+    if (String(password).length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
 
     const existing = await db.execute({
       sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
@@ -99,7 +99,7 @@ router.post("/signup", async (req, res) => {
     const trialEnds = new Date();
     trialEnds.setDate(trialEnds.getDate() + 3);
 
-    const insertResult = await db.execute({
+    await db.execute({
       sql: `
         INSERT INTO users (email, password, status, trial_ends_at)
         VALUES (?, ?, ?, ?)
@@ -107,28 +107,22 @@ router.post("/signup", async (req, res) => {
       args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
     });
 
-    let userId =
-      insertResult?.lastInsertRowid ||
-      insertResult?.insertId ||
-      insertResult?.rows?.[0]?.id;
-
-    if (!userId) {
-      const lookup = await db.execute({
-        sql: "SELECT id, email FROM users WHERE email = ? LIMIT 1",
-        args: [normalizedEmail],
-      });
-      const createdUser = lookup.rows?.[0];
-      if (!createdUser) {
-        throw new Error("User created but could not be reloaded");
-      }
-      userId = createdUser.id;
-    }
-
-    const token = signToken({
-      id: userId,
-      email: normalizedEmail,
+    const created = await db.execute({
+      sql: `
+        SELECT id, email, status, trial_ends_at, premium_expires_at
+        FROM users
+        WHERE email = ?
+        LIMIT 1
+      `,
+      args: [normalizedEmail],
     });
 
+    const user = created.rows?.[0];
+    if (!user) {
+      throw new Error("User created but could not be reloaded");
+    }
+
+    const token = signToken(user);
     return res.json({ token });
   } catch (err) {
     console.error("Signup Error:", err);
