@@ -236,6 +236,17 @@
       transform:translateY(106%);transition:transform .32s cubic-bezier(.22,1,.36,1);overflow:hidden;
     }
     .panel.active{transform:translateY(0)}
+    /* ACCA slide-panel — same behaviour as .panel */
+    .slide-panel{
+      position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
+      background:linear-gradient(180deg,#0b0f14,#080b10);
+      border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
+      box-shadow:0 -18px 50px rgba(0,0,0,.46);
+      transform:translateY(106%);transition:transform .32s cubic-bezier(.22,1,.36,1);overflow:hidden;
+      display:flex;flex-direction:column;
+    }
+    .slide-panel.active{transform:translateY(0)}
+    .slide-panel .panel-list{overflow-y:auto;flex:1;padding-bottom:26px}
     .panel-handle{width:78px;height:6px;border-radius:999px;background:#3a414e;margin:10px auto 0}
     .panel-close{
       position:absolute;top:16px;right:14px;width:46px;height:46px;border:none;border-radius:999px;
@@ -701,6 +712,36 @@
     .markdown-body ul { padding-left: 20px; }
     .markdown-body li { margin-bottom: 4px; }
     .markdown-body p { margin-bottom: 8px; }
+    /* ─── Mobile Responsive ─── */
+    @media (max-width: 420px) {
+      /* Shrink brand name so header fits */
+      .brand-name { font-size: 18px; letter-spacing: 1px; }
+      .brand-badge { width: 34px; height: 34px; border-radius: 10px; }
+      .brand-fallback { font-size: 19px; }
+
+      /* Hide LIVE pill text on tiny screens, keep dot only */
+      .live-pill { padding: 7px 9px; font-size: 10px; gap: 5px; }
+      .live-pill::before { width: 7px; height: 7px; }
+
+      /* Smaller ACCA button */
+      .acca-nav-btn { font-size: 11px; padding: 5px 10px; }
+
+      /* Smaller menu button */
+      .menu-btn { width: 36px; height: 36px; font-size: 16px; }
+
+      /* Reduce topbar padding */
+      .topbar-inner { padding: 10px 10px 8px; }
+
+      /* Date strip smaller */
+      .date-tab { padding: 8px 10px; font-size: 11px; }
+      .date-tab .day-num { font-size: 18px; }
+    }
+
+    @media (max-width: 360px) {
+      /* On very small screens hide LIVE entirely */
+      .live-pill { display: none; }
+      .brand-name { font-size: 17px; }
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -1431,8 +1472,10 @@
   }
 
   function closeOverlay(panel) {
+    if (!panel) return;
     panel.classList.remove('active');
-    if (!leaguePanel.classList.contains('active') && !matchPanel.classList.contains('active')) {
+    var accaPanel = document.getElementById('accaPanel');
+    if (!leaguePanel.classList.contains('active') && !matchPanel.classList.contains('active') && (!accaPanel || !accaPanel.classList.contains('active'))) {
       panelBackdrop.classList.remove('active');
     }
   }
@@ -2363,6 +2406,7 @@
   panelBackdrop.addEventListener('click', function() {
     closeOverlay(leaguePanel);
     closeOverlay(matchPanel);
+    closeOverlay(document.getElementById('accaPanel'));
   });
 
   document.querySelectorAll('[data-close-modal]').forEach(function(btn) {
