@@ -338,7 +338,7 @@ function detectValue(modelProb, decimalOdds) {
 }
 
 function marketValueLabel(valueDiff) {
-  if (valueDiff === null || valueDiff === undefined) return "NO_ODDS";
+  if (valueDiff === null || valueDiff === undefined) return "UNAVAILABLE";
   if (valueDiff > 0.10) return "STRONG";
   if (valueDiff > 0.05) return "FAIR";
   return "WEAK";

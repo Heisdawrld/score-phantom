@@ -1526,7 +1526,7 @@
   function renderPredictionHero(prediction) {
     var rec = (prediction && prediction.predictions && prediction.predictions.recommendation) || {};
     var mr = (prediction && prediction.predictions && prediction.predictions.match_result) || {};
-    var mp = (prediction && prediction.predictions && prediction.predictions.matchProfile) || {};
+    var mp = (prediction && prediction.model && prediction.model.matchProfile) || {};
     var model = (prediction && prediction.model) || {};
     var homePct = safeNum(mr.home, 0) * 100;
     var drawPct = safeNum(mr.draw, 0) * 100;
@@ -1679,7 +1679,7 @@
 
   function renderPreviewTab(prediction) {
     var rec = (prediction && prediction.predictions && prediction.predictions.recommendation) || {};
-    var mp = (prediction && prediction.predictions && prediction.predictions.matchProfile) || {};
+    var mp = (prediction && prediction.model && prediction.model.matchProfile) || {};
     var model = (prediction && prediction.model) || {};
     var explanation = (prediction && prediction.explanation) || {};
     var reasons = rec.reasons || explanation.reasons || [];

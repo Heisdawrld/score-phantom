@@ -37,8 +37,8 @@ function cacheSet(key, value) {
 // Smart Rate Limiting — Groq at ~30%
 // ---------------------------------------------------------------------------
 const GROQ_BUDGET = {
-  maxCallsPerHour: 20,
-  maxCallsPerDay: 200,
+  maxCallsPerHour: 40,
+  maxCallsPerDay: 400,
   callsThisHour: 0,
   callsToday: 0,
   hourStart: Date.now(),
@@ -107,11 +107,9 @@ function shouldUseGroq(prediction) {
 
   groqCallCounter++;
 
-  // High-value matches always try Groq (within budget)
-  if (isHighValueMatch(prediction)) return true;
-
-  // Every 3rd call uses Groq (~33%)
-  return groqCallCounter % 3 === 0;
+  // Use Groq for every match — the thinking layer is critical for quality
+  // Budget limits still protect against abuse (40/hr, 400/day)
+  return true;
 }
 
 // ---------------------------------------------------------------------------

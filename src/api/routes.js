@@ -2,6 +2,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { predict } from "../predictions/poissonEngine.js";
+import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
 import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
 
@@ -222,6 +223,54 @@ async function requireTrialOrPremium(req, res, next) {
   next();
 }
 
+// ─── Prediction Cache ─────────────────────────────────────────────────────────
+// Cache predictions in DB so they're stable and fast. TTL = 2 hours.
+
+const PREDICTION_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
+async function getCachedPrediction(fixtureId) {
+  try {
+    const result = await db.execute({
+      sql: `SELECT * FROM predictions WHERE fixture_id = ? ORDER BY generated_at DESC LIMIT 1`,
+      args: [fixtureId],
+    });
+    const row = result.rows?.[0];
+    if (!row) return null;
+
+    const age = Date.now() - new Date(row.generated_at).getTime();
+    if (age > PREDICTION_CACHE_TTL_MS) return null;
+
+    try {
+      return JSON.parse(row.value);
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function cachePrediction(fixtureId, prediction) {
+  try {
+    await db.execute({
+      sql: `DELETE FROM predictions WHERE fixture_id = ?`,
+      args: [fixtureId],
+    });
+    await db.execute({
+      sql: `INSERT INTO predictions (fixture_id, market, value, probability, confidence, generated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      args: [
+        fixtureId,
+        prediction.predictions?.recommendation?.market || 'unknown',
+        JSON.stringify(prediction),
+        prediction.predictions?.recommendation?.probability || 0,
+        prediction.predictions?.recommendation?.confidence || 'LOW',
+      ],
+    });
+  } catch (err) {
+    console.error('[Cache] Failed to cache prediction:', err.message);
+  }
+}
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 async function getFixtureById(fixtureId) {
@@ -412,14 +461,46 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId — trial OR premium (trial = basic prediction only)
 router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req, res) => {
   try {
-    const bundle = await ensureFixtureData(req.params.fixtureId);
+    const fixtureId = req.params.fixtureId;
+
+    // Check cache first for stable predictions
+    const cached = await getCachedPrediction(fixtureId);
+    if (cached) {
+      const response = {
+        ...cached,
+        access: buildAccessPayload(req.access),
+        _cached: true,
+      };
+
+      // Trial users: keep confidence_detail but strip detailed analysis
+      if (req.access.is_trial) {
+        delete response.detailed_analysis;
+        delete response.reasoning;
+        delete response.value_bets;
+        if (response.predictions) {
+          delete response.predictions.rejected_picks;
+          // Keep recommendation.confidence_detail for trial users — it's useful
+          // Only strip full reasons list (premium perk)
+          if (response.predictions.recommendation) {
+            delete response.predictions.recommendation.reasons;
+          }
+        }
+        response.trial_limited = true;
+      }
+
+      return res.json(response);
+    }
+
+    const bundle = await ensureFixtureData(fixtureId);
 
     if (!bundle) {
       return res.status(404).json({ error: "Fixture not found" });
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
+
+    // Step 1: Poisson engine computes all probabilities and ranks markets
+    let prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
@@ -427,28 +508,40 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
       odds
     );
 
-    const response = {
+    // Step 2: Groq evaluator reviews the ranked markets and selects best angle
+    // This is the "thinking" layer that considers 30+ football factors
+    try {
+      prediction = await evaluatePrediction(prediction);
+    } catch (evalErr) {
+      console.error('[Evaluator] Failed, using Poisson recommendation:', evalErr.message);
+      // Poisson engine's recommendation is still valid as fallback
+    }
+
+    const fullResponse = {
       ...prediction,
       odds,
       meta,
+    };
+
+    // Cache the prediction for stability (2 hour TTL)
+    await cachePrediction(fixtureId, fullResponse);
+
+    const response = {
+      ...fullResponse,
       access: buildAccessPayload(req.access),
     };
 
-    // Trial users: strip detailed explanation fields, keep only basic prediction
+    // Trial users: keep confidence_detail but strip detailed analysis
     if (req.access.is_trial) {
       delete response.detailed_analysis;
       delete response.reasoning;
       delete response.value_bets;
-      // Strip enhanced prediction data for trial
       if (response.predictions) {
         delete response.predictions.rejected_picks;
+        // Keep recommendation.confidence_detail for trial users
         if (response.predictions.recommendation) {
           delete response.predictions.recommendation.reasons;
-          delete response.predictions.recommendation.confidence_detail;
-          delete response.predictions.recommendation.is_value_bet;
-          delete response.predictions.recommendation.value_edge;
         }
-        delete response.predictions.matchProfile;
       }
       response.trial_limited = true;
     }
@@ -470,13 +563,20 @@ router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, asy
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
+    let prediction = await predict(
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
       meta,
       odds
     );
+
+    // Run through evaluator for smart pick selection
+    try {
+      prediction = await evaluatePrediction(prediction);
+    } catch (evalErr) {
+      console.error('[Evaluator] Failed in explain:', evalErr.message);
+    }
 
     const fullPayload = {
       ...prediction,
