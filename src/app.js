@@ -8,6 +8,7 @@ import routes from "./api/routes.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
+import { seedFixtures } from "./services/fixtureSeeder.js";
 
 dotenv.config();
 
@@ -32,6 +33,28 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 
+// ── Admin: trigger a manual reseed (protected by ADMIN_ACTIVATION secret) ────
+app.post("/api/admin/seed", async (req, res) => {
+  const secret = req.headers["x-admin-secret"] || req.query.secret;
+  const expected = process.env.ADMIN_ACTIVATION || process.env.ADMIN_SECRET;
+  if (!expected || secret !== expected) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const clearFirst = req.query.clear === "true";
+    const days = parseInt(req.query.days || "7", 10);
+    const msgs = [];
+    const result = await seedFixtures({
+      days,
+      clearFirst,
+      log: (m) => { console.log(m); msgs.push(m); },
+    });
+    res.json({ success: true, ...result, log: msgs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "index.html"));
 });
@@ -42,13 +65,20 @@ async function autoSeed() {
     const count = Number(result.rows[0].count || 0);
 
     if (count > 0) {
-      console.log("DB already has " + count + " fixtures, skipping seed.");
+      console.log("DB already has " + count + " fixtures, skipping auto-seed.");
       return;
     }
 
-    console.warn("No fixtures found. Run the seed script manually.");
+    if (!process.env.LIVESCORE_API_KEY || !process.env.LIVESCORE_API_SECRET) {
+      console.warn("[AutoSeed] No fixtures & no LiveScore keys — skipping seed.");
+      return;
+    }
+
+    console.log("[AutoSeed] Empty DB detected — seeding fixtures from LiveScore...");
+    const result2 = await seedFixtures({ days: 7, clearFirst: true });
+    console.log(`[AutoSeed] Seeded ${result2.inserted} fixtures.`);
   } catch (err) {
-    console.error("Auto-seed check failed:", err.message);
+    console.error("[AutoSeed] Failed:", err.message);
   }
 }
 
