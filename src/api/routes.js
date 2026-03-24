@@ -320,7 +320,6 @@ router.get("/access", requireAuth, (req, res) => {
 router.get("/fixtures", requireAuth, async (req, res) => {
   try {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
-    const isTrial = req.access.is_trial;
 
     let query = `SELECT * FROM fixtures WHERE 1=1`;
     const args = [];
@@ -344,25 +343,9 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     args.push(parseInt(limit, 10), parseInt(offset, 10));
 
     const result = await db.execute({ sql: query, args });
-    let fixtures = result.rows;
+    const fixtures = result.rows;
 
-    // Trial restriction: max 3 leagues, first 2 matches per league
-    if (isTrial) {
-      const leagueMap = new Map();
-      for (const f of fixtures) {
-        const league = f.tournament_name || f.league || '__unknown__';
-        if (!leagueMap.has(league)) {
-          leagueMap.set(league, []);
-        }
-        leagueMap.get(league).push(f);
-      }
-
-      const limitedLeagues = [...leagueMap.entries()].slice(0, 3);
-      fixtures = [];
-      for (const [, matches] of limitedLeagues) {
-        fixtures.push(...matches.slice(0, 2));
-      }
-    }
+    // All users see all fixtures — predictions are gated, not fixture listing
 
     res.json({
       total: fixtures.length,
