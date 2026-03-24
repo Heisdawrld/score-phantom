@@ -8,6 +8,8 @@ import { enrichFixture } from "../enrichment/enrichOne.js";
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'scorephantom_secret_2026';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function safeJsonParse(value, fallback = {}) {
   if (!value) return fallback;
   if (typeof value === "object") return value;
@@ -73,6 +75,8 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
   return meta;
 }
 
+// ─── Auth / Access helpers ────────────────────────────────────────────────────
+
 function getTokenFromRequest(req) {
   const auth = req.headers.authorization || '';
   const parts = auth.split(' ');
@@ -99,25 +103,59 @@ async function getCurrentUser(req) {
 function computeAccessStatus(user) {
   const now = new Date();
 
-  const trialActive =
-    user?.trial_ends_at && new Date(user.trial_ends_at) > now;
+  const trialEnds = user?.trial_ends_at ? new Date(user.trial_ends_at) : null;
+  const trialActive = trialEnds && trialEnds > now;
 
-  const subActive =
-    user?.subscription_expires_at && new Date(user.subscription_expires_at) > now;
+  const subExpires = user?.subscription_expires_at
+    ? new Date(user.subscription_expires_at)
+    : null;
+  const subActive = subExpires && subExpires > now;
 
   let status = 'expired';
   if (subActive) status = 'active';
   else if (trialActive) status = 'trial';
 
+  const trialDaysLeft = trialActive
+    ? Math.max(0, Math.ceil((trialEnds - now) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  const isPremium = !!subActive;
+  const isTrial = !!trialActive && !subActive;
+
   return {
     status,
+    is_premium: isPremium,
+    is_trial: isTrial,
     trial_active: !!trialActive,
     subscription_active: !!subActive,
     has_full_access: !!trialActive || !!subActive,
+    trial_days_left: trialDaysLeft,
+    features: {
+      ai_chat: isPremium,
+      full_predictions: isPremium,
+      all_matches: isPremium,
+    },
   };
 }
 
-async function requirePremiumAccess(req, res, next) {
+/**
+ * Build the standard `access` object included in every authenticated response.
+ */
+function buildAccessPayload(access) {
+  return {
+    status: access.status,
+    is_premium: access.is_premium,
+    is_trial: access.is_trial,
+    trial_days_left: access.trial_days_left,
+    features: access.features,
+  };
+}
+
+// ─── Middleware: requireAuth ──────────────────────────────────────────────────
+// Just verifies JWT and attaches user + access info to `req`.
+// Does NOT enforce any subscription / trial state.
+
+async function requireAuth(req, res, next) {
   const user = await getCurrentUser(req);
 
   if (!user) {
@@ -128,17 +166,63 @@ async function requirePremiumAccess(req, res, next) {
   req.user = user;
   req.access = access;
 
-  if (!access.has_full_access) {
+  next();
+}
+
+// ─── Middleware: requirePremiumAccess ─────────────────────────────────────────
+// Requires an active subscription (NOT trial). Use for premium-only endpoints.
+
+async function requirePremiumAccess(req, res, next) {
+  // If auth was already resolved by a previous middleware, reuse it
+  if (!req.user) {
+    const user = await getCurrentUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const access = computeAccessStatus(user);
+    req.user = user;
+    req.access = access;
+  }
+
+  if (!req.access.is_premium) {
     return res.status(403).json({
-      error: 'Subscription required',
-      code: 'subscription_required',
-      access_status: access.status,
-      subscription_code: user.subscription_code || null,
+      error: 'Premium subscription required',
+      code: 'premium_required',
+      access: buildAccessPayload(req.access),
+      subscription_code: req.user.subscription_code || null,
     });
   }
 
   next();
 }
+
+// ─── Middleware: requireTrialOrPremium ────────────────────────────────────────
+// Requires at least an active trial OR subscription.
+
+async function requireTrialOrPremium(req, res, next) {
+  if (!req.user) {
+    const user = await getCurrentUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const access = computeAccessStatus(user);
+    req.user = user;
+    req.access = access;
+  }
+
+  if (!req.access.has_full_access) {
+    return res.status(403).json({
+      error: 'Subscription required',
+      code: 'subscription_required',
+      access: buildAccessPayload(req.access),
+      subscription_code: req.user.subscription_code || null,
+    });
+  }
+
+  next();
+}
+
+// ─── Data helpers ─────────────────────────────────────────────────────────────
 
 async function getFixtureById(fixtureId) {
   const result = await db.execute({
@@ -218,13 +302,25 @@ async function ensureFixtureData(fixtureId) {
   };
 }
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+// Health — public
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "ScorePhantom API" });
 });
 
-router.get("/fixtures", requirePremiumAccess, async (req, res) => {
+// ─── GET /access — lightweight access check ──────────────────────────────────
+router.get("/access", requireAuth, (req, res) => {
+  res.json({
+    access: buildAccessPayload(req.access),
+  });
+});
+
+// ─── GET /fixtures — auth required; trial users get limited results ──────────
+router.get("/fixtures", requireAuth, async (req, res) => {
   try {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
+    const isTrial = req.access.is_trial;
 
     let query = `SELECT * FROM fixtures WHERE 1=1`;
     const args = [];
@@ -248,11 +344,30 @@ router.get("/fixtures", requirePremiumAccess, async (req, res) => {
     args.push(parseInt(limit, 10), parseInt(offset, 10));
 
     const result = await db.execute({ sql: query, args });
+    let fixtures = result.rows;
+
+    // Trial restriction: max 3 leagues, first 2 matches per league
+    if (isTrial) {
+      const leagueMap = new Map();
+      for (const f of fixtures) {
+        const league = f.tournament_name || f.league || '__unknown__';
+        if (!leagueMap.has(league)) {
+          leagueMap.set(league, []);
+        }
+        leagueMap.get(league).push(f);
+      }
+
+      const limitedLeagues = [...leagueMap.entries()].slice(0, 3);
+      fixtures = [];
+      for (const [, matches] of limitedLeagues) {
+        fixtures.push(...matches.slice(0, 2));
+      }
+    }
 
     res.json({
-      total: result.rows.length,
-      fixtures: result.rows,
-      access_status: req.access.status,
+      total: fixtures.length,
+      fixtures,
+      access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
@@ -260,8 +375,18 @@ router.get("/fixtures", requirePremiumAccess, async (req, res) => {
   }
 });
 
-router.get("/fixtures/:id", requirePremiumAccess, async (req, res) => {
+// ─── GET /fixtures/:id — auth required; trial users only see "free" fixtures ─
+router.get("/fixtures/:id", requireAuth, async (req, res) => {
   try {
+    // Require at least trial or premium
+    if (!req.access.has_full_access) {
+      return res.status(403).json({
+        error: "Subscription required",
+        code: "subscription_required",
+        access: buildAccessPayload(req.access),
+      });
+    }
+
     const bundle = await ensureFixtureData(req.params.id);
 
     if (!bundle) {
@@ -269,6 +394,18 @@ router.get("/fixtures/:id", requirePremiumAccess, async (req, res) => {
     }
 
     const { fixture, meta } = bundle;
+
+    // Trial users: only allow fixtures flagged as free (or first fixture)
+    if (req.access.is_trial) {
+      const fixtureMeta = safeJsonParse(fixture.meta, {});
+      if (fixtureMeta.premium_only) {
+        return res.status(403).json({
+          error: "This fixture is not available on trial",
+          code: "trial_restricted",
+          access: buildAccessPayload(req.access),
+        });
+      }
+    }
 
     res.json({
       fixture,
@@ -281,6 +418,7 @@ router.get("/fixtures/:id", requirePremiumAccess, async (req, res) => {
         awayForm: meta.awayForm || [],
       },
       meta,
+      access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
@@ -288,7 +426,8 @@ router.get("/fixtures/:id", requirePremiumAccess, async (req, res) => {
   }
 });
 
-router.get("/predict/:fixtureId", requirePremiumAccess, async (req, res) => {
+// ─── GET /predict/:fixtureId — trial OR premium (trial = basic prediction only)
+router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.fixtureId);
 
@@ -301,21 +440,45 @@ router.get("/predict/:fixtureId", requirePremiumAccess, async (req, res) => {
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
-      meta
+      meta,
+      odds
     );
 
-    res.json({
+    const response = {
       ...prediction,
       odds,
       meta,
-    });
+      access: buildAccessPayload(req.access),
+    };
+
+    // Trial users: strip detailed explanation fields, keep only basic prediction
+    if (req.access.is_trial) {
+      delete response.detailed_analysis;
+      delete response.reasoning;
+      delete response.value_bets;
+      // Strip enhanced prediction data for trial
+      if (response.predictions) {
+        delete response.predictions.rejected_picks;
+        if (response.predictions.recommendation) {
+          delete response.predictions.recommendation.reasons;
+          delete response.predictions.recommendation.confidence_detail;
+          delete response.predictions.recommendation.is_value_bet;
+          delete response.predictions.recommendation.value_edge;
+        }
+        delete response.predictions.matchProfile;
+      }
+      response.trial_limited = true;
+    }
+
+    res.json(response);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Prediction failed", detail: err.message });
   }
 });
 
-router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
+// ─── GET /predict/:fixtureId/explain — PREMIUM ONLY ─────────────────────────
+router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, async (req, res) => {
   try {
     const bundle = await ensureFixtureData(req.params.fixtureId);
 
@@ -328,7 +491,8 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
       fixture.id,
       fixture.home_team_name,
       fixture.away_team_name,
-      meta
+      meta,
+      odds
     );
 
     const fullPayload = {
@@ -342,6 +506,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
     res.json({
       ...fullPayload,
       explanation,
+      access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
@@ -349,7 +514,50 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
   }
 });
 
-router.get("/tournaments", requirePremiumAccess, async (req, res) => {
+// ─── POST /predict/:fixtureId/chat — PREMIUM ONLY ───────────────────────────
+router.post("/predict/:fixtureId/chat", requireAuth, requirePremiumAccess, async (req, res) => {
+  try {
+    const { message, history = [] } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message required" });
+    }
+
+    const bundle = await ensureFixtureData(req.params.fixtureId);
+
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
+    }
+
+    const { fixture, odds, meta } = bundle;
+    const prediction = await predict(
+      fixture.id,
+      fixture.home_team_name,
+      fixture.away_team_name,
+      meta,
+      odds
+    );
+
+    const fullPrediction = {
+      ...prediction,
+      odds,
+      meta,
+    };
+
+    const reply = await chatAboutMatch(fullPrediction, history, message);
+
+    res.json({
+      reply,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[Chat] Failed:", err.message);
+    res.status(500).json({ error: "Chat failed", detail: err.message });
+  }
+});
+
+// ─── GET /tournaments — auth required (trial + premium) ─────────────────────
+router.get("/tournaments", requireAuth, requireTrialOrPremium, async (req, res) => {
   try {
     const result = await db.execute(
       `SELECT DISTINCT id, name, category FROM tournaments ORDER BY category, name`
@@ -358,6 +566,7 @@ router.get("/tournaments", requirePremiumAccess, async (req, res) => {
     res.json({
       total: result.rows.length,
       tournaments: result.rows,
+      access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
@@ -365,7 +574,8 @@ router.get("/tournaments", requirePremiumAccess, async (req, res) => {
   }
 });
 
-router.get("/stats", requirePremiumAccess, async (req, res) => {
+// ─── GET /stats — auth required (trial + premium) ───────────────────────────
+router.get("/stats", requireAuth, requireTrialOrPremium, async (req, res) => {
   try {
     const [total, enriched, historical, teams, tournaments] = await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM fixtures`),
@@ -387,47 +597,11 @@ router.get("/stats", requirePremiumAccess, async (req, res) => {
       historical_matches: Number(historical.rows[0].count || 0),
       teams: Number(teams.rows[0].count || 0),
       tournaments: Number(tournaments.rows[0].count || 0),
+      access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch stats" });
-  }
-});
-
-router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) => {
-  try {
-    const { message, history = [] } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
-
-    const bundle = await ensureFixtureData(req.params.fixtureId);
-
-    if (!bundle) {
-      return res.status(404).json({ error: "Fixture not found" });
-    }
-
-    const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
-      fixture.id,
-      fixture.home_team_name,
-      fixture.away_team_name,
-      meta
-    );
-
-    const fullPrediction = {
-      ...prediction,
-      odds,
-      meta,
-    };
-
-    const reply = await chatAboutMatch(fullPrediction, history, message);
-
-    res.json({ reply });
-  } catch (err) {
-    console.error("[Chat] Failed:", err.message);
-    res.status(500).json({ error: "Chat failed", detail: err.message });
   }
 });
 

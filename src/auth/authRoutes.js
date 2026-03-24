@@ -6,15 +6,34 @@ import db from "../config/database.js";
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
-const PLAN_AMOUNT_KOBO = 300000;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+const PLAN_AMOUNT_NAIRA = 3000;
 const PLAN_DURATION_DAYS = 30;
+const TRIAL_DURATION_DAYS = 3;
+
+// OPay bank details
+const OPAY_BANK_DETAILS = {
+  bank_name: "OPay",
+  account_number: "8117024699",
+  account_name: "ScorePhantom",
+  amount: `₦${PLAN_AMOUNT_NAIRA.toLocaleString()}`,
+  plan: "Monthly Premium",
+};
+
+const WHATSAPP_NUMBER = "2348117024699";
+const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+  "Hi, I just made a payment for ScorePhantom Premium. Here is my receipt:"
+)}`;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function ensureColumn(tableName, columnName, alterSql) {
   const info = await db.execute(`PRAGMA table_info(${tableName})`);
   const rows = info.rows || [];
-  const exists = rows.some((row) => String(row.name).toLowerCase() === String(columnName).toLowerCase());
+  const exists = rows.some(
+    (row) =>
+      String(row.name).toLowerCase() === String(columnName).toLowerCase()
+  );
   if (!exists) {
     await db.execute(alterSql);
   }
@@ -52,6 +71,18 @@ export async function initUsersTable() {
     `ALTER TABLE users ADD COLUMN premium_expires_at TEXT`
   );
 
+  await ensureColumn(
+    "users",
+    "subscription_expires_at",
+    `ALTER TABLE users ADD COLUMN subscription_expires_at TEXT`
+  );
+
+  await ensureColumn(
+    "users",
+    "subscription_code",
+    `ALTER TABLE users ADD COLUMN subscription_code TEXT`
+  );
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,11 +97,9 @@ export async function initUsersTable() {
 }
 
 function signToken(user) {
-  return jwt.sign(
-    { id: user.id, email: user.email },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
 }
 
 function requireAuth(req, res, next) {
@@ -96,19 +125,27 @@ function publicUser(user) {
     status: user.status,
     trial_ends_at: user.trial_ends_at,
     premium_expires_at: user.premium_expires_at,
+    subscription_expires_at: user.subscription_expires_at,
+    subscription_code: user.subscription_code,
   };
 }
+
+// ── Auth Routes ──────────────────────────────────────────────────────────────
 
 router.post("/signup", async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res
+        .status(400)
+        .json({ error: "Email and password are required" });
     }
 
     if (String(password).length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 6 characters" });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -125,7 +162,7 @@ router.post("/signup", async (req, res) => {
     const hashedPassword = await bcrypt.hash(String(password), 10);
 
     const trialEnds = new Date();
-    trialEnds.setDate(trialEnds.getDate() + 3);
+    trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS);
 
     await db.execute({
       sql: `
@@ -137,7 +174,8 @@ router.post("/signup", async (req, res) => {
 
     const created = await db.execute({
       sql: `
-        SELECT id, email, status, trial_ends_at, premium_expires_at
+        SELECT id, email, status, trial_ends_at, premium_expires_at,
+               subscription_expires_at, subscription_code
         FROM users
         WHERE email = ?
         LIMIT 1
@@ -151,7 +189,7 @@ router.post("/signup", async (req, res) => {
     }
 
     const token = signToken(user);
-    return res.json({ token });
+    return res.json({ token, user: publicUser(user) });
   } catch (err) {
     console.error("Signup Error:", err);
     return res.status(500).json({ error: "Signup failed" });
@@ -175,16 +213,21 @@ router.post("/login", async (req, res) => {
     }
 
     if (!user.password) {
-      return res.status(400).json({ error: "Account password is not set. Create a new account." });
+      return res.status(400).json({
+        error: "Account password is not set. Create a new account.",
+      });
     }
 
-    const ok = await bcrypt.compare(String(password || ""), String(user.password || ""));
+    const ok = await bcrypt.compare(
+      String(password || ""),
+      String(user.password || "")
+    );
     if (!ok) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
     const token = signToken(user);
-    return res.json({ token });
+    return res.json({ token, user: publicUser(user) });
   } catch (err) {
     console.error("Login Error:", err);
     return res.status(500).json({ error: "Login failed" });
@@ -195,7 +238,8 @@ router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
       sql: `
-        SELECT id, email, status, trial_ends_at, premium_expires_at
+        SELECT id, email, status, trial_ends_at, premium_expires_at,
+               subscription_expires_at, subscription_code
         FROM users
         WHERE id = ?
         LIMIT 1
@@ -215,20 +259,19 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/payment/initialize", requireAuth, async (req, res) => {
-  try {
-    if (!PAYSTACK_SECRET_KEY) {
-      return res.status(500).json({ error: "Paystack is not configured" });
-    }
+// ── Payment Routes (OPay Manual Flow) ────────────────────────────────────────
 
+// POST /auth/payment/request — Create a pending payment, return bank details
+router.post("/payment/request", requireAuth, async (req, res) => {
+  try {
     const userResult = await db.execute({
-      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      sql: "SELECT id, email, status FROM users WHERE id = ? LIMIT 1",
       args: [req.user.id],
     });
 
     const user = userResult.rows?.[0];
-    if (!user?.email) {
-      return res.status(400).json({ error: "User email not found" });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
 
     const reference = `SP_${user.id}_${Date.now()}`;
@@ -238,61 +281,40 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
         INSERT INTO payments (user_id, reference, amount, status)
         VALUES (?, ?, ?, ?)
       `,
-      args: [user.id, reference, PLAN_AMOUNT_KOBO, "initialized"],
+      args: [user.id, reference, PLAN_AMOUNT_NAIRA, "initialized"],
     });
-
-    const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: user.email,
-        amount: PLAN_AMOUNT_KOBO,
-        reference,
-        callback_url: `${APP_URL}/payment-success?reference=${encodeURIComponent(reference)}`,
-        metadata: {
-          user_id: user.id,
-          email: user.email,
-          product: "scorephantom_monthly",
-        },
-      }),
-    });
-
-    const data = await paystackRes.json();
-
-    if (!data?.status || !data?.data?.authorization_url) {
-      return res.status(400).json({
-        error: data?.message || "Paystack error",
-      });
-    }
 
     return res.json({
-      authorization_url: data.data.authorization_url,
       reference,
-      test_mode: String(PAYSTACK_SECRET_KEY).startsWith("sk_test_"),
+      bank_details: OPAY_BANK_DETAILS,
+      whatsapp_link: WHATSAPP_LINK,
+      whatsapp_number: `+${WHATSAPP_NUMBER}`,
+      instructions: [
+        `1. Transfer ₦${PLAN_AMOUNT_NAIRA.toLocaleString()} to the OPay account above`,
+        "2. Take a screenshot of your payment receipt",
+        "3. Click the WhatsApp link or send the receipt to our WhatsApp number",
+        `4. Include your reference code: ${reference}`,
+        "5. Your account will be activated within minutes after verification",
+      ],
     });
   } catch (err) {
-    console.error("Payment Init Error:", err);
-    return res.status(500).json({ error: "Payment initialization failed" });
+    console.error("Payment Request Error:", err);
+    return res.status(500).json({ error: "Failed to create payment request" });
   }
 });
 
-router.get("/payment/verify", requireAuth, async (req, res) => {
+// POST /auth/payment/confirm — User says "I have paid", set to pending_verification
+router.post("/payment/confirm", requireAuth, async (req, res) => {
   try {
-    if (!PAYSTACK_SECRET_KEY) {
-      return res.status(500).json({ error: "Paystack is not configured" });
-    }
+    const { reference } = req.body || {};
 
-    const reference = String(req.query.reference || "").trim();
     if (!reference) {
-      return res.status(400).json({ error: "Reference is required" });
+      return res.status(400).json({ error: "Payment reference is required" });
     }
 
     const paymentResult = await db.execute({
       sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1",
-      args: [reference],
+      args: [String(reference).trim()],
     });
 
     const payment = paymentResult.rows?.[0];
@@ -301,56 +323,138 @@ router.get("/payment/verify", requireAuth, async (req, res) => {
     }
 
     if (Number(payment.user_id) !== Number(req.user.id)) {
-      return res.status(403).json({ error: "This payment does not belong to this account" });
+      return res
+        .status(403)
+        .json({ error: "This payment does not belong to this account" });
     }
 
-    if (payment.status === "success") {
-      const userResult = await db.execute({
-        sql: `
-          SELECT id, email, status, trial_ends_at, premium_expires_at
-          FROM users
-          WHERE id = ?
-          LIMIT 1
-        `,
-        args: [req.user.id],
-      });
-
-      const user = userResult.rows?.[0];
+    if (payment.status === "verified") {
       return res.json({
         success: true,
         already_verified: true,
-        premium_expires_at: user?.premium_expires_at || null,
-        test_mode: String(PAYSTACK_SECRET_KEY).startsWith("sk_test_"),
+        message: "This payment has already been verified.",
       });
     }
 
-    const verifyRes = await fetch(
-      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        },
-      }
-    );
+    await db.execute({
+      sql: `
+        UPDATE payments
+        SET status = 'pending_verification'
+        WHERE reference = ?
+      `,
+      args: [String(reference).trim()],
+    });
 
-    const data = await verifyRes.json();
-    const txn = data?.data;
+    const whatsappWithRef = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+      `Hi, I just paid for ScorePhantom Premium.\n\nReference: ${reference}\nEmail: ${req.user.email}\n\nHere is my payment receipt:`
+    )}`;
 
-    if (!data?.status || !txn) {
-      return res.status(400).json({ error: data?.message || "Verification failed" });
-    }
+    return res.json({
+      success: true,
+      status: "pending_verification",
+      message:
+        "Thank you! Please send your payment receipt via WhatsApp for verification.",
+      whatsapp_link: whatsappWithRef,
+      whatsapp_number: `+${WHATSAPP_NUMBER}`,
+      reference,
+    });
+  } catch (err) {
+    console.error("Payment Confirm Error:", err);
+    return res.status(500).json({ error: "Failed to confirm payment" });
+  }
+});
 
-    if (txn.status !== "success") {
-      return res.status(400).json({ error: "Payment not successful" });
-    }
+// GET /auth/payment/status — Check current user's latest payment status
+router.get("/payment/status", requireAuth, async (req, res) => {
+  try {
+    const paymentResult = await db.execute({
+      sql: `
+        SELECT id, reference, amount, status, paid_at, created_at
+        FROM payments
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      args: [req.user.id],
+    });
 
-    if (Number(txn.amount) !== PLAN_AMOUNT_KOBO) {
-      return res.status(400).json({ error: "Payment amount mismatch" });
+    const payment = paymentResult.rows?.[0];
+
+    if (!payment) {
+      return res.json({
+        has_payment: false,
+        message: "No payment records found. Start by requesting payment details.",
+      });
     }
 
     const userResult = await db.execute({
-      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      sql: `
+        SELECT status, premium_expires_at, subscription_expires_at
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+      `,
       args: [req.user.id],
+    });
+
+    const user = userResult.rows?.[0];
+
+    return res.json({
+      has_payment: true,
+      payment: {
+        reference: payment.reference,
+        amount: payment.amount,
+        status: payment.status,
+        paid_at: payment.paid_at,
+        created_at: payment.created_at,
+      },
+      account_status: user?.status || null,
+      premium_expires_at: user?.premium_expires_at || null,
+      subscription_expires_at: user?.subscription_expires_at || null,
+    });
+  } catch (err) {
+    console.error("Payment Status Error:", err);
+    return res.status(500).json({ error: "Failed to check payment status" });
+  }
+});
+
+// ── Admin Routes ─────────────────────────────────────────────────────────────
+
+// POST /auth/admin/verify-payment — Admin verifies a payment and activates premium
+router.post("/admin/verify-payment", async (req, res) => {
+  try {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (!ADMIN_SECRET || adminSecret !== ADMIN_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { user_id, reference } = req.body || {};
+
+    if (!user_id && !reference) {
+      return res
+        .status(400)
+        .json({ error: "Either user_id or reference is required" });
+    }
+
+    let payment = null;
+    let targetUserId = user_id;
+
+    if (reference) {
+      const paymentResult = await db.execute({
+        sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1",
+        args: [String(reference).trim()],
+      });
+      payment = paymentResult.rows?.[0];
+      if (!payment) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+      targetUserId = payment.user_id;
+    }
+
+    // Verify user exists
+    const userResult = await db.execute({
+      sql: "SELECT id, email, status FROM users WHERE id = ? LIMIT 1",
+      args: [targetUserId],
     });
 
     const user = userResult.rows?.[0];
@@ -358,42 +462,63 @@ router.get("/payment/verify", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const paidEmail = String(txn.customer?.email || "").trim().toLowerCase();
-    const userEmail = String(user.email || "").trim().toLowerCase();
-
-    if (!paidEmail || paidEmail !== userEmail) {
-      return res.status(400).json({ error: "Payment email does not match this account" });
-    }
-
+    // Calculate expiry: 30 days from now
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
+    const expiryISO = expiry.toISOString();
 
+    // Generate subscription code
+    const subscriptionCode = `SUB_${user.id}_${Date.now()}`;
+
+    // Update user to premium
     await db.execute({
       sql: `
         UPDATE users
-        SET status = 'premium', premium_expires_at = ?
+        SET status = 'premium',
+            premium_expires_at = ?,
+            subscription_expires_at = ?,
+            subscription_code = ?
         WHERE id = ?
       `,
-      args: [expiry.toISOString(), req.user.id],
+      args: [expiryISO, expiryISO, subscriptionCode, targetUserId],
     });
 
-    await db.execute({
-      sql: `
-        UPDATE payments
-        SET status = 'success', paid_at = ?
-        WHERE reference = ?
-      `,
-      args: [new Date().toISOString(), reference],
-    });
+    // Update payment record if we have a reference
+    if (reference && payment) {
+      await db.execute({
+        sql: `
+          UPDATE payments
+          SET status = 'verified', paid_at = ?
+          WHERE reference = ?
+        `,
+        args: [new Date().toISOString(), String(reference).trim()],
+      });
+    } else if (user_id) {
+      // Update the latest pending payment for this user
+      await db.execute({
+        sql: `
+          UPDATE payments
+          SET status = 'verified', paid_at = ?
+          WHERE user_id = ? AND status IN ('initialized', 'pending_verification')
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        args: [new Date().toISOString(), targetUserId],
+      });
+    }
 
     return res.json({
       success: true,
-      premium_expires_at: expiry.toISOString(),
-      test_mode: String(PAYSTACK_SECRET_KEY).startsWith("sk_test_"),
+      user_id: targetUserId,
+      email: user.email,
+      status: "premium",
+      premium_expires_at: expiryISO,
+      subscription_expires_at: expiryISO,
+      subscription_code: subscriptionCode,
     });
   } catch (err) {
-    console.error("Verify Error:", err);
-    return res.status(500).json({ error: "Verification failed" });
+    console.error("Admin Verify Error:", err);
+    return res.status(500).json({ error: "Failed to verify payment" });
   }
 });
 

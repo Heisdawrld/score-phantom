@@ -213,6 +213,199 @@ function marketFloor(market) {
   }
 }
 
+// ─── GAME SCRIPT CLASSIFICATION ──────────────────────────────────────────────
+
+function classifyGameScript(features, lambdaHome, lambdaAway, context) {
+  const hf = features?.homeFeatures || {};
+  const af = features?.awayFeatures || {};
+  const tc = features?.tableContext || {};
+  const cs = features?.combinedSignals || {};
+
+  const totalXg = lambdaHome + lambdaAway;
+  const strengthGap = context.strengthGap;
+  const absGap = Math.abs(strengthGap);
+  const posGap = Math.abs(safeNum(tc.position_gap, 0));
+  const momentumGap = safeNum(tc.momentum_gap, 0);
+  const homeForm = safeNum(hf.weighted_points_per_match, 1.2);
+  const awayForm = safeNum(af.weighted_points_per_match, 1.2);
+
+  // Check for chaotic / unreliable data first
+  const homeMatches = safeNum(hf.matches_available, 0);
+  const awayMatches = safeNum(af.matches_available, 0);
+  if (homeMatches < 3 || awayMatches < 3) {
+    return {
+      script: "chaotic_unreliable",
+      description: "Insufficient data to classify match pattern reliably",
+    };
+  }
+
+  // Mixed signals: one metric says dominant, another contradicts
+  const formSaysHome = homeForm > awayForm + 0.4;
+  const tableSaysAway = safeNum(tc.position_gap, 0) < -5;
+  const formSaysAway = awayForm > homeForm + 0.4;
+  const tableSaysHome = safeNum(tc.position_gap, 0) > 5;
+  if ((formSaysHome && tableSaysAway) || (formSaysAway && tableSaysHome)) {
+    return {
+      script: "chaotic_unreliable",
+      description: "Conflicting signals between form and table position — mixed picture",
+    };
+  }
+
+  // Dominant home pressure
+  if (strengthGap >= 0.6 && (posGap >= 6 || homeForm >= 2.0) && lambdaHome >= 1.4) {
+    return {
+      script: "dominant_home_pressure",
+      description: "Home team expected to dominate territory and create most chances",
+    };
+  }
+
+  // Dominant away pressure
+  if (strengthGap <= -0.6 && (posGap >= 6 || awayForm >= 2.0) && lambdaAway >= 1.3) {
+    return {
+      script: "dominant_away_pressure",
+      description: "Away team clearly stronger despite travelling — likely to control proceedings",
+    };
+  }
+
+  // Open end to end
+  if (totalXg >= 2.9 && context.bothTeamsReliable && context.isOpen) {
+    return {
+      script: "open_end_to_end",
+      description: "Both teams attack-minded — expect an open, high-event game",
+    };
+  }
+
+  // Balanced high event
+  if (totalXg >= 2.6 && absGap < 0.5 && !context.isCagey) {
+    return {
+      script: "balanced_high_event",
+      description: "Balanced sides but goals expected — competitive and entertaining",
+    };
+  }
+
+  // Tight low event
+  if (totalXg <= 2.25 && (context.isCagey || context.lowScoringTrend)) {
+    return {
+      script: "tight_low_event",
+      description: "Tight defensive game expected — few clear chances anticipated",
+    };
+  }
+
+  // Default fallback — balanced or unclassifiable
+  if (absGap < 0.35 && totalXg >= 2.25 && totalXg < 2.9) {
+    return {
+      script: "balanced_high_event",
+      description: "Evenly matched with moderate goal expectation",
+    };
+  }
+
+  // Mild home or away advantage that doesn't hit dominant thresholds
+  if (strengthGap > 0.25) {
+    return {
+      script: "dominant_home_pressure",
+      description: "Home team holds a moderate edge — should see more of the ball",
+    };
+  }
+  if (strengthGap < -0.25) {
+    return {
+      script: "dominant_away_pressure",
+      description: "Away team holds a moderate edge despite travelling",
+    };
+  }
+
+  return {
+    script: "tight_low_event",
+    description: "No strong pattern — default to tight, cautious game script",
+  };
+}
+
+// ─── VALUE DETECTION AGAINST ODDS ────────────────────────────────────────────
+
+function calcImpliedProb(decimalOdds) {
+  if (!decimalOdds || decimalOdds <= 1) return null;
+  return 1 / decimalOdds;
+}
+
+function detectValue(modelProb, decimalOdds) {
+  const implied = calcImpliedProb(decimalOdds);
+  if (implied === null) return { implied: null, value: null, isValue: false };
+  const value = modelProb - implied;
+  return {
+    implied: parseFloat(implied.toFixed(4)),
+    value: parseFloat(value.toFixed(4)),
+    isValue: value > 0.05,
+  };
+}
+
+function marketValueLabel(valueDiff) {
+  if (valueDiff === null || valueDiff === undefined) return "NO_ODDS";
+  if (valueDiff > 0.10) return "STRONG";
+  if (valueDiff > 0.05) return "FAIR";
+  return "WEAK";
+}
+
+function matchVolatilityLabel(features, gameScript) {
+  const hf = features?.homeFeatures || {};
+  const af = features?.awayFeatures || {};
+  const homeMatches = safeNum(hf.matches_available, 0);
+  const awayMatches = safeNum(af.matches_available, 0);
+
+  if (homeMatches < 4 || awayMatches < 4) return "HIGH";
+  if (gameScript === "chaotic_unreliable") return "HIGH";
+  if (gameScript === "open_end_to_end") return "MEDIUM";
+  if (gameScript === "tight_low_event") return "LOW";
+  if (homeMatches >= 8 && awayMatches >= 8) return "LOW";
+  return "MEDIUM";
+}
+
+// ─── FIND ODDS FOR A CANDIDATE ───────────────────────────────────────────────
+
+function findOddsForCandidate(candidate, odds, homeTeam, awayTeam) {
+  if (!odds) return null;
+
+  const m = candidate.market;
+  const p = candidate.pick;
+
+  // 1X2
+  if (m === "1X2") {
+    if (p === `${homeTeam} Win` && odds.home) return odds.home;
+    if (p === "Draw" && odds.draw) return odds.draw;
+    if (p === `${awayTeam} Win` && odds.away) return odds.away;
+  }
+
+  // Over/Under
+  if (m === "Over/Under") {
+    if (p === "Over 2.5 Goals" && odds.over_2_5) return odds.over_2_5;
+    if (p === "Under 2.5 Goals" && odds.under_2_5) return odds.under_2_5;
+    if (p === "Over 1.5 Goals" && odds.over_1_5) return odds.over_1_5;
+    if (p === "Under 1.5 Goals" && odds.under_1_5) return odds.under_1_5;
+    if (p === "Over 3.5 Goals" && odds.over_3_5) return odds.over_3_5;
+  }
+
+  // BTTS
+  if (m === "BTTS") {
+    if (p === "BTTS Yes" && odds.btts_yes) return odds.btts_yes;
+    if (p === "BTTS No" && odds.btts_no) return odds.btts_no;
+  }
+
+  // Double Chance
+  if (m === "Double Chance") {
+    if (p === `${homeTeam} or Draw` && odds.dc_home_draw) return odds.dc_home_draw;
+    if (p === `${awayTeam} or Draw` && odds.dc_away_draw) return odds.dc_away_draw;
+    if (p === `${homeTeam} or ${awayTeam}` && odds.dc_home_away) return odds.dc_home_away;
+  }
+
+  // Draw No Bet
+  if (m === "Draw No Bet") {
+    if (p === `${homeTeam} DNB` && odds.dnb_home) return odds.dnb_home;
+    if (p === `${awayTeam} DNB` && odds.dnb_away) return odds.dnb_away;
+  }
+
+  return null;
+}
+
+// ─── CONTEXT BUILDER ─────────────────────────────────────────────────────────
+
 function buildContext(features, lambdaHome, lambdaAway, result1X2, overUnder, btts) {
   const hf = features?.homeFeatures || {};
   const af = features?.awayFeatures || {};
@@ -287,6 +480,8 @@ function buildContext(features, lambdaHome, lambdaAway, result1X2, overUnder, bt
   };
 }
 
+// ─── CANDIDATE BUILDING & SCORING ────────────────────────────────────────────
+
 function makeCandidate(market, pick, probability) {
   return {
     market,
@@ -295,7 +490,7 @@ function makeCandidate(market, pick, probability) {
   };
 }
 
-function scoreCandidate(candidate, context, homeTeam, awayTeam) {
+function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, odds) {
   const p = candidate.probability;
   let score = p;
   const reasons = [];
@@ -304,6 +499,59 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam) {
   if (p < floor) {
     score -= (floor - p) * 1.45;
     reasons.push(`Below ideal threshold for ${candidate.market}`);
+  }
+
+  // ── Odds-based value bonus ──
+  const candidateOdds = findOddsForCandidate(candidate, odds, homeTeam, awayTeam);
+  const valueInfo = detectValue(p, candidateOdds);
+  let valueBonus = 0;
+
+  if (valueInfo.isValue) {
+    // Scale bonus by how much value found
+    valueBonus = Math.min(valueInfo.value * 0.8, 0.15);
+    score += valueBonus;
+    reasons.push(`VALUE BET — model edge of ${pct(valueInfo.value)}% over market`);
+  } else if (valueInfo.value !== null && valueInfo.value < -0.05) {
+    // Market thinks this is LESS likely than we do is wrong — market is against us
+    score -= 0.04;
+    reasons.push("Market odds suggest less value than model");
+  }
+
+  // ── High-prob pick with tiny edge over market — penalize ──
+  if (p > 0.85 && valueInfo.implied !== null && valueInfo.implied > 0.80) {
+    const tinyEdge = valueInfo.value;
+    if (tinyEdge !== null && tinyEdge < 0.05) {
+      score -= 0.08;
+      reasons.push("High-probability pick but odds already reflect it — minimal edge");
+    }
+  }
+
+  // ── Game script awareness ──
+  const script = gameScriptObj?.script || "tight_low_event";
+
+  if (candidate.market === "Over/Under" && candidate.pick === "Over 2.5 Goals") {
+    if (script === "open_end_to_end" || script === "balanced_high_event") {
+      score += 0.04;
+      reasons.push("Game script supports goals market");
+    }
+  }
+  if (candidate.market === "Over/Under" && candidate.pick === "Under 2.5 Goals") {
+    if (script === "tight_low_event") {
+      score += 0.04;
+      reasons.push("Game script supports low-event market");
+    }
+  }
+  if (candidate.market === "1X2" && candidate.pick === `${homeTeam} Win` && script === "dominant_home_pressure") {
+    score += 0.04;
+    reasons.push("Game script expects home dominance");
+  }
+  if (candidate.market === "1X2" && candidate.pick === `${awayTeam} Win` && script === "dominant_away_pressure") {
+    score += 0.04;
+    reasons.push("Game script expects away control");
+  }
+  if (script === "chaotic_unreliable") {
+    score -= 0.04;
+    reasons.push("Chaotic match script — lower reliability");
   }
 
   // Kill lazy spam markets
@@ -471,8 +719,45 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam) {
     score: parseFloat(score.toFixed(4)),
     confidence: confidenceFromProb(p),
     rationale: reasons.slice(0, 2).join(". "),
+    _reasons: reasons,
+    _valueInfo: valueInfo,
+    _valueBonus: valueBonus,
+    _candidateOdds: candidateOdds,
   };
 }
+
+// ─── REJECTION LOGIC ─────────────────────────────────────────────────────────
+
+function shouldReject(scored, odds, homeTeam, awayTeam) {
+  const p = scored.probability;
+  const pick = scored.pick;
+  const market = scored.market;
+  const valueInfo = scored._valueInfo;
+
+  // Reject Over 0.5 in any game
+  if (pick.includes("Over 0.5")) {
+    return `Rejected: "${pick}" — Over 0.5 is trivially easy and not a real pick`;
+  }
+
+  // Reject giant favorite double chance with no value
+  if (market === "Double Chance" && p >= 0.88) {
+    if (!valueInfo.isValue) {
+      return `Rejected: "${pick}" — Double chance at ${pct(p)}% is too safe with no market value`;
+    }
+  }
+
+  // High prob + market already priced it in
+  if (p > 0.85 && valueInfo.implied !== null && valueInfo.implied > 0.80) {
+    const edge = valueInfo.value;
+    if (edge !== null && edge < 0.03) {
+      return `Rejected: "${pick}" — ${pct(p)}% probability but market already at ${pct(valueInfo.implied)}%, edge only ${pct(edge)}%`;
+    }
+  }
+
+  return null;
+}
+
+// ─── RANK MARKETS ────────────────────────────────────────────────────────────
 
 function rankMarkets(
   result1X2,
@@ -484,7 +769,9 @@ function rankMarkets(
   doubleChance,
   homeTeam,
   awayTeam,
-  context
+  context,
+  gameScriptObj,
+  odds
 ) {
   const candidates = [
     makeCandidate("1X2", `${homeTeam} Win`, result1X2.home),
@@ -519,9 +806,29 @@ function rankMarkets(
     makeCandidate("Handicap", `${awayTeam} -1.5`, handicap.away_neg1_5),
   ];
 
-  return candidates
+  const scored = candidates
     .filter((c) => c.probability >= 0.36)
-    .map((c) => scoreCandidate(c, context, homeTeam, awayTeam))
+    .map((c) => scoreCandidate(c, context, homeTeam, awayTeam, gameScriptObj, odds));
+
+  // Separate rejected picks
+  const rejectedPicks = [];
+  const validPicks = [];
+
+  for (const s of scored) {
+    const rejection = shouldReject(s, odds, homeTeam, awayTeam);
+    if (rejection) {
+      rejectedPicks.push({
+        market: s.market,
+        pick: s.pick,
+        probability: `${pct(s.probability)}%`,
+        reason: rejection,
+      });
+    } else {
+      validPicks.push(s);
+    }
+  }
+
+  const ranked = validPicks
     .sort((a, b) => b.score - a.score || b.probability - a.probability)
     .slice(0, 12)
     .map((m) => ({
@@ -532,17 +839,112 @@ function rankMarkets(
       score: m.score,
       confidence: m.confidence,
       rationale: m.rationale,
+      _reasons: m._reasons,
+      _valueInfo: m._valueInfo,
+      _valueBonus: m._valueBonus,
+      _candidateOdds: m._candidateOdds,
     }));
+
+  return { ranked, rejectedPicks };
 }
 
-function chooseRecommendation(rankedMarkets) {
+// ─── GENERATE EXPLAINER REASONS ──────────────────────────────────────────────
+
+function generateReasons(pick, features, context, gameScriptObj, valueInfo) {
+  const hf = features?.homeFeatures || {};
+  const af = features?.awayFeatures || {};
+  const tc = features?.tableContext || {};
+  const reasons = [];
+
+  const posGap = Math.abs(safeNum(tc.position_gap, 0));
+  const script = gameScriptObj?.script || "";
+
+  // Strength / table context reasons
+  if (posGap >= 6 && context.strengthGap > 0.3) {
+    reasons.push(`Home side far stronger — table position gap of ${Math.round(posGap)}`);
+  } else if (posGap >= 6 && context.strengthGap < -0.3) {
+    reasons.push(`Away side far stronger — table position gap of ${Math.round(posGap)}`);
+  } else if (context.tightMatch) {
+    reasons.push("Tightly balanced match — neither side has a clear edge");
+  }
+
+  // Defensive weaknesses
+  const awayConcede = safeNum(af.avg_conceded, 0);
+  const homeConcede = safeNum(hf.avg_conceded, 0);
+  if (awayConcede >= 1.6) {
+    reasons.push(`Away team weak defensively on the road — concedes ${awayConcede.toFixed(1)}/game`);
+  }
+  if (homeConcede >= 1.6) {
+    reasons.push(`Home team leaky at the back — concedes ${homeConcede.toFixed(1)}/game`);
+  }
+
+  // Scoring strength
+  const homeScored = safeNum(hf.avg_scored, 0);
+  const awayScored = safeNum(af.avg_scored, 0);
+  if (homeScored >= 1.8) {
+    reasons.push(`Home averaging ${homeScored.toFixed(1)} goals at home`);
+  }
+  if (awayScored >= 1.6) {
+    reasons.push(`Away averaging ${awayScored.toFixed(1)} goals on the road`);
+  }
+
+  // Goal environment
+  if (context.isOpen && context.totalXg >= 2.8) {
+    reasons.push(`High expected goals environment — xG total ${context.totalXg.toFixed(1)}`);
+  } else if (context.isCagey && context.totalXg <= 2.2) {
+    reasons.push(`Low-scoring environment — xG total only ${context.totalXg.toFixed(1)}`);
+  }
+
+  // BTTS context
+  if (context.bothTeamsReliable) {
+    reasons.push("Both teams score reliably — over 74% scoring rate each");
+  }
+
+  // Game script
+  if (script && script !== "chaotic_unreliable") {
+    const scriptLabel = script.replace(/_/g, " ");
+    reasons.push(`Game script: ${scriptLabel}`);
+  } else if (script === "chaotic_unreliable") {
+    reasons.push("Game script is chaotic — data sends mixed signals");
+  }
+
+  // Value detection
+  if (valueInfo && valueInfo.isValue) {
+    reasons.push(`Market mispriced — model finds ${pct(valueInfo.value)}% edge over bookmaker odds`);
+  }
+
+  // Momentum
+  const momentumGap = safeNum(tc.momentum_gap, 0);
+  if (Math.abs(momentumGap) >= 4) {
+    const who = momentumGap > 0 ? "Home" : "Away";
+    reasons.push(`${who} team has strong recent momentum advantage`);
+  }
+
+  // Best edge summary
+  if (pick?.pick) {
+    reasons.push(`Best edge found: ${pick.pick}`);
+  }
+
+  // Return 4-6 reasons
+  return reasons.slice(0, 6);
+}
+
+// ─── CHOOSE RECOMMENDATION ──────────────────────────────────────────────────
+
+function chooseRecommendation(rankedMarkets, features, context, gameScriptObj) {
   if (!rankedMarkets.length) {
     return {
       market: "No Edge",
       pick: "No Clear Edge",
       probability: 0,
       confidence: "LOW",
+      confidence_detail: {
+        model_confidence: "LOW",
+        market_value: "NO_ODDS",
+        match_volatility: "HIGH",
+      },
       rationale: "No market passed the minimum quality threshold.",
+      reasons: ["Insufficient edge across all markets", "Model could not find a reliable angle"],
       alternative: null,
       alternative_market: null,
       alternative_probability: null,
@@ -558,13 +960,27 @@ function chooseRecommendation(rankedMarkets) {
     best.score < 0.56 ||
     (best.market === "1X2" && best.raw_probability < 0.56);
 
+  const bestValueInfo = best._valueInfo || { value: null };
+  const modelConf = confidenceFromProb(best.raw_probability);
+  const mktValue = marketValueLabel(bestValueInfo.value);
+  const volatility = matchVolatilityLabel(features, gameScriptObj?.script);
+
   if (weakHeadline) {
+    const reasons = generateReasons(best, features, context, gameScriptObj, bestValueInfo);
+    reasons.unshift(`Strongest angle (${best.pick} at ${best.probability}) still falls below conviction threshold`);
+
     return {
       market: "No Edge",
       pick: "No Clear Edge",
       probability: best.raw_probability,
       confidence: "LOW",
+      confidence_detail: {
+        model_confidence: "LOW",
+        market_value: mktValue,
+        match_volatility: volatility,
+      },
       rationale: `The strongest available angle is still weak (${best.pick} at ${best.probability}). Better to avoid forcing a main pick.`,
+      reasons: reasons.slice(0, 6),
       alternative: best.pick,
       alternative_market: best.market,
       alternative_probability: best.raw_probability,
@@ -573,12 +989,20 @@ function chooseRecommendation(rankedMarkets) {
     };
   }
 
+  const reasons = generateReasons(best, features, context, gameScriptObj, bestValueInfo);
+
   return {
     market: best.market,
     pick: best.pick,
     probability: best.raw_probability,
-    confidence: best.confidence,
+    confidence: modelConf,
+    confidence_detail: {
+      model_confidence: modelConf,
+      market_value: mktValue,
+      match_volatility: volatility,
+    },
     rationale: best.rationale || "Best fit based on probability and match profile.",
+    reasons,
     alternative: alt?.pick || null,
     alternative_market: alt?.market || null,
     alternative_probability: alt?.raw_probability ?? null,
@@ -587,7 +1011,9 @@ function chooseRecommendation(rankedMarkets) {
   };
 }
 
-export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) {
+// ─── MAIN PREDICT FUNCTION ──────────────────────────────────────────────────
+
+export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, odds = null) {
   const features = await computeFeatures(fixtureId, homeTeamName, awayTeamName);
   const { combinedSignals, h2hFeatures, homeFeatures, awayFeatures, tableContext } = features;
 
@@ -629,7 +1055,12 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) 
   const correctScore = calcCorrectScore(matrix);
 
   const context = buildContext(features, lambdaHome, lambdaAway, result1X2, overUnder, btts);
-  const rankedMarkets = rankMarkets(
+
+  // Classify game script
+  const gameScriptObj = classifyGameScript(features, lambdaHome, lambdaAway, context);
+
+  // Rank markets with odds-aware scoring
+  const { ranked: rankedMarkets, rejectedPicks } = rankMarkets(
     result1X2,
     overUnder,
     btts,
@@ -639,10 +1070,39 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) 
     doubleChance,
     homeTeamName,
     awayTeamName,
-    context
+    context,
+    gameScriptObj,
+    odds
   );
 
-  const recommendation = chooseRecommendation(rankedMarkets);
+  const recommendation = chooseRecommendation(rankedMarkets, features, context, gameScriptObj);
+
+  // Build goal expectation label
+  const totalXg = lambdaHome + lambdaAway;
+  let goalExpectation = "moderate";
+  if (totalXg >= 3.0) goalExpectation = "high";
+  else if (totalXg <= 2.1) goalExpectation = "low";
+
+  // Build risk level
+  let riskLevel = "moderate";
+  const volatility = matchVolatilityLabel(features, gameScriptObj.script);
+  if (volatility === "HIGH" || gameScriptObj.script === "chaotic_unreliable") riskLevel = "high";
+  else if (volatility === "LOW" && recommendation.confidence_detail?.model_confidence === "HIGH") riskLevel = "low";
+  if (gameScriptObj.script === "chaotic_unreliable" && volatility === "HIGH") riskLevel = "extreme";
+
+  // Clean internal fields from ranked markets before output
+  const cleanRanked = rankedMarkets.map((m) => ({
+    market: m.market,
+    pick: m.pick,
+    probability: m.probability,
+    raw_probability: m.raw_probability,
+    score: m.score,
+    confidence: m.confidence,
+    rationale: m.rationale,
+    value: m._valueInfo?.isValue
+      ? { edge: pct(m._valueInfo.value) + "%", odds: m._candidateOdds, implied: pct(m._valueInfo.implied) + "%" }
+      : null,
+  }));
 
   return {
     fixture: {
@@ -656,9 +1116,13 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) 
       expectedTotalGoals: parseFloat((lambdaHome + lambdaAway).toFixed(2)),
       h2hAdjusted: h2hAvailable,
       matchProfile: {
+        script: gameScriptObj.script,
+        script_description: gameScriptObj.description,
         openGame: context.isOpen,
         cageyGame: context.isCagey,
         tightMatch: context.tightMatch,
+        goalExpectation,
+        riskLevel,
       },
       dataQuality: {
         homeFormMatches: homeFeatures.matches_available,
@@ -668,6 +1132,7 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) 
     },
     predictions: {
       recommendation,
+      rejected_picks: rejectedPicks,
       match_result: {
         home: result1X2.home,
         draw: result1X2.draw,
@@ -681,7 +1146,7 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}) 
       handicap,
       dnb,
       double_chance: doubleChance,
-      ranked_markets: rankedMarkets,
+      ranked_markets: cleanRanked,
     },
     features,
   };
