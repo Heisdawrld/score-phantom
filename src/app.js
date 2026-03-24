@@ -11,6 +11,14 @@ import errorHandler from "./middlewares/errorHandler.js";
 
 dotenv.config();
 
+// ── Startup checks ────────────────────────────────────────────────────────────
+if (!process.env.TURSO_URL || !process.env.TURSO_TOKEN) {
+  console.error("❌ FATAL: TURSO_URL and TURSO_TOKEN environment variables are required.");
+  console.error("   Set them in your Render dashboard (or .env file locally).");
+  console.error("   Get them from: https://app.turso.tech → your database → Connect");
+  process.exit(1);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

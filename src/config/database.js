@@ -3,6 +3,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+if (!process.env.TURSO_URL || !process.env.TURSO_TOKEN) {
+  console.error("❌ FATAL: Missing TURSO_URL or TURSO_TOKEN environment variables.");
+  console.error("   Add them to your Render dashboard → Environment Variables.");
+  console.error("   Get them from: https://app.turso.tech → your database → Connect");
+  process.exit(1);
+}
+
 const db = createClient({
   url: process.env.TURSO_URL,
   authToken: process.env.TURSO_TOKEN,
