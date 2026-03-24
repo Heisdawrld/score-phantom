@@ -571,6 +571,37 @@ router.get("/admin/users", async (req, res) => {
   }
 });
 
+// DELETE /auth/admin/remove-user — Remove (delete) a user by email (admin only)
+router.delete("/admin/remove-user", async (req, res) => {
+  try {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (!ADMIN_SECRET || adminSecret !== ADMIN_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
+
+    // Find user first
+    const found = await db.execute({
+      sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
+      args: [email.toLowerCase().trim()],
+    });
+    if (!found.rows || found.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const userId = found.rows[0].id;
+
+    // Delete payments first (FK safety), then user
+    await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [userId] });
+
+    return res.json({ success: true, message: `User ${email} removed successfully` });
+  } catch (err) {
+    console.error("Admin Remove User Error:", err);
+    return res.status(500).json({ error: "Failed to remove user" });
+  }
+});
+
 // POST /auth/admin/upgrade-by-email — Upgrade user by email (admin only)  
 router.post("/admin/upgrade-by-email", async (req, res) => {
   try {

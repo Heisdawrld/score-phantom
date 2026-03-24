@@ -18,6 +18,8 @@
     button:active { opacity: 0.8; }
     button.danger { background: #c0392b; }
     button.success { background: #27ae60; }
+    button.danger { background: #c0392b; }
+    button.danger:hover { background: #e74c3c; }
     button.small { font-size: 13px; padding: 7px 14px; }
     .error { color: #e05c5c; font-size: 14px; margin-top: 8px; }
 
@@ -185,7 +187,10 @@
             '<td><span class="badge ' + (u.status || 'expired') + '">' + (u.status || 'expired') + '</span></td>' +
             '<td>' + expText + '</td>' +
             '<td class="hide-mobile" style="font-size:12px;color:#8892a4">' + paymentsText + '</td>' +
-            '<td><button class="small success" onclick="quickUpgrade(\'' + escEmail(u.email) + '\')">Upgrade</button></td>' +
+            '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
+              '<button class="small success" onclick="quickUpgrade(\'' + escEmail(u.email) + '\')">Upgrade</button>' +
+              '<button class="small danger" onclick="removeUser(\'' + escEmail(u.email) + '\')">🗑 Remove</button>' +
+            '</td>' +
           '</tr>';
         }).join('');
         document.getElementById('usersTable').innerHTML = rows || '<tr><td colspan="6" style="color:#8892a4;text-align:center;padding:20px">No users found</td></tr>';
@@ -202,8 +207,9 @@
               '<span>ID #' + u.id + '</span>' +
               '<span>Expires: ' + expText + '</span>' +
             '</div>' +
-            '<div class="user-card-action">' +
-              '<button class="small success" onclick="quickUpgrade(\'' + escEmail(u.email) + '\')">⬆ Upgrade to Premium</button>' +
+            '<div class="user-card-action" style="display:flex;gap:8px">' +
+              '<button class="small success" style="flex:1" onclick="quickUpgrade(\'' + escEmail(u.email) + '\')">⬆ Upgrade</button>' +
+              '<button class="small danger" style="flex:1" onclick="removeUser(\'' + escEmail(u.email) + '\')">🗑 Remove</button>' +
             '</div>' +
           '</div>';
         }).join('');
@@ -225,6 +231,26 @@
 
     function stat(num, label, color) {
       return '<div class="stat-card"><div class="num" style="color:' + (color || '#4f89ff') + '">' + num + '</div><div class="label">' + label + '</div></div>';
+    }
+
+    async function removeUser(email) {
+      if (!confirm('⚠️ Remove user "' + email + '"?\n\nThis will permanently delete their account and all payment records. This cannot be undone.')) return;
+      try {
+        var res = await fetch('/api/auth/admin/remove-user', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+          body: JSON.stringify({ email: email }),
+        });
+        var data = await res.json();
+        if (data.success) {
+          showMsg('🗑 ' + data.message, 'ok');
+          loadUsers();
+        } else {
+          showMsg('Error: ' + (data.error || 'Unknown error'), 'err');
+        }
+      } catch (err) {
+        showMsg('Error: ' + err.message, 'err');
+      }
     }
 
     function quickUpgrade(email) {
