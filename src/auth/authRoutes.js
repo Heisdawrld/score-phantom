@@ -49,6 +49,13 @@ export async function initUsersTable() {
 
   await ensureColumn(
     "users",
+    "password_hash",
+    `ALTER TABLE users ADD COLUMN password_hash TEXT`
+  );
+
+  // legacy column — keep for backward compat but we write to password_hash
+  await ensureColumn(
+    "users",
     "password",
     `ALTER TABLE users ADD COLUMN password TEXT`
   );
@@ -166,10 +173,10 @@ router.post("/signup", async (req, res) => {
 
     await db.execute({
       sql: `
-        INSERT INTO users (email, password, status, trial_ends_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO users (email, password_hash, password, status, trial_ends_at)
+        VALUES (?, ?, ?, ?, ?)
       `,
-      args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
+      args: [normalizedEmail, hashedPassword, hashedPassword, "trial", trialEnds.toISOString()],
     });
 
     const created = await db.execute({
@@ -212,7 +219,9 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    if (!user.password) {
+    const storedHash = user.password_hash || user.password;
+
+    if (!storedHash) {
       return res.status(400).json({
         error: "Account password is not set. Create a new account.",
       });
@@ -220,7 +229,7 @@ router.post("/login", async (req, res) => {
 
     const ok = await bcrypt.compare(
       String(password || ""),
-      String(user.password || "")
+      String(storedHash)
     );
     if (!ok) {
       return res.status(400).json({ error: "Invalid credentials" });
