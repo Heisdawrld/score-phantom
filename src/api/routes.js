@@ -748,6 +748,11 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
         const edgeBonus = rec.has_value ? 0.1 : 0;
         const score = (rec.probability || row.probability || 0) + edgeBonus;
         
+        // Build a clean one-line reason from the engine's rationale or _reasons array
+        const reason = rec.rationale ||
+          (rec._reasons && rec._reasons.find(r => !r.startsWith('Rejected') && !r.startsWith('Below'))) ||
+          null;
+
         scored.push({
           fixture_id: row.fixture_id,
           home: row.home_team_name,
@@ -758,7 +763,7 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
           confidence: rec.probability || row.probability,
           odds: rec.market_odds || null,
           has_value: rec.has_value || false,
-          reason: (rec.reasons && rec.reasons[0]) || null,
+          reason,
           score,
         });
       } catch {}
@@ -768,17 +773,28 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
     scored.sort((a, b) => b.score - a.score);
     const picks = scored.slice(0, 5);
 
-    // Calculate combined odds if all have odds
+    // Calculate combined odds — use real odds if available, else estimate from probability
     let combined_odds = null;
-    const allHaveOdds = picks.every(p => p.odds && p.odds > 1);
-    if (allHaveOdds && picks.length >= 2) {
-      combined_odds = picks.reduce((acc, p) => acc * p.odds, 1);
+    if (picks.length >= 2) {
+      combined_odds = picks.reduce((acc, p) => {
+        let legOdds;
+        if (p.odds && p.odds > 1.05) {
+          legOdds = p.odds; // Use real market odds
+        } else {
+          // Estimate: implied odds from model probability, capped to sensible range
+          const prob = p.confidence || 0.6;
+          legOdds = Math.min(5.0, Math.max(1.15, parseFloat((1 / prob).toFixed(2))));
+        }
+        return acc * legOdds;
+      }, 1);
       combined_odds = parseFloat(combined_odds.toFixed(2));
     }
+    const oddsAreEstimated = picks.some(p => !p.odds || p.odds <= 1.05);
 
     res.json({
       picks,
       combined_odds,
+      odds_are_estimated: oddsAreEstimated,
       count: picks.length,
       date: dateStr,
       disclaimer: "For entertainment purposes. Always gamble responsibly.",
