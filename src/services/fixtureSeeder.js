@@ -29,22 +29,30 @@ async function fetchFixturesByDate(date) {
 
   while (true) {
     try {
-      const data = await get('/fixtures/matches.json', { date, page });
+      const data = await get('/fixtures/list.json', { date, page });
       const fixtures = data.data?.fixtures || [];
       if (!fixtures.length) break;
 
       for (const f of fixtures) {
+        const homeName = f.home?.name || f.home_name || '';
+        const awayName = f.away?.name || f.away_name || '';
+        const homeId = String(f.home?.id || f.home_id || f.id + '_h');
+        const awayId = String(f.away?.id || f.away_id || f.id + '_a');
+        const competitionId = String(f.competition?.id || f.competition_id || '0');
+        const competitionName = f.competition?.name || f.competition_name || '';
+        const countryName = f.country?.name || f.competition?.country || '';
+
         allFixtures.push({
           match_id: String(f.id),
-          home_team_id: String(f.home_id),
-          home_team_name: f.home_name,
-          home_team_short_name: f.home_name?.substring(0, 3).toUpperCase() || '',
-          away_team_id: String(f.away_id),
-          away_team_name: f.away_name,
-          away_team_short_name: f.away_name?.substring(0, 3).toUpperCase() || '',
-          tournament_id: String(f.competition_id),
-          tournament_name: f.competition?.name || f.competition_name || '',
-          category_name: f.competition?.country || f.country || '',
+          home_team_id: homeId,
+          home_team_name: homeName,
+          home_team_short_name: homeName.substring(0, 3).toUpperCase() || '',
+          away_team_id: awayId,
+          away_team_name: awayName,
+          away_team_short_name: awayName.substring(0, 3).toUpperCase() || '',
+          tournament_id: competitionId,
+          tournament_name: competitionName,
+          category_name: countryName,
           match_date: f.date + 'T' + (f.time || '00:00:00'),
           match_url: String(f.id),
         });
