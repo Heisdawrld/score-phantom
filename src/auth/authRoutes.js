@@ -531,4 +531,91 @@ router.post("/admin/verify-payment", async (req, res) => {
   }
 });
 
+// GET /auth/admin/users — List all users (admin only)
+router.get("/admin/users", async (req, res) => {
+  try {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (!ADMIN_SECRET || adminSecret !== ADMIN_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const result = await db.execute(`
+      SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code
+      FROM users
+      ORDER BY id DESC
+      LIMIT 200
+    `);
+
+    const payments = await db.execute(`
+      SELECT user_id, status, amount, paid_at, created_at
+      FROM payments
+      ORDER BY created_at DESC
+      LIMIT 200
+    `);
+
+    const paymentsByUser = {};
+    for (const p of (payments.rows || [])) {
+      if (!paymentsByUser[p.user_id]) paymentsByUser[p.user_id] = [];
+      paymentsByUser[p.user_id].push(p);
+    }
+
+    const users = (result.rows || []).map(u => ({
+      ...u,
+      payments: paymentsByUser[u.id] || [],
+    }));
+
+    return res.json({ users, total: users.length });
+  } catch (err) {
+    console.error("Admin Users Error:", err);
+    return res.status(500).json({ error: "Failed to load users" });
+  }
+});
+
+// POST /auth/admin/upgrade-by-email — Upgrade user by email (admin only)  
+router.post("/admin/upgrade-by-email", async (req, res) => {
+  try {
+    const adminSecret = req.headers["x-admin-secret"];
+    if (!ADMIN_SECRET || adminSecret !== ADMIN_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { email, days } = req.body || {};
+    if (!email) return res.status(400).json({ error: "Email required" });
+
+    const planDays = parseInt(days || PLAN_DURATION_DAYS, 10);
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email, status FROM users WHERE email = ? LIMIT 1",
+      args: [normalizedEmail],
+    });
+
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + planDays);
+    const expiryISO = expiry.toISOString();
+    const subscriptionCode = `SUB_${user.id}_${Date.now()}`;
+
+    await db.execute({
+      sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
+      args: [expiryISO, expiryISO, subscriptionCode, user.id],
+    });
+
+    return res.json({
+      success: true,
+      user_id: user.id,
+      email: user.email,
+      status: "premium",
+      premium_expires_at: expiryISO,
+      days: planDays,
+    });
+  } catch (err) {
+    console.error("Admin Upgrade Error:", err);
+    return res.status(500).json({ error: "Failed to upgrade user" });
+  }
+});
+
 export default router;
+

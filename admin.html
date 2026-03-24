@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ScorePhantom Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d1117; color: #e0e6f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .subtitle { color: #8892a4; font-size: 14px; margin-bottom: 24px; }
+    .login-box { max-width: 400px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin: 80px auto; }
+    .login-box h2 { margin-bottom: 16px; }
+    input { width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #e0e6f0; font-size: 15px; padding: 10px 12px; margin-bottom: 12px; }
+    button { background: #4f89ff; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-size: 15px; font-weight: 600; padding: 10px 20px; }
+    button:hover { background: #3a6fd8; }
+    button.danger { background: #c0392b; }
+    button.success { background: #27ae60; }
+    button.small { font-size: 13px; padding: 6px 14px; }
+    .error { color: #e05c5c; font-size: 14px; margin-top: 8px; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px 20px; flex: 1; min-width: 120px; }
+    .stat-card .num { font-size: 28px; font-weight: 700; color: #4f89ff; }
+    .stat-card .label { font-size: 12px; color: #8892a4; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
+    th { background: #21262d; color: #8892a4; font-size: 12px; font-weight: 600; padding: 10px 14px; text-align: left; }
+    td { padding: 10px 14px; border-top: 1px solid #21262d; font-size: 14px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge.premium { background: rgba(79,175,110,.15); color: #4faf6e; }
+    .badge.trial { background: rgba(79,137,255,.15); color: #4f89ff; }
+    .badge.expired { background: rgba(224,92,92,.15); color: #e05c5c; }
+    .upgrade-form { display: flex; gap: 8px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+    .upgrade-form input { width: auto; flex: 1; min-width: 200px; margin-bottom: 0; }
+    #adminPanel { display: none; }
+    .msg { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px; }
+    .msg.ok { background: rgba(79,175,110,.15); color: #4faf6e; }
+    .msg.err { background: rgba(224,92,92,.15); color: #e05c5c; }
+  </style>
+</head>
+<body>
+
+  <div id="loginPanel">
+    <div class="login-box">
+      <h2>🔐 Admin Login</h2>
+      <input id="secretInput" type="password" placeholder="Admin secret key">
+      <button onclick="adminLogin()">Login</button>
+      <div id="loginError" class="error"></div>
+    </div>
+  </div>
+
+  <div id="adminPanel">
+    <h1>⚡ ScorePhantom Admin</h1>
+    <div class="subtitle">User management panel</div>
+
+    <div id="statsRow" class="stats-row"></div>
+
+    <div id="actionMsg"></div>
+
+    <h3 style="margin-bottom:12px">Quick Upgrade</h3>
+    <div class="upgrade-form">
+      <input id="upgradeEmail" type="email" placeholder="user@email.com">
+      <input id="upgradeDays" type="number" value="30" min="1" max="365" style="width:80px">
+      <span style="font-size:13px;color:#8892a4">days</span>
+      <button onclick="upgradeByEmail()">Upgrade to Premium</button>
+    </div>
+
+    <h3 style="margin-bottom:12px">All Users</h3>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Email</th><th>Status</th><th>Expires</th><th>Payments</th><th>Action</th></tr>
+      </thead>
+      <tbody id="usersTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    var adminSecret = '';
+
+    function adminLogin() {
+      var secret = document.getElementById('secretInput').value.trim();
+      if (!secret) { document.getElementById('loginError').textContent = 'Enter the admin secret'; return; }
+      adminSecret = secret;
+      loadUsers();
+    }
+
+    function showMsg(text, type) {
+      var el = document.getElementById('actionMsg');
+      el.innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+      setTimeout(function() { el.innerHTML = ''; }, 4000);
+    }
+
+    async function loadUsers() {
+      try {
+        var res = await fetch('/api/auth/admin/users', { headers: { 'x-admin-secret': adminSecret } });
+        if (res.status === 401) { document.getElementById('loginError').textContent = 'Wrong secret key'; return; }
+        var data = await res.json();
+
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('adminPanel').style.display = 'block';
+
+        var total = data.total || 0;
+        var premium = (data.users || []).filter(function(u) { return u.status === 'premium'; }).length;
+        var trial = (data.users || []).filter(function(u) { return u.status === 'trial'; }).length;
+        var expired = total - premium - trial;
+
+        document.getElementById('statsRow').innerHTML =
+          stat(total, 'Total Users') + stat(premium, 'Premium', '#4faf6e') + stat(trial, 'Trial', '#4f89ff') + stat(expired, 'Expired', '#e05c5c');
+
+        var rows = (data.users || []).map(function(u) {
+          var exp = u.premium_expires_at || u.subscription_expires_at || u.trial_ends_at || '';
+          var expText = exp ? new Date(exp).toLocaleDateString() : '—';
+          var paymentsText = (u.payments || []).length > 0
+            ? (u.payments || []).map(function(p) { return p.status; }).join(', ')
+            : '—';
+          return '<tr>' +
+            '<td>' + u.id + '</td>' +
+            '<td>' + u.email + '</td>' +
+            '<td><span class="badge ' + (u.status || 'expired') + '">' + (u.status || 'expired') + '</span></td>' +
+            '<td>' + expText + '</td>' +
+            '<td style="font-size:12px;color:#8892a4">' + paymentsText + '</td>' +
+            '<td><button class="small success" onclick="quickUpgrade(\'' + u.email.replace(/'/g, "\\'") + '\')">Upgrade</button></td>' +
+          '</tr>';
+        }).join('');
+
+        document.getElementById('usersTable').innerHTML = rows || '<tr><td colspan="6" style="color:#8892a4">No users found</td></tr>';
+      } catch (err) {
+        document.getElementById('loginError').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function stat(num, label, color) {
+      return '<div class="stat-card"><div class="num" style="color:' + (color || '#4f89ff') + '">' + num + '</div><div class="label">' + label + '</div></div>';
+    }
+
+    function quickUpgrade(email) {
+      document.getElementById('upgradeEmail').value = email;
+      upgradeByEmail();
+    }
+
+    async function upgradeByEmail() {
+      var email = document.getElementById('upgradeEmail').value.trim();
+      var days = parseInt(document.getElementById('upgradeDays').value || '30', 10);
+      if (!email) { showMsg('Enter an email address', 'err'); return; }
+      try {
+        var res = await fetch('/api/auth/admin/upgrade-by-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+          body: JSON.stringify({ email: email, days: days }),
+        });
+        var data = await res.json();
+        if (data.success) {
+          showMsg('✓ ' + data.email + ' upgraded to premium until ' + new Date(data.premium_expires_at).toLocaleDateString(), 'ok');
+          loadUsers();
+        } else {
+          showMsg('Error: ' + (data.error || 'Unknown'), 'err');
+        }
+      } catch (err) {
+        showMsg('Error: ' + err.message, 'err');
+      }
+    }
+  </script>
+</body>
+</html>

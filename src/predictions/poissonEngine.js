@@ -1013,6 +1013,19 @@ function chooseRecommendation(rankedMarkets, features, context, gameScriptObj) {
 
 // ─── MAIN PREDICT FUNCTION ──────────────────────────────────────────────────
 
+function computeEdgeScore(modelProb, marketOdds) {
+  // modelProb: 0-1, marketOdds: decimal (e.g. 2.10)
+  if (!marketOdds || marketOdds <= 1.01) return null;
+  const impliedProb = 1 / marketOdds;
+  const edge = modelProb - impliedProb;
+  return {
+    edge: parseFloat(edge.toFixed(4)),
+    implied_prob: parseFloat(impliedProb.toFixed(4)),
+    value: edge > 0.05, // meaningful edge
+    edge_pct: parseFloat((edge * 100).toFixed(1)),
+  };
+}
+
 export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, odds = null) {
   const features = await computeFeatures(fixtureId, homeTeamName, awayTeamName);
   const { combinedSignals, h2hFeatures, homeFeatures, awayFeatures, tableContext } = features;
@@ -1076,6 +1089,35 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, 
   );
 
   const recommendation = chooseRecommendation(rankedMarkets, features, context, gameScriptObj);
+
+  // Add value detection if odds available
+  if (odds && recommendation) {
+    const marketOddsMap = {
+      'home win': odds.home,
+      'away win': odds.away,
+      'draw': odds.draw,
+      'over 2.5': odds.over_2_5,
+      'under 2.5': odds.under_2_5,
+      'over 1.5': odds.over_1_5,
+      'under 1.5': odds.under_1_5,
+      'btts yes': odds.btts_yes,
+      'btts no': odds.btts_no,
+    };
+    const pickLower = String(recommendation.pick || recommendation.market || '').toLowerCase();
+    let matchedOdds = null;
+    for (const [key, val] of Object.entries(marketOddsMap)) {
+      if (pickLower.includes(key) && val) { matchedOdds = val; break; }
+    }
+    if (matchedOdds) {
+      const edgeData = computeEdgeScore(recommendation.probability || 0, matchedOdds);
+      if (edgeData) {
+        recommendation.market_odds = matchedOdds;
+        recommendation.edge = edgeData.edge_pct;
+        recommendation.implied_prob = edgeData.implied_prob;
+        recommendation.has_value = edgeData.value;
+      }
+    }
+  }
 
   // Build goal expectation label
   const totalXg = lambdaHome + lambdaAway;

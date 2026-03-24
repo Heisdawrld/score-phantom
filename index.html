@@ -667,7 +667,42 @@
     .status-badge.premium{background:rgba(16,231,116,.1);color:var(--green);border:1px solid rgba(16,231,116,.2)}
     .status-badge.trial{background:rgba(255,180,0,.1);color:#ffd277;border:1px solid rgba(255,180,0,.2)}
     .status-badge.expired{background:rgba(255,77,109,.1);color:var(--danger);border:1px solid rgba(255,77,109,.2)}
+    .acca-nav-btn {
+      background: linear-gradient(135deg, #f0a500, #e06820);
+      border: none;
+      border-radius: 20px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+    }
+    .acca-pick-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .acca-pick-card .acca-match { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+    .acca-pick-card .acca-pick { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .acca-pick-card .acca-conf { font-size: 13px; color: var(--green); }
+    .acca-combined { background: linear-gradient(135deg, rgba(240,165,0,.12), rgba(224,104,32,.12)); border: 1px solid rgba(240,165,0,.3); border-radius: 14px; padding: 16px; margin-bottom: 16px; text-align: center; }
+    .acca-combined .acca-odds-num { font-size: 32px; font-weight: 800; color: #f0a500; }
+    .acca-combined .acca-odds-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .acca-lock-box { text-align: center; padding: 40px 20px; }
+    .acca-lock-box .lock-icon { font-size: 40px; margin-bottom: 12px; }
+    .acca-lock-box .lock-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .acca-lock-box .lock-desc { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; }
+    .acca-lock-box .lock-btn { background: var(--accent); border: none; border-radius: 20px; color: #fff; font-size: 15px; font-weight: 600; padding: 12px 28px; cursor: pointer; }
+    .markdown-body strong { font-weight: 700; }
+    .markdown-body em { font-style: italic; }
+    .markdown-body ul { padding-left: 20px; }
+    .markdown-body li { margin-bottom: 4px; }
+    .markdown-body p { margin-bottom: 8px; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div id="authView" class="auth-wrap hidden">
@@ -717,6 +752,7 @@
 
           <div class="top-actions">
             <div class="live-pill">LIVE</div>
+            <button id="accaBtn" class="acca-nav-btn" title="Daily ACCA">⚡ ACCA</button>
             <button id="menuBtn" class="menu-btn">&#9776;</button>
           </div>
         </div>
@@ -765,6 +801,19 @@
       </div>
       <div id="leaguePanelList" class="league-panel-list"></div>
     </div>
+  </div>
+
+  <!-- ACCA Panel -->
+  <div id="accaPanel" class="slide-panel">
+    <div class="panel-header">
+      <button class="panel-back" id="accaBack">&#8592;</button>
+      <div class="panel-title-block">
+        <div class="panel-label">⚡ DAILY ACCA</div>
+        <div id="accaTitle" class="panel-title">Best 5 Picks</div>
+        <div id="accaSub" class="panel-sub">Premium feature</div>
+      </div>
+    </div>
+    <div id="accaContent" class="panel-list" style="padding:16px"></div>
   </div>
 
   <div id="matchPanel" class="panel">
@@ -1412,25 +1461,28 @@
     leaguePanelTitle.textContent = group.league;
     leaguePanelSub.textContent = group.fixtures.length + ' fixtures';
 
-    leaguePanelList.innerHTML = group.fixtures.map(function(f) {
+    var TRIAL_MATCH_LIMIT = 10;
+    leaguePanelList.innerHTML = group.fixtures.map(function(f, idx) {
       var time = f.match_date
         ? new Date(f.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
         : '--:--';
 
       var locked = !hasAnyAccess() && !f._isFree;
-      return '<div class="match-row' + (locked ? ' match-locked' : '') + '" data-fixture-id="' + f.id + '">' +
+      var trialLocked = !locked && isTrialActive() && idx >= TRIAL_MATCH_LIMIT;
+      var isLocked = locked || trialLocked;
+      return '<div class="match-row' + (isLocked ? ' match-locked' : '') + '" data-fixture-id="' + f.id + '" data-trial-locked="' + (trialLocked ? '1' : '0') + '">' +
         '<div class="match-time">' + time + '</div>' +
         '<div class="match-main">' +
           '<div class="match-team">' +
             '<div class="dot"></div>' +
-            '<div class="match-team-name">' + escapeHtml(f.home_team_name || '') + (locked ? '<span class="pro-badge" style="display:inline-flex">PRO</span>' : '') + '</div>' +
+            '<div class="match-team-name">' + escapeHtml(f.home_team_name || '') + (trialLocked ? '<span class="pro-badge" style="display:inline-flex">PRO</span>' : (locked ? '<span class="pro-badge" style="display:inline-flex">PRO</span>' : '')) + '</div>' +
           '</div>' +
           '<div class="match-team">' +
             '<div class="dot away"></div>' +
             '<div class="match-team-name">' + escapeHtml(f.away_team_name || '') + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="match-open">' + (locked ? '&#128274;' : '&#8594;') + '</div>' +
+        '<div class="match-open">' + (isLocked ? '&#128274;' : '&#8594;') + '</div>' +
       '</div>';
     }).join('');
 
@@ -1441,6 +1493,11 @@
         if (!hasAnyAccess() && !fixture._isFree) {
           closeOverlay(leaguePanel);
           openUpsellModal();
+          return;
+        }
+        if (row.dataset.trialLocked === '1') {
+          closeOverlay(leaguePanel);
+          openSubscribeModal();
           return;
         }
         openMatchPanel(fixture);
@@ -1590,12 +1647,17 @@
     document.getElementById('heroConfidencePills').innerHTML = cpHtml;
 
     // Value Bet Badge
-    var vbArea = document.getElementById('heroValueBadge');
-    if (rec.is_value_bet) {
-      var edge = rec.value_edge ? ' (+' + (safeNum(rec.value_edge, 0) * 100).toFixed(1) + '% edge)' : '';
-      vbArea.innerHTML = '<div class="value-badge">&#128165; VALUE BET' + escapeHtml(edge) + '</div>';
-    } else {
-      vbArea.innerHTML = '';
+    // Value badge
+    var valueBadge = document.getElementById('heroValueBadge');
+    if (valueBadge) {
+      var vbHtml = '';
+      if (rec.has_value) {
+        vbHtml = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;color:#f0a500">🔥 VALUE BET' + (rec.edge != null ? ' +' + rec.edge + '%' : '') + '</span>';
+      } else if (rec.is_value_bet) {
+        var edge = rec.value_edge ? ' (+' + (safeNum(rec.value_edge, 0) * 100).toFixed(1) + '% edge)' : '';
+        vbHtml = '<div class="value-badge">&#128165; VALUE BET' + escapeHtml(edge) + '</div>';
+      }
+      valueBadge.innerHTML = vbHtml;
     }
 
     // Hero Reasons
@@ -1706,12 +1768,12 @@
     }
 
     // Expected Goals
-    if (model.expectedHomeGoals != null || model.expectedTotalGoals != null) {
+    if (model.lambdaHome != null || model.expectedTotalGoals != null) {
       html += '<div class="card">';
       html += '<h3 style="font-size:20px">Expected Goals</h3>';
       html += '<div class="metrics">';
-      html += '<div class="metric"><div class="big">' + safeNum(model.expectedHomeGoals, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(home) + '</div></div>';
-      html += '<div class="metric"><div class="big">' + safeNum(model.expectedAwayGoals, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(away) + '</div></div>';
+      html += '<div class="metric"><div class="big">' + safeNum(model.lambdaHome, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(home) + '</div></div>';
+      html += '<div class="metric"><div class="big">' + safeNum(model.lambdaAway, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(away) + '</div></div>';
       html += '<div class="metric"><div class="big" style="color:var(--green)">' + safeNum(model.expectedTotalGoals, 0).toFixed(1) + '</div><div class="small">Total</div></div>';
       html += '</div></div>';
     }
@@ -1736,7 +1798,13 @@
       escapeHtml(home) + ' vs ' + escapeHtml(away) + '. ' +
       escapeHtml(rec.pick || 'No Clear Edge') + ' is the official match angle. ' +
       'Expected total goals: ' + safeNum(model.expectedTotalGoals, 0).toFixed(2) + '. ' +
-      'Table gap: ' + safeNum(table.points_gap, 0) + ' points. Momentum gap: ' + safeNum(table.momentum_gap, 0) + '.' +
+      (function() {
+        var pg = Math.round(safeNum(table.points_gap, 0));
+        var mg = Math.round(safeNum(table.momentum_gap, 0));
+        var pgText = pg > 0 ? pg + ' pts ahead' : (pg < 0 ? Math.abs(pg) + ' pts behind' : 'level on points');
+        var mgText = mg > 0 ? 'momentum: +' + mg : (mg < 0 ? 'momentum: ' + mg : 'equal momentum');
+        return 'Table context: ' + pgText + ', ' + mgText + '.';
+      })() +
     '</p></div>';
 
     previewBox.innerHTML = html;
@@ -1808,13 +1876,43 @@
     document.getElementById('awayFormList').innerHTML = renderMiniList(awayForm);
   }
 
+  function computeFormBadgesHtml(formMatches, teamNameRaw) {
+    var teamName = String(teamNameRaw || '').toLowerCase();
+    var firstWord = teamName.split(' ')[0];
+    var results = [];
+    (formMatches || []).slice(0, 5).forEach(function(m) {
+      var score = String(m.score || '');
+      var parts = score.split('-').map(function(n) { return parseInt(n, 10); });
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) { results.push('?'); return; }
+      var homeTeam = String(m.home || '').toLowerCase();
+      var isHome = homeTeam.includes(firstWord) && firstWord.length > 2;
+      var scored = isHome ? parts[0] : parts[1];
+      var conceded = isHome ? parts[1] : parts[0];
+      if (scored > conceded) results.push('W');
+      else if (scored === conceded) results.push('D');
+      else results.push('L');
+    });
+    if (!results.length) return '<span style="color:#666">—</span>';
+    return results.map(function(r) {
+      var color = r === 'W' ? '#4faf6e' : (r === 'D' ? '#f0a500' : (r === 'L' ? '#e05c5c' : '#666'));
+      var bg = r === 'W' ? 'rgba(79,175,110,.15)' : (r === 'D' ? 'rgba(240,165,0,.15)' : (r === 'L' ? 'rgba(224,92,92,.15)' : 'transparent'));
+      return '<span style="display:inline-block;width:18px;height:18px;border-radius:4px;font-size:11px;font-weight:700;line-height:18px;text-align:center;color:' + color + ';background:' + bg + ';margin:1px">' + r + '</span>';
+    }).join('');
+  }
+
   function renderTableTab(data) {
     var standings = Array.isArray(data && data.meta && data.meta.standings) ? data.meta.standings : [];
     var home = selectedFixture && selectedFixture.home_team_name;
     var away = selectedFixture && selectedFixture.away_team_name;
+    var homeForm = Array.isArray(data && data.meta && data.meta.homeForm) ? data.meta.homeForm : [];
+    var awayForm = Array.isArray(data && data.meta && data.meta.awayForm) ? data.meta.awayForm : [];
 
     var rows = standings.map(function(row) {
       var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
+      var formHtml;
+      if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
+      else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
+      else formHtml = '<span style="color:#666">—</span>';
       return '<tr class="' + highlight + '">' +
         '<td>' + (row.position != null ? row.position : '') + '</td>' +
         '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
@@ -1823,7 +1921,7 @@
         '<td>' + (row.draws || 0) + '</td>' +
         '<td>' + (row.losses || 0) + '</td>' +
         '<td><strong>' + (row.points || 0) + '</strong></td>' +
-        '<td>' + escapeHtml(row.form || '') + '</td>' +
+        '<td>' + formHtml + '</td>' +
       '</tr>';
     }).join('');
 
@@ -2141,6 +2239,61 @@
     }
   }
 
+  async function loadAccaTab() {
+    var accaContent = document.getElementById('accaContent');
+    if (!accaContent) return;
+
+    if (!isActiveSub()) {
+      accaContent.innerHTML =
+        '<div class="acca-lock-box">' +
+          '<div class="lock-icon">&#9889;</div>' +
+          '<div class="lock-title">Premium Feature</div>' +
+          '<div class="lock-desc">The Daily ACCA shows our 5 highest-confidence picks of the day, compiled automatically. Subscribe for full access.</div>' +
+          '<button class="lock-btn" onclick="closeOverlay(document.getElementById(\'accaPanel\'));openSubscribeModal()">Subscribe &mdash; &#8358;3,000/mo</button>' +
+        '</div>';
+      return;
+    }
+
+    accaContent.innerHTML = '<div class="loading"><div class="spinner"></div>Loading Daily ACCA...</div>';
+
+    try {
+      var data = await apiFetch('/acca/daily');
+      if (!data || !data.picks || !data.picks.length) {
+        accaContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">No ACCA available yet. Check back once more matches have been processed today.</div>';
+        return;
+      }
+
+      var html = '';
+
+      if (data.combined_odds) {
+        html += '<div class="acca-combined">' +
+          '<div class="acca-odds-num">x' + parseFloat(data.combined_odds).toFixed(2) + '</div>' +
+          '<div class="acca-odds-label">Combined Odds (' + data.picks.length + ' legs)</div>' +
+        '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:10px 0 16px;font-size:13px;color:var(--text-muted)">🎯 ' + data.picks.length + ' best picks today</div>';
+      }
+
+      data.picks.forEach(function(pick, i) {
+        var conf = pick.confidence != null ? (pick.confidence * 100).toFixed(0) + '%' : '';
+        html += '<div class="acca-pick-card">' +
+          '<div class="acca-match">' + escapeHtml(pick.home || '') + ' vs ' + escapeHtml(pick.away || '') + (pick.league ? ' · ' + escapeHtml(pick.league) : '') + '</div>' +
+          '<div class="acca-pick">' + (i + 1) + '. ' + escapeHtml(pick.pick || '') + '</div>' +
+          (conf ? '<div class="acca-conf">&#10003; ' + conf + ' confidence' + (pick.odds ? ' · Odds: ' + parseFloat(pick.odds).toFixed(2) : '') + '</div>' : '') +
+          (pick.reason ? '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">' + escapeHtml(pick.reason) + '</div>' : '') +
+        '</div>';
+      });
+
+      if (data.disclaimer) {
+        html += '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px 0">' + escapeHtml(data.disclaimer) + '</div>';
+      }
+
+      accaContent.innerHTML = html;
+    } catch (err) {
+      accaContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">Failed to load ACCA: ' + escapeHtml(err.message || 'Unknown error') + '</div>';
+    }
+  }
+
   async function sendChat() {
     var aiInput = document.getElementById('aiInput');
     var aiLog = document.getElementById('aiLog');
@@ -2157,7 +2310,7 @@
         method: 'POST',
         body: JSON.stringify({ message: message, history: [] })
       });
-      aiLog.innerHTML += '<div class="msg bot">' + escapeHtml(data.reply || 'No reply') + '</div>';
+      aiLog.innerHTML += '<div class="msg bot markdown-body">' + (typeof marked !== 'undefined' ? marked.parse(data.reply || '') : escapeHtml(data.reply || 'No reply')) + '</div>';
     } catch(e) {
       aiLog.innerHTML += '<div class="msg bot">AI analysis unavailable.</div>';
     }
@@ -2181,6 +2334,19 @@
     profileBackdrop.classList.remove('active');
   });
 
+  var accaBtn = document.getElementById('accaBtn');
+  if (accaBtn) {
+    accaBtn.addEventListener('click', function() {
+      openOverlay(document.getElementById('accaPanel'));
+      loadAccaTab();
+    });
+  }
+  var accaBack = document.getElementById('accaBack');
+  if (accaBack) {
+    accaBack.addEventListener('click', function() {
+      closeOverlay(document.getElementById('accaPanel'));
+    });
+  }
   subscribeBtn.addEventListener('click', openSubscribeModal);
   trialBtn.addEventListener('click', openTrialModal);
 

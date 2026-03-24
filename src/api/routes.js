@@ -5,6 +5,7 @@ import { predict } from "../predictions/poissonEngine.js";
 import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
 import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
+import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'scorephantom_secret_2026';
@@ -340,7 +341,19 @@ async function ensureFixtureData(fixtureId) {
     }
   }
 
-  const odds = await getOdds(fixtureId);
+  // Try to fetch live odds from Odds API first, fall back to cached DB odds
+  let odds = null;
+  try {
+    const meta0 = safeJsonParse(fixture.meta, {});
+    const tournamentName = fixture.tournament_name || meta0.tournament_name || '';
+    odds = await fetchAndCacheOddsForFixture(
+      fixtureId,
+      fixture.home_team_name,
+      fixture.away_team_name,
+      tournamentName
+    );
+  } catch {}
+  if (!odds) odds = await getOdds(fixtureId);
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 
   return {
@@ -688,4 +701,94 @@ router.get("/stats", requireAuth, requireTrialOrPremium, async (req, res) => {
   }
 });
 
+// ─── GET /acca/daily — Premium only: daily 5-pick ACCA ──────────────────────
+router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
+  try {
+    // Get today's date range
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    // Fetch cached predictions for today's matches
+    const result = await db.execute({
+      sql: `
+        SELECT p.fixture_id, p.market, p.probability, p.confidence, p.value as prediction_json,
+               f.home_team_name, f.away_team_name, f.tournament_name, f.match_date
+        FROM predictions p
+        JOIN fixtures f ON f.id = p.fixture_id
+        WHERE f.match_date >= ? AND f.match_date < ?
+        AND p.probability >= 0.55
+        ORDER BY p.probability DESC
+        LIMIT 20
+      `,
+      args: [dateStr, tomorrowStr],
+    });
+
+    const rows = result.rows || [];
+
+    if (!rows.length) {
+      return res.json({
+        picks: [],
+        message: "No predictions available yet for today's matches.",
+      });
+    }
+
+    // Parse and score each prediction
+    const scored = [];
+    for (const row of rows) {
+      try {
+        const pred = typeof row.prediction_json === 'string'
+          ? JSON.parse(row.prediction_json)
+          : (row.prediction_json || {});
+        const rec = pred?.predictions?.recommendation || {};
+        
+        // Edge score: probability + value bonus
+        const edgeBonus = rec.has_value ? 0.1 : 0;
+        const score = (rec.probability || row.probability || 0) + edgeBonus;
+        
+        scored.push({
+          fixture_id: row.fixture_id,
+          home: row.home_team_name,
+          away: row.away_team_name,
+          league: row.tournament_name,
+          match_date: row.match_date,
+          pick: rec.pick || row.market,
+          confidence: rec.probability || row.probability,
+          odds: rec.market_odds || null,
+          has_value: rec.has_value || false,
+          reason: (rec.reasons && rec.reasons[0]) || null,
+          score,
+        });
+      } catch {}
+    }
+
+    // Sort by score, take top 5
+    scored.sort((a, b) => b.score - a.score);
+    const picks = scored.slice(0, 5);
+
+    // Calculate combined odds if all have odds
+    let combined_odds = null;
+    const allHaveOdds = picks.every(p => p.odds && p.odds > 1);
+    if (allHaveOdds && picks.length >= 2) {
+      combined_odds = picks.reduce((acc, p) => acc * p.odds, 1);
+      combined_odds = parseFloat(combined_odds.toFixed(2));
+    }
+
+    res.json({
+      picks,
+      combined_odds,
+      count: picks.length,
+      date: dateStr,
+      disclaimer: "For entertainment purposes. Always gamble responsibly.",
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error('[ACCA] Error:', err.message);
+    res.status(500).json({ error: 'Failed to load ACCA' });
+  }
+});
+
 export default router;
+
