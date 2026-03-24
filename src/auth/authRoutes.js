@@ -15,7 +15,7 @@ const TRIAL_DURATION_DAYS = 3;
 const OPAY_BANK_DETAILS = {
   bank_name: "OPay",
   account_number: "8117024699",
-  account_name: "ScorePhantom",
+  account_name: "David .C (SCOREPHANTOM)",
   amount: `₦${PLAN_AMOUNT_NAIRA.toLocaleString()}`,
   plan: "Monthly Premium",
 };
