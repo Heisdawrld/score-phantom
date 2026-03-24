@@ -61,20 +61,25 @@ app.get("*", (req, res) => {
 
 async function autoSeed() {
   try {
-    const result = await db.execute("SELECT COUNT(*) as count FROM fixtures");
-    const count = Number(result.rows[0].count || 0);
-
-    if (count > 0) {
-      console.log("DB already has " + count + " fixtures, skipping auto-seed.");
-      return;
-    }
-
     if (!process.env.LIVESCORE_API_KEY || !process.env.LIVESCORE_API_SECRET) {
-      console.warn("[AutoSeed] No fixtures & no LiveScore keys — skipping seed.");
+      console.warn("[AutoSeed] No LiveScore keys — skipping seed.");
       return;
     }
 
-    console.log("[AutoSeed] Empty DB detected — seeding fixtures from LiveScore...");
+    // Check for TODAY's fixtures specifically — not just any stale data
+    const today = new Date().toISOString().split('T')[0];
+    const result = await db.execute({
+      sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
+      args: [`${today}%`],
+    });
+    const todayCount = Number(result.rows[0].count || 0);
+
+    if (todayCount > 0) {
+      console.log(`[AutoSeed] DB already has ${todayCount} fixtures for today (${today}), skipping.`);
+      return;
+    }
+
+    console.log(`[AutoSeed] No fixtures for today (${today}) — clearing stale data and reseeding...`);
     const result2 = await seedFixtures({ days: 7, clearFirst: true });
     console.log(`[AutoSeed] Seeded ${result2.inserted} fixtures.`);
   } catch (err) {
