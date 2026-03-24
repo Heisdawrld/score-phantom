@@ -1832,7 +1832,14 @@
   }
 
   async function loadPrediction(fixtureId) {
-    var prediction = await apiFetch('/predict/' + fixtureId + '/explain');
+    var prediction;
+    if (isActiveSub()) {
+      // Premium users get full explanation
+      prediction = await apiFetch('/predict/' + fixtureId + '/explain');
+    } else {
+      // Trial users get basic prediction
+      prediction = await apiFetch('/predict/' + fixtureId);
+    }
     lastPredictionData = prediction;
     renderPredictionHero(prediction);
     renderPredictionTab(prediction, prediction.explanation || {});
