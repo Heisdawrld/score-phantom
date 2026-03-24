@@ -7,10 +7,10 @@ dotenv.config();
 const APIFY_TOKEN = process.env.APIFY_TOKEN;
 const APIFY_ACTOR_ID = process.env.APIFY_ACTOR_ID;
 
-// How many fixtures to process per run (increase later once stable)
+// How many fixtures to process per run
 const BATCH_SIZE = 50;
 
-// Delay between each Apify call in ms (avoid rate limiting)
+// Delay between each Apify call in ms
 const DELAY_MS = 3000;
 
 function sleep(ms) {
@@ -65,25 +65,12 @@ function parseScore(scoreStr) {
     return { home, away };
 }
 
-const insertMatch = db.prepare(`
-    INSERT INTO historical_matches (
-        fixture_id, type, date, home_team, away_team, home_goals, away_goals
-    ) VALUES (
-        @fixture_id, @type, @date, @home_team, @away_team, @home_goals, @away_goals
-    )
-`);
-
-const markEnriched = db.prepare(`
-    UPDATE fixtures SET enriched = 1 WHERE id = @id
-`);
-
-const deleteExisting = db.prepare(`
-    DELETE FROM historical_matches WHERE fixture_id = @fixture_id
-`);
-
-function storeEnrichment(fixtureId, data) {
+async function storeEnrichment(fixtureId, data) {
     // Clear any previous enrichment for this fixture
-    deleteExisting.run({ fixture_id: fixtureId });
+    await db.execute({
+        sql: 'DELETE FROM historical_matches WHERE fixture_id = ?',
+        args: [fixtureId],
+    });
 
     const sections = [
         { key: 'h2h', type: 'h2h' },
@@ -106,26 +93,45 @@ function storeEnrichment(fixtureId, data) {
 
             const { home, away } = parseScore(match.score);
 
-            insertMatch.run({
-                fixture_id: fixtureId,
-                type: section.type,
-                date: match.date || null,
-                home_team: match.home || null,
-                away_team: match.away || null,
-                home_goals: home,
-                away_goals: away,
+            await db.execute({
+                sql: `INSERT INTO historical_matches (fixture_id, type, date, home_team, away_team, home_goals, away_goals)
+                      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                args: [
+                    fixtureId,
+                    section.type,
+                    match.date || null,
+                    match.home || null,
+                    match.away || null,
+                    home,
+                    away,
+                ],
             });
         }
     }
 
-    markEnriched.run({ id: fixtureId });
+    // Store meta (standings, odds, etc.) if present
+    const metaFields = {};
+    if (data.standings) metaFields.standings = data.standings;
+    if (data.odds) metaFields.odds = data.odds;
+
+    const metaJson = Object.keys(metaFields).length > 0
+        ? JSON.stringify(metaFields)
+        : null;
+
+    await db.execute({
+        sql: 'UPDATE fixtures SET enriched = 1, meta = COALESCE(?, meta) WHERE id = ?',
+        args: [metaJson, fixtureId],
+    });
 }
 
 async function main() {
     // Get unenriched fixtures
-    const fixtures = db
-        .prepare(`SELECT * FROM fixtures WHERE enriched = 0 LIMIT ${BATCH_SIZE}`)
-        .all();
+    const result = await db.execute({
+        sql: `SELECT * FROM fixtures WHERE enriched = 0 LIMIT ?`,
+        args: [BATCH_SIZE],
+    });
+
+    const fixtures = result.rows || [];
 
     if (fixtures.length === 0) {
         console.log('All fixtures are already enriched.');
@@ -149,7 +155,7 @@ async function main() {
                 continue;
             }
 
-            storeEnrichment(fixture.id, data);
+            await storeEnrichment(fixture.id, data);
             console.log(`  ✓ Stored h2h: ${(data.h2h || []).length} | homeForm: ${(data.homeForm || []).length} | awayForm: ${(data.awayForm || []).length}`);
             success++;
         } catch (err) {
@@ -164,4 +170,7 @@ async function main() {
     console.log(`Run the script again to continue with the next batch.`);
 }
 
-main();
+main().catch((err) => {
+    console.error('Fatal:', err.message);
+    process.exit(1);
+});
