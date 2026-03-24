@@ -1305,7 +1305,8 @@
       '<div class="loading"><div class="spinner"></div>Loading fixtures...</div>';
 
     try {
-      var data = await apiFetch('/fixtures?limit=2000');
+      var dateParam = selectedDate || getTodayDateString(0);
+      var data = await apiFetch('/fixtures?limit=2000&date=' + encodeURIComponent(dateParam));
       allFixtures = markFreeFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
       groupedFixtures = groupByLeague(allFixtures);
       renderHomeLeagues();
@@ -1978,21 +1979,22 @@
     }
 
     try {
-      var payData = await apiFetch('/auth/payment/initialize', { method: 'POST' });
+      var payData = await apiFetch('/auth/payment/request', { method: 'POST' });
 
       var userEmail = (currentUser && currentUser.email) || '';
       var reference = payData.reference || '';
+      var bankDetails = payData.bank_details || {};
       var expiresAt = payData.expiresAt ? new Date(payData.expiresAt) : null;
 
-      var whatsappUrl = 'https://wa.me/2348117024699?text=' +
-        encodeURIComponent('Hi ScorePhantom! I just made payment. Reference: ' + reference + ' Email: ' + userEmail);
+      var whatsappUrl = payData.whatsapp_link || ('https://wa.me/2348117024699?text=' +
+        encodeURIComponent('Hi ScorePhantom! I just made payment. Reference: ' + reference + ' Email: ' + userEmail));
 
       box.innerHTML =
         '<div class="bank-card">' +
-          '<div class="bank-row"><div class="label">Bank</div><div class="value">' + escapeHtml(payData.bank || 'OPay') + '</div></div>' +
-          '<div class="bank-row"><div class="label">Account Number</div><div class="value"><span id="acctNum">' + escapeHtml(payData.accountNumber || '') + '</span> <button id="copyAcctBtn" class="copy-btn">COPY</button></div></div>' +
-          '<div class="bank-row"><div class="label">Account Name</div><div class="value">' + escapeHtml(payData.accountName || '') + '</div></div>' +
-          '<div class="bank-row"><div class="label">Amount</div><div class="value" style="color:var(--green)">&#8358;' + escapeHtml(String(payData.amount || '3,000')) + '</div></div>' +
+          '<div class="bank-row"><div class="label">Bank</div><div class="value">' + escapeHtml(bankDetails.bank_name || 'OPay') + '</div></div>' +
+          '<div class="bank-row"><div class="label">Account Number</div><div class="value"><span id="acctNum">' + escapeHtml(bankDetails.account_number || '') + '</span> <button id="copyAcctBtn" class="copy-btn">COPY</button></div></div>' +
+          '<div class="bank-row"><div class="label">Account Name</div><div class="value">' + escapeHtml(bankDetails.account_name || '') + '</div></div>' +
+          '<div class="bank-row"><div class="label">Amount</div><div class="value" style="color:var(--green)">' + escapeHtml(bankDetails.amount || '₦3,000') + '</div></div>' +
           '<div class="bank-row"><div class="label">Reference</div><div class="value" style="font-size:13px;word-break:break-all">' + escapeHtml(reference) + '</div></div>' +
         '</div>' +
         '<div class="ref-note">&#9888;&#65039; Please use the reference above as your transfer narration/description so we can identify your payment.</div>' +
