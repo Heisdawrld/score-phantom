@@ -614,9 +614,32 @@ router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, asy
       console.error('[Evaluator] Failed in explain:', evalErr.message);
     }
 
+    // Compute model-implied odds for leagues without bookmaker coverage (same as /predict)
+    let modelImpliedOddsExplain = null;
+    if (!odds && prediction?.predictions) {
+      const mr = prediction.predictions.match_result || {};
+      const ou = prediction.predictions.over_under || {};
+      const bt = prediction.predictions.btts || {};
+      const safe = (p) => (p > 0.01 ? parseFloat((1 / p).toFixed(2)) : null);
+      modelImpliedOddsExplain = {
+        source: 'model',
+        home:  safe(mr.home),
+        draw:  safe(mr.draw),
+        away:  safe(mr.away),
+        over_2_5:  safe(ou.over_2_5),
+        under_2_5: safe(ou.under_2_5),
+        over_1_5:  safe(ou.over_1_5),
+        under_1_5: safe(ou.under_1_5),
+        over_3_5:  safe(ou.over_3_5),
+        btts_yes:  safe(bt.yes),
+        btts_no:   safe(bt.no),
+      };
+    }
+
     const fullPayload = {
       ...prediction,
       odds,
+      model_implied_odds: modelImpliedOddsExplain,
       meta,
     };
 
