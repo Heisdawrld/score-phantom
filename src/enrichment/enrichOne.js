@@ -27,7 +27,7 @@ function normalizeMatch(match) {
   };
 }
 
-export async function storeEnrichment(fixtureId, data) {
+export async function storeEnrichment(fixtureId, data, markEnriched = true) {
   await db.execute({
     sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
@@ -108,8 +108,8 @@ export async function storeEnrichment(fixtureId, data) {
   };
 
   await db.execute({
-    sql: `UPDATE fixtures SET enriched = 1, meta = ? WHERE id = ?`,
-    args: [JSON.stringify(meta), fixtureId],
+    sql: `UPDATE fixtures SET enriched = ?, meta = ? WHERE id = ?`,
+    args: [markEnriched ? 1 : 0, JSON.stringify(meta), fixtureId],
   });
 }
 
@@ -120,6 +120,13 @@ export async function enrichFixture(fixture) {
     throw new Error("No data returned from LiveScore API");
   }
 
-  await storeEnrichment(fixture.id, data);
+  // If both form arrays are empty the API returned garbage data for this fixture.
+  // Store what we have but leave enriched=0 so the next request retries.
+  const hasUsableData = (data.homeForm?.length > 0) || (data.awayForm?.length > 0);
+  if (!hasUsableData) {
+    console.warn(`[enrichFixture] No usable form data for fixture ${fixture.id} (${fixture.home_team_name} vs ${fixture.away_team_name}) — will retry on next request`);
+  }
+
+  await storeEnrichment(fixture.id, data, hasUsableData);
   return data;
 }

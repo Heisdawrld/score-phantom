@@ -210,20 +210,62 @@ const NON_DOMESTIC_KEYWORDS = [
   'young africans', 'maniema union', // CAF club names often appear in competition field
 ];
 
-function filterDomesticForm(form, tournamentName, maxResults = 5) {
+/**
+ * Return true if the match plausibly involves teamName.
+ * Uses first-word fuzzy matching to handle abbreviations and slight name differences.
+ */
+function matchInvolvesTeam(match, teamName) {
+  if (!teamName) return true; // can't validate without a name
+  const team = String(teamName).toLowerCase().trim();
+  const home = String(match.home || '').toLowerCase().trim();
+  const away = String(match.away || '').toLowerCase().trim();
+  if (!home && !away) return true; // no names stored — can't filter
+
+  // Exact match
+  if (home === team || away === team) return true;
+
+  // First-word match (handles "Sport Recife" vs "Sport")
+  const teamWord = team.split(' ')[0];
+  const homeWord = home.split(' ')[0];
+  const awayWord = away.split(' ')[0];
+  if (teamWord.length >= 4) {
+    if (homeWord === teamWord || awayWord === teamWord) return true;
+    if (home.includes(teamWord) || away.includes(teamWord)) return true;
+  }
+
+  return false;
+}
+
+function filterDomesticForm(form, tournamentName, maxResults = 15, teamName = '') {
   if (!form || !form.length) return [];
 
-  const filtered = form.filter((m) => {
+  // Step 1: discard matches that don't involve the target team at all.
+  // This catches garbage data (e.g. 1930 World Cup matches returned for a
+  // Brazilian club ID) before any other filtering.
+  const teamFiltered = teamName
+    ? form.filter((m) => matchInvolvesTeam(m, teamName))
+    : form;
+
+  // Step 2: exclude known non-domestic competitions
+  const domesticFiltered = teamFiltered.filter((m) => {
     const comp = String(m.competition || '').toLowerCase();
-    if (!comp) return true; // keep if no competition info — can't filter
-    // Exclude known non-domestic competitions
+    if (!comp) return true;
     return !NON_DOMESTIC_KEYWORDS.some((kw) => comp.includes(kw));
   });
 
-  // If we have at least 3 domestic results, use them (capped at maxResults)
-  if (filtered.length >= 3) return filtered.slice(0, maxResults);
+  // If we have at least 3 domestic results, use them
+  if (domesticFiltered.length >= 3) return domesticFiltered.slice(0, maxResults);
 
-  // Fallback: return all results capped — better than showing nothing
+  // Fallback: use team-validated results even if competition is unknown
+  if (teamFiltered.length >= 3) return teamFiltered.slice(0, maxResults);
+
+  // Last resort: if team validation found nothing (API returned completely wrong data),
+  // return empty rather than storing garbage that breaks the engine.
+  if (teamName && teamFiltered.length === 0) {
+    console.warn(`[filterDomesticForm] No matches found for team "${teamName}" — discarding ${form.length} unrelated rows`);
+    return [];
+  }
+
   return form.slice(0, maxResults);
 }
 
@@ -245,8 +287,9 @@ export async function enrichMatchData(fixture) {
 
   // Keep up to 15 matches so venue-split features (which need ≥3 home/away games each)
   // have enough data even after the domestic-only filter removes cup/European results.
-  const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 15);
-  const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 15);
+  // Pass team names so filterDomesticForm can discard completely wrong-team data.
+  const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 15, fixture.home_team_name);
+  const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 15, fixture.away_team_name);
 
   return {
     h2h: h2hData.h2h,

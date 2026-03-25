@@ -85,6 +85,13 @@ function getBadMarketPenalty(candidate, featureVector) {
   if (marketKey === 'away_over_05') return 0.9;
   if (marketKey === 'win_either_half_home' || marketKey === 'win_either_half_away') return 0.3;
 
+  // Draw No Bet: structurally inflated (= win / (win+draw)), deflate excess above 0.60
+  if (marketKey === 'dnb_home' || marketKey === 'dnb_away') {
+    const prob = safeNum(modelProbability, 0);
+    const excess = Math.max(0, prob - 0.60);
+    return clamp(excess * 1.0, 0, 0.4);
+  }
+
   // Double chance: always apply a structural inflation penalty.
   // DC probability = win + draw, so it's always 0.68–0.88 by construction.
   // The excess above 0.65 is mathematical padding, not real edge.

@@ -651,23 +651,26 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, o
     reasons.push("Chaotic match script — all markets penalised");
   }
 
-  // Kill lazy spam markets
+  // Kill lazy spam markets — set score to a hard floor so they can never win
   if (candidate.pick === "Over 1.5 Goals") {
-    score -= 0.14;
+    score = Math.min(score - 0.14, 0.38);
     reasons.push("Too generic to headline");
   }
   if (candidate.pick === "Under 4.5 Goals") {
-    score -= 0.18;
+    // Under 4.5 is ~95%+ probability by construction — always wins on raw score.
+    // Hard-cap it so it can never be the headline pick.
+    score = Math.min(score - 0.18, 0.30);
     reasons.push("Too broad for a premium pick");
   }
   if (candidate.pick.includes("Over 0.5")) {
-    score -= 0.2;
+    score = Math.min(score - 0.20, 0.25);
     reasons.push("Too obvious to feature");
   }
 
   // 1X2
   if (candidate.market === "1X2") {
-    if (p >= 0.63) {
+    if (p >= 0.60) {
+      // 60%+ is a genuine lean — reward it so it beats inflated DNB/DC
       score += 0.10;
       reasons.push("Strong standalone 1X2 edge");
     } else if (p >= 0.52) {
@@ -725,8 +728,16 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, o
     }
   }
 
-  // DNB
+  // Draw No Bet
+  // DNB probability = win / (win + draw), so it's structurally inflated above
+  // the raw win probability. Deflate the excess above 0.60 so it competes
+  // fairly against the 1X2 win — otherwise it wins every lopsided match.
   if (candidate.market === "Draw No Bet") {
+    const dnbExcess = Math.max(0, p - 0.60);
+    score -= dnbExcess * 1.0;
+    reasons.push(`DNB inflation deflated by ${(dnbExcess * 1.0).toFixed(3)}`);
+
+    // Only reward DNB when the draw is a genuine risk worth insuring against
     if (context.tightMatch && p >= 0.61) {
       score += 0.09;
       reasons.push("Draw protection fits close game");
@@ -924,6 +935,9 @@ function rankMarkets(
 
   const scored = candidates
     .filter((c) => c.probability >= 0.36)
+    // Hard-exclude trivially broad markets before scoring — their raw probability
+    // is so high (0.90–0.99) that even large penalties can't stop them winning.
+    .filter((c) => c.pick !== "Under 4.5 Goals" && !c.pick.includes("Over 0.5"))
     .map((c) => scoreCandidate(c, context, homeTeam, awayTeam, gameScriptObj, odds));
 
   // Separate rejected picks

@@ -15,10 +15,11 @@ export function applyMarketFilters(candidates) {
   return candidates.filter((candidate) => {
     const { marketKey, modelProbability, edge, badMarketPenalty, tacticalFitScore } = candidate;
 
-    // Rule 1: reject over_05 markets entirely
+    // Rule 1: reject trivially broad markets — probability so high penalties can't suppress them
     if (marketKey === 'over_05') return false;
-    if (marketKey === 'home_over_05' && (badMarketPenalty ?? 0) >= 0.9) return false;
-    if (marketKey === 'away_over_05' && (badMarketPenalty ?? 0) >= 0.9) return false;
+    if (marketKey === 'home_over_05') return false;
+    if (marketKey === 'away_over_05') return false;
+    if (marketKey === 'under_45') return false;
 
     // Rule 2: too low probability
     if ((modelProbability ?? 0) < 0.45) return false;
