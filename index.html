@@ -1169,7 +1169,10 @@
     } else if (isTrialActive()) {
       const ends = new Date(currentUser.trial_ends_at);
       const daysLeft = Math.max(0, Math.ceil((ends - new Date()) / 86400000));
-      banner.innerHTML = 'Free Trial &bull; ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left &bull; <a onclick="openSubscribeModal()">Upgrade for full access</a>';
+      const _todayKey = new Date().toISOString().slice(0, 10);
+      const _matchesViewed = parseInt(localStorage.getItem('trial_opens_' + _todayKey) || '0', 10);
+      const _counterPart = _matchesViewed > 0 ? ' &bull; ' + _matchesViewed + '/10 today' : '';
+      banner.innerHTML = 'Free Trial &bull; ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left' + _counterPart + ' &bull; <a onclick="openSubscribeModal()">Upgrade</a>';
       banner.classList.add('active', 'trial');
     } else {
       banner.innerHTML = 'Trial Expired &bull; <a onclick="openSubscribeModal()">Subscribe to continue</a>';
@@ -2430,6 +2433,25 @@
     } catch (err) {
       accaContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">Failed to load ACCA: ' + escapeHtml(err.message || 'Unknown error') + '</div>';
     }
+
+    // Load yesterday's picks below today's
+    try {
+      var yData = await apiFetch('/acca/yesterday');
+      if (yData && yData.picks && yData.picks.length) {
+        var yDate = yData.date ? new Date(yData.date + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : 'Yesterday';
+        var yHtml = '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">' +
+          '<div style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;margin-bottom:12px">&#128197; YESTERDAY&#39;S PICKS (' + yDate + ')</div>';
+        yData.picks.forEach(function(p, i) {
+          var conf = p.confidence != null ? ' <span style="color:var(--green);font-size:12px">(' + (p.confidence * 100).toFixed(0) + '%)</span>' : '';
+          yHtml += '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">' + escapeHtml(p.home || '') + ' vs ' + escapeHtml(p.away || '') + '</div>' +
+            '<div style="font-size:14px;font-weight:600">' + (i + 1) + '. ' + escapeHtml(p.pick || '') + conf + '</div>' +
+          '</div>';
+        });
+        yHtml += '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px 0 4px">&#128202; For transparency — results posted once verified</div></div>';
+        accaContent.innerHTML += yHtml;
+      }
+    } catch (e) { /* yesterday picks optional */ }
   }
 
   async function sendChat() {

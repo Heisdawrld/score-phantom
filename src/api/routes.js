@@ -806,5 +806,70 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
   }
 });
 
+// ─── GET /acca/yesterday — Premium only: show yesterday's top picks ──────────
+router.get("/acca/yesterday", requirePremiumAccess, async (req, res) => {
+  try {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().slice(0, 10);
+    const dayAfter = new Date(yesterday);
+    dayAfter.setDate(dayAfter.getDate() + 1);
+    const dayAfterStr = dayAfter.toISOString().slice(0, 10);
+
+    const result = await db.execute({
+      sql: `
+        SELECT p.fixture_id, p.market, p.probability, p.confidence, p.value as prediction_json,
+               f.home_team_name, f.away_team_name, f.tournament_name, f.match_date
+        FROM predictions p
+        JOIN fixtures f ON f.id = p.fixture_id
+        WHERE f.match_date >= ? AND f.match_date < ?
+        AND p.probability >= 0.55
+        ORDER BY p.probability DESC
+        LIMIT 20
+      `,
+      args: [dateStr, dayAfterStr],
+    });
+
+    const rows = result.rows || [];
+    if (!rows.length) return res.json({ picks: [], date: dateStr });
+
+    const scored = [];
+    for (const row of rows) {
+      try {
+        const pred = typeof row.prediction_json === 'string'
+          ? JSON.parse(row.prediction_json)
+          : (row.prediction_json || {});
+        const rec = pred?.predictions?.recommendation || {};
+        const edgeBonus = rec.has_value ? 0.1 : 0;
+        const score = (rec.probability || row.probability || 0) + edgeBonus;
+        const reason = rec.rationale ||
+          (rec._reasons && rec._reasons.find(r => !r.startsWith('Rejected') && !r.startsWith('Below'))) ||
+          null;
+        scored.push({
+          fixture_id: row.fixture_id,
+          home: row.home_team_name,
+          away: row.away_team_name,
+          league: row.tournament_name,
+          match_date: row.match_date,
+          pick: rec.pick || row.market,
+          confidence: rec.probability || row.probability,
+          odds: rec.market_odds || null,
+          reason,
+          score,
+        });
+      } catch {}
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    const picks = scored.slice(0, 5);
+
+    res.json({ picks, date: dateStr, access: buildAccessPayload(req.access) });
+  } catch (err) {
+    console.error('[ACCA Yesterday] Error:', err.message);
+    res.status(500).json({ error: 'Failed to load yesterday ACCA' });
+  }
+});
+
+
 export default router;
 
