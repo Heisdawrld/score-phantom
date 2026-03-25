@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
+import db from "../config/database.js";
 dotenv.config();
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -10,6 +11,50 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const CACHE_MAX_SIZE = 500;
 const evaluationCache = new Map(); // key → { ts, value }
+
+// ---------------------------------------------------------------------------
+// Persistent DB cache — cross-user, survives restarts (P4.1)
+// ---------------------------------------------------------------------------
+async function ensureGroqCacheTable() {
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS groq_prediction_cache (
+        fixture_id TEXT PRIMARY KEY,
+        result TEXT NOT NULL,
+        model TEXT NOT NULL DEFAULT 'llama-3.1-8b-instant',
+        created_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT
+      )
+    `);
+  } catch (err) {
+    console.error('[GroqEvaluator] DB cache table init error:', err.message);
+  }
+}
+ensureGroqCacheTable();
+
+async function dbCacheGet(fixtureId) {
+  try {
+    const res = await db.execute({
+      sql: `SELECT result FROM groq_prediction_cache WHERE fixture_id = ? AND expires_at > datetime('now') LIMIT 1`,
+      args: [String(fixtureId)],
+    });
+    if (res.rows?.[0]?.result) {
+      return JSON.parse(res.rows[0].result);
+    }
+  } catch {}
+  return null;
+}
+
+async function dbCacheSet(fixtureId, result) {
+  try {
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO groq_prediction_cache (fixture_id, result, expires_at) VALUES (?, ?, datetime('now', '+6 hours'))`,
+      args: [String(fixtureId), JSON.stringify(result)],
+    });
+  } catch (err) {
+    console.error('[GroqEvaluator] DB cache write error:', err.message);
+  }
+}
 
 function cacheGet(key) {
   const entry = evaluationCache.get(key);
@@ -325,10 +370,19 @@ export async function evaluatePrediction(prediction) {
   const fixtureId = prediction?.fixture?.id;
   const cacheKey = String(fixtureId || "unknown");
 
-  // 1. Check cache first
+  // 1. Check in-memory cache first (fastest)
   const cached = cacheGet(cacheKey);
   if (cached) {
     prediction.predictions.recommendation = cached.value;
+    prediction.predictions.evaluated_by = "groq-evaluator-cache";
+    return prediction;
+  }
+
+  // 1b. Check persistent DB cache (cross-user, survives restarts — P4.1)
+  const dbCached = await dbCacheGet(cacheKey);
+  if (dbCached) {
+    cacheSet(cacheKey, dbCached); // also warm in-memory cache
+    prediction.predictions.recommendation = dbCached;
     prediction.predictions.evaluated_by = "groq-evaluator-cache";
     return prediction;
   }
@@ -340,6 +394,7 @@ export async function evaluatePrediction(prediction) {
     // Deterministic path — skip Groq entirely
     const fallback = deterministicFallback(prediction);
     cacheSet(cacheKey, fallback);
+    await dbCacheSet(cacheKey, fallback);
     prediction.predictions.recommendation = fallback;
     prediction.predictions.evaluated_by = "deterministic-engine";
     return prediction;
@@ -407,6 +462,7 @@ export async function evaluatePrediction(prediction) {
     }
 
     cacheSet(cacheKey, result);
+    await dbCacheSet(cacheKey, result); // persist for cross-user caching (P4.1)
     prediction.predictions.recommendation = result;
     prediction.predictions.evaluated_by = "groq-evaluator";
     return prediction;
@@ -414,6 +470,7 @@ export async function evaluatePrediction(prediction) {
     console.error("[GroqEvaluator] Groq call failed, using deterministic fallback:", err.message);
     const fallback = deterministicFallback(prediction);
     cacheSet(cacheKey, fallback);
+    await dbCacheSet(cacheKey, fallback);
     prediction.predictions.recommendation = fallback;
     prediction.predictions.evaluated_by = "deterministic-engine";
     return prediction;

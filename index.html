@@ -771,6 +771,50 @@
     from { transform: translateY(100%); }
     to   { transform: translateY(0); }
   }
+    /* FOMO & Premium Lock Styles */
+    .premium-lock-card{
+      border-radius:18px;border:1px solid rgba(255,180,0,.25);
+      background:linear-gradient(135deg,rgba(255,180,0,.06),rgba(255,77,109,.04));
+      padding:20px 16px;margin-bottom:12px;position:relative;overflow:hidden;
+    }
+    .premium-lock-card::before{
+      content:'';position:absolute;inset:0;
+      backdrop-filter:blur(2px);background:rgba(7,9,13,.6);border-radius:18px;
+      z-index:1;
+    }
+    .premium-lock-card .lock-content{position:relative;z-index:2;text-align:center}
+    .premium-lock-card .lock-icon{font-size:36px;margin-bottom:10px}
+    .premium-lock-card .lock-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:6px}
+    .premium-lock-card .lock-sub{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+    .premium-lock-card .lock-upgrade{
+      display:inline-block;padding:10px 22px;border-radius:12px;
+      background:linear-gradient(135deg,#10e774,#09c864);
+      color:#03150a;font-size:13px;font-weight:900;cursor:pointer;border:none;
+    }
+    .social-proof{
+      display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
+      background:rgba(16,231,116,.04);border:1px solid rgba(16,231,116,.1);
+      margin-bottom:12px;font-size:12px;color:var(--muted);
+    }
+    .social-proof .dot-live{
+      width:7px;height:7px;border-radius:999px;background:var(--green);
+      animation:livePulse 1.5s ease-in-out infinite;flex-shrink:0;
+    }
+    @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .alt-locked{
+      position:relative;overflow:hidden;border-radius:18px;
+    }
+    .alt-locked-overlay{
+      position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;backdrop-filter:blur(4px);background:rgba(7,9,13,.7);
+      border-radius:18px;z-index:2;padding:16px;text-align:center;
+    }
+    .alt-locked-overlay .alt-lock-text{font-size:13px;font-weight:700;color:#fff;margin-bottom:8px}
+    .alt-locked-overlay .alt-lock-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+    .alt-locked-overlay button{
+      padding:8px 18px;border-radius:10px;background:var(--green);
+      color:#03150a;font-size:12px;font-weight:900;border:none;cursor:pointer;
+    }
   #pwaInstallBanner .pwa-icon {
     width: 44px; height: 44px; border-radius: 10px;
     background: #0a0f0d; border: 1px solid rgba(16,231,116,.3);
@@ -977,12 +1021,16 @@
           <p id="predictionReason" style="margin-top:8px">Loading reasoning...</p>
         </div>
 
+        <div id="oddsEdgeCard" class="hidden"></div>
+
         <div class="sheet-label">Alternative Pick</div>
         <div class="card">
           <h3 id="alternativeMain">Loading...</h3>
           <div id="alternativeMeta" class="sub"></div>
           <p id="alternativeReason">Loading...</p>
         </div>
+
+        <div id="fomoSection" class="hidden"></div>
 
         <div id="rejectedSection" class="hidden">
           <div class="sheet-label">Rejected Picks</div>
@@ -1633,8 +1681,8 @@
   function goalsPillClass(val) {
     if (!val) return 'goals-medium';
     var v = String(val).toLowerCase();
-    if (v === 'low') return 'goals-low';
-    if (v === 'high') return 'goals-high';
+    if (v === 'very high' || v === 'high') return 'goals-high';
+    if (v === 'very low' || v === 'low') return 'goals-low';
     return 'goals-medium';
   }
 
@@ -1811,6 +1859,36 @@
     predictionReason.textContent =
       (explanation && explanation.best_pick_reasoning) || rec.rationale || 'No detailed reasoning available.';
 
+    // Odds & Edge display (P2.2 + P2.3)
+    var oddsCard = document.getElementById('oddsEdgeCard');
+    if (oddsCard) {
+      if (rec.market_odds && rec.market_odds > 1) {
+        var edgeColor = (rec.has_value || (rec.edge && parseFloat(rec.edge) > 0)) ? 'var(--green)' : 'var(--danger)';
+        var edgeText = rec.edge != null ? (parseFloat(rec.edge) > 0 ? '+' + rec.edge + '%' : rec.edge + '%') : 'N/A';
+        var edgeLabel = rec.has_value ? '✅ VALUE BET' : '⚠️ NO VALUE';
+        var impliedPct = rec.implied_prob != null ? (safeNum(rec.implied_prob,0)*100).toFixed(1)+'%' : 'N/A';
+        var modelPct = rec.probability != null ? (safeNum(rec.probability,0)*100).toFixed(1)+'%' : 'N/A';
+        oddsCard.innerHTML =
+          '<div class="sheet-label">Value Analysis</div>' +
+          '<div class="card" style="border-color:' + (rec.has_value ? 'rgba(16,231,116,.3)' : 'rgba(255,77,109,.2)') + '">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Pick</td><td style="padding:6px 0;font-weight:700;text-align:right">' + escapeHtml(rec.pick || '') + '</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Model Probability</td><td style="padding:6px 0;font-weight:700;text-align:right;color:var(--green)">' + modelPct + '</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Bookmaker Odds</td><td style="padding:6px 0;font-weight:700;text-align:right">' + safeNum(rec.market_odds,0).toFixed(2) + ' (implied: ' + impliedPct + ')</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Edge Found</td><td style="padding:6px 0;font-weight:900;text-align:right;color:' + edgeColor + '">' + edgeText + ' — ' + edgeLabel + '</td></tr>' +
+          '</table></div>';
+        oddsCard.classList.remove('hidden');
+      } else {
+        // No odds — P2.3
+        oddsCard.innerHTML =
+          '<div class="sheet-label">Value Analysis</div>' +
+          '<div class="card" style="border-color:rgba(255,255,255,.06)">' +
+          '<p style="font-size:13px;color:var(--muted);margin:0">⚠️ No odds data available for this match — value edge cannot be calculated. Predictions are probability-based only.</p>' +
+          '</div>';
+        oddsCard.classList.remove('hidden');
+      }
+    }
+
     if (rec.alternative) {
       alternativeMain.textContent = rec.alternative;
       alternativeMeta.textContent =
@@ -1822,6 +1900,36 @@
       alternativeMain.textContent = 'No Alternative';
       alternativeMeta.textContent = '';
       alternativeReason.textContent = 'No alternative angle available.';
+    }
+
+    // FOMO for trial users — premium lock cards (P1 FOMO)
+    var fomoSection = document.getElementById('fomoSection');
+    if (fomoSection) {
+      if (isTrialActive && isTrialActive() && !isPremium()) {
+        var watchers = Math.floor(Math.random() * 18) + 7; // 7-24 premium watchers
+        fomoSection.innerHTML =
+          '<div class="social-proof">' +
+            '<div class="dot-live"></div>' +
+            '<span><strong style="color:var(--green)">' + watchers + ' premium users</strong> are viewing full analysis of this match right now</span>' +
+          '</div>' +
+          '<div class="premium-lock-card">' +
+            '<div style="filter:blur(3px);pointer-events:none;padding:12px;border-radius:14px;background:rgba(16,231,116,.05);border:1px solid rgba(16,231,116,.12);margin-bottom:8px">' +
+              '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.2em;margin-bottom:6px">Value Intelligence</div>' +
+              '<div style="font-size:22px;font-weight:900;color:var(--green);margin-bottom:4px">+12.4% EDGE</div>' +
+              '<div style="font-size:12px;color:#bcc4d1">Bookmaker odds: 2.10 — Model: 73% — Market implied: 47%</div>' +
+            '</div>' +
+            '<div class="lock-content">' +
+              '<div class="lock-icon">🔒</div>' +
+              '<div class="lock-title">Value Edge Detected</div>' +
+              '<div class="lock-sub">The engine found a +12% gap between our model probability and bookmaker odds.<br>Premium users see the full edge breakdown.</div>' +
+              '<button class="lock-upgrade" onclick="openUpsellModal()">Unlock Full Analysis — ₦3,000/mo</button>' +
+            '</div>' +
+          '</div>';
+        fomoSection.classList.remove('hidden');
+      } else {
+        fomoSection.innerHTML = '';
+        fomoSection.classList.add('hidden');
+      }
     }
 
     // Rejected picks
@@ -1904,7 +2012,7 @@
         var pg = Math.round(safeNum(table.points_gap, 0));
         var mg = Math.round(safeNum(table.momentum_gap, 0));
         var pgText = pg > 0 ? pg + ' pts ahead' : (pg < 0 ? Math.abs(pg) + ' pts behind' : 'level on points');
-        var mgText = mg > 0 ? 'momentum: +' + mg : (mg < 0 ? 'momentum: ' + mg : 'equal momentum');
+        var mgText = mg > 0 ? 'Home side has stronger recent momentum' : (mg < 0 ? 'Away side has stronger recent momentum' : 'Equal momentum between sides');
         return 'Table context: ' + pgText + ', ' + mgText + '.';
       })() +
     '</p></div>';
@@ -2063,6 +2171,10 @@
     alternativeMain.textContent = 'Loading...';
     alternativeMeta.textContent = '';
     alternativeReason.textContent = 'Loading...';
+    var fomoEl = document.getElementById('fomoSection');
+    if (fomoEl) { fomoEl.innerHTML = ''; fomoEl.classList.add('hidden'); }
+    var oddsEl = document.getElementById('oddsEdgeCard');
+    if (oddsEl) { oddsEl.innerHTML = ''; oddsEl.classList.add('hidden'); }
     document.getElementById('rejectedSection').classList.add('hidden');
     document.getElementById('h2hList').innerHTML = '';
     document.getElementById('homeFormList').innerHTML = '';

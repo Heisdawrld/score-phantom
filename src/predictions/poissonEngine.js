@@ -284,7 +284,7 @@ function classifyGameScript(features, lambdaHome, lambdaAway, context) {
   }
 
   // Tight low event
-  if (totalXg <= 2.25 && (context.isCagey || context.lowScoringTrend)) {
+  if (totalXg <= 2.0 && (context.isCagey || context.lowScoringTrend)) {
     return {
       script: "tight_low_event",
       description: "Tight defensive game expected — few clear chances anticipated",
@@ -526,32 +526,126 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, o
     }
   }
 
-  // ── Game script awareness ──
+  // ── Game script awareness — rich layered conditions (P3.1) ──
   const script = gameScriptObj?.script || "tight_low_event";
+  const hf2 = context._hf || {};
+  const af2 = context._af || {};
+  const homeScored = safeNum(hf2.avg_scored, 1.1);
+  const awayConcede = safeNum(af2.avg_conceded, 1.1);
+  const homeConcede = safeNum(hf2.avg_conceded, 1.1);
+  const awayScored = safeNum(af2.avg_scored, 1.0);
+  const totalXgC = context.totalXg || 2.2;
 
-  if (candidate.market === "Over/Under" && candidate.pick === "Over 2.5 Goals") {
-    if (script === "open_end_to_end" || script === "balanced_high_event") {
-      score += 0.04;
-      reasons.push("Game script supports goals market");
+  if (script === "dominant_home_pressure") {
+    if (candidate.market === "1X2" && candidate.pick === `${homeTeam} Win`) {
+      score += 0.08;
+      reasons.push("Script: home dominance — 1X2 home win is primary market");
+    }
+    if (candidate.market === "Draw No Bet" && candidate.pick === `${homeTeam} DNB`) {
+      score += 0.07;
+      reasons.push("Script: home dominance — DNB home removes draw risk cleanly");
+    }
+    if (candidate.market === "Team Goals" && candidate.pick === `${homeTeam} Over 1.5`) {
+      score += 0.06;
+      reasons.push("Script: home pressure — home team goals market well-supported");
+    }
+    if (candidate.market === "Over/Under" && candidate.pick === "Over 1.5 Goals" && homeScored >= 1.6) {
+      score += 0.03; // modest bump only since over 1.5 is generic
+    }
+    // Penalise away-side markets in dominant-home context
+    if (candidate.market === "1X2" && candidate.pick === `${awayTeam} Win`) {
+      score -= 0.08;
+      reasons.push("Script contradicts away win");
+    }
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS Yes" && awayConcede <= 0.9) {
+      score -= 0.05;
+      reasons.push("Away defence solid despite home pressure — BTTS Yes weakened");
     }
   }
-  if (candidate.market === "Over/Under" && candidate.pick === "Under 2.5 Goals") {
-    if (script === "tight_low_event") {
-      score += 0.04;
-      reasons.push("Game script supports low-event market");
+
+  if (script === "dominant_away_pressure") {
+    if (candidate.market === "1X2" && candidate.pick === `${awayTeam} Win`) {
+      score += 0.08;
+      reasons.push("Script: away dominance — 1X2 away win is primary market");
+    }
+    if (candidate.market === "Draw No Bet" && candidate.pick === `${awayTeam} DNB`) {
+      score += 0.07;
+      reasons.push("Script: away dominance — DNB away removes draw risk");
+    }
+    if (candidate.market === "Team Goals" && candidate.pick === `${awayTeam} Over 1.5`) {
+      score += 0.06;
+      reasons.push("Script: away pressure — away team goals market well-supported");
+    }
+    if (candidate.market === "1X2" && candidate.pick === `${homeTeam} Win`) {
+      score -= 0.08;
+      reasons.push("Script contradicts home win");
     }
   }
-  if (candidate.market === "1X2" && candidate.pick === `${homeTeam} Win` && script === "dominant_home_pressure") {
-    score += 0.04;
-    reasons.push("Game script expects home dominance");
+
+  if (script === "open_end_to_end") {
+    if (candidate.market === "Over/Under" && candidate.pick === "Over 2.5 Goals") {
+      score += 0.08;
+      reasons.push("Script: open game — Over 2.5 is the standout market");
+    }
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS Yes") {
+      score += 0.08;
+      reasons.push("Script: end-to-end — both teams attacking strongly");
+    }
+    if (candidate.market === "Over/Under" && candidate.pick === "Under 2.5 Goals") {
+      score -= 0.07;
+      reasons.push("Script contradicts under 2.5 in open game");
+    }
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS No") {
+      score -= 0.07;
+      reasons.push("Script contradicts BTTS No in open game");
+    }
   }
-  if (candidate.market === "1X2" && candidate.pick === `${awayTeam} Win` && script === "dominant_away_pressure") {
-    score += 0.04;
-    reasons.push("Game script expects away control");
+
+  if (script === "balanced_high_event") {
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS Yes") {
+      score += 0.07;
+      reasons.push("Script: balanced high-event — BTTS Yes well-supported");
+    }
+    if (candidate.market === "Over/Under" && candidate.pick === "Over 2.5 Goals") {
+      score += 0.06;
+      reasons.push("Script: balanced high-event — goals environment is positive");
+    }
+    // Both team goals also fits
+    if (candidate.market === "Team Goals") {
+      if ((candidate.pick === `${homeTeam} Over 1.5` && homeScored >= 1.4) ||
+          (candidate.pick === `${awayTeam} Over 1.5` && awayScored >= 1.2)) {
+        score += 0.05;
+        reasons.push("Script: high-event balanced game — team goal lines align");
+      }
+    }
   }
+
+  if (script === "tight_low_event") {
+    if (candidate.market === "Over/Under" && candidate.pick === "Under 2.5 Goals") {
+      score += 0.08;
+      reasons.push("Script: tight game — Under 2.5 is the primary line");
+    }
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS No") {
+      score += 0.07;
+      reasons.push("Script: low-event — BTTS No supported by defensive profile");
+    }
+    if (candidate.market === "Draw No Bet") {
+      score += 0.04;
+      reasons.push("Script: tight match — DNB protection suits cagey game");
+    }
+    if (candidate.market === "Over/Under" && candidate.pick === "Over 2.5 Goals") {
+      score -= 0.08;
+      reasons.push("Script contradicts Over 2.5 in tight game");
+    }
+    if (candidate.market === "BTTS" && candidate.pick === "BTTS Yes") {
+      score -= 0.07;
+      reasons.push("Script contradicts BTTS Yes in tight game");
+    }
+  }
+
   if (script === "chaotic_unreliable") {
-    score -= 0.04;
-    reasons.push("Chaotic match script — lower reliability");
+    score -= 0.12;
+    reasons.push("Chaotic match script — all markets penalised");
   }
 
   // Kill lazy spam markets
@@ -954,7 +1048,9 @@ function chooseRecommendation(rankedMarkets, features, context, gameScriptObj) {
   }
 
   const best = rankedMarkets[0];
-  const alt = rankedMarkets.find((m) => m.market !== best.market) || rankedMarkets[1] || null;
+  // Two-tier threshold: relaxed 0.50 for alternatives. Always prefer a different market.
+  const altCandidates = rankedMarkets.filter((m, i) => i > 0 && m.score >= 0.50);
+  const alt = altCandidates.find(m => m.market !== best.market) || altCandidates[0] || rankedMarkets[1] || null;
 
   const weakHeadline =
     best.score < 0.56 ||
@@ -1046,13 +1142,29 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, 
   const momentumNudge = clamp(safeNum(tableContext.momentum_gap, 0) * 0.0025, -0.18, 0.18);
   const streakNudge = clamp((safeNum(homeFeatures.streak_score, 0) - safeNum(awayFeatures.streak_score, 0)) * 0.03, -0.15, 0.15);
 
+  // Motivation multiplier — wire tableContext classification into expected goals (P3.2)
+  function getMotivationMultiplier(ctx, isHome) {
+    const motiv = String(isHome ? (ctx.home_motivation || '') : (ctx.away_motivation || '')).toLowerCase();
+    const matchCtx = String(ctx.match_context || ctx.context_tag || '').toLowerCase();
+    const combined = motiv + ' ' + matchCtx;
+    if (combined.includes('relegation')) return 1.08;
+    if (combined.includes('title') || combined.includes('champion')) return 1.05;
+    if (combined.includes('promotion')) return 1.06;
+    if (combined.includes('must-win') || combined.includes('must win')) return 1.07;
+    if (combined.includes('nothing to play') || combined.includes('mid-table comfort')) return 0.92;
+    if (combined.includes('rotation') || combined.includes('cup priority')) return 0.88;
+    return 1.0;
+  }
+  const homeMotivMult = getMotivationMultiplier(tableContext, true);
+  const awayMotivMult = getMotivationMultiplier(tableContext, false);
+
   lambdaHome = clamp(
-    lambdaHome + Math.max(0, tableNudge) + Math.max(0, momentumNudge) + Math.max(0, streakNudge),
+    (lambdaHome + Math.max(0, tableNudge) + Math.max(0, momentumNudge) + Math.max(0, streakNudge)) * homeMotivMult,
     0.35,
     4.5
   );
   lambdaAway = clamp(
-    lambdaAway + Math.max(0, -tableNudge) + Math.max(0, -momentumNudge) + Math.max(0, -streakNudge),
+    (lambdaAway + Math.max(0, -tableNudge) + Math.max(0, -momentumNudge) + Math.max(0, -streakNudge)) * awayMotivMult,
     0.25,
     4.2
   );
@@ -1119,18 +1231,37 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, 
     }
   }
 
-  // Build goal expectation label
+  // Build goal expectation label — 5-level scale aligned with xG thresholds
   const totalXg = lambdaHome + lambdaAway;
-  let goalExpectation = "moderate";
-  if (totalXg >= 3.0) goalExpectation = "high";
-  else if (totalXg <= 2.1) goalExpectation = "low";
+  let goalExpectation;
+  if (totalXg >= 3.0) goalExpectation = "very high";
+  else if (totalXg >= 2.5) goalExpectation = "high";
+  else if (totalXg >= 2.1) goalExpectation = "moderate";
+  else if (totalXg >= 1.8) goalExpectation = "low";
+  else goalExpectation = "very low";
 
-  // Build risk level
-  let riskLevel = "moderate";
+  // Risk = data quality + script reliability (decoupled from model confidence — P1.2)
+  const homeMatchCount = safeNum(homeFeatures.matches_available, 0);
+  const awayMatchCount = safeNum(awayFeatures.matches_available, 0);
+  const dataRich = homeMatchCount >= 8 && awayMatchCount >= 8;
+  const scriptClear = ['dominant_home_pressure', 'dominant_away_pressure', 'tight_low_event', 'open_end_to_end'].includes(gameScriptObj.script);
+  const scriptChaotic = gameScriptObj.script === 'chaotic_unreliable';
   const volatility = matchVolatilityLabel(features, gameScriptObj.script);
-  if (volatility === "HIGH" || gameScriptObj.script === "chaotic_unreliable") riskLevel = "high";
-  else if (volatility === "LOW" && recommendation.confidence_detail?.model_confidence === "HIGH") riskLevel = "low";
-  if (gameScriptObj.script === "chaotic_unreliable" && volatility === "HIGH") riskLevel = "extreme";
+
+  let riskLevel;
+  if (scriptChaotic) {
+    riskLevel = "extreme";
+  } else if (homeMatchCount < 3 || awayMatchCount < 3) {
+    riskLevel = "high";
+  } else if (dataRich && scriptClear) {
+    riskLevel = "low";
+  } else if (homeMatchCount >= 5 && awayMatchCount >= 5 && scriptClear) {
+    riskLevel = "moderate";
+  } else if (!scriptClear || homeMatchCount < 5 || awayMatchCount < 5) {
+    riskLevel = "moderate";
+  } else {
+    riskLevel = "moderate";
+  }
 
   // Clean internal fields from ranked markets before output
   const cleanRanked = rankedMarkets.map((m) => ({
