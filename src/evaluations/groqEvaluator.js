@@ -192,8 +192,20 @@ function buildPromptPayload(prediction) {
     standings: { home: homeStand, away: awayStand },
     tableContext: tc,
     model,
-    homeForm: hf,
-    awayForm: af,
+    homeForm: {
+      ...hf,
+      // Venue-specific stats (home team at home only) — most important signal
+      home_avg_scored: hf.home_avg_scored ?? null,
+      home_avg_conceded: hf.home_avg_conceded ?? null,
+      home_matches: hf.home_matches ?? 0,
+    },
+    awayForm: {
+      ...af,
+      // Venue-specific stats (away team away only)
+      away_avg_scored: af.away_avg_scored ?? null,
+      away_avg_conceded: af.away_avg_conceded ?? null,
+      away_matches: af.away_matches ?? 0,
+    },
     h2h,
     gameScript,
     valueDetection,
@@ -407,7 +419,7 @@ export async function evaluatePrediction(prediction) {
     recordGroqCall();
 
     const response = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.1,
       max_tokens: 420,
       messages: [

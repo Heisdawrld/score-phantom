@@ -228,13 +228,23 @@ function filterDomesticForm(form, tournamentName, maxResults = 5) {
 }
 
 export async function enrichMatchData(fixture) {
-  const [h2hData, standings] = await Promise.all([
+  const [h2hData, standings, homeTeamFormExtended, awayTeamFormExtended] = await Promise.all([
     fetchH2H(fixture.home_team_id, fixture.away_team_id),
     fetchStandings(fixture.tournament_id),
+    fetchTeamForm(fixture.home_team_id, 10),
+    fetchTeamForm(fixture.away_team_id, 10),
   ]);
 
-  const homeFormFiltered = filterDomesticForm(h2hData.homeForm, fixture.tournament_name);
-  const awayFormFiltered = filterDomesticForm(h2hData.awayForm, fixture.tournament_name);
+  // Prefer the fuller form dataset for better statistical reliability
+  const homeFormRaw = homeTeamFormExtended.length > h2hData.homeForm.length
+    ? homeTeamFormExtended
+    : h2hData.homeForm;
+  const awayFormRaw = awayTeamFormExtended.length > h2hData.awayForm.length
+    ? awayTeamFormExtended
+    : h2hData.awayForm;
+
+  const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 10);
+  const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 10);
 
   return {
     h2h: h2hData.h2h,

@@ -355,6 +355,39 @@ export async function computeFeatures(fixtureId, homeTeamName, awayTeamName) {
   const awayFeatures = buildTeamFeatures(awayGoals, awayForm, awayTeamName, standingsMap);
   const h2hFeatures = buildH2HFeatures(h2h, homeTeamName, awayTeamName, standingsMap);
 
+  // ── Venue-split stats: home team at home only, away team away only ─────────
+  // These are the most important signals for expected goals accuracy.
+  // A team's home scoring rate is typically 10-20% higher than their overall rate.
+  const homeTeamAtHome = homeGoals.filter((m) => m.isHome === true);
+  const awayTeamAway = awayGoals.filter((m) => m.isHome === false);
+
+  const MIN_VENUE_SAMPLE = 3; // Need at least 3 venue-specific games to trust the stats
+
+  const homeAtHomeScored =
+    homeTeamAtHome.length >= MIN_VENUE_SAMPLE
+      ? avg(homeTeamAtHome.map((m) => m.scored))
+      : null;
+  const homeAtHomeConceded =
+    homeTeamAtHome.length >= MIN_VENUE_SAMPLE
+      ? avg(homeTeamAtHome.map((m) => m.conceded))
+      : null;
+  const awayTeamAwayScored =
+    awayTeamAway.length >= MIN_VENUE_SAMPLE
+      ? avg(awayTeamAway.map((m) => m.scored))
+      : null;
+  const awayTeamAwayConceded =
+    awayTeamAway.length >= MIN_VENUE_SAMPLE
+      ? avg(awayTeamAway.map((m) => m.conceded))
+      : null;
+
+  // Attach venue stats to features so downstream layers can use them
+  homeFeatures.home_avg_scored = homeAtHomeScored;
+  homeFeatures.home_avg_conceded = homeAtHomeConceded;
+  homeFeatures.home_matches = homeTeamAtHome.length;
+  awayFeatures.away_avg_scored = awayTeamAwayScored;
+  awayFeatures.away_avg_conceded = awayTeamAwayConceded;
+  awayFeatures.away_matches = awayTeamAway.length;
+
   const tableContext = buildTableContext(
     homeTeamName,
     awayTeamName,
@@ -366,14 +399,42 @@ export async function computeFeatures(fixtureId, homeTeamName, awayTeamName) {
   const h2hWeight = h2h.length >= 5 ? 0.28 : h2h.length >= 3 ? 0.18 : 0;
   const formWeight = 1 - h2hWeight;
 
-  // Base expected goals from venue-specific form
-  let expectedHomeGoals =
-    (safeNum(homeFeatures.avg_scored, 1.2) * 0.60) +
-    (safeNum(awayFeatures.avg_conceded, 1.1) * 0.40);
+  // Base expected goals — prioritise venue-specific stats when available.
+  // Home team at home typically scores 10-20% more than their overall average.
+  // Away team away typically scores 10-15% less than their overall average.
+  let expectedHomeGoals;
+  if (homeAtHomeScored !== null && awayTeamAwayConceded !== null) {
+    // Best case: full venue split on both sides
+    expectedHomeGoals = homeAtHomeScored * 0.65 + awayTeamAwayConceded * 0.35;
+  } else if (homeAtHomeScored !== null) {
+    // Partial: home team venue data available
+    expectedHomeGoals = homeAtHomeScored * 0.65 + safeNum(awayFeatures.avg_conceded, 1.1) * 0.35;
+  } else if (awayTeamAwayConceded !== null) {
+    // Partial: away team defence data available
+    expectedHomeGoals = safeNum(homeFeatures.avg_scored, 1.2) * 0.60 + awayTeamAwayConceded * 0.40;
+  } else {
+    // Fallback: no venue data — use overall averages
+    expectedHomeGoals =
+      (safeNum(homeFeatures.avg_scored, 1.2) * 0.60) +
+      (safeNum(awayFeatures.avg_conceded, 1.1) * 0.40);
+  }
 
-  let expectedAwayGoals =
-    (safeNum(awayFeatures.avg_scored, 1.0) * 0.60) +
-    (safeNum(homeFeatures.avg_conceded, 1.1) * 0.40);
+  let expectedAwayGoals;
+  if (awayTeamAwayScored !== null && homeAtHomeConceded !== null) {
+    // Best case: full venue split on both sides
+    expectedAwayGoals = awayTeamAwayScored * 0.65 + homeAtHomeConceded * 0.35;
+  } else if (awayTeamAwayScored !== null) {
+    // Partial: away team venue data available
+    expectedAwayGoals = awayTeamAwayScored * 0.65 + safeNum(homeFeatures.avg_conceded, 1.1) * 0.35;
+  } else if (homeAtHomeConceded !== null) {
+    // Partial: home team defence data available
+    expectedAwayGoals = safeNum(awayFeatures.avg_scored, 1.0) * 0.60 + homeAtHomeConceded * 0.40;
+  } else {
+    // Fallback: no venue data — use overall averages
+    expectedAwayGoals =
+      (safeNum(awayFeatures.avg_scored, 1.0) * 0.60) +
+      (safeNum(homeFeatures.avg_conceded, 1.1) * 0.40);
+  }
 
   // Standings + momentum nudges
   const pointsNudge = clamp((tableContext.points_gap || 0) * 0.012, -0.20, 0.20);
