@@ -1559,7 +1559,7 @@
         : '--:--';
 
       var locked = !hasAnyAccess() && !f._isFree;
-      var trialLocked = !locked && isTrialActive() && idx >= TRIAL_MATCH_LIMIT;
+      var trialLocked = false; // daily count enforced on click
       var isLocked = locked || trialLocked;
       return '<div class="match-row' + (isLocked ? ' match-locked' : '') + '" data-fixture-id="' + f.id + '" data-trial-locked="' + (trialLocked ? '1' : '0') + '">' +
         '<div class="match-time">' + time + '</div>' +
@@ -1586,10 +1586,18 @@
           openUpsellModal();
           return;
         }
-        if (row.dataset.trialLocked === '1') {
-          closeOverlay(leaguePanel);
-          openSubscribeModal();
-          return;
+        if (isTrialActive()) {
+          var today = new Date().toISOString().slice(0, 10);
+          var dk = 'trial_opens_' + today;
+          var opens = parseInt(localStorage.getItem(dk) || '0', 10);
+          if (opens >= TRIAL_MATCH_LIMIT) {
+            closeOverlay(leaguePanel);
+            var tom = new Date(); tom.setDate(tom.getDate() + 1);
+            var tomStr = tom.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+            alert('⏳ Daily limit reached!\n\nFree trial users can view 10 matches per day.\n\nCome back tomorrow (' + tomStr + ') or upgrade to Premium for unlimited access.');
+            return;
+          }
+          localStorage.setItem(dk, opens + 1);
         }
         openMatchPanel(fixture);
       });
