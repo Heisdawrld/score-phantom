@@ -28,6 +28,65 @@ function safeJsonParse(value, fallback = {}) {
   }
 }
 
+// Format a human-readable pick label from market + selection
+function formatPickLabel(market, selection, homeTeam, awayTeam) {
+  if (!market) return selection || 'Pick';
+  const m = (market || '').toLowerCase().replace(/-/g, '_');
+  const s = (selection || '').toLowerCase().replace(/-/g, '_');
+
+  // Over/Under goals
+  if (m === 'over_under' || m === 'goals_ou') {
+    if (s.startsWith('over_')) return `Over ${s.replace('over_', '')} Goals`;
+    if (s.startsWith('under_')) return `Under ${s.replace('under_', '')} Goals`;
+    if (s.includes('over')) return `Over Goals`;
+    if (s.includes('under')) return `Under Goals`;
+  }
+  // BTTS
+  if (m === 'btts' || m === 'both_teams_to_score') {
+    if (s === 'yes' || s === 'btts_yes') return 'Both Teams to Score';
+    if (s === 'no' || s === 'btts_no') return 'Both Teams NOT to Score';
+  }
+  // 1X2
+  if (m === '1x2' || m === 'match_winner') {
+    if (s === 'home' || s === '1') return `${homeTeam || 'Home'} Win`;
+    if (s === 'away' || s === '2') return `${awayTeam || 'Away'} Win`;
+    if (s === 'draw' || s === 'x') return 'Draw';
+  }
+  // DNB (Draw No Bet)
+  if (m === 'dnb' || m === 'draw_no_bet') {
+    if (s === 'home') return `${homeTeam || 'Home'} Win (DNB)`;
+    if (s === 'away') return `${awayTeam || 'Away'} Win (DNB)`;
+  }
+  // Double Chance
+  if (m === 'double_chance') {
+    if (s === '1x' || s === 'home_draw') return `${homeTeam || 'Home'} or Draw`;
+    if (s === '2x' || s === 'away_draw') return `${awayTeam || 'Away'} or Draw`;
+    if (s === '12' || s === 'home_away') return 'Home or Away Win';
+  }
+  // Asian Handicap
+  if (m === 'asian_handicap' || m === 'handicap') {
+    if (s.includes('home')) return `${homeTeam || 'Home'} Handicap`;
+    if (s.includes('away')) return `${awayTeam || 'Away'} Handicap`;
+  }
+  // Team goals
+  if (m === 'team_goals' || m === 'home_goals' || m === 'away_goals') {
+    const side = m.includes('home') ? (homeTeam || 'Home') : (awayTeam || 'Away');
+    if (s.startsWith('over_')) return `${side} Over ${s.replace('over_', '')} Goals`;
+    if (s.startsWith('under_')) return `${side} Under ${s.replace('under_', '')} Goals`;
+  }
+  // Win either half
+  if (m === 'win_either_half') {
+    if (s === 'home') return `${homeTeam || 'Home'} Win Either Half`;
+    if (s === 'away') return `${awayTeam || 'Away'} Win Either Half`;
+  }
+
+  // Fallback: prettify raw selection
+  if (selection) {
+    return selection.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+  return market.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function mapHistoryRow(row) {
   return {
     home: row.home_team,
@@ -843,28 +902,28 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
         const prob = parseFloat(row.best_pick_probability || 0);
         const score = parseFloat(row.best_pick_score || 0);
 
-        // Build reason from explanation or reason_codes
-        let reason = row.explanation_text ? row.explanation_text.split('.')[0] : null;
-        if (!reason) {
-          const codes = safeJsonParse(row.reason_codes, []);
-          reason = codes.slice(0, 2).join(', ') || null;
+        // Format pick label from market + selection
+        const pickLabel = formatPickLabel(row.best_pick_market, row.best_pick_selection, homeTeam, awayTeam);
+
+        // Build reason from explanation_text (first sentence only — never raw codes)
+        let reason = null;
+        if (row.explanation_text) {
+          const firstSentence = row.explanation_text.split('.')[0].trim();
+          reason = firstSentence.length > 10 ? firstSentence : null;
         }
 
         scored.push({
           fixture_id: row.fixture_id,
-          home_team: homeTeam,
-          away_team: awayTeam,
+          home: homeTeam,
+          away: awayTeam,
           league: row.tournament_name,
           match_date: row.match_date,
-          market: row.best_pick_market,
-          selection: row.best_pick_selection,
-          modelProbability: prob,
-          impliedProbability: parseFloat(row.best_pick_implied_probability || 0),
-          edge,
+          pick: pickLabel,
+          confidence: prob,
           odds: row.best_pick_implied_probability > 0
             ? parseFloat((1 / row.best_pick_implied_probability).toFixed(2))
             : null,
-          confidence: { model: row.confidence_model, value: row.confidence_value, volatility: row.confidence_volatility },
+          edge,
           script: row.script_primary,
           reason,
           score,
