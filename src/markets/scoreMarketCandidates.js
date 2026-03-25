@@ -49,8 +49,8 @@ const SCRIPT_MARKET_FIT = {
   chaotic_unreliable: {}, // all get default 0.1
 };
 
-const DEFAULT_TACTICAL_FIT = 0.3;
-const CHAOTIC_TACTICAL_FIT = 0.1;
+const DEFAULT_TACTICAL_FIT = 0.4;
+const CHAOTIC_TACTICAL_FIT = 0.15;
 
 /**
  * Compute the tactical fit score for a candidate given the script output.
@@ -109,25 +109,32 @@ function getBadMarketPenalty(candidate, featureVector) {
 /**
  * Score each market candidate.
  *
+ * REBALANCED FORMULA (v2.1):
  * finalScore =
- *   0.34 * modelConfidenceScore
+ *   0.28 * modelConfidenceScore  (reduced from 0.34)
  * + 0.28 * edgeScore
- * + 0.18 * tacticalFitScore
+ * + 0.26 * tacticalFitScore      (increased from 0.18)
  * + 0.12 * dataSupportScore
+ * + 0.06 * formMomentumScore     (NEW)
  * - 0.22 * volatilityPenalty
  * - 0.14 * badMarketPenalty
  * - 0.08 * repetitionPenalty
+ * - 0.05 * diversityPenalty      (NEW)
  *
  * @param {MarketCandidate[]} candidates
  * @param {object} scriptOutput
  * @param {object} featureVector - flat feature vector
- * @param {object} recentMarkets - { [marketKey]: number } count of recent uses
+ * @param {object} recentMarkets - { markets: {[key]: count}, marketTypes: {[type]: count} }
  * @returns {MarketCandidate[]} with finalScore populated
  */
 export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}) {
   const fv = featureVector || {};
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
   const volatilityPenalty = clamp(safeNum(fv.matchChaosScore, 0.5), 0, 1);
+
+  // Extract market tracking data
+  const recentMarketCounts = recentMarkets.markets || {};
+  const recentTypeCounts = recentMarkets.marketTypes || {};
 
   return candidates.map((candidate) => {
     const modelConfidenceScore = clamp(safeNum(candidate.modelProbability, 0), 0, 1);
@@ -140,25 +147,68 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const tacticalFitScore = getTacticalFit(candidate.marketKey, scriptOutput);
     const badMarketPenalty = getBadMarketPenalty(candidate, featureVector);
 
-    // Repetition penalty: how often has this market been used recently
-    const recentCount = safeNum(recentMarkets[candidate.marketKey], 0);
+    // Form/momentum score: reward picks that align with recent team performance
+    const homePointsLast5 = safeNum(fv.homePointsLast5, 6);
+    const awayPointsLast5 = safeNum(fv.awayPointsLast5, 5);
+    const formGap = (homePointsLast5 - awayPointsLast5) / 15; // normalize to -1 to 1
+    
+    let formMomentumScore = 0;
+    const marketKey = candidate.marketKey || '';
+    if (marketKey.includes('home') && formGap > 0.2) formMomentumScore = 0.6;
+    else if (marketKey.includes('away') && formGap < -0.2) formMomentumScore = 0.6;
+    else if (marketKey.includes('draw') && Math.abs(formGap) < 0.15) formMomentumScore = 0.5;
+    else formMomentumScore = 0.3;
+
+    // Repetition penalty: how often has this specific market been used recently
+    const recentCount = safeNum(recentMarketCounts[candidate.marketKey], 0);
     const repetitionPenalty = clamp(recentCount * 0.15, 0, 0.6);
 
+    // Diversity penalty: encourage variety in market TYPES
+    const marketType = extractMarketType(candidate.marketKey);
+    const typeCount = safeNum(recentTypeCounts[marketType], 0);
+    let diversityPenalty = 0;
+    if (typeCount >= 3) diversityPenalty = 0.08; // Heavy penalty for overused types
+    else if (typeCount >= 2) diversityPenalty = 0.04;
+    
+    // Diversity bonus for underused types
+    let diversityBonus = 0;
+    if (typeCount === 0) diversityBonus = 0.03;
+
     const finalScore =
-      0.34 * modelConfidenceScore +
-      0.28 * Math.max(0, edgeScore) + // only reward positive edge
-      0.18 * tacticalFitScore +
-      0.12 * dataSupportScore -
+      0.28 * modelConfidenceScore +
+      0.28 * Math.max(0, edgeScore) +
+      0.26 * tacticalFitScore +
+      0.12 * dataSupportScore +
+      0.06 * formMomentumScore +
+      diversityBonus -
       0.22 * volatilityPenalty -
       0.14 * badMarketPenalty -
-      0.08 * repetitionPenalty;
+      0.08 * repetitionPenalty -
+      diversityPenalty;
 
     return {
       ...candidate,
       tacticalFitScore: parseFloat(tacticalFitScore.toFixed(3)),
       badMarketPenalty: parseFloat(badMarketPenalty.toFixed(3)),
       repetitionPenalty: parseFloat(repetitionPenalty.toFixed(3)),
+      diversityPenalty: parseFloat(diversityPenalty.toFixed(3)),
+      formMomentumScore: parseFloat(formMomentumScore.toFixed(3)),
       finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
     };
   });
+}
+
+/**
+ * Extract market type from market key (helper for diversity tracking)
+ */
+function extractMarketType(marketKey) {
+  const key = (marketKey || '').toLowerCase();
+  if (key.includes('over') || key.includes('under')) return 'over_under';
+  if (key.includes('btts')) return 'btts';
+  if (key.includes('win') && !key.includes('either')) return '1x2';
+  if (key.includes('double_chance')) return 'double_chance';
+  if (key.includes('dnb')) return 'draw_no_bet';
+  if (key.includes('handicap')) return 'handicap';
+  if (key.includes('either_half')) return 'win_either_half';
+  return 'other';
 }

@@ -31,8 +31,8 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
     };
   }
 
-  // Rule 2: high chaos score
-  if (matchChaosScore > 0.85) {
+  // Rule 2: high chaos score (relaxed from 0.85 to 0.88)
+  if (matchChaosScore > 0.88) {
     return {
       bestPick: null,
       backupPicks: ranked.slice(0, 3),
@@ -56,8 +56,8 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
   // model probability — natural gaps are small (0.006–0.02). Use a lower threshold in that case.
   if (ranked.length >= 2) {
     const hasOdds = ranked.some(c => c.edge != null && c.edge !== 0);
-    // 0.018 with odds, 0.004 without — previous 0.035 was rejecting the majority of valid matches
-    const minGap = hasOdds ? 0.018 : 0.004;
+    // Improved thresholds: 0.018 with odds, 0.012 without (increased from 0.004 for better differentiation)
+    const minGap = hasOdds ? 0.018 : 0.012;
     const gap = safeNum(ranked[0].finalScore, 0) - safeNum(ranked[1].finalScore, 0);
     if (gap < minGap) {
       // Without odds, fall back to best tactical fit + probability instead of rejecting outright
