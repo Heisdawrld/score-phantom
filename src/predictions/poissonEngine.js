@@ -668,9 +668,16 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, o
   // 1X2
   if (candidate.market === "1X2") {
     if (p >= 0.63) {
-      score += 0.1;
+      score += 0.10;
       reasons.push("Strong standalone 1X2 edge");
-    } else if (p < 0.56) {
+    } else if (p >= 0.52) {
+      // Moderate lean — slight penalty but still a real pick
+      score -= 0.06;
+      reasons.push("Moderate 1X2 lean");
+    } else if (p >= 0.48) {
+      score -= 0.10;
+      reasons.push("Weak 1X2 lean");
+    } else {
       score -= 0.16;
       reasons.push("Weak standalone 1X2 edge");
     }
@@ -691,15 +698,27 @@ function scoreCandidate(candidate, context, homeTeam, awayTeam, gameScriptObj, o
   }
 
   // Double chance
+  // DC probability is structurally inflated (it equals win + draw, so it's
+  // almost always 0.68–0.88). Score it on its marginal value instead of raw
+  // probability, otherwise it wins every match regardless of match profile.
   if (candidate.market === "Double Chance") {
+    // Deflate the inflated portion above 0.65 — that's just mathematical padding
+    const dcExcess = Math.max(0, p - 0.65);
+    score -= dcExcess * 1.2;
+    reasons.push(`DC inflation deflated by ${(dcExcess * 1.2).toFixed(3)}`);
+
+    // Only reward DC when the match is genuinely tight (no clear favourite)
     if (context.tightMatch && p >= 0.66) {
-      score += 0.1;
-      reasons.push("Tight match favors protection market");
+      score += 0.10;
+      reasons.push("Tight match — DC protection is genuinely useful");
     }
-    if (!context.tightMatch && p >= 0.72) {
-      score += 0.04;
-      reasons.push("Solid protection with real stability");
+
+    // Penalise when a clear favourite already exists — just back them to win
+    if (context.strongest1x2 >= 0.55 && !context.tightMatch) {
+      score -= 0.12;
+      reasons.push("Clear favourite exists — DC is redundant over 1X2 win");
     }
+
     if (p < 0.64) {
       score -= 0.06;
       reasons.push("Not strong enough even as safer angle");
