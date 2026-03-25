@@ -11,6 +11,7 @@ import { buildExplanationPayload } from "../explanations/buildExplanationPayload
 import { getPrediction, initPredictionsTable, updatePredictionExplanation } from "../storage/savePrediction.js";
 import { savePredictionLog, initLogsTable } from "../storage/savePredictionLog.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
+import { adaptResponseFormat } from "./responseAdapter.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'scorephantom_secret_2026';
@@ -1109,9 +1110,16 @@ router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async 
 
     const result = await runPredictionEngine(fixtureId, bundle);
 
+    // Get team names from bundle
+    const homeTeam = result.homeTeam || bundle.fixture?.home_team_name || 'Home';
+    const awayTeam = result.awayTeam || bundle.fixture?.away_team_name || 'Away';
+
+    // Adapt response format to match old engine (for frontend compatibility)
+    const adaptedPrediction = adaptResponseFormat(result, homeTeam, awayTeam);
+
     // Build explanation payload
     const explanationLines = buildExplanationPayload(result.reasonCodes, result.bestPick);
-    const matchLabel = `${result.homeTeam || ''} vs ${result.awayTeam || ''}`.trim();
+    const matchLabel = `${homeTeam} vs ${awayTeam}`.trim();
 
     // Get Groq explanation (non-blocking)
     let explanationText = null;
@@ -1125,9 +1133,11 @@ router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async 
     updatePredictionExplanation(result.fixtureId, explanationLines, explanationText).catch(() => {});
 
     const response = {
-      ...result,
-      explanationLines,
-      explanationText,
+      ...adaptedPrediction,
+      explanation: {
+        lines: explanationLines,
+        text: explanationText,
+      },
       access: buildAccessPayload(req.access),
     };
 
@@ -1236,4 +1246,3 @@ router.post("/refresh", requireAuth, requirePremiumAccess, async (req, res) => {
 });
 
 export default router;
-

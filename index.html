@@ -2212,14 +2212,9 @@
   }
 
   async function loadPrediction(fixtureId) {
-    var prediction;
-    if (isActiveSub()) {
-      // Premium users get full explanation
-      prediction = await apiFetch('/predict/' + fixtureId + '/explain');
-    } else {
-      // Trial users get basic prediction
-      prediction = await apiFetch('/predict/' + fixtureId);
-    }
+    // New engine endpoint - includes explanation inline for all users
+    var prediction = await apiFetch('/api/predictions/' + fixtureId);
+    
     lastPredictionData = prediction;
     renderPredictionHero(prediction);
     renderPredictionTab(prediction, prediction.explanation || {});

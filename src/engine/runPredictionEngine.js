@@ -14,6 +14,7 @@ import { selectBestPick } from './selectBestPick.js';
 import { buildConfidenceProfile } from './buildConfidenceProfile.js';
 import { buildReasonCodes } from './buildReasonCodes.js';
 import { savePrediction } from '../storage/savePrediction.js';
+import { getRecentMarkets, logRecommendedMarket } from '../storage/marketTracking.js';
 
 /**
  * Flatten the nested feature vector from buildFeatureVector into a flat
@@ -158,10 +159,9 @@ function flattenFeatureVector(fv) {
  *
  * @param {string} fixtureId
  * @param {object} rawData - data bundle from ensureFixtureData
- * @param {object} recentMarkets - { [marketKey]: count } of recently used markets
  * @returns {object} full prediction result
  */
-export async function runPredictionEngine(fixtureId, rawData, recentMarkets = {}) {
+export async function runPredictionEngine(fixtureId, rawData) {
   try {
     // Step 1: Normalize fixture
     const normalized = normalizeFixture(rawData);
@@ -196,7 +196,10 @@ export async function runPredictionEngine(fixtureId, rawData, recentMarkets = {}
     // Step 9: Compute implied probabilities + edge from bookmaker odds
     const candidatesWithEdge = computeImpliedProbabilities(candidates, odds);
 
-    // Step 10: Score candidates
+    // Step 9.5: Get recently recommended markets for this fixture (ANTI-REPETITION)
+    const recentMarkets = await getRecentMarkets(fixtureId, 24);
+
+    // Step 10: Score candidates (now with market tracking data)
     const scoredCandidates = scoreMarketCandidates(candidatesWithEdge, script, features, recentMarkets);
 
     // Step 11: Filter weak candidates
@@ -250,6 +253,17 @@ export async function runPredictionEngine(fixtureId, rawData, recentMarkets = {}
     await savePrediction(result).catch(err =>
       console.error('[runPredictionEngine] Save failed:', err.message)
     );
+
+    // Step 17: Log recommended market to tracking (if we have a best pick)
+    if (bestPick && bestPick.marketKey) {
+      await logRecommendedMarket(
+        fixtureId,
+        bestPick.marketKey,
+        bestPick.selection || bestPick.marketKey
+      ).catch(err =>
+        console.error('[runPredictionEngine] Market tracking failed:', err.message)
+      );
+    }
 
     return result;
   } catch (err) {
