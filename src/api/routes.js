@@ -8,7 +8,7 @@ import { enrichFixture } from "../enrichment/enrichOne.js";
 import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 import { buildExplanationPayload } from "../explanations/buildExplanationPayload.js";
-import { getPrediction, initPredictionsTable } from "../storage/savePrediction.js";
+import { getPrediction, initPredictionsTable, updatePredictionExplanation } from "../storage/savePrediction.js";
 import { savePredictionLog, initLogsTable } from "../storage/savePredictionLog.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
 
@@ -971,6 +971,8 @@ router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async 
           return res.json({
             cached: true,
             fixtureId,
+            homeTeam: cached.home_team || null,
+            awayTeam: cached.away_team || null,
             script: { primary: cached.script_primary, secondary: cached.script_secondary, confidence: cached.script_confidence },
             expectedGoals: { home: cached.home_xg, away: cached.away_xg, total: cached.total_xg },
             bestPick: cached.best_pick_market ? {
@@ -981,10 +983,13 @@ router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async 
               edge: cached.best_pick_edge,
               finalScore: cached.best_pick_score,
             } : null,
+            backupPicks: safeJsonParse(cached.backup_picks_json, []),
             noSafePick: !!cached.no_safe_pick,
+            noSafePickReason: cached.no_safe_pick_reason || null,
             confidence: { model: cached.confidence_model, value: cached.confidence_value, volatility: cached.confidence_volatility },
             reasonCodes: safeJsonParse(cached.reason_codes, []),
             explanationLines: safeJsonParse(cached.explanation_json, []),
+            explanationText: cached.explanation_text || null,
             updatedAt: cached.updated_at,
             access: buildAccessPayload(req.access),
           });
@@ -1011,6 +1016,9 @@ router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async 
     } catch (e) {
       console.error('[PredictionsV2] Explain failed:', e.message);
     }
+
+    // Save explanation back to DB so cached responses include it
+    updatePredictionExplanation(result.fixtureId, explanationLines, explanationText).catch(() => {});
 
     const response = {
       ...result,

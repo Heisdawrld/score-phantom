@@ -23,12 +23,29 @@ export async function initPredictionsTable() {
       confidence_value TEXT,
       confidence_volatility TEXT,
       explanation_json TEXT,
+      explanation_text TEXT,
       reason_codes TEXT,
       no_safe_pick INTEGER,
+      no_safe_pick_reason TEXT,
+      backup_picks_json TEXT,
+      home_team TEXT,
+      away_team TEXT,
       created_at TEXT,
       updated_at TEXT
     )
   `);
+
+  // Migrate existing table — add missing columns if they don't exist
+  const migrations = [
+    `ALTER TABLE predictions_v2 ADD COLUMN explanation_text TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN no_safe_pick_reason TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN backup_picks_json TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN home_team TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN away_team TEXT`,
+  ];
+  for (const sql of migrations) {
+    try { await db.execute(sql); } catch (_) { /* column already exists */ }
+  }
 }
 
 /**
@@ -56,7 +73,9 @@ export async function savePrediction(predictionResult) {
           best_pick_market, best_pick_selection, best_pick_probability,
           best_pick_implied_probability, best_pick_edge, best_pick_score,
           confidence_model, confidence_value, confidence_volatility,
-          explanation_json, reason_codes, no_safe_pick,
+          explanation_json, explanation_text, reason_codes,
+          no_safe_pick, no_safe_pick_reason, backup_picks_json,
+          home_team, away_team,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?,
@@ -65,6 +84,8 @@ export async function savePrediction(predictionResult) {
           ?, ?, ?,
           ?, ?, ?,
           ?, ?, ?,
+          ?, ?, ?,
+          ?, ?,
           ?, ?
         )
       `,
@@ -87,8 +108,13 @@ export async function savePrediction(predictionResult) {
         conf.value || null,
         conf.volatility || null,
         JSON.stringify(r.explanationLines || []),
+        r.explanationText || null,
         JSON.stringify(r.reasonCodes || []),
         r.noSafePick ? 1 : 0,
+        r.noSafePickReason || null,
+        JSON.stringify(r.backupPicks || []),
+        r.homeTeam || null,
+        r.awayTeam || null,
         r.createdAt || now,
         r.updatedAt || now,
       ],
@@ -97,6 +123,29 @@ export async function savePrediction(predictionResult) {
     return true;
   } catch (err) {
     console.error('[savePrediction] Failed:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Update only the explanation fields for an existing prediction.
+ * Called after Groq generates text (async, non-blocking save).
+ */
+export async function updatePredictionExplanation(fixtureId, explanationLines, explanationText) {
+  try {
+    const now = new Date().toISOString();
+    await db.execute({
+      sql: `UPDATE predictions_v2 SET explanation_json = ?, explanation_text = ?, updated_at = ? WHERE fixture_id = ?`,
+      args: [
+        JSON.stringify(explanationLines || []),
+        explanationText || null,
+        now,
+        fixtureId,
+      ],
+    });
+    return true;
+  } catch (err) {
+    console.error('[updatePredictionExplanation] Failed:', err.message);
     return false;
   }
 }
