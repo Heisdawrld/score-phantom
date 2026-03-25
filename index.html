@@ -2071,9 +2071,9 @@
     document.getElementById('h2hDrawBar').style.width = ((split.draws / split.total) * 100) + '%';
     document.getElementById('h2hAwayBar').style.width = ((split.awayWins / split.total) * 100) + '%';
 
-    var renderMiniList = function(items) {
+    var renderMiniList = function(items, limit) {
       if (!items.length) return '<div class="empty-state">No data available</div>';
-      return items.slice(0, 5).map(function(m) {
+      return items.slice(0, limit || 5).map(function(m) {
         var compLabel = m.competition ? '<span style="font-size:10px;color:#888;margin-left:6px;">' + escapeHtml(m.competition) + '</span>' : '';
         return '<div class="mini-item">' +
           '<div>' +
@@ -2085,7 +2085,7 @@
       }).join('');
     };
 
-    document.getElementById('h2hList').innerHTML = renderMiniList(h2h);
+    document.getElementById('h2hList').innerHTML = renderMiniList(h2h, 6);
     document.getElementById('homeRecentTitle').textContent = ((selectedFixture && selectedFixture.home_team_name) || 'Home') + ' \u2014 Recent Results';
     document.getElementById('awayRecentTitle').textContent = ((selectedFixture && selectedFixture.away_team_name) || 'Away') + ' \u2014 Recent Results';
     document.getElementById('homeFormList').innerHTML = renderMiniList(homeForm);
