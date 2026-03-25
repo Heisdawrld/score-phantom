@@ -198,19 +198,50 @@ function momentum(form, teamName) {
   return total > 0 ? Number(((pts / total) * 100).toFixed(1)) : null;
 }
 
+// Keywords that identify non-domestic competitions to exclude from team form
+const NON_DOMESTIC_KEYWORDS = [
+  'champions league', 'europa league', 'conference league',
+  'caf', 'concacaf', 'copa sudamericana', 'libertadores',
+  'fa cup', 'league cup', 'carabao', 'efl trophy',
+  'dfb pokal', 'coupe de france', 'copa del rey', 'coppa italia',
+  'nations league', 'world cup', 'euro', 'olympics', 'olympic',
+  'friendly', 'test match', 'pre-season',
+  'young africans', 'maniema union', // CAF club names often appear in competition field
+];
+
+function filterDomesticForm(form, tournamentName, maxResults = 5) {
+  if (!form || !form.length) return [];
+
+  const filtered = form.filter((m) => {
+    const comp = String(m.competition || '').toLowerCase();
+    if (!comp) return true; // keep if no competition info — can't filter
+    // Exclude known non-domestic competitions
+    return !NON_DOMESTIC_KEYWORDS.some((kw) => comp.includes(kw));
+  });
+
+  // If we have at least 3 domestic results, use them (capped at maxResults)
+  if (filtered.length >= 3) return filtered.slice(0, maxResults);
+
+  // Fallback: return all results capped — better than showing nothing
+  return form.slice(0, maxResults);
+}
+
 export async function enrichMatchData(fixture) {
   const [h2hData, standings] = await Promise.all([
     fetchH2H(fixture.home_team_id, fixture.away_team_id),
     fetchStandings(fixture.tournament_id),
   ]);
 
+  const homeFormFiltered = filterDomesticForm(h2hData.homeForm, fixture.tournament_name);
+  const awayFormFiltered = filterDomesticForm(h2hData.awayForm, fixture.tournament_name);
+
   return {
     h2h: h2hData.h2h,
-    homeForm: h2hData.homeForm,
-    awayForm: h2hData.awayForm,
+    homeForm: homeFormFiltered,
+    awayForm: awayFormFiltered,
     standings,
-    homeMomentum: momentum(h2hData.homeForm, fixture.home_team_name),
-    awayMomentum: momentum(h2hData.awayForm, fixture.away_team_name),
+    homeMomentum: momentum(homeFormFiltered, fixture.home_team_name),
+    awayMomentum: momentum(awayFormFiltered, fixture.away_team_name),
     homeStats: null,
     awayStats: null,
     odds: null,

@@ -2073,11 +2073,12 @@
 
     var renderMiniList = function(items) {
       if (!items.length) return '<div class="empty-state">No data available</div>';
-      return items.slice(0, 6).map(function(m) {
+      return items.slice(0, 5).map(function(m) {
+        var compLabel = m.competition ? '<span style="font-size:10px;color:#888;margin-left:6px;">' + escapeHtml(m.competition) + '</span>' : '';
         return '<div class="mini-item">' +
           '<div>' +
-            '<div class="mini-a">' + escapeHtml(m.home || '') + '</div>' +
-            '<div class="mini-b">vs ' + escapeHtml(m.away || '') + '<br>' + escapeHtml(m.date || '') + '</div>' +
+            '<div class="mini-a">' + escapeHtml(m.home || '') + compLabel + '</div>' +
+            '<div class="mini-b">vs ' + escapeHtml(m.away || '') + ' &bull; ' + escapeHtml(m.date || '') + '</div>' +
           '</div>' +
           '<div class="score-pill">' + escapeHtml(m.score || '-') + '</div>' +
         '</div>';
