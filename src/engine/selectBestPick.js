@@ -52,9 +52,32 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
   }
 
   // Rule 3: top two too close
+  // When no odds data is available, the formula can only differentiate via tactical fit and
+  // model probability — natural gaps are small (0.006–0.02). Use a lower threshold in that case.
   if (ranked.length >= 2) {
+    const hasOdds = ranked.some(c => c.edge != null && c.edge !== 0);
+    const minGap = hasOdds ? 0.035 : 0.005;
     const gap = safeNum(ranked[0].finalScore, 0) - safeNum(ranked[1].finalScore, 0);
-    if (gap < 0.035) {
+    if (gap < minGap) {
+      // Without odds, fall back to best tactical fit + probability instead of rejecting outright
+      if (!hasOdds) {
+        const byTacticalScore = [...ranked].sort((a, b) => {
+          const aScore = safeNum(a.tacticalFitScore, 0) * 0.6 + safeNum(a.modelProbability, 0) * 0.4;
+          const bScore = safeNum(b.tacticalFitScore, 0) * 0.6 + safeNum(b.modelProbability, 0) * 0.4;
+          return bScore - aScore;
+        });
+        const tacticalGap = (safeNum(byTacticalScore[0].tacticalFitScore, 0) * 0.6 + safeNum(byTacticalScore[0].modelProbability, 0) * 0.4) -
+                            (safeNum(byTacticalScore[1].tacticalFitScore, 0) * 0.6 + safeNum(byTacticalScore[1].modelProbability, 0) * 0.4);
+        if (tacticalGap >= 0.02) {
+          // Sufficient tactical separation — use the tactically best pick
+          return {
+            bestPick: byTacticalScore[0],
+            backupPicks: byTacticalScore.slice(1, 4),
+            noSafePick: false,
+            noSafePickReason: null,
+          };
+        }
+      }
       return {
         bestPick: null,
         backupPicks: ranked.slice(0, 3),
