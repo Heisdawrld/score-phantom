@@ -32,7 +32,7 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
   }
 
   // Rule 2: high chaos score
-  if (matchChaosScore > 0.78) {
+  if (matchChaosScore > 0.85) {
     return {
       bestPick: null,
       backupPicks: ranked.slice(0, 3),
@@ -54,7 +54,7 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
   // Rule 3: top two too close
   if (ranked.length >= 2) {
     const gap = safeNum(ranked[0].finalScore, 0) - safeNum(ranked[1].finalScore, 0);
-    if (gap < 0.06) {
+    if (gap < 0.035) {
       return {
         bestPick: null,
         backupPicks: ranked.slice(0, 3),

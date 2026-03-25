@@ -41,11 +41,17 @@ export function computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2
   );
 
   // Match chaos score: composite volatility indicator
+  // Normalize formVariance: max possible is 2.25 (alternating 0/3 results) → divide to get [0,1]
   const avgFormVar = (homeFormVariance + awayFormVariance) / 2;
+  const normFormVar = clamp(avgFormVar / 2.25, 0, 1);
+
+  // Normalize scoringVariance: cap at 4.0 (e.g. scoring 0,4,0,4 = variance ~4) → [0,1]
   const avgScoreVar = (scoringVarianceHome + scoringVarianceAway) / 2;
+  const normScoreVar = clamp(avgScoreVar / 4.0, 0, 1);
+
   const matchChaosScore = clamp(
-    avgFormVar * 0.3 +
-    avgScoreVar * 0.25 +
+    normFormVar * 0.3 +
+    normScoreVar * 0.25 +
     upsetRiskScore * 0.25 +
     (1 - dataCompletenessScore) * 0.2,
     0, 1

@@ -795,17 +795,27 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-    // Fetch cached predictions for today's matches
+    // Fetch predictions from new engine (predictions_v2) for today's matches
+    // Only include matches that have a real best pick (no_safe_pick = 0)
     const result = await db.execute({
       sql: `
-        SELECT p.fixture_id, p.market, p.probability, p.confidence, p.value as prediction_json,
+        SELECT p.fixture_id,
+               p.best_pick_market, p.best_pick_selection,
+               p.best_pick_probability, p.best_pick_implied_probability,
+               p.best_pick_edge, p.best_pick_score,
+               p.script_primary, p.script_confidence,
+               p.confidence_model, p.confidence_value, p.confidence_volatility,
+               p.reason_codes, p.explanation_text,
+               p.home_team, p.away_team,
                f.home_team_name, f.away_team_name, f.tournament_name, f.match_date
-        FROM predictions p
-        JOIN fixtures f ON f.id = p.fixture_id
+        FROM predictions_v2 p
+        JOIN fixtures f ON CAST(f.id AS TEXT) = CAST(p.fixture_id AS TEXT)
         WHERE f.match_date >= ? AND f.match_date < ?
-        AND p.probability >= 0.55
-        ORDER BY p.probability DESC
-        LIMIT 20
+          AND p.no_safe_pick = 0
+          AND p.best_pick_market IS NOT NULL
+          AND p.best_pick_probability >= 0.50
+        ORDER BY p.best_pick_score DESC
+        LIMIT 30
       `,
       args: [dateStr, tomorrowStr],
     });
@@ -815,38 +825,47 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
     if (!rows.length) {
       return res.json({
         picks: [],
-        message: "No predictions available yet for today's matches.",
+        message: "No predictions available yet for today's matches. Predictions are generated when users view individual fixtures.",
       });
     }
 
-    // Parse and score each prediction
+    // Score and de-duplicate by fixture
+    const seen = new Set();
     const scored = [];
     for (const row of rows) {
       try {
-        const pred = typeof row.prediction_json === 'string'
-          ? JSON.parse(row.prediction_json)
-          : (row.prediction_json || {});
-        const rec = pred?.predictions?.recommendation || {};
-        
-        // Edge score: probability + value bonus
-        const edgeBonus = rec.has_value ? 0.1 : 0;
-        const score = (rec.probability || row.probability || 0) + edgeBonus;
-        
-        // Build a clean one-line reason from the engine's rationale or _reasons array
-        const reason = rec.rationale ||
-          (rec._reasons && rec._reasons.find(r => !r.startsWith('Rejected') && !r.startsWith('Below'))) ||
-          null;
+        if (seen.has(row.fixture_id)) continue;
+        seen.add(row.fixture_id);
+
+        const homeTeam = row.home_team || row.home_team_name || 'Unknown';
+        const awayTeam = row.away_team || row.away_team_name || 'Unknown';
+        const edge = parseFloat(row.best_pick_edge || 0);
+        const prob = parseFloat(row.best_pick_probability || 0);
+        const score = parseFloat(row.best_pick_score || 0);
+
+        // Build reason from explanation or reason_codes
+        let reason = row.explanation_text ? row.explanation_text.split('.')[0] : null;
+        if (!reason) {
+          const codes = safeJsonParse(row.reason_codes, []);
+          reason = codes.slice(0, 2).join(', ') || null;
+        }
 
         scored.push({
           fixture_id: row.fixture_id,
-          home: row.home_team_name,
-          away: row.away_team_name,
+          home_team: homeTeam,
+          away_team: awayTeam,
           league: row.tournament_name,
           match_date: row.match_date,
-          pick: rec.pick || row.market,
-          confidence: rec.probability || row.probability,
-          odds: rec.market_odds || null,
-          has_value: rec.has_value || false,
+          market: row.best_pick_market,
+          selection: row.best_pick_selection,
+          modelProbability: prob,
+          impliedProbability: parseFloat(row.best_pick_implied_probability || 0),
+          edge,
+          odds: row.best_pick_implied_probability > 0
+            ? parseFloat((1 / row.best_pick_implied_probability).toFixed(2))
+            : null,
+          confidence: { model: row.confidence_model, value: row.confidence_value, volatility: row.confidence_volatility },
+          script: row.script_primary,
           reason,
           score,
         });
@@ -857,16 +876,16 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
     scored.sort((a, b) => b.score - a.score);
     const picks = scored.slice(0, 5);
 
-    // Calculate combined odds — use real odds if available, else estimate from probability
+    // Calculate combined odds — use implied odds from model probability
     let combined_odds = null;
     if (picks.length >= 2) {
       combined_odds = picks.reduce((acc, p) => {
         let legOdds;
         if (p.odds && p.odds > 1.05) {
-          legOdds = p.odds; // Use real market odds
+          legOdds = p.odds;
         } else {
-          // Estimate: implied odds from model probability, capped to sensible range
-          const prob = p.confidence || 0.6;
+          // Estimate from modelProbability, capped to sensible range
+          const prob = p.modelProbability || 0.6;
           legOdds = Math.min(5.0, Math.max(1.15, parseFloat((1 / prob).toFixed(2))));
         }
         return acc * legOdds;
