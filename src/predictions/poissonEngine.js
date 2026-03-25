@@ -477,6 +477,9 @@ function buildContext(features, lambdaHome, lambdaAway, result1X2, overUnder, bt
     homeTableEdge,
     awayTableEdge,
     tightMatch,
+    // Attach raw feature objects so scoreCandidate can read team-level stats
+    _hf: hf,
+    _af: af,
   };
 }
 
@@ -1052,9 +1055,13 @@ function chooseRecommendation(rankedMarkets, features, context, gameScriptObj) {
   const altCandidates = rankedMarkets.filter((m, i) => i > 0 && m.score >= 0.50);
   const alt = altCandidates.find(m => m.market !== best.market) || altCandidates[0] || rankedMarkets[1] || null;
 
+  // A pick is only "weak" if the scored value is genuinely low.
+  // 0.56 was too aggressive — script penalties + no-odds environment routinely
+  // pushed valid 60-65% picks below that line, producing "No Clear Edge" for
+  // most matches. 0.48 still catches truly poor candidates.
   const weakHeadline =
-    best.score < 0.56 ||
-    (best.market === "1X2" && best.raw_probability < 0.56);
+    best.score < 0.48 ||
+    (best.market === "1X2" && best.raw_probability < 0.52);
 
   const bestValueInfo = best._valueInfo || { value: null };
   const modelConf = confidenceFromProb(best.raw_probability);

@@ -23,8 +23,9 @@ export function applyMarketFilters(candidates) {
     // Rule 2: too low probability
     if ((modelProbability ?? 0) < 0.45) return false;
 
-    // Rule 3: edge is too small (only if odds data available)
-    if (edge !== null && edge !== undefined && edge < 0.04) return false;
+    // Rule 3: edge is negative (market strongly against us) — only reject when odds available
+    // Do NOT reject on small positive edge; that kills all picks for leagues without odds coverage
+    if (edge !== null && edge !== undefined && edge < -0.05) return false;
 
     // Rule 4: bad market penalty too high
     if ((badMarketPenalty ?? 0) >= 0.9) return false;

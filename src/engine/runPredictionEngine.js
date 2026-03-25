@@ -53,9 +53,9 @@ function flattenFeatureVector(fv) {
   const homeWeightedPts = safeNum(hf.weighted_points_per_match, 1.2);
   const awayWeightedPts = safeNum(af.weighted_points_per_match, 1.0);
 
-  // Last 5 points (approximate)
-  const homePointsLast5 = safeNum(hf.points_last5, homeWeightedPts * 5);
-  const awayPointsLast5 = safeNum(af.points_last5, awayWeightedPts * 5);
+  // computeFormFeatures outputs `pointsLast5` (camelCase) — not `points_last5`
+  const homePointsLast5 = safeNum(hf.pointsLast5 ?? hf.points_last5, homeWeightedPts * 5);
+  const awayPointsLast5 = safeNum(af.pointsLast5 ?? af.points_last5, awayWeightedPts * 5);
 
   // Failed to score rate
   const homeFailedToScoreRate = 1 - safeNum(hf.scored_over_0_5_rate, 0.7);

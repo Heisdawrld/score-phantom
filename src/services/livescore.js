@@ -243,8 +243,10 @@ export async function enrichMatchData(fixture) {
     ? awayTeamFormExtended
     : h2hData.awayForm;
 
-  const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 10);
-  const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 10);
+  // Keep up to 15 matches so venue-split features (which need ≥3 home/away games each)
+  // have enough data even after the domestic-only filter removes cup/European results.
+  const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 15);
+  const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 15);
 
   return {
     h2h: h2hData.h2h,
