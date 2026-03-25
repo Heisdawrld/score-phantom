@@ -147,6 +147,7 @@ export async function fetchStandings(competitionId) {
         goalDiff: Number(r.goal_difference || r.gd || 0),
         points: Number(r.points || r.pts || 0),
         form: r.recent_form || r.form || '',
+        group: r.group_name || r.group || r.pool || r.pool_name || null,
       };
     });
   } catch (err) {

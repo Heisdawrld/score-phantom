@@ -2123,26 +2123,68 @@
     var homeForm = Array.isArray(data && data.meta && data.meta.homeForm) ? data.meta.homeForm : [];
     var awayForm = Array.isArray(data && data.meta && data.meta.awayForm) ? data.meta.awayForm : [];
 
-    var rows = standings.map(function(row) {
-      var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
-      var formHtml;
-      if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
-      else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
-      else formHtml = '<span style="color:#666">—</span>';
-      return '<tr class="' + highlight + '">' +
-        '<td>' + (row.position != null ? row.position : '') + '</td>' +
-        '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
-        '<td>' + (row.played || row.games || row.matches || 0) + '</td>' +
-        '<td>' + (row.wins || 0) + '</td>' +
-        '<td>' + (row.draws || 0) + '</td>' +
-        '<td>' + (row.losses || 0) + '</td>' +
-        '<td><strong>' + (row.points || 0) + '</strong></td>' +
-        '<td>' + formHtml + '</td>' +
-      '</tr>';
-    }).join('');
+    // Detect if standings have multiple groups
+    var hasGroups = standings.some(function(r) { return r.group; });
+
+    var html = '';
+    if (hasGroups) {
+      // Group the rows by group name, preserving order
+      var groupOrder = [];
+      var groupMap = {};
+      standings.forEach(function(row) {
+        var g = row.group || 'Group';
+        if (!groupMap[g]) { groupMap[g] = []; groupOrder.push(g); }
+        groupMap[g].push(row);
+      });
+
+      groupOrder.forEach(function(groupName) {
+        var groupRows = groupMap[groupName];
+        // Check if home or away team is in this group
+        var isRelevant = groupRows.some(function(r) { return r.team === home || r.team === away; });
+        // Group header
+        html += '<tr><td colspan="8" style="background:#1a2a1a;color:#4caf50;font-weight:700;font-size:11px;letter-spacing:1px;padding:6px 10px;border-bottom:1px solid #2a3a2a;">' +
+          escapeHtml(groupName) + (isRelevant ? ' ★' : '') + '</td></tr>';
+        groupRows.forEach(function(row) {
+          var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
+          var formHtml;
+          if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
+          else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
+          else formHtml = '<span style="color:#666">—</span>';
+          html += '<tr class="' + highlight + '">' +
+            '<td>' + (row.position != null ? row.position : '') + '</td>' +
+            '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
+            '<td>' + (row.played || 0) + '</td>' +
+            '<td>' + (row.wins || 0) + '</td>' +
+            '<td>' + (row.draws || 0) + '</td>' +
+            '<td>' + (row.losses || 0) + '</td>' +
+            '<td><strong>' + (row.points || 0) + '</strong></td>' +
+            '<td>' + formHtml + '</td>' +
+          '</tr>';
+        });
+      });
+    } else {
+      // Single group / regular league — render flat
+      html = standings.map(function(row) {
+        var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
+        var formHtml;
+        if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
+        else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
+        else formHtml = '<span style="color:#666">—</span>';
+        return '<tr class="' + highlight + '">' +
+          '<td>' + (row.position != null ? row.position : '') + '</td>' +
+          '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
+          '<td>' + (row.played || 0) + '</td>' +
+          '<td>' + (row.wins || 0) + '</td>' +
+          '<td>' + (row.draws || 0) + '</td>' +
+          '<td>' + (row.losses || 0) + '</td>' +
+          '<td><strong>' + (row.points || 0) + '</strong></td>' +
+          '<td>' + formHtml + '</td>' +
+        '</tr>';
+      }).join('');
+    }
 
     document.getElementById('tableBody').innerHTML =
-      rows || '<tr><td colspan="8">No table data</td></tr>';
+      html || '<tr><td colspan="8">No table data</td></tr>';
   }
 
   async function loadPrediction(fixtureId) {
