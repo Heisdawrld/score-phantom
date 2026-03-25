@@ -2091,12 +2091,12 @@
     document.getElementById('h2hHomeLbl').textContent = (selectedFixture && selectedFixture.home_team_name) || 'Home';
     document.getElementById('h2hAwayLbl').textContent = (selectedFixture && selectedFixture.away_team_name) || 'Away';
 
-    document.getElementById('h2hHomeBar').style.width = ((split.homeWins / split.total) * 100) + '%';
-    document.getElementById('h2hDrawBar').style.width = ((split.draws / split.total) * 100) + '%';
-    document.getElementById('h2hAwayBar').style.width = ((split.awayWins / split.total) * 100) + '%';
+    document.getElementById('h2hHomeBar').style.width = split.total ? ((split.homeWins / split.total) * 100) + '%' : '33%';
+    document.getElementById('h2hDrawBar').style.width = split.total ? ((split.draws / split.total) * 100) + '%' : '34%';
+    document.getElementById('h2hAwayBar').style.width = split.total ? ((split.awayWins / split.total) * 100) + '%' : '33%';
 
-    var renderMiniList = function(items, limit) {
-      if (!items.length) return '<div class="empty-state">No data available</div>';
+    var renderMiniList = function(items, limit, emptyMsg) {
+      if (!items.length) return '<div class="empty-state">' + (emptyMsg || 'No data available') + '</div>';
       return items.slice(0, limit || 5).map(function(m) {
         var compLabel = m.competition ? '<span style="font-size:10px;color:#888;margin-left:6px;">' + escapeHtml(m.competition) + '</span>' : '';
         return '<div class="mini-item">' +
@@ -2109,7 +2109,7 @@
       }).join('');
     };
 
-    document.getElementById('h2hList').innerHTML = renderMiniList(h2h, 6);
+    document.getElementById('h2hList').innerHTML = renderMiniList(h2h, 6, 'No previous H2H meetings found');
     document.getElementById('homeRecentTitle').textContent = ((selectedFixture && selectedFixture.home_team_name) || 'Home') + ' \u2014 Recent Results';
     document.getElementById('awayRecentTitle').textContent = ((selectedFixture && selectedFixture.away_team_name) || 'Away') + ' \u2014 Recent Results';
     document.getElementById('homeFormList').innerHTML = renderMiniList(homeForm);

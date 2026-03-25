@@ -394,11 +394,12 @@ async function getOdds(fixtureId) {
 }
 
 function hasUsableHistory(historyRows) {
-  const h2hCount = historyRows.filter((m) => m.type === "h2h").length;
+  // H2H is NOT required — teams may legitimately have no prior meetings.
+  // Only require home and away form data for the engine to run.
   const homeCount = historyRows.filter((m) => m.type === "home_form").length;
   const awayCount = historyRows.filter((m) => m.type === "away_form").length;
 
-  return h2hCount > 0 && homeCount > 0 && awayCount > 0;
+  return homeCount > 0 && awayCount > 0;
 }
 
 async function ensureFixtureData(fixtureId) {
@@ -919,6 +920,8 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
           league: row.tournament_name,
           match_date: row.match_date,
           pick: pickLabel,
+          // marketKey used for diversity enforcement (not sent to client)
+          _marketKey: `${row.best_pick_market || 'unknown'}_${row.best_pick_selection || 'unknown'}`,
           confidence: prob,
           odds: row.best_pick_implied_probability > 0
             ? parseFloat((1 / row.best_pick_implied_probability).toFixed(2))
@@ -931,9 +934,32 @@ router.get("/acca/daily", requirePremiumAccess, async (req, res) => {
       } catch {}
     }
 
-    // Sort by score, take top 5
+    // Sort by score descending
     scored.sort((a, b) => b.score - a.score);
-    const picks = scored.slice(0, 5);
+
+    // ── Market diversity enforcement ─────────────────────────────────────────
+    // At most 2 picks with the same market+selection combo in the ACCA.
+    // This prevents 5× "Under 2.5 Goals" dominating the slip when
+    // many matches share the same low-event profile.
+    // Strategy: greedily fill 5 slots respecting the cap.
+    const marketCounts = {};
+    const MAX_SAME_MARKET = 2;
+    const picks = [];
+    for (const pick of scored) {
+      if (picks.length >= 5) break;
+      const key = pick._marketKey;
+      const count = marketCounts[key] || 0;
+      if (count < MAX_SAME_MARKET) {
+        marketCounts[key] = count + 1;
+        const { _marketKey, ...cleanPick } = pick; // strip internal key
+        picks.push(cleanPick);
+      }
+    }
+    // Fallback: if diversity filter left us with < 3, relax and fill normally
+    if (picks.length < 3) {
+      picks.length = 0;
+      scored.slice(0, 5).forEach(({ _marketKey, ...p }) => picks.push(p));
+    }
 
     // Calculate combined odds — use implied odds from model probability
     let combined_odds = null;
