@@ -1191,6 +1191,11 @@
     return isActiveSub() || isTrialActive();
   }
 
+  // isPremium = alias for isActiveSub (used in FOMO rendering)
+  function isPremium() {
+    return isActiveSub();
+  }
+
   function markFreeFixtures(fixtures) {
     const leagueCounts = {};
     const sorted = [...fixtures].sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
