@@ -1884,13 +1884,37 @@
           '</table></div>';
         oddsCard.classList.remove('hidden');
       } else {
-        // No odds — P2.3
-        oddsCard.innerHTML =
-          '<div class="sheet-label">Value Analysis</div>' +
-          '<div class="card" style="border-color:rgba(255,255,255,.06)">' +
-          '<p style="font-size:13px;color:var(--muted);margin:0">⚠️ No odds data available for this match — value edge cannot be calculated. Predictions are probability-based only.</p>' +
-          '</div>';
-        oddsCard.classList.remove('hidden');
+        // No bookmaker odds — show model-implied odds (P2.3 enhanced)
+        var mio = prediction && prediction.model_implied_odds;
+        if (mio && mio.source === 'model') {
+          var modelPct2 = rec.probability != null ? (safeNum(rec.probability,0)*100).toFixed(1)+'%' : 'N/A';
+          oddsCard.innerHTML =
+            '<div class="sheet-label">Value Analysis</div>' +
+            '<div class="card" style="border-color:rgba(255,180,0,.25);background:rgba(255,180,0,.04)">' +
+              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">' +
+                '<span style="font-size:11px;background:rgba(255,180,0,.18);color:#f5c400;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.06em">MODEL EST. ODDS</span>' +
+                '<span style="font-size:11px;color:var(--muted)">No bookmaker data — showing model-derived fair odds</span>' +
+              '</div>' +
+              '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+              '<tr><td style="padding:5px 0;color:var(--muted)">Pick</td><td style="padding:5px 0;font-weight:700;text-align:right">' + escapeHtml(rec.pick || '') + '</td></tr>' +
+              '<tr><td style="padding:5px 0;color:var(--muted)">Model Probability</td><td style="padding:5px 0;font-weight:700;text-align:right;color:var(--green)">' + modelPct2 + '</td></tr>' +
+              (mio.home ? '<tr><td style="padding:5px 0;color:var(--muted)">1 (Home Win)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.home).toFixed(2) + '</td></tr>' : '') +
+              (mio.draw ? '<tr><td style="padding:5px 0;color:var(--muted)">X (Draw)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.draw).toFixed(2) + '</td></tr>' : '') +
+              (mio.away ? '<tr><td style="padding:5px 0;color:var(--muted)">2 (Away Win)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.away).toFixed(2) + '</td></tr>' : '') +
+              (mio.over_2_5 ? '<tr><td style="padding:5px 0;color:var(--muted)">Over 2.5</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.over_2_5).toFixed(2) + '</td></tr>' : '') +
+              (mio.btts_yes ? '<tr><td style="padding:5px 0;color:var(--muted)">BTTS Yes</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.btts_yes).toFixed(2) + '</td></tr>' : '') +
+              '</table>' +
+              '<p style="font-size:11px;color:var(--muted);margin:8px 0 0">ℹ️ These are fair-value odds computed from our Poisson model (no bookmaker margin). Actual market odds may differ.</p>' +
+            '</div>';
+          oddsCard.classList.remove('hidden');
+        } else {
+          oddsCard.innerHTML =
+            '<div class="sheet-label">Value Analysis</div>' +
+            '<div class="card" style="border-color:rgba(255,255,255,.06)">' +
+            '<p style="font-size:13px;color:var(--muted);margin:0">⚠️ No odds data available for this match — value edge cannot be calculated. Predictions are probability-based only.</p>' +
+            '</div>';
+          oddsCard.classList.remove('hidden');
+        }
       }
     }
 

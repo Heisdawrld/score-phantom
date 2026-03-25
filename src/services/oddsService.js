@@ -114,6 +114,13 @@ const LEAGUE_MAP = {
 async function ensureOddsTable() {
   try {
     await db.execute(`
+      CREATE TABLE IF NOT EXISTS league_odds_cache (
+        sport_key TEXT PRIMARY KEY,
+        events_json TEXT NOT NULL,
+        fetched_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS fixture_odds (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fixture_id TEXT NOT NULL,
@@ -177,6 +184,21 @@ function teamNamesMatch(a, b) {
 
 async function fetchLeagueOdds(sportKey) {
   if (!ODDS_API_KEY) return null;
+  
+  // Check league-level cache first (shared across all fixtures in same league)
+  try {
+    const cached = await db.execute({
+      sql: `SELECT events_json FROM league_odds_cache WHERE sport_key = ? AND fetched_at > datetime('now', '-4 hours') LIMIT 1`,
+      args: [sportKey],
+    });
+    if (cached.rows?.[0]?.events_json) {
+      const events = JSON.parse(cached.rows[0].events_json);
+      console.log(`[OddsService] League cache HIT for ${sportKey} (${events.length} events)`);
+      return events;
+    }
+  } catch {}
+
+  // Cache miss — fetch from API
   try {
     const url = `${ODDS_API_BASE}/sports/${sportKey}/odds?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals&oddsFormat=decimal&dateFormat=iso`;
     const res = await fetch(url);
@@ -185,7 +207,20 @@ async function fetchLeagueOdds(sportKey) {
       return null;
     }
     const data = await res.json();
-    return Array.isArray(data) ? data : null;
+    if (!Array.isArray(data)) return null;
+
+    // Store in league cache
+    try {
+      await db.execute({
+        sql: `INSERT OR REPLACE INTO league_odds_cache (sport_key, events_json, fetched_at) VALUES (?, ?, datetime('now'))`,
+        args: [sportKey, JSON.stringify(data)],
+      });
+      console.log(`[OddsService] League cache STORED for ${sportKey} (${data.length} events)`);
+    } catch (err) {
+      console.error('[OddsService] League cache write error:', err.message);
+    }
+
+    return data;
   } catch (err) {
     console.error('[OddsService] Fetch error:', err.message);
     return null;
