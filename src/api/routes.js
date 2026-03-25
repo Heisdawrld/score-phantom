@@ -272,6 +272,18 @@ async function cachePrediction(fixtureId, prediction) {
   }
 }
 
+// ─── Explanation cache (Groq results) — same TTL as predictions ───────────────
+// Uses fixture_id + '_explain' as the cache key so User A's Groq call is
+// served from DB for User B, User C, etc. — zero extra Groq tokens.
+
+async function getCachedExplanation(fixtureId) {
+  return getCachedPrediction(fixtureId + '_explain');
+}
+
+async function cacheExplanation(fixtureId, explainResponse) {
+  return cachePrediction(fixtureId + '_explain', explainResponse);
+}
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 async function getFixtureById(fixtureId) {
@@ -592,7 +604,19 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
 // ─── GET /predict/:fixtureId/explain — PREMIUM ONLY ─────────────────────────
 router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, async (req, res) => {
   try {
-    const bundle = await ensureFixtureData(req.params.fixtureId);
+    const fixtureId = req.params.fixtureId;
+
+    // ── Cache check: serve from DB if Groq already ran for this fixture ──
+    const cachedExplain = await getCachedExplanation(fixtureId);
+    if (cachedExplain) {
+      // Reattach access payload (not cached — always fresh per user)
+      return res.json({
+        ...cachedExplain,
+        access: buildAccessPayload(req.access),
+      });
+    }
+
+    const bundle = await ensureFixtureData(fixtureId);
 
     if (!bundle) {
       return res.status(404).json({ error: "Fixture not found" });
@@ -645,9 +669,18 @@ router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, asy
 
     const explanation = await explainPrediction(fullPayload);
 
-    res.json({
+    const explainResponse = {
       ...fullPayload,
       explanation,
+    };
+
+    // Store Groq result in cache — User B, C, D get this for free
+    cacheExplanation(fixtureId, explainResponse).catch((e) =>
+      console.error('[ExplainCache] Store failed:', e.message)
+    );
+
+    res.json({
+      ...explainResponse,
       access: buildAccessPayload(req.access),
     });
   } catch (err) {
