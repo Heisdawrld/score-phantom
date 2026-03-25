@@ -3,9 +3,14 @@ import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { predict } from "../predictions/poissonEngine.js";
 import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
-import { explainPrediction, chatAboutMatch } from "../explanations/groqExplainer.js";
+import { explainPrediction, chatAboutMatch, explainFromPayload } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
 import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
+import { runPredictionEngine } from "../engine/runPredictionEngine.js";
+import { buildExplanationPayload } from "../explanations/buildExplanationPayload.js";
+import { getPrediction, initPredictionsTable } from "../storage/savePrediction.js";
+import { savePredictionLog, initLogsTable } from "../storage/savePredictionLog.js";
+import { seedFixtures } from "../services/fixtureSeeder.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'scorephantom_secret_2026';
@@ -949,6 +954,174 @@ router.get("/acca/yesterday", requirePremiumAccess, async (req, res) => {
   }
 });
 
+
+// ─── GET /api/predictions/:fixtureId — New engine prediction ─────────────────
+// Returns cached prediction if < 30 min old, else runs engine
+router.get("/predictions/:fixtureId", requireAuth, requireTrialOrPremium, async (req, res) => {
+  try {
+    const fixtureId = req.params.fixtureId;
+    const CACHE_TTL_MS = 30 * 60 * 1000;
+
+    // Check DB cache
+    try {
+      const cached = await getPrediction(fixtureId);
+      if (cached) {
+        const age = Date.now() - new Date(cached.updated_at || cached.created_at || 0).getTime();
+        if (age < CACHE_TTL_MS) {
+          return res.json({
+            cached: true,
+            fixtureId,
+            script: { primary: cached.script_primary, secondary: cached.script_secondary, confidence: cached.script_confidence },
+            expectedGoals: { home: cached.home_xg, away: cached.away_xg, total: cached.total_xg },
+            bestPick: cached.best_pick_market ? {
+              marketKey: cached.best_pick_market,
+              selection: cached.best_pick_selection,
+              modelProbability: cached.best_pick_probability,
+              impliedProbability: cached.best_pick_implied_probability,
+              edge: cached.best_pick_edge,
+              finalScore: cached.best_pick_score,
+            } : null,
+            noSafePick: !!cached.no_safe_pick,
+            confidence: { model: cached.confidence_model, value: cached.confidence_value, volatility: cached.confidence_volatility },
+            reasonCodes: safeJsonParse(cached.reason_codes, []),
+            explanationLines: safeJsonParse(cached.explanation_json, []),
+            updatedAt: cached.updated_at,
+            access: buildAccessPayload(req.access),
+          });
+        }
+      }
+    } catch (cacheErr) {
+      console.error('[PredictionsV2] Cache check failed:', cacheErr.message);
+    }
+
+    // Run engine
+    const bundle = await ensureFixtureData(fixtureId);
+    if (!bundle) return res.status(404).json({ error: "Fixture not found" });
+
+    const result = await runPredictionEngine(fixtureId, bundle);
+
+    // Build explanation payload
+    const explanationLines = buildExplanationPayload(result.reasonCodes, result.bestPick);
+    const matchLabel = `${result.homeTeam || ''} vs ${result.awayTeam || ''}`.trim();
+
+    // Get Groq explanation (non-blocking)
+    let explanationText = null;
+    try {
+      explanationText = await explainFromPayload({ explanationLines, matchLabel });
+    } catch (e) {
+      console.error('[PredictionsV2] Explain failed:', e.message);
+    }
+
+    const response = {
+      ...result,
+      explanationLines,
+      explanationText,
+      access: buildAccessPayload(req.access),
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error('[PredictionsV2]', err.message);
+    res.status(500).json({ error: "Prediction failed", detail: err.message });
+  }
+});
+
+// ─── POST /api/predictions/rebuild/:fixtureId — Force re-run ─────────────────
+router.post("/predictions/rebuild/:fixtureId", requireAuth, requirePremiumAccess, async (req, res) => {
+  try {
+    const fixtureId = req.params.fixtureId;
+    const bundle = await ensureFixtureData(fixtureId);
+    if (!bundle) return res.status(404).json({ error: "Fixture not found" });
+
+    const result = await runPredictionEngine(fixtureId, bundle);
+    const explanationLines = buildExplanationPayload(result.reasonCodes, result.bestPick);
+    const matchLabel = `${result.homeTeam || ''} vs ${result.awayTeam || ''}`.trim();
+
+    let explanationText = null;
+    try {
+      explanationText = await explainFromPayload({ explanationLines, matchLabel });
+    } catch {}
+
+    res.json({
+      ...result,
+      explanationLines,
+      explanationText,
+      rebuilt: true,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error('[Rebuild]', err.message);
+    res.status(500).json({ error: "Rebuild failed", detail: err.message });
+  }
+});
+
+// ─── GET /api/admin/prediction-logs/:fixtureId — Debug logs ──────────────────
+router.get("/admin/prediction-logs/:fixtureId", requireAuth, requirePremiumAccess, async (req, res) => {
+  try {
+    await initLogsTable();
+    const result = await db.execute({
+      sql: `SELECT * FROM prediction_logs WHERE fixture_id = ? ORDER BY created_at DESC LIMIT 20`,
+      args: [req.params.fixtureId],
+    });
+    res.json({
+      fixtureId: req.params.fixtureId,
+      logs: result.rows || [],
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error('[AdminLogs]', err.message);
+    res.status(500).json({ error: "Failed to fetch logs", detail: err.message });
+  }
+});
+
+// ─── POST /api/refresh — Re-seed + re-predict today's fixtures ───────────────
+router.post("/refresh", requireAuth, requirePremiumAccess, async (req, res) => {
+  try {
+    // Re-seed fixtures
+    let seededCount = 0;
+    try {
+      if (typeof seedFixtures === 'function') {
+        await seedFixtures({ days: 1 });
+        seededCount = 1;
+      }
+    } catch (seedErr) {
+      console.error('[Refresh] Seeder failed:', seedErr.message);
+    }
+
+    // Get today's fixtures and re-run predictions
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await db.execute({
+      sql: `SELECT id, home_team_name, away_team_name FROM fixtures WHERE match_date LIKE ? AND enriched = 1 LIMIT 50`,
+      args: [`%${today}%`],
+    });
+
+    const fixtures = result.rows || [];
+    const predictions = [];
+
+    for (const fixture of fixtures) {
+      try {
+        const bundle = await ensureFixtureData(fixture.id);
+        if (bundle) {
+          const pred = await runPredictionEngine(fixture.id, bundle);
+          predictions.push({ fixtureId: fixture.id, noSafePick: pred.noSafePick, script: pred.script?.primary });
+        }
+      } catch (e) {
+        console.error(`[Refresh] Failed for ${fixture.id}:`, e.message);
+        predictions.push({ fixtureId: fixture.id, error: e.message });
+      }
+    }
+
+    res.json({
+      seeded: seededCount,
+      predictionsRun: predictions.length,
+      predictions,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error('[Refresh]', err.message);
+    res.status(500).json({ error: "Refresh failed", detail: err.message });
+  }
+});
 
 export default router;
 
