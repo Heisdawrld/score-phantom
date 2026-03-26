@@ -274,7 +274,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     engineResult?.volatilityFeatures?.dataCompletenessScore,
     0.5
   );
-  const enrichmentTier = featureVector.enrichmentTier || null;
+  // Derive tier from score if enrichmentTier is missing (old enrichment records lack it)
+  const enrichmentTier = featureVector.enrichmentTier || (() => {
+    const s = dataCompletenessScore;
+    if (s >= 0.8) return 'rich';
+    if (s >= 0.55) return 'good';
+    if (s >= 0.35) return 'partial';
+    return 'thin';
+  })();
 
   // ── Game Script ──────────────────────────────────────────────────────────
   const sp2Script = script.primary || "balanced";
