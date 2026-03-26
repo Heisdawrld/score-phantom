@@ -38,13 +38,44 @@ const SCRIPT_DESCRIPTIONS = {
   chaotic: "Unpredictable match with high variance",
 };
 
+// ── Human-readable reason code labels ──────────────────────────────────────
+
+const REASON_LABELS = {
+  home_strength_gap_high: "Home team holds a significant quality advantage",
+  away_defense_weak_away: "Away side concedes heavily away from home",
+  home_scoring_rate_strong: "Home team is prolific in front of their own fans",
+  away_failed_to_score_often: "Away team frequently fails to find the net",
+  btts_profile_high: "Both teams carry a strong threat to score",
+  projected_home_control: "Model projects home team to dominate the match",
+  projected_open_game: "Model projects an open, end-to-end encounter",
+  low_event_profile: "Model projects a tight, low-scoring battle",
+  high_volatility_warning: "⚠️ High match volatility — result harder to predict",
+  away_strength_advantage: "Away team holds a notable quality edge",
+  strong_away_form: "Away team is in significantly better recent form",
+  h2h_btts_rate_high: "Both teams have scored in the majority of recent head-to-head meetings",
+  home_form_strong: "Home team is in excellent recent form",
+  low_data_quality: "⚠️ Limited data available — confidence is reduced",
+};
+
+function humanizeReasonCode(code) {
+  if (REASON_LABELS[code]) return REASON_LABELS[code];
+  // Fallback: prettify raw code
+  return code
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ── Confidence / Fit / Value mappings ────────────────────────────────────────
 
-function mapModelConfidence(probability) {
+function mapModelConfidence(probability, dataCompletenessScore) {
   const p = safeNum(probability, 0);
-  if (p >= 0.72) return "HIGH";
-  if (p >= 0.62) return "MEDIUM";
-  if (p >= 0.56) return "LEAN";
+  // Penalise confidence when data is sparse
+  const dataQuality = safeNum(dataCompletenessScore, 0.5);
+  const penalisedP = dataQuality < 0.35 ? p * 0.88 : dataQuality < 0.55 ? p * 0.94 : p;
+
+  if (penalisedP >= 0.78) return "HIGH";
+  if (penalisedP >= 0.65) return "MEDIUM";
+  if (penalisedP >= 0.56) return "LEAN";
   return "LOW";
 }
 
@@ -159,7 +190,7 @@ function mapMarketName(marketKey) {
 
 // ── Build a candidate pick object (shared for recommendation + backups) ─────
 
-function buildPickObject(pick, homeTeam, awayTeam) {
+function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
 
   const probability = safeNum(pick.modelProbability, 0);
@@ -172,10 +203,10 @@ function buildPickObject(pick, homeTeam, awayTeam) {
     probability,
     probability_pct: parseFloat((probability * 100).toFixed(1)),
     edgeScore,
-    modelConfidence: mapModelConfidence(probability),
+    modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
     tacticalFit: mapTacticalFit(tacticalFitScore),
     valueRating: mapValueRating(edgeScore),
-    reasons: pick.reasons || [],
+    reasons: (pick.reasons || []).map(humanizeReasonCode),
     no_edge: !!(pick.edge != null && pick.edge <= 0),
   };
 }
@@ -184,11 +215,6 @@ function buildPickObject(pick, homeTeam, awayTeam) {
 
 /**
  * Transform SP2 engine result to SP1 React frontend format.
- *
- * @param {object} engineResult - Result from runPredictionEngine
- * @param {string} homeTeam - Home team name
- * @param {string} awayTeam - Away team name
- * @returns {object} SP1-compatible response
  */
 export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const {
@@ -208,6 +234,13 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     dataQuality,
     correctScoreProbs,
   } = engineResult;
+
+  // Data completeness from volatility features (passed through features)
+  const dataCompletenessScore = safeNum(
+    engineResult?.features?.dataCompletenessScore ??
+    engineResult?.volatilityFeatures?.dataCompletenessScore,
+    0.5
+  );
 
   // ── Game Script ──────────────────────────────────────────────────────────
   const sp2Script = script.primary || "balanced";
@@ -229,11 +262,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const lambdaAway = safeNum(expectedGoals.away, 1.0);
   const totalXg = safeNum(expectedGoals.total, lambdaHome + lambdaAway);
 
-  const model = {
-    lambdaHome,
-    lambdaAway,
-    totalXg,
-  };
+  const model = { lambdaHome, lambdaAway, totalXg };
 
   // ── Predictions: match_result (percentages 0-100) ────────────────────────
   const cp = calibratedProbs || {};
@@ -257,6 +286,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     no: safeNum(cp.bttsNo, 0.55),
   };
 
+  // ── Human-readable reasons ───────────────────────────────────────────────
+  const humanReasonCodes = (reasonCodes || []).map(humanizeReasonCode);
+
+  // Add a data quality warning if completeness is low
+  if (dataCompletenessScore < 0.4 && !humanReasonCodes.some(r => r.includes("Limited data"))) {
+    humanReasonCodes.push("⚠️ Limited historical data — predictions carry higher uncertainty");
+  }
+
   // ── Recommendation ──────────────────────────────────────────────────────
   let recommendation;
   if (bestPick && !noSafePick) {
@@ -270,10 +307,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       probability,
       probability_pct: parseFloat((probability * 100).toFixed(1)),
       edgeScore,
-      modelConfidence: mapModelConfidence(probability),
+      modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
       tacticalFit: mapTacticalFit(tacticalFitScore),
       valueRating: mapValueRating(edgeScore),
-      reasons: reasonCodes || [],
+      reasons: humanReasonCodes,
       no_edge: false,
     };
   } else {
@@ -292,14 +329,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   }
 
   // ── Backup Picks ────────────────────────────────────────────────────────
-  const backup_picks = (backupPicks || []).slice(0, 5).map((bp) =>
-    buildPickObject(bp, homeTeam, awayTeam)
-  ).filter(Boolean);
+  const backup_picks = (backupPicks || []).slice(0, 5)
+    .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore))
+    .filter(Boolean);
 
   // ── All Candidates ──────────────────────────────────────────────────────
-  const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10).map((c) =>
-    buildPickObject(c, homeTeam, awayTeam)
-  ).filter(Boolean);
+  const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10)
+    .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore))
+    .filter(Boolean);
 
   // ── Correct Score ───────────────────────────────────────────────────────
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({
@@ -307,15 +344,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     probability: safeNum(cs.probability || cs.prob, 0),
   }));
 
-  // ── Data Quality (pass through from engine) ─────────────────────────────
-  const dq = dataQuality || {};
-
   return {
-    fixture: {
-      id: fixtureId,
-      homeTeam,
-      awayTeam,
-    },
+    fixture: { id: fixtureId, homeTeam, awayTeam },
     model,
     gameScript,
     predictions: {
@@ -328,6 +358,6 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       correct_score,
     },
     features: features || {},
-    dataQuality: dq,
+    dataQuality: dataQuality || { completenessScore: dataCompletenessScore },
   };
 }

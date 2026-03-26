@@ -223,4 +223,33 @@ router.post("/users/:id/revoke", requireAdmin, async (req, res) => {
   }
 });
 
+// ── DELETE /users/:id — delete a user and their data ─────────────────────────
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Delete related data first
+    await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [userId] });
+
+    return res.json({
+      success: true,
+      user_id: userId,
+      email: user.email,
+      message: `User ${user.email} has been deleted`,
+    });
+  } catch (err) {
+    console.error("Admin Delete User Error:", err);
+    return res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
 export default router;

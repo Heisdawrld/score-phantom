@@ -75,10 +75,17 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <Link href="/signup" className="text-primary hover:text-primary/80 font-medium transition-colors">
-              Start Free Trial
+          <div className="mt-6 space-y-3">
+            <div className="relative flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <span className="relative bg-panel px-3 text-xs text-muted-foreground">or</span>
+            </div>
+            <Link href="/signup">
+              <button type="button" className="w-full h-11 rounded-xl border border-primary/30 bg-primary/5 text-primary font-semibold text-sm hover:bg-primary/15 hover:border-primary/50 transition-all tracking-wide">
+                🚀 Start Free Trial — 3 Days Free
+              </button>
             </Link>
           </div>
         </Card>

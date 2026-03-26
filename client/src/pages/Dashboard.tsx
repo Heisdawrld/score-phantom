@@ -214,6 +214,14 @@ export default function Dashboard() {
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   const isTrial = user?.access_status === "trial";
 
+  const { data: usageData } = useQuery({
+    queryKey: ["/api/usage"],
+    queryFn: () => fetchApi("/usage"),
+    enabled: isTrial,
+    refetchInterval: 30000, // refresh every 30s
+    staleTime: 10000,
+  });
+
   const groupedFixtures = useMemo(() => {
     if (!data?.fixtures) return {};
 
@@ -272,7 +280,16 @@ export default function Dashboard() {
             <Crown className="w-5 h-5 text-primary shrink-0" />
             <p className="text-sm text-white/90 flex-1">
               <span className="font-bold text-primary">Free trial active.</span>{" "}
-              10 predictions/day · No AI chat · No ACCA
+              {usageData ? (
+                <>
+                  <span className={usageData.remaining <= 2 ? "text-orange-400 font-bold" : ""}>
+                    {usageData.remaining}/{usageData.limit} predictions left today
+                  </span>{" · "}
+                </>
+              ) : (
+                "10 predictions/day · "
+              )}
+              No AI chat · No ACCA
             </p>
             <Button size="sm" className="shrink-0 h-7 text-xs">Upgrade</Button>
           </div>

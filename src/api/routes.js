@@ -455,6 +455,22 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId/explain — requires premium access ──────────────
 router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
   try {
+    // Trial users: enforce 10 predictions/day cap
+    let predictionsRemaining = null;
+    if (!req.access.subscription_active && req.access.trial_active) {
+      const { count, today } = await getTodayCount(req.user.id);
+      if (count >= TRIAL_DAILY_LIMIT) {
+        return res.status(429).json({
+          error: "Daily limit reached",
+          code: "daily_limit_reached",
+          message: `Free trial allows ${TRIAL_DAILY_LIMIT} predictions per day. Come back tomorrow!`,
+          access: buildAccessPayload(req.access),
+        });
+      }
+      await incrementDailyCount(req.user.id, today);
+      predictionsRemaining = Math.max(0, TRIAL_DAILY_LIMIT - count - 1);
+    }
+
     const fixtureId = req.params.fixtureId;
 
     const bundle = await ensureFixtureData(fixtureId);
@@ -480,6 +496,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
     res.json({
       ...fullPayload,
       explanation,
+      predictions_remaining: predictionsRemaining,
       access: buildAccessPayload(req.access),
     });
   } catch (err) {
@@ -706,6 +723,45 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
   } catch (err) {
     console.error("[ACCA]", err.message);
     res.status(500).json({ error: "ACCA failed", detail: err.message });
+  }
+});
+
+// ─── GET /usage — daily prediction usage for trial users ─────────────────────
+router.get("/usage", requireAuth, async (req, res) => {
+  try {
+    if (req.access.subscription_active) {
+      return res.json({
+        used: 0,
+        remaining: null,
+        limit: null,
+        isPremium: true,
+        isTrial: false,
+        access: buildAccessPayload(req.access),
+      });
+    }
+    if (!req.access.has_full_access) {
+      return res.json({
+        used: 0,
+        remaining: 0,
+        limit: TRIAL_DAILY_LIMIT,
+        isPremium: false,
+        isTrial: false,
+        expired: true,
+        access: buildAccessPayload(req.access),
+      });
+    }
+    const { count } = await getTodayCount(req.user.id);
+    return res.json({
+      used: count,
+      remaining: Math.max(0, TRIAL_DAILY_LIMIT - count),
+      limit: TRIAL_DAILY_LIMIT,
+      isPremium: false,
+      isTrial: true,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[Usage]", err.message);
+    res.status(500).json({ error: "Failed to fetch usage" });
   }
 });
 
