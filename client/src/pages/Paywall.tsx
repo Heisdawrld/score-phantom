@@ -44,13 +44,24 @@ export default function Paywall() {
 
   const handleIPaid = () => {
     if (!paymentData?.reference) return;
+
+    // Open WhatsApp IMMEDIATELY — must be in the direct click handler, not in a callback,
+    // or browsers will block it as a popup.
+    const waText = encodeURIComponent(
+      `Hi, I just paid for ScorePhantom Premium.\n\nReference: ${paymentData.reference}\n\nHere is my payment receipt:`
+    );
+    const waUrl = `https://wa.me/2348117024699?text=${waText}`;
+    // Use location.href as a fallback if window.open is blocked
+    const opened = window.open(waUrl, "_blank");
+    if (!opened) {
+      window.location.href = waUrl;
+    }
+
+    // Then confirm with backend in parallel
     setStep("confirming");
     confirmPayment.mutate(paymentData.reference, {
-      onSuccess: (data) => {
+      onSuccess: () => {
         setStep("done");
-        if (data.whatsapp_link) {
-          setTimeout(() => { window.open(data.whatsapp_link, "_blank"); }, 500);
-        }
       },
       onError: (err: any) => {
         setStep("details");
