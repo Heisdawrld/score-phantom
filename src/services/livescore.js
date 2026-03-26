@@ -125,6 +125,7 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
     });
 
     const toMatch = (m) => ({
+      match_id: String(m.id || m.match_id || ''),
       home: m.home_name || '',
       away: m.away_name || '',
       // Score comes as "2 - 1" — normalise to "2-1" for consistent parsing
@@ -161,6 +162,7 @@ export async function fetchTeamForm(teamId, num = 10) {
     const matches = Array.isArray(data.data) ? data.data : [];
 
     return matches.map((m) => ({
+      match_id: String(m.id || m.match_id || ''),
       home: m.home_name || '',
       away: m.away_name || '',
       score: normaliseScore(m.ft_score || m.score) || null,

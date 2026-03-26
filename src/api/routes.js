@@ -2,13 +2,17 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { requirePremiumAccess, computeAccessStatus } from "../auth/authRoutes.js";
-import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 import { adaptResponseFormat } from "./responseAdapter.js";
 import { explainPrediction, chatAboutMatch } from "../services/groqExplainer.js";
-import { enrichFixture } from "../enrichment/enrichOne.js";
-import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
 import { fetchLiveMatches } from "../services/livescore.js";
+import {
+  getOrBuildPrediction,
+  ensureFixtureData,
+  getFixtureById,
+  getHistoryRows,
+  getOdds,
+} from "../services/predictionCache.js";
 
 const router = Router();
 // Must match authRoutes.js fallback exactly
@@ -37,48 +41,6 @@ function mapHistoryRow(row) {
         : null,
     date: row.date,
   };
-}
-
-function buildMetaFromFixtureAndHistory(fixture, historyRows) {
-  const meta = safeJsonParse(fixture.meta, {});
-
-  meta.homeForm = historyRows
-    .filter((m) => m.type === "home_form")
-    .map(mapHistoryRow);
-
-  meta.awayForm = historyRows
-    .filter((m) => m.type === "away_form")
-    .map(mapHistoryRow);
-
-  meta.h2h = historyRows
-    .filter((m) => m.type === "h2h")
-    .map(mapHistoryRow);
-
-  if (!Array.isArray(meta.standings)) {
-    meta.standings = [];
-  }
-
-  meta.standings = meta.standings.map((r, idx) => {
-    const wins = Number(r.wins || 0);
-    const draws = Number(r.draws || 0);
-    const losses = Number(r.losses || 0);
-    const computedPlayed = wins + draws + losses;
-    const played = Number(r.played || r.games || r.matches || 0) || computedPlayed;
-
-    return {
-      ...r,
-      position: Number(r.position || idx + 1),
-      played,
-      games: played,
-      matches: played,
-      wins,
-      draws,
-      losses,
-      points: Number(r.points || 0),
-    };
-  });
-
-  return meta;
 }
 
 // ─── Auth / Access helpers ────────────────────────────────────────────────────
@@ -200,97 +162,6 @@ async function requireTrialOrPremium(req, res, next) {
   }
 
   next();
-}
-
-// ─── Data helpers ─────────────────────────────────────────────────────────────
-
-async function getFixtureById(fixtureId) {
-  const result = await db.execute({
-    sql: `SELECT * FROM fixtures WHERE id = ?`,
-    args: [fixtureId],
-  });
-
-  if (!result.rows.length) return null;
-  return result.rows[0];
-}
-
-async function getHistoryRows(fixtureId) {
-  const result = await db.execute({
-    sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`,
-    args: [fixtureId],
-  });
-
-  return result.rows;
-}
-
-async function getOdds(fixtureId) {
-  try {
-    const result = await db.execute({
-      sql: `SELECT home, draw, away, btts_yes, btts_no, over_under FROM fixture_odds WHERE fixture_id = ? LIMIT 1`,
-      args: [fixtureId],
-    });
-
-    const oddsRow = result.rows?.[0] || null;
-    if (!oddsRow) return null;
-
-    return {
-      home: oddsRow.home,
-      draw: oddsRow.draw,
-      away: oddsRow.away,
-      btts_yes: oddsRow.btts_yes,
-      btts_no: oddsRow.btts_no,
-      over_under: oddsRow.over_under ? safeJsonParse(oddsRow.over_under, {}) : {},
-    };
-  } catch (err) {
-    console.error("[Odds] Failed:", err.message);
-    return null;
-  }
-}
-
-function hasUsableHistory(historyRows) {
-  const homeCount = historyRows.filter((m) => m.type === "home_form").length;
-  const awayCount = historyRows.filter((m) => m.type === "away_form").length;
-
-  return homeCount > 0 && awayCount > 0;
-}
-
-async function ensureFixtureData(fixtureId) {
-  let fixture = await getFixtureById(fixtureId);
-  if (!fixture) return null;
-
-  let historyRows = await getHistoryRows(fixtureId);
-
-  if (!fixture.enriched || !hasUsableHistory(historyRows)) {
-    try {
-      await enrichFixture(fixture);
-      fixture = await getFixtureById(fixtureId);
-      historyRows = await getHistoryRows(fixtureId);
-    } catch (e) {
-      console.error("[Enrich] Failed:", e.message);
-    }
-  }
-
-  // Try to fetch live odds from Odds API first, fall back to cached DB odds
-  let odds = null;
-  try {
-    const meta0 = safeJsonParse(fixture.meta, {});
-    const tournamentName = fixture.tournament_name || meta0.tournament_name || "";
-    odds = await fetchAndCacheOddsForFixture(
-      fixtureId,
-      fixture.home_team_name,
-      fixture.away_team_name,
-      tournamentName
-    );
-  } catch {}
-  if (!odds) odds = await getOdds(fixtureId);
-  const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
-
-  return {
-    fixture,
-    historyRows,
-    odds,
-    meta,
-  };
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -427,17 +298,12 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const fixtureId = req.params.fixtureId;
 
-    const bundle = await ensureFixtureData(fixtureId);
-    if (!bundle) {
+    const result = await getOrBuildPrediction(fixtureId);
+    if (!result) {
       return res.status(404).json({ error: "Fixture not found" });
     }
 
-    const { fixture, odds, meta } = bundle;
-
-    const engineResult = await runPredictionEngine(fixtureId, bundle);
-    const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
-    const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
-    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
+    const { prediction, odds, meta } = result;
 
     // Increment trial count only after a successful prediction
     if (!req.access.subscription_active && req.access.has_full_access) {
@@ -481,30 +347,12 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
 
     const fixtureId = req.params.fixtureId;
 
-    const bundle = await ensureFixtureData(fixtureId);
-    if (!bundle) {
+    const result = await getOrBuildPrediction(fixtureId);
+    if (!result) {
       return res.status(404).json({ error: "Fixture not found" });
     }
 
-    const { fixture, odds, meta } = bundle;
-
-    // Check predictions_v2 cache before running engine
-    let engineResult;
-    const cached = await db.execute({
-      sql: `SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
-      args: [String(fixtureId)],
-    });
-    if (cached.rows?.length) {
-      engineResult = JSON.parse(cached.rows[0].raw_engine_output || "null") ||
-        await runPredictionEngine(fixtureId, bundle);
-    } else {
-      engineResult = await runPredictionEngine(fixtureId, bundle);
-    }
-
-    const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
-    const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
-    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
-
+    const { prediction, odds, meta } = result;
     const fullPayload = { ...prediction, odds, meta };
 
     const explanation = await explainPrediction(fullPayload);
@@ -544,35 +392,13 @@ router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) =
       return res.status(400).json({ error: "Message required" });
     }
 
-    const bundle = await ensureFixtureData(req.params.fixtureId);
-    if (!bundle) {
+    const chatResult = await getOrBuildPrediction(req.params.fixtureId);
+    if (!chatResult) {
       return res.status(404).json({ error: "Fixture not found" });
     }
 
-    const { fixture, odds, meta } = bundle;
-
-    // Check predictions_v2 cache before running engine
-    let engineResult;
-    const cachedChat = await db.execute({
-      sql: `SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
-      args: [String(req.params.fixtureId)],
-    });
-    if (cachedChat.rows?.length) {
-      engineResult = JSON.parse(cachedChat.rows[0].raw_engine_output || "null") ||
-        await runPredictionEngine(req.params.fixtureId, bundle);
-    } else {
-      engineResult = await runPredictionEngine(req.params.fixtureId, bundle);
-    }
-
-    const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
-    const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
-    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
-
-    const fullPrediction = {
-      ...prediction,
-      odds,
-      meta,
-    };
+    const { prediction, odds, meta } = chatResult;
+    const fullPrediction = { ...prediction, odds, meta };
 
     const reply = await chatAboutMatch(fullPrediction, message, history);
 
@@ -659,9 +485,9 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 
     for (const fixture of fixtures) {
       try {
-        const bundle = await ensureFixtureData(fixture.id);
-        if (bundle) {
-          const pred = await runPredictionEngine(fixture.id, bundle);
+        const r = await getOrBuildPrediction(fixture.id, { forceRefresh: true });
+        if (r) {
+          const pred = r.engineResult || {};
           predictions.push({ fixtureId: fixture.id, noSafePick: pred.noSafePick, script: pred.script?.primary });
         }
       } catch (e) {
@@ -732,15 +558,14 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       return res.json({ picks: [], message: "No fixtures found for today yet." });
     }
 
-    // Run engine in parallel for all fixtures (much faster than sequential)
+    // Run engine in parallel for all fixtures via unified prediction cache
     const results = await Promise.allSettled(
       fixtures.map(async (fixture) => {
-        const bundle = await ensureFixtureData(fixture.id);
-        if (!bundle) return null;
-        const engineResult = await runPredictionEngine(fixture.id, bundle);
-        const homeTeam = engineResult.homeTeam || fixture.home_team_name;
-        const awayTeam = engineResult.awayTeam || fixture.away_team_name;
-        const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
+        const result = await getOrBuildPrediction(fixture.id);
+        if (!result) return null;
+        const { prediction } = result;
+        const homeTeam = result.fixture?.home_team_name || fixture.home_team_name;
+        const awayTeam = result.fixture?.away_team_name || fixture.away_team_name;
         const rec = prediction?.predictions?.recommendation;
         if (!rec) return null;
         const confScore = { HIGH: 3, MEDIUM: 2, LEAN: 1, LOW: 0 }[rec.confidence] ?? 0;

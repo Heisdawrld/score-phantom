@@ -151,6 +151,39 @@ function flattenFeatureVector(fv) {
     positionGap: safeNum(tc.position_gap, 0),
     homeContext: tc.home_context || 'midtable',
     awayContext: tc.away_context || 'midtable',
+
+    // Team profile features (from historical stats aggregation)
+    homeAvgShotsFor: safeNum(fv.homeProfileFeatures?.avgShotsFor, null),
+    awayAvgShotsFor: safeNum(fv.awayProfileFeatures?.avgShotsFor, null),
+    homeAvgShotsOnTargetFor: safeNum(fv.homeProfileFeatures?.avgShotsOnTargetFor, null),
+    awayAvgShotsOnTargetFor: safeNum(fv.awayProfileFeatures?.avgShotsOnTargetFor, null),
+    homeAvgDangerousAttacksFor: safeNum(fv.homeProfileFeatures?.avgDangerousAttacksFor, null),
+    awayAvgDangerousAttacksFor: safeNum(fv.awayProfileFeatures?.avgDangerousAttacksFor, null),
+    homeAvgCornersFor: safeNum(fv.homeProfileFeatures?.avgCornersFor, null),
+    awayAvgCornersFor: safeNum(fv.awayProfileFeatures?.avgCornersFor, null),
+    homeAvgPossession: safeNum(fv.homeProfileFeatures?.avgPossession, null),
+    awayAvgPossession: safeNum(fv.awayProfileFeatures?.avgPossession, null),
+    homeShotQuality: safeNum(fv.homeShotQuality, null),
+    awayShotQuality: safeNum(fv.awayShotQuality, null),
+    possessionDiff: safeNum(fv.possessionDiff, null),
+    attackPressDiff: safeNum(fv.attackPressDiff, null),
+    homeProfileBttsRate: safeNum(fv.homeProfileFeatures?.profileBttsRate, null),
+    awayProfileBttsRate: safeNum(fv.awayProfileFeatures?.profileBttsRate, null),
+    homeProfileCleanSheetRate: safeNum(fv.homeProfileFeatures?.profileCleanSheetRate, null),
+    awayProfileCleanSheetRate: safeNum(fv.awayProfileFeatures?.profileCleanSheetRate, null),
+    homeProfileOver25Rate: safeNum(fv.homeProfileFeatures?.profileOver25Rate, null),
+    awayProfileOver25Rate: safeNum(fv.awayProfileFeatures?.profileOver25Rate, null),
+    hasHomeStatProfile: fv.homeProfileFeatures?.hasProfile === true,
+    hasAwayStatProfile: fv.awayProfileFeatures?.hasProfile === true,
+
+    // Lineup modifiers
+    hasLineupData: fv.lineupFeatures?.hasLineup === true,
+    homeLineupComplete: fv.lineupFeatures?.homeLineupComplete || false,
+    awayLineupComplete: fv.lineupFeatures?.awayLineupComplete || false,
+
+    // Enrichment completeness
+    enrichmentCompleteness: fv.enrichmentCompleteness?.score ?? null,
+    enrichmentTier: fv.enrichmentCompleteness?.tier ?? null,
   };
 }
 
