@@ -188,6 +188,39 @@ export async function ensureFixtureData(fixtureId) {
   return { fixture, historyRows, odds, meta };
 }
 
+// ── Cache storage helpers ─────────────────────────────────────────────────────
+
+async function savePredictionToCache(fixtureId, prediction, engineResult) {
+  try {
+    await db.execute({
+      sql: `ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`,
+    });
+  } catch (_) { /* column already exists */ }
+
+  try {
+    await db.execute({
+      sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
+      args: [JSON.stringify({ prediction, engineResult: null }), String(fixtureId)],
+    });
+  } catch (err) {
+    console.error('[predictionCache] savePredictionToCache failed:', err.message);
+  }
+}
+
+async function loadCachedPrediction(fixtureId) {
+  try {
+    const r = await db.execute({
+      sql: `SELECT prediction_json FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
+      args: [String(fixtureId)],
+    });
+    const row = r.rows?.[0];
+    if (!row?.prediction_json) return null;
+    return JSON.parse(row.prediction_json);
+  } catch {
+    return null;
+  }
+}
+
 // ── Main exported function ────────────────────────────────────────────────────
 
 /**
@@ -211,11 +244,19 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
 
   // ── Check predictions_v2 cache ────────────────────────────────────────────
   if (!forceRefresh && await isCacheFresh(fixtureId)) {
-    // Cache is fresh — but we still need to run the engine to build the full
-    // response object (the cache stores per-field, not the full adapted shape).
-    // Running the engine is fast if historical_matches are already in DB.
-    // We skip the enrichment re-fetch (already done above), so this is efficient.
-    console.log(`[predictionCache] Cache valid for fixture ${fixtureId} — rebuilding response from DB data`);
+    const cached = await loadCachedPrediction(fixtureId);
+    if (cached) {
+      console.log(`[predictionCache] Cache HIT for fixture ${fixtureId} — returning stored prediction`);
+      return {
+        prediction: cached.prediction,
+        odds,
+        meta,
+        engineResult: cached.engineResult,
+        fixture,
+        fromCache: true,
+      };
+    }
+    console.log(`[predictionCache] Cache stale or empty for fixture ${fixtureId} — rebuilding`);
   }
 
   // ── Run the engine ────────────────────────────────────────────────────────
@@ -224,6 +265,11 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
   const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
   const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';
   const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
+
+  // ── Store full prediction in cache ────────────────────────────────────────
+  await savePredictionToCache(fixtureId, prediction, engineResult).catch(err =>
+    console.error('[predictionCache] Cache save failed:', err.message)
+  );
 
   return {
     prediction,

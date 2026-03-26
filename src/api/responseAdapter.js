@@ -237,12 +237,15 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     correctScoreProbs,
   } = engineResult;
 
-  // Data completeness from volatility features (passed through features)
+  // Data completeness — read from flat feature vector passed through engine result
+  const featureVector = engineResult?.features || {};
   const dataCompletenessScore = safeNum(
-    engineResult?.features?.dataCompletenessScore ??
+    featureVector.dataCompletenessScore ??
+    featureVector.enrichmentCompleteness ??
     engineResult?.volatilityFeatures?.dataCompletenessScore,
     0.5
   );
+  const enrichmentTier = featureVector.enrichmentTier || null;
 
   // ── Game Script ──────────────────────────────────────────────────────────
   const sp2Script = script.primary || "balanced";
@@ -359,7 +362,12 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       all_candidates,
       correct_score,
     },
-    features: features || {},
-    dataQuality: dataQuality || { completenessScore: dataCompletenessScore },
+    features: featureVector,
+    dataQuality: {
+      completenessScore: dataCompletenessScore,
+      tier: enrichmentTier,
+      homeFormMatches: featureVector.homeMatchesAvailable ?? null,
+      awayFormMatches: featureVector.awayMatchesAvailable ?? null,
+    },
   };
 }

@@ -214,6 +214,17 @@ export async function runPredictionEngine(fixtureId, rawData) {
     // Step 4: Estimate expected goals
     const xg = estimateExpectedGoals(features, script);
 
+    // Step 4.5: Post-xG script correction
+    // If xG difference is < 0.5, the match is NOT actually dominant — downgrade
+    const xgDiff = Math.abs(xg.homeExpectedGoals - xg.awayExpectedGoals);
+    if (xgDiff < 0.5 && script.primary === 'dominant_home_pressure') {
+      script.primary = 'balanced_high_event';
+      script.secondary = null;
+    } else if (xgDiff < 0.5 && script.primary === 'dominant_away_pressure') {
+      script.primary = 'balanced_high_event';
+      script.secondary = null;
+    }
+
     // Step 5: Build score matrix
     const scoreMatrix = buildScoreMatrix(xg.homeExpectedGoals, xg.awayExpectedGoals);
 
@@ -280,6 +291,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
       confidence,
       reasonCodes,
       rankedMarkets: rankedCandidates,
+      features,          // pass flat feature vector for dataQuality computation
       updatedAt: new Date().toISOString(),
     };
 
