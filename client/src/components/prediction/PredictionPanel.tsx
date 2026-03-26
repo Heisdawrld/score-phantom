@@ -14,6 +14,13 @@ interface PredictionPanelProps {
   onError?: (code: string) => void;
 }
 
+// Fix engine market labels: "Over 25" → "Over 2.5", "OVER 15" → "OVER 1.5", etc.
+function formatMarket(label: string | undefined | null): string {
+  if (!label) return "";
+  // Replace patterns like "25", "15", "35", "45" when they appear as standalone numbers after a space
+  return label.replace(/\b([1-9])5\b/g, "$1.5");
+}
+
 function formatPct(val: number | undefined | null): string {
   if (val === null || val === undefined) return "—";
   const n = val <= 1 ? val * 100 : val;
@@ -179,7 +186,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
 
                         <div className="flex items-end justify-between gap-4 mb-5">
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1">{rec.market}</p>
+                            <p className="text-xs text-muted-foreground mb-1">{formatMarket(rec.market)}</p>
                             <h3 className="font-display text-3xl sm:text-4xl text-white tracking-wide leading-none">{rec.pick}</h3>
                           </div>
                           <div className="text-right shrink-0">
@@ -213,13 +220,19 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
 
                   {/* Backup Picks */}
                   {backups.length > 0 && (
-                    <div>
+                    <div className="relative">
                       <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-3 ml-1">Backup Angles</p>
-                      <div className="space-y-3">
+                      <div className={cn("space-y-3", !isPremium && "pointer-events-none")}>
                         {backups.map((b: any, i: number) => (
-                          <div key={i} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex items-center justify-between gap-4">
+                          <div
+                            key={i}
+                            className={cn(
+                              "bg-white/5 border border-white/8 rounded-2xl p-4 flex items-center justify-between gap-4",
+                              !isPremium && i > 0 && "blur-sm select-none"
+                            )}
+                          >
                             <div>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{b.market}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{formatMarket(b.market)}</p>
                               <p className="font-semibold text-sm">{b.pick}</p>
                               {b.reasons?.[0] && <p className="text-xs text-muted-foreground mt-1">{b.reasons[0]}</p>}
                             </div>
@@ -230,6 +243,18 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                           </div>
                         ))}
                       </div>
+                      {/* FOMO overlay for trial users */}
+                      {!isPremium && backups.length > 1 && (
+                        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#080b10] to-transparent flex flex-col items-center justify-end pb-3 pointer-events-auto">
+                          <p className="text-xs text-muted-foreground mb-2">🔒 {backups.length - 1} more angle{backups.length > 2 ? "s" : ""} hidden</p>
+                          <button
+                            onClick={() => setLocation("/upgrade")}
+                            className="text-xs font-bold text-primary border border-primary/40 rounded-full px-4 py-1.5 hover:bg-primary/10 transition-colors"
+                          >
+                            Upgrade to Unlock
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
