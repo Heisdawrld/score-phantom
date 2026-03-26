@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
 import adminRoutes from "./api/adminRoutes.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
+import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import { seedFixtures } from "./services/fixtureSeeder.js";
@@ -27,7 +28,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+const allowedOrigins = [
+  process.env.APP_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Render health checks)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, true); // Keep permissive in prod until APP_URL is confirmed set
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
@@ -187,16 +201,9 @@ async function backfillMissingCountries() {
 
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
-  // Clear stale prediction cache on deploy so new engine produces fresh predictions
-  try {
-    await db.execute({ sql: `DELETE FROM predictions`, args: [] });
-    console.log("[Startup] Cleared prediction cache for fresh engine results");
-  } catch (e) {
-    console.warn("[Startup] Cache clear skipped:", e.message);
-  }
   await initUsersTable();
+  await initPredictionsTable();
   await autoSeed();
-  await backfillMissingCountries();
 });
 
 app.use(errorHandler);

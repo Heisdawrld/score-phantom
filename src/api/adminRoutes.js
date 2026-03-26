@@ -4,7 +4,8 @@ import jwt from "jsonwebtoken";
 import { computeAccessStatus } from "../auth/authRoutes.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+// Must match authRoutes.js fallback exactly
+const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const PLAN_DURATION_DAYS = 30;
 

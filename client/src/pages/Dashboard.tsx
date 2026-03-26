@@ -39,7 +39,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
     return (
       <div
         className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-4 flex items-center gap-4 cursor-pointer hover:bg-primary/10 transition-all"
-        onClick={() => (window.location.href = "/paywall")}
+        onClick={() => setLocation("/paywall")}
       >
         <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
           <Crown className="w-5 h-5 text-primary" />
@@ -247,7 +247,7 @@ export default function Dashboard() {
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
   if (user && user.access_status === "expired") {
-    window.location.href = "/paywall";
+    setLocation("/paywall");
     return null;
   }
 

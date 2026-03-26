@@ -2,22 +2,30 @@ services:
   - type: web
     name: scorephantom
     env: node
-    buildCommand: npm install
+    buildCommand: npm install && cd client && npm install && npm run build
     startCommand: node src/app.js
     envVars:
       - key: NODE_ENV
         value: production
-      - key: APIFY_TOKEN
+      - key: PORT
+        value: 3000
+      - key: TURSO_URL
         sync: false
-      - key: APIFY_ACTOR_ID
+      - key: TURSO_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: LIVESCORE_API_KEY
+        sync: false
+      - key: LIVESCORE_API_SECRET
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: LIVESCORE_API_KEY
-        sync: false      # <-- new, required
-      - key: LIVESCORE_API_SECRET
-        sync: false      # <-- new, required
-      - key: DATABASE_URL
-        value: ./scorephantom.db
-      - key: PORT
-        value: 3000
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: APP_URL
+        sync: false

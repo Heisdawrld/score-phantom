@@ -2,11 +2,25 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+// Unified JWT secret — matches routes.js and adminRoutes.js
+const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
+if (!process.env.JWT_SECRET) {
+  console.warn("[Auth] WARNING: JWT_SECRET env var not set. Using insecure default. Set it in Render dashboard!");
+}
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: "Too many attempts, please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
 const APP_URL = process.env.APP_URL || "";
@@ -189,29 +203,31 @@ function publicUser(user) {
     subscription_code: user.subscription_code,
     has_access: access.has_full_access,
     access_status: access.status,
-    is_admin: ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL,
   };
 }
 
 // ── Auth Routes ──────────────────────────────────────────────────────────────
 
-router.post("/signup", async (req, res) => {
+router.post("/signup", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Email and password are required" });
-    }
-
-    if (String(password).length < 6) {
-      return res
-        .status(400)
-        .json({ error: "Password must be at least 6 characters" });
+      return res.status(400).json({ error: "Email and password are required" });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Input validation
+    if (!normalizedEmail.includes("@") || normalizedEmail.length > 254) {
+      return res.status(400).json({ error: "Please enter a valid email address" });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    if (String(password).length > 128) {
+      return res.status(400).json({ error: "Password too long" });
+    }
 
     const existing = await db.execute({
       sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
@@ -229,10 +245,10 @@ router.post("/signup", async (req, res) => {
 
     await db.execute({
       sql: `
-        INSERT INTO users (email, password_hash, password, status, trial_ends_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO users (email, password_hash, status, trial_ends_at)
+        VALUES (?, ?, ?, ?)
       `,
-      args: [normalizedEmail, hashedPassword, hashedPassword, "trial", trialEnds.toISOString()],
+      args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
     });
 
     const created = await db.execute({
@@ -265,7 +281,7 @@ router.post("/signup", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     const normalizedEmail = String(email || "").trim().toLowerCase();
@@ -330,11 +346,13 @@ router.get("/me", requireAuth, async (req, res) => {
     }
 
     const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL;
     return res.json({
       ...publicUser(user),
       has_access: access.has_full_access,
       access_status: access.status,
-      is_admin: ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL,
+      // Only expose admin flag on the /me route, not in general user payloads
+      ...(isAdmin ? { is_admin: true } : {}),
     });
   } catch (err) {
     console.error("Me Error:", err);

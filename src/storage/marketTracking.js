@@ -7,6 +7,10 @@ import db from '../config/database.js';
  * recommended for each fixture recently.
  */
 
+// Module-level flag so we only run CREATE TABLE once per process lifetime
+let _initialized = false;
+let _initPromise = null;
+
 // Initialize market tracking table
 export async function initMarketTrackingTable() {
   try {
@@ -46,9 +50,15 @@ export async function initMarketTrackingTable() {
  * @param {number} hoursBack - How many hours to look back (default 24)
  * @returns {Promise<{markets: object, marketTypes: object}>}
  */
+async function ensureInit() {
+  if (_initialized) return;
+  if (!_initPromise) _initPromise = initMarketTrackingTable().then(() => { _initialized = true; });
+  await _initPromise;
+}
+
 export async function getRecentMarkets(fixtureId, hoursBack = 24) {
   try {
-    await initMarketTrackingTable();
+    await ensureInit();
 
     const cutoffTime = Date.now() - (hoursBack * 60 * 60 * 1000);
 
@@ -92,7 +102,7 @@ export async function getRecentMarkets(fixtureId, hoursBack = 24) {
  */
 export async function logRecommendedMarket(fixtureId, marketKey, selection) {
   try {
-    await initMarketTrackingTable();
+    await ensureInit();
 
     // Extract market type from market key
     const marketType = extractMarketType(marketKey);
@@ -142,7 +152,7 @@ function extractMarketType(marketKey) {
  */
 export async function cleanupOldTracking() {
   try {
-    await initMarketTrackingTable();
+    await ensureInit();
 
     const cutoffTime = Date.now() - (48 * 60 * 60 * 1000);
 

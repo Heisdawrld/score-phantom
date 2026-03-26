@@ -1,11 +1,14 @@
 import axios from 'axios';
 
-const KEY = process.env.LIVESCORE_API_KEY;
-const SECRET = process.env.LIVESCORE_API_SECRET;
 const BASE = 'https://livescore-api.com/api-client';
 
-if (!KEY || !SECRET) {
-  throw new Error('LIVESCORE_API_KEY and LIVESCORE_API_SECRET must be set in environment variables');
+function getCredentials() {
+  const KEY = process.env.LIVESCORE_API_KEY;
+  const SECRET = process.env.LIVESCORE_API_SECRET;
+  if (!KEY || !SECRET) {
+    throw new Error('LIVESCORE_API_KEY and LIVESCORE_API_SECRET must be set in environment variables');
+  }
+  return { KEY, SECRET };
 }
 
 function sleep(ms) {
@@ -13,6 +16,7 @@ function sleep(ms) {
 }
 
 async function get(path, params = {}) {
+  const { KEY, SECRET } = getCredentials();
   await sleep(350 + Math.random() * 200);
   const res = await axios.get(`${BASE}${path}`, {
     params: { key: KEY, secret: SECRET, ...params },

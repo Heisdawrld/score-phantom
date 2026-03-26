@@ -194,7 +194,9 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
 
   const probability = safeNum(pick.modelProbability, 0);
-  const edgeScore = safeNum(pick.finalScore, 0);
+  // Use real betting edge (model prob - implied prob) when odds are available,
+  // fall back to ranking score only when no odds data exists
+  const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
 
   return {
@@ -298,7 +300,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   let recommendation;
   if (bestPick && !noSafePick) {
     const probability = safeNum(bestPick.modelProbability, 0);
-    const edgeScore = safeNum(bestPick.finalScore, 0);
+    const edgeScore = bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0);
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
 
     recommendation = {

@@ -248,7 +248,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#080b10] to-transparent flex flex-col items-center justify-end pb-3 pointer-events-auto">
                           <p className="text-xs text-muted-foreground mb-2">🔒 {backups.length - 1} more angle{backups.length > 2 ? "s" : ""} hidden</p>
                           <button
-                            onClick={() => setLocation("/upgrade")}
+                            onClick={() => setLocation("/paywall")}
                             className="text-xs font-bold text-primary border border-primary/40 rounded-full px-4 py-1.5 hover:bg-primary/10 transition-colors"
                           >
                             Upgrade to Unlock

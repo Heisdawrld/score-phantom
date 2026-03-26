@@ -11,6 +11,7 @@ import { seedFixtures } from "../services/fixtureSeeder.js";
 import { fetchLiveMatches } from "../services/livescore.js";
 
 const router = Router();
+// Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -421,7 +422,7 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
           access: buildAccessPayload(req.access),
         });
       }
-      await incrementDailyCount(req.user.id, today);
+      // NOTE: increment happens AFTER success to avoid charging for engine failures
     }
 
     const fixtureId = req.params.fixtureId;
@@ -437,6 +438,12 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
     const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
     const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
     const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
+
+    // Increment trial count only after a successful prediction
+    if (!req.access.subscription_active && req.access.has_full_access) {
+      const { today } = await getTodayCount(req.user.id);
+      await incrementDailyCount(req.user.id, today);
+    }
 
     const response = {
       ...prediction,
@@ -457,6 +464,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
   try {
     // Trial users: enforce 10 predictions/day cap
     let predictionsRemaining = null;
+    let trialToday = null;
     if (!req.access.subscription_active && req.access.trial_active) {
       const { count, today } = await getTodayCount(req.user.id);
       if (count >= TRIAL_DAILY_LIMIT) {
@@ -467,7 +475,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
           access: buildAccessPayload(req.access),
         });
       }
-      await incrementDailyCount(req.user.id, today);
+      trialToday = today;
       predictionsRemaining = Math.max(0, TRIAL_DAILY_LIMIT - count - 1);
     }
 
@@ -480,18 +488,31 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
 
     const { fixture, odds, meta } = bundle;
 
-    const engineResult = await runPredictionEngine(fixtureId, bundle);
+    // Check predictions_v2 cache before running engine
+    let engineResult;
+    const cached = await db.execute({
+      sql: `SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
+      args: [String(fixtureId)],
+    });
+    if (cached.rows?.length) {
+      engineResult = JSON.parse(cached.rows[0].raw_engine_output || "null") ||
+        await runPredictionEngine(fixtureId, bundle);
+    } else {
+      engineResult = await runPredictionEngine(fixtureId, bundle);
+    }
+
     const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
     const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
     const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
 
-    const fullPayload = {
-      ...prediction,
-      odds,
-      meta,
-    };
+    const fullPayload = { ...prediction, odds, meta };
 
     const explanation = await explainPrediction(fullPayload);
+
+    // Increment trial count only after successful response
+    if (trialToday) {
+      await incrementDailyCount(req.user.id, trialToday);
+    }
 
     res.json({
       ...fullPayload,
@@ -508,6 +529,15 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
 // ─── POST /predict/:fixtureId/chat — requires premium access ────────────────
 router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) => {
   try {
+    // AI chat is a premium-only feature — block trial users
+    if (!req.access.subscription_active) {
+      return res.status(403).json({
+        error: "AI Chat requires a premium subscription",
+        code: "subscription_required",
+        access: buildAccessPayload(req.access),
+      });
+    }
+
     const { message, history = [] } = req.body;
 
     if (!message) {
@@ -521,7 +551,19 @@ router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) =
 
     const { fixture, odds, meta } = bundle;
 
-    const engineResult = await runPredictionEngine(req.params.fixtureId, bundle);
+    // Check predictions_v2 cache before running engine
+    let engineResult;
+    const cachedChat = await db.execute({
+      sql: `SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
+      args: [String(req.params.fixtureId)],
+    });
+    if (cachedChat.rows?.length) {
+      engineResult = JSON.parse(cachedChat.rows[0].raw_engine_output || "null") ||
+        await runPredictionEngine(req.params.fixtureId, bundle);
+    } else {
+      engineResult = await runPredictionEngine(req.params.fixtureId, bundle);
+    }
+
     const homeTeam = engineResult.homeTeam || fixture.home_team_name || "";
     const awayTeam = engineResult.awayTeam || fixture.away_team_name || "";
     const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
@@ -690,20 +732,20 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       return res.json({ picks: [], message: "No fixtures found for today yet." });
     }
 
-    const scored = [];
-    for (const fixture of fixtures) {
-      try {
+    // Run engine in parallel for all fixtures (much faster than sequential)
+    const results = await Promise.allSettled(
+      fixtures.map(async (fixture) => {
         const bundle = await ensureFixtureData(fixture.id);
-        if (!bundle) continue;
+        if (!bundle) return null;
         const engineResult = await runPredictionEngine(fixture.id, bundle);
         const homeTeam = engineResult.homeTeam || fixture.home_team_name;
         const awayTeam = engineResult.awayTeam || fixture.away_team_name;
         const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
         const rec = prediction?.predictions?.recommendation;
-        if (!rec) continue;
+        if (!rec) return null;
         const confScore = { HIGH: 3, MEDIUM: 2, LEAN: 1, LOW: 0 }[rec.confidence] ?? 0;
         const valueScore = { STRONG: 3, GOOD: 2, FAIR: 1, WEAK: 0 }[rec.value] ?? 0;
-        scored.push({
+        return {
           fixtureId: fixture.id,
           homeTeam,
           awayTeam,
@@ -714,9 +756,12 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
           confidence: rec.confidence,
           value: rec.value,
           score: confScore * 2 + valueScore,
-        });
-      } catch {}
-    }
+        };
+      })
+    );
+    const scored = results
+      .filter((r) => r.status === "fulfilled" && r.value !== null)
+      .map((r) => r.value);
 
     scored.sort((a, b) => b.score - a.score);
     res.json({ picks: scored.slice(0, 5), source: "live", access: buildAccessPayload(req.access) });
