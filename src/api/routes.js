@@ -611,20 +611,54 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 router.get("/acca", requirePremiumAccess, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
+
+    // ① First try: use already-computed predictions_v2 cache joined with fixtures
+    const cached = await db.execute({
+      sql: `SELECT p.fixture_id, p.home_team, p.away_team,
+                   p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+                   p.best_pick_score, p.confidence_model, p.confidence_value,
+                   p.no_safe_pick,
+                   f.tournament_name, f.match_date
+            FROM predictions_v2 p
+            JOIN fixtures f ON f.id = p.fixture_id
+            WHERE f.match_date LIKE ?
+              AND p.no_safe_pick = 0
+              AND p.best_pick_selection IS NOT NULL
+            ORDER BY p.best_pick_score DESC
+            LIMIT 5`,
+      args: [`%${today}%`],
+    });
+
+    if (cached.rows?.length) {
+      const picks = cached.rows.map((r) => ({
+        fixtureId: r.fixture_id,
+        homeTeam: r.home_team,
+        awayTeam: r.away_team,
+        tournament: r.tournament_name || "",
+        matchDate: r.match_date,
+        pick: r.best_pick_market,
+        selection: r.best_pick_selection,
+        confidence: r.confidence_model || r.confidence_value || "MEDIUM",
+        probability: r.best_pick_probability,
+        score: r.best_pick_score,
+      }));
+      return res.json({ picks, source: "cache", access: buildAccessPayload(req.access) });
+    }
+
+    // ② Fallback: get today's fixtures (no enriched filter) and run engine on first 15
     const result = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name, tournament_name, match_date
-            FROM fixtures WHERE match_date LIKE ? AND enriched = 1 LIMIT 80`,
+            FROM fixtures WHERE match_date LIKE ? LIMIT 15`,
       args: [`%${today}%`],
     });
 
     const fixtures = result.rows || [];
     if (!fixtures.length) {
-      return res.json({ picks: [], message: "No enriched fixtures for today yet." });
+      return res.json({ picks: [], message: "No fixtures found for today yet." });
     }
 
-    // Score each fixture by running engine
     const scored = [];
-    for (const fixture of fixtures.slice(0, 30)) { // cap at 30 to stay fast
+    for (const fixture of fixtures) {
       try {
         const bundle = await ensureFixtureData(fixture.id);
         if (!bundle) continue;
@@ -634,12 +668,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
         const rec = prediction?.predictions?.recommendation;
         if (!rec) continue;
-
-        // confidence score: HIGH=3, MEDIUM=2, LEAN=1, LOW=0
         const confScore = { HIGH: 3, MEDIUM: 2, LEAN: 1, LOW: 0 }[rec.confidence] ?? 0;
         const valueScore = { STRONG: 3, GOOD: 2, FAIR: 1, WEAK: 0 }[rec.value] ?? 0;
-        const totalScore = confScore * 2 + valueScore;
-
         scored.push({
           fixtureId: fixture.id,
           homeTeam,
@@ -650,17 +680,13 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
           selection: rec.selection,
           confidence: rec.confidence,
           value: rec.value,
-          reason: rec.reason || "",
-          score: totalScore,
+          score: confScore * 2 + valueScore,
         });
       } catch {}
     }
 
-    // Sort by score, take top 5
     scored.sort((a, b) => b.score - a.score);
-    const picks = scored.slice(0, 5);
-
-    res.json({ picks, total: scored.length, access: buildAccessPayload(req.access) });
+    res.json({ picks: scored.slice(0, 5), source: "live", access: buildAccessPayload(req.access) });
   } catch (err) {
     console.error("[ACCA]", err.message);
     res.status(500).json({ error: "ACCA failed", detail: err.message });
