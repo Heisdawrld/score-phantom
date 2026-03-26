@@ -103,14 +103,50 @@ function mapVolatility(volatilityScore) {
 
 // ── Pick label formatting ────────────────────────────────────────────────────
 
+// Direct lookup table for all internal marketKey values produced by buildMarketCandidates.
+// The selection field from that module is already perfectly formatted, but we want team names
+// substituted in for home/away references.
+const PICK_LABEL_MAP = {
+  home_win:             (h)    => `${h || "Home"} Win`,
+  away_win:             (h, a) => `${a || "Away"} Win`,
+  draw:                 ()     => "Draw",
+  double_chance_home:   (h)    => `${h || "Home"} or Draw`,
+  double_chance_away:   (h, a) => `${a || "Away"} or Draw`,
+  over_15:              ()     => "Over 1.5 Goals",
+  over_25:              ()     => "Over 2.5 Goals",
+  over_35:              ()     => "Over 3.5 Goals",
+  under_25:             ()     => "Under 2.5 Goals",
+  under_35:             ()     => "Under 3.5 Goals",
+  btts_yes:             ()     => "Both Teams to Score",
+  btts_no:              ()     => "Both Teams NOT to Score",
+  home_over_05:         (h)    => `${h || "Home"} Over 0.5 Goals`,
+  home_over_15:         (h)    => `${h || "Home"} Over 1.5 Goals`,
+  home_over_25:         (h)    => `${h || "Home"} Over 2.5 Goals`,
+  home_under_15:        (h)    => `${h || "Home"} Under 1.5 Goals`,
+  away_over_05:         (h, a) => `${a || "Away"} Over 0.5 Goals`,
+  away_over_15:         (h, a) => `${a || "Away"} Over 1.5 Goals`,
+  away_over_25:         (h, a) => `${a || "Away"} Over 2.5 Goals`,
+  away_under_15:        (h, a) => `${a || "Away"} Under 1.5 Goals`,
+  win_either_half_home: (h)    => `${h || "Home"} Win Either Half`,
+  win_either_half_away: (h, a) => `${a || "Away"} Win Either Half`,
+  dnb_home:             (h)    => `${h || "Home"} Win (DNB)`,
+  dnb_away:             (h, a) => `${a || "Away"} Win (DNB)`,
+};
+
 function formatPickLabel(marketKey, selection, homeTeam, awayTeam) {
   if (!marketKey) return selection || "No Clear Edge";
 
   const key = (marketKey || "").toLowerCase().replace(/-/g, "_");
+
+  // Primary path: use the direct lookup table (covers all buildMarketCandidates keys)
+  if (PICK_LABEL_MAP[key]) {
+    return PICK_LABEL_MAP[key](homeTeam, awayTeam);
+  }
+
+  // Secondary path: legacy/external market keys (over_under category, 1x2, etc.)
   const sel = (selection || "").toLowerCase().replace(/-/g, "_");
 
-  // Over/Under
-  if (key === "over_under" || key === "goals_ou" || key.includes("over") || key.includes("under")) {
+  if (key === "over_under" || key === "goals_ou") {
     if (sel.startsWith("over_")) {
       const val = sel.replace("over_", "").replace("_", ".");
       return `Over ${val} Goals`;
@@ -119,56 +155,36 @@ function formatPickLabel(marketKey, selection, homeTeam, awayTeam) {
       const val = sel.replace("under_", "").replace("_", ".");
       return `Under ${val} Goals`;
     }
-    if (sel.includes("over")) return "Over Goals";
-    if (sel.includes("under")) return "Under Goals";
   }
 
-  // BTTS
-  if (key === "btts" || key === "both_teams_to_score") {
-    if (sel === "yes" || sel === "btts_yes") return "Both Teams to Score";
-    if (sel === "no" || sel === "btts_no") return "Both Teams NOT to Score";
-  }
-
-  // 1X2
   if (key === "1x2" || key === "match_winner") {
     if (sel === "home" || sel === "1") return `${homeTeam || "Home"} Win`;
     if (sel === "away" || sel === "2") return `${awayTeam || "Away"} Win`;
     if (sel === "draw" || sel === "x") return "Draw";
   }
 
-  // Double Chance
   if (key === "double_chance") {
     if (sel === "1x" || sel === "home_draw") return `${homeTeam || "Home"} or Draw`;
     if (sel === "2x" || sel === "away_draw") return `${awayTeam || "Away"} or Draw`;
     if (sel === "12" || sel === "home_away") return "Home or Away Win";
   }
 
-  // DNB
   if (key === "dnb" || key === "draw_no_bet") {
     if (sel === "home") return `${homeTeam || "Home"} Win (DNB)`;
     if (sel === "away") return `${awayTeam || "Away"} Win (DNB)`;
   }
 
-  // Asian Handicap
   if (key === "asian_handicap" || key === "handicap") {
     if (sel.includes("home")) return `${homeTeam || "Home"} Handicap`;
     if (sel.includes("away")) return `${awayTeam || "Away"} Handicap`;
   }
 
-  // Team goals
-  if (key === "team_goals" || key === "home_goals" || key === "away_goals") {
-    const side = key.includes("home") ? (homeTeam || "Home") : (awayTeam || "Away");
-    if (sel.startsWith("over_")) return `${side} Over ${sel.replace("over_", "")} Goals`;
-    if (sel.startsWith("under_")) return `${side} Under ${sel.replace("under_", "")} Goals`;
-  }
-
-  // Win either half
   if (key === "win_either_half") {
     if (sel === "home") return `${homeTeam || "Home"} Win Either Half`;
     if (sel === "away") return `${awayTeam || "Away"} Win Either Half`;
   }
 
-  // Fallback: prettify raw selection
+  // Fallback: use raw selection string (may already be human-readable)
   if (selection) {
     return selection.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
@@ -179,12 +195,25 @@ function formatPickLabel(marketKey, selection, homeTeam, awayTeam) {
 
 function mapMarketName(marketKey) {
   const key = (marketKey || "").toLowerCase();
+  // Over/Under markets
   if (key === "over_under" || key === "goals_ou") return "Over/Under";
-  if (key === "btts" || key === "both_teams_to_score") return "Both Teams to Score";
-  if (key === "1x2" || key === "match_winner") return "Match Result";
-  if (key === "double_chance") return "Double Chance";
-  if (key === "dnb" || key === "draw_no_bet") return "Draw No Bet";
+  if (key === "over_15" || key === "over_25" || key === "over_35") return "Over/Under";
+  if (key === "under_25" || key === "under_35") return "Over/Under";
+  // BTTS
+  if (key === "btts" || key === "btts_yes" || key === "btts_no" || key === "both_teams_to_score") return "Both Teams to Score";
+  // Match result
+  if (key === "1x2" || key === "match_winner" || key === "home_win" || key === "away_win" || key === "draw") return "Match Result";
+  // Double Chance
+  if (key === "double_chance" || key === "double_chance_home" || key === "double_chance_away") return "Double Chance";
+  // Draw No Bet
+  if (key === "dnb" || key === "draw_no_bet" || key === "dnb_home" || key === "dnb_away") return "Draw No Bet";
+  // Asian Handicap
   if (key === "asian_handicap" || key === "handicap") return "Asian Handicap";
+  // Team goals (home/away over/under)
+  if (key.startsWith("home_over_") || key.startsWith("home_under_")) return "Home Team Goals";
+  if (key.startsWith("away_over_") || key.startsWith("away_under_")) return "Away Team Goals";
+  // Win Either Half
+  if (key === "win_either_half_home" || key === "win_either_half_away") return "Win Either Half";
   return marketKey ? marketKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unknown";
 }
 

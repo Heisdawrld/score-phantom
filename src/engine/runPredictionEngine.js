@@ -184,6 +184,10 @@ function flattenFeatureVector(fv) {
     // Enrichment completeness
     enrichmentCompleteness: fv.enrichmentCompleteness?.score ?? null,
     enrichmentTier: fv.enrichmentCompleteness?.tier ?? null,
+
+    // Form match counts (used by responseAdapter for dataQuality display)
+    homeMatchesAvailable: safeNum(hf.matches_available, 0),
+    awayMatchesAvailable: safeNum(af.matches_available, 0),
   };
 }
 
