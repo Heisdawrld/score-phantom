@@ -142,6 +142,16 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
           ],
         },
       ]);
+      // Save pre-match odds if available from fixture list
+      if (f.odds_home || f.odds_draw || f.odds_away) {
+        try {
+          await db.execute({
+            sql: `INSERT OR IGNORE INTO fixture_odds (fixture_id, home, draw, away)
+                  VALUES (?, ?, ?, ?)`,
+            args: [f.match_id, f.odds_home || null, f.odds_draw || null, f.odds_away || null],
+          });
+        } catch (_) {}
+      }
       inserted++;
     } catch (err) {
       failed++;

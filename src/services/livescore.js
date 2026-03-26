@@ -33,6 +33,7 @@ function getCompetitionName(f) {
 
 function getCompetitionCountry(f) {
   return (
+    f.country?.name ||
     f.competition?.country ||
     f.country ||
     f.competition_country ||
@@ -42,28 +43,54 @@ function getCompetitionCountry(f) {
   );
 }
 
+/**
+ * Convert "2 - 1" or "2-1" score format to "2-1" normalised string.
+ * Returns null if not parseable.
+ */
+function normaliseScore(raw) {
+  if (!raw) return null;
+  // Handle "2 - 1" (with spaces) or "2-1"
+  const parts = String(raw).split('-');
+  if (parts.length < 2) return null;
+  const h = parseInt(parts[0], 10);
+  const a = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(a)) return null;
+  return `${h}-${a}`;
+}
+
+// ── Fixtures by date ──────────────────────────────────────────────────────────
+// Endpoint: /fixtures/list.json  (NEW - was /fixtures/matches.json)
 export async function fetchFixturesByDate(date) {
   const allFixtures = [];
   let page = 1;
 
   while (true) {
     try {
-      const data = await get('/fixtures/matches.json', { date, page });
+      const data = await get('/fixtures/list.json', { date, page });
       const fixtures = data.data?.fixtures || [];
       if (!fixtures.length) break;
 
       for (const f of fixtures) {
+        // New API structure: home/away are nested objects with id/name
+        const homeName = f.home?.name || f.home_name || '';
+        const awayName = f.away?.name || f.away_name || '';
+        const homeId = String(f.home?.id || f.home_id || f.id + '_h');
+        const awayId = String(f.away?.id || f.away_id || f.id + '_a');
+        const competitionId = String(f.competition?.id || f.competition_id || '0');
+        const competitionName = getCompetitionName(f);
+        const countryName = getCompetitionCountry(f);
+
         allFixtures.push({
           match_id: String(f.id),
-          home_team_id: String(f.home_id),
-          home_team_name: f.home_name,
-          home_team_short_name: f.home_name?.substring(0, 3).toUpperCase() || '',
-          away_team_id: String(f.away_id),
-          away_team_name: f.away_name,
-          away_team_short_name: f.away_name?.substring(0, 3).toUpperCase() || '',
-          tournament_id: String(f.competition_id),
-          tournament_name: getCompetitionName(f),
-          category_name: getCompetitionCountry(f),
+          home_team_id: homeId,
+          home_team_name: homeName,
+          home_team_short_name: homeName?.substring(0, 3).toUpperCase() || '',
+          away_team_id: awayId,
+          away_team_name: awayName,
+          away_team_short_name: awayName?.substring(0, 3).toUpperCase() || '',
+          tournament_id: competitionId,
+          tournament_name: competitionName,
+          category_name: countryName,
           match_date: f.date + 'T' + (f.time || '00:00:00'),
           match_url: String(f.id),
           odds_home: f.odds?.pre?.['1'] || null,
@@ -84,6 +111,8 @@ export async function fetchFixturesByDate(date) {
   return allFixtures;
 }
 
+// ── Head 2 Head ───────────────────────────────────────────────────────────────
+// Endpoint: /teams/head2head.json (correct — response now properly parsed)
 export async function fetchH2H(homeTeamId, awayTeamId) {
   try {
     const data = await get('/teams/head2head.json', {
@@ -94,15 +123,22 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
     const toMatch = (m) => ({
       home: m.home_name || '',
       away: m.away_name || '',
-      score: m.score || null,
+      // Score comes as "2 - 1" — normalise to "2-1" for consistent parsing
+      score: normaliseScore(m.ft_score || m.score) || null,
       date: m.date || null,
-      competition: m.competition_name || m.league || '',
+      competition: m.competition?.name || m.competition_name || '',
     });
 
+    // API returns:
+    //   data.h2h            — actual head-to-head matches between the two teams
+    //   data.team1_last_6   — team1's last 6 overall matches
+    //   data.team2_last_6   — team2's last 6 overall matches
+    const d = data.data || {};
+
     return {
-      h2h: (data.data?.h2h || []).map(toMatch),
-      homeForm: (data.data?.team1_last_6 || data.data?.first_team_results || []).map(toMatch),
-      awayForm: (data.data?.team2_last_6 || data.data?.second_team_results || []).map(toMatch),
+      h2h: (d.h2h || []).map(toMatch),
+      homeForm: (d.team1_last_6 || d.first_team_results || []).map(toMatch),
+      awayForm: (d.team2_last_6 || d.second_team_results || []).map(toMatch),
     };
   } catch (err) {
     console.error('[LiveScore] H2H failed:', err.message);
@@ -110,15 +146,22 @@ export async function fetchH2H(homeTeamId, awayTeamId) {
   }
 }
 
+// ── Team recent matches ───────────────────────────────────────────────────────
+// Endpoint: /teams/matches.json  (NEW - was /scores/history.json)
+// Returns the last `num` matches for a given team_id.
 export async function fetchTeamForm(teamId, num = 10) {
   try {
-    const data = await get('/scores/history.json', { team_id: teamId, num });
-    return (data.data?.match || []).map((m) => ({
+    const data = await get('/teams/matches.json', { team_id: teamId, number: num });
+
+    // Response: data.data is a flat array of match objects
+    const matches = Array.isArray(data.data) ? data.data : [];
+
+    return matches.map((m) => ({
       home: m.home_name || '',
       away: m.away_name || '',
-      score: m.score || null,
+      score: normaliseScore(m.ft_score || m.score) || null,
       date: m.date || null,
-      competition: m.competition_name || '',
+      competition: m.competition?.name || m.competition_name || '',
     }));
   } catch (err) {
     console.error('[LiveScore] Team form failed:', err.message);
@@ -126,36 +169,130 @@ export async function fetchTeamForm(teamId, num = 10) {
   }
 }
 
+// ── Competition standings ─────────────────────────────────────────────────────
+// Endpoint: /competitions/table.json  (NEW - was /leagues/table.json)
+// Response structure: data.stages[].groups[].standings[]
 export async function fetchStandings(competitionId) {
   try {
-    const data = await get('/leagues/table.json', { competition_id: competitionId });
-    return (data.data?.table || []).map((r, idx) => {
-      const wins = Number(r.won || r.w || 0);
-      const draws = Number(r.drawn || r.d || 0);
-      const losses = Number(r.lost || r.l || 0);
-      const played = Number(r.played || r.gp || 0) || (wins + draws + losses);
+    const data = await get('/competitions/table.json', { competition_id: competitionId });
 
-      return {
-        position: Number(r.position || r.rank || r.pos || idx + 1),
-        team: r.name || r.team_name || '',
-        played,
-        wins,
-        draws,
-        losses,
-        goalsFor: Number(r.goals_for || r.gf || 0),
-        goalsAgainst: Number(r.goals_against || r.ga || 0),
-        goalDiff: Number(r.goal_difference || r.gd || 0),
-        points: Number(r.points || r.pts || 0),
-        form: r.recent_form || r.form || '',
-        group: r.group_name || r.group || r.pool || r.pool_name || null,
-      };
-    });
+    const stages = data.data?.stages || [];
+    const rows = [];
+
+    for (const stage of stages) {
+      for (const group of (stage.groups || [])) {
+        for (const r of (group.standings || [])) {
+          const won   = Number(r.won   || 0);
+          const drawn = Number(r.drawn || 0);
+          const lost  = Number(r.lost  || 0);
+          const played = Number(r.matches || r.played || (won + drawn + lost));
+
+          rows.push({
+            position:     Number(r.rank || r.position || 0),
+            team:         r.team?.name || r.name || '',
+            played,
+            wins:         won,
+            draws:        drawn,
+            losses:       lost,
+            goalsFor:     Number(r.goals_scored || r.goals_for || r.gf || 0),
+            goalsAgainst: Number(r.goals_conceded || r.goals_against || r.ga || 0),
+            goalDiff:     Number(r.goal_diff || r.goal_difference || r.gd || 0),
+            points:       Number(r.points || r.pts || 0),
+            form:         r.recent_form || r.form || '',
+            group:        group.name || null,
+          });
+        }
+      }
+    }
+
+    // Sort by position
+    return rows.sort((a, b) => a.position - b.position);
   } catch (err) {
     console.error('[LiveScore] Standings failed:', err.message);
     return [];
   }
 }
 
+// ── Live matches ──────────────────────────────────────────────────────────────
+// Endpoint: /matches/live.json
+export async function fetchLiveMatches() {
+  try {
+    const data = await get('/matches/live.json');
+    const matches = data.data?.match || [];
+
+    return matches.map((m) => ({
+      match_id:         String(m.id || m.fixture_id || ''),
+      fixture_id:       String(m.fixture_id || m.id || ''),
+      status:           m.status || 'IN PLAY',
+      minute:           m.time || '',
+      home_team_name:   m.home?.name || '',
+      away_team_name:   m.away?.name || '',
+      home_team_id:     String(m.home?.id || ''),
+      away_team_id:     String(m.away?.id || ''),
+      score:            m.scores?.score || '0 - 0',
+      ht_score:         m.scores?.ht_score || '',
+      competition_name: m.competition?.name || '',
+      competition_id:   String(m.competition?.id || ''),
+      country:          m.country?.name || '',
+      odds_home:        m.odds?.live?.['1'] || m.odds?.pre?.['1'] || null,
+      odds_draw:        m.odds?.live?.['X'] || m.odds?.pre?.['X'] || null,
+      odds_away:        m.odds?.live?.['2'] || m.odds?.pre?.['2'] || null,
+    }));
+  } catch (err) {
+    console.error('[LiveScore] Live matches failed:', err.message);
+    return [];
+  }
+}
+
+// ── Match events ──────────────────────────────────────────────────────────────
+// Endpoint: /matches/events.json?match_id=X
+export async function fetchMatchEvents(matchId) {
+  try {
+    const data = await get('/matches/events.json', { match_id: matchId });
+    return data.data?.event || data.data?.events || [];
+  } catch (err) {
+    console.error('[LiveScore] Match events failed:', err.message);
+    return [];
+  }
+}
+
+// ── Match statistics ──────────────────────────────────────────────────────────
+// Endpoint: /matches/stats.json?match_id=X
+export async function fetchMatchStats(matchId) {
+  try {
+    const data = await get('/matches/stats.json', { match_id: matchId });
+    return data.data || null;
+  } catch (err) {
+    console.error('[LiveScore] Match stats failed:', err.message);
+    return null;
+  }
+}
+
+// ── Match lineups ─────────────────────────────────────────────────────────────
+// Endpoint: /matches/lineups.json?match_id=X
+export async function fetchMatchLineups(matchId) {
+  try {
+    const data = await get('/matches/lineups.json', { match_id: matchId });
+    return data.data || null;
+  } catch (err) {
+    console.error('[LiveScore] Match lineups failed:', err.message);
+    return null;
+  }
+}
+
+// ── Competition top scorers ───────────────────────────────────────────────────
+// Endpoint: /competitions/topscorers.json?competition_id=X
+export async function fetchTopScorers(competitionId) {
+  try {
+    const data = await get('/competitions/topscorers.json', { competition_id: competitionId });
+    return data.data?.topscorers || data.data || [];
+  } catch (err) {
+    console.error('[LiveScore] Top scorers failed:', err.message);
+    return [];
+  }
+}
+
+// ── Momentum helper ───────────────────────────────────────────────────────────
 function momentum(form, teamName) {
   let pts = 0;
   let total = 0;
@@ -207,24 +344,17 @@ const NON_DOMESTIC_KEYWORDS = [
   'dfb pokal', 'coupe de france', 'copa del rey', 'coppa italia',
   'nations league', 'world cup', 'euro', 'olympics', 'olympic',
   'friendly', 'test match', 'pre-season',
-  'young africans', 'maniema union', // CAF club names often appear in competition field
 ];
 
-/**
- * Return true if the match plausibly involves teamName.
- * Uses first-word fuzzy matching to handle abbreviations and slight name differences.
- */
 function matchInvolvesTeam(match, teamName) {
-  if (!teamName) return true; // can't validate without a name
+  if (!teamName) return true;
   const team = String(teamName).toLowerCase().trim();
   const home = String(match.home || '').toLowerCase().trim();
   const away = String(match.away || '').toLowerCase().trim();
-  if (!home && !away) return true; // no names stored — can't filter
+  if (!home && !away) return true;
 
-  // Exact match
   if (home === team || away === team) return true;
 
-  // First-word match (handles "Sport Recife" vs "Sport")
   const teamWord = team.split(' ')[0];
   const homeWord = home.split(' ')[0];
   const awayWord = away.split(' ')[0];
@@ -239,28 +369,19 @@ function matchInvolvesTeam(match, teamName) {
 function filterDomesticForm(form, tournamentName, maxResults = 15, teamName = '') {
   if (!form || !form.length) return [];
 
-  // Step 1: discard matches that don't involve the target team at all.
-  // This catches garbage data (e.g. 1930 World Cup matches returned for a
-  // Brazilian club ID) before any other filtering.
   const teamFiltered = teamName
     ? form.filter((m) => matchInvolvesTeam(m, teamName))
     : form;
 
-  // Step 2: exclude known non-domestic competitions
   const domesticFiltered = teamFiltered.filter((m) => {
     const comp = String(m.competition || '').toLowerCase();
     if (!comp) return true;
     return !NON_DOMESTIC_KEYWORDS.some((kw) => comp.includes(kw));
   });
 
-  // If we have at least 3 domestic results, use them
   if (domesticFiltered.length >= 3) return domesticFiltered.slice(0, maxResults);
-
-  // Fallback: use team-validated results even if competition is unknown
   if (teamFiltered.length >= 3) return teamFiltered.slice(0, maxResults);
 
-  // Last resort: if team validation found nothing (API returned completely wrong data),
-  // return empty rather than storing garbage that breaks the engine.
   if (teamName && teamFiltered.length === 0) {
     console.warn(`[filterDomesticForm] No matches found for team "${teamName}" — discarding ${form.length} unrelated rows`);
     return [];
@@ -269,6 +390,7 @@ function filterDomesticForm(form, tournamentName, maxResults = 15, teamName = ''
   return form.slice(0, maxResults);
 }
 
+// ── Main enrichment ───────────────────────────────────────────────────────────
 export async function enrichMatchData(fixture) {
   const [h2hData, standings, homeTeamFormExtended, awayTeamFormExtended] = await Promise.all([
     fetchH2H(fixture.home_team_id, fixture.away_team_id),
@@ -285,9 +407,7 @@ export async function enrichMatchData(fixture) {
     ? awayTeamFormExtended
     : h2hData.awayForm;
 
-  // Keep up to 15 matches so venue-split features (which need ≥3 home/away games each)
-  // have enough data even after the domestic-only filter removes cup/European results.
-  // Pass team names so filterDomesticForm can discard completely wrong-team data.
+  // Keep up to 15 matches so venue-split features have enough data
   const homeFormFiltered = filterDomesticForm(homeFormRaw, fixture.tournament_name, 15, fixture.home_team_name);
   const awayFormFiltered = filterDomesticForm(awayFormRaw, fixture.tournament_name, 15, fixture.away_team_name);
 

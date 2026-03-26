@@ -8,6 +8,7 @@ import { explainPrediction, chatAboutMatch } from "../services/groqExplainer.js"
 import { enrichFixture } from "../enrichment/enrichOne.js";
 import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
+import { fetchLiveMatches } from "../services/livescore.js";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
@@ -296,6 +297,21 @@ async function ensureFixtureData(fixtureId) {
 // Health — public
 router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "ScorePhantom API" });
+});
+
+// ─── GET /live — live matches (auth required) ────────────────────────────────
+router.get("/live", requireAuth, async (req, res) => {
+  try {
+    const matches = await fetchLiveMatches();
+    res.json({
+      total: matches.length,
+      matches,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[Live]", err.message);
+    res.status(500).json({ error: "Failed to fetch live matches", detail: err.message });
+  }
 });
 
 // ─── GET /access — lightweight access check ──────────────────────────────────
