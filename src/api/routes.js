@@ -1,8 +1,9 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import db from "../config/database.js";
-import { predict } from "../predictions/poissonEngine.js";
-import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
+// Old engine imports removed — now using runPredictionEngine + adaptResponseFormat
+// import { predict } from "../predictions/poissonEngine.js";
+// import { evaluatePrediction } from "../evaluations/groqEvaluator.js";
 import { explainPrediction, chatAboutMatch, explainFromPayload } from "../explanations/groqExplainer.js";
 import { enrichFixture } from "../enrichment/enrichOne.js";
 import { fetchAndCacheOddsForFixture } from "../services/oddsService.js";
@@ -590,23 +591,11 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
 
     const { fixture, odds, meta } = bundle;
 
-    // Step 1: Poisson engine computes all probabilities and ranks markets
-    let prediction = await predict(
-      fixture.id,
-      fixture.home_team_name,
-      fixture.away_team_name,
-      meta,
-      odds
-    );
-
-    // Step 2: Groq evaluator reviews the ranked markets and selects best angle
-    // This is the "thinking" layer that considers 30+ football factors
-    try {
-      prediction = await evaluatePrediction(prediction);
-    } catch (evalErr) {
-      console.error('[Evaluator] Failed, using Poisson recommendation:', evalErr.message);
-      // Poisson engine's recommendation is still valid as fallback
-    }
+    // ── NEW ENGINE: run prediction engine (replaces old Poisson-only path) ──
+    const engineResult = await runPredictionEngine(fixtureId, bundle);
+    const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
+    const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';
+    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
 
     // Compute model-implied odds for leagues without bookmaker coverage
     let modelImpliedOdds = null;
@@ -634,7 +623,7 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
       ...prediction,
       odds,
       model_implied_odds: modelImpliedOdds,
-      meta,
+      meta, // ← KEY: include meta so frontend can render H2H, form, standings
     };
 
     // Cache the prediction for stability (2 hour TTL)
@@ -689,22 +678,14 @@ router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, asy
     }
 
     const { fixture, odds, meta } = bundle;
-    let prediction = await predict(
-      fixture.id,
-      fixture.home_team_name,
-      fixture.away_team_name,
-      meta,
-      odds
-    );
 
-    // Run through evaluator for smart pick selection
-    try {
-      prediction = await evaluatePrediction(prediction);
-    } catch (evalErr) {
-      console.error('[Evaluator] Failed in explain:', evalErr.message);
-    }
+    // ── NEW ENGINE ──
+    const engineResult = await runPredictionEngine(fixtureId, bundle);
+    const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
+    const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';
+    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
 
-    // Compute model-implied odds for leagues without bookmaker coverage (same as /predict)
+    // Compute model-implied odds for leagues without bookmaker coverage
     let modelImpliedOddsExplain = null;
     if (!odds && prediction?.predictions) {
       const mr = prediction.predictions.match_result || {};
@@ -730,7 +711,7 @@ router.get("/predict/:fixtureId/explain", requireAuth, requirePremiumAccess, asy
       ...prediction,
       odds,
       model_implied_odds: modelImpliedOddsExplain,
-      meta,
+      meta, // ← KEY: include meta for H2H, form, standings
     };
 
     const explanation = await explainPrediction(fullPayload);
@@ -771,13 +752,12 @@ router.post("/predict/:fixtureId/chat", requireAuth, requirePremiumAccess, async
     }
 
     const { fixture, odds, meta } = bundle;
-    const prediction = await predict(
-      fixture.id,
-      fixture.home_team_name,
-      fixture.away_team_name,
-      meta,
-      odds
-    );
+
+    // ── NEW ENGINE for chat context ──
+    const engineResult = await runPredictionEngine(req.params.fixtureId, bundle);
+    const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
+    const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';
+    const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
 
     const fullPrediction = {
       ...prediction,
