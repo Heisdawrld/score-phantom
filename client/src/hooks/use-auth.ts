@@ -69,11 +69,37 @@ export function useLogout() {
   };
 }
 
+/** OPay: get bank details + reference for manual payment */
+export function useRequestPayment() {
+  return useMutation({
+    mutationFn: async () => {
+      return fetchApi("/auth/payment/request", { method: "POST" });
+    },
+  });
+}
+
+/** OPay: user confirms they paid — backend sets pending_verification and returns WhatsApp link */
+export function useConfirmPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (reference: string) => {
+      return fetchApi("/auth/payment/confirm", {
+        method: "POST",
+        body: JSON.stringify({ reference }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+}
+
+/** Legacy Paystack hooks (kept for compatibility) */
 export function useInitPayment() {
   return useMutation({
     mutationFn: async () => {
       return fetchApi("/auth/payment/initialize", { method: "POST" });
-    }
+    },
   });
 }
 
@@ -85,6 +111,6 @@ export function useVerifyPayment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    }
+    },
   });
 }

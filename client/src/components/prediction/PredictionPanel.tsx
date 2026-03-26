@@ -1,14 +1,17 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
-import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle } from "lucide-react";
+import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle, Lock, Crown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChatInterface } from "./ChatInterface";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 
 interface PredictionPanelProps {
   fixtureId: string | null;
   onClose: () => void;
+  onError?: (code: string) => void;
 }
 
 function formatPct(val: number | undefined | null): string {
@@ -63,8 +66,11 @@ const SCRIPT_COLORS: Record<string, string> = {
   chaotic: "text-destructive",
 };
 
-export function PredictionPanel({ fixtureId, onClose }: PredictionPanelProps) {
-  const { data, isLoading, error } = usePrediction(fixtureId);
+export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanelProps) {
+  const { data: user } = useAuth();
+  const [, setLocation] = useLocation();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  const { data, isLoading, error } = usePrediction(fixtureId, onError);
 
   if (!fixtureId) return null;
 
@@ -324,7 +330,25 @@ export function PredictionPanel({ fixtureId, onClose }: PredictionPanelProps) {
                   {/* AI Chat */}
                   <div className="pt-2 border-t border-white/5">
                     <h4 className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-4 ml-1">Ask ScorePhantom AI</h4>
-                    <ChatInterface fixtureId={fixtureId} />
+                    {isPremium ? (
+                      <ChatInterface fixtureId={fixtureId} />
+                    ) : (
+                      <div
+                        className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-white/3 border border-white/8 cursor-pointer hover:bg-primary/5 hover:border-primary/20 transition-all"
+                        onClick={() => setLocation("/paywall")}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
+                          <Lock className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-white mb-1">AI Chat — Premium Only</p>
+                          <p className="text-xs text-muted-foreground">Upgrade to ask questions about this match</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-primary text-xs font-bold">
+                          <Crown className="w-3.5 h-3.5" /> Upgrade Now
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                 </div>

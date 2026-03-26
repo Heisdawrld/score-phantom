@@ -134,6 +134,47 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// ─── Daily prediction limit for trial users ──────────────────────────────────
+
+const TRIAL_DAILY_LIMIT = 10;
+
+async function ensureDailyCountTable() {
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS trial_daily_counts (
+        user_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        PRIMARY KEY (user_id, date)
+      )
+    `);
+  } catch {}
+}
+ensureDailyCountTable();
+
+async function getTodayCount(userId) {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const r = await db.execute({
+      sql: `SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
+      args: [userId, today],
+    });
+    return { count: Number(r.rows?.[0]?.count || 0), today };
+  } catch {
+    return { count: 0, today };
+  }
+}
+
+async function incrementDailyCount(userId, today) {
+  try {
+    await db.execute({
+      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
+            ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`,
+      args: [userId, today],
+    });
+  } catch {}
+}
+
 // ─── Middleware: requireTrialOrPremium ────────────────────────────────────────
 // Requires at least an active trial OR subscription.
 
@@ -342,9 +383,31 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /predict/:fixtureId — requires premium access ──────────────────────
-router.get("/predict/:fixtureId", requirePremiumAccess, async (req, res) => {
+// ─── GET /predict/:fixtureId — trial (10/day) or premium ────────────────────
+router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
+    // Trial users: enforce 10 predictions/day cap
+    if (!req.access.subscription_active) {
+      if (!req.access.has_full_access) {
+        return res.status(403).json({
+          error: "Subscription required",
+          code: "subscription_required",
+          access: buildAccessPayload(req.access),
+        });
+      }
+      // has_full_access but not subscription = trial
+      const { count, today } = await getTodayCount(req.user.id);
+      if (count >= TRIAL_DAILY_LIMIT) {
+        return res.status(429).json({
+          error: "Daily limit reached",
+          code: "daily_limit_reached",
+          message: `Free trial allows ${TRIAL_DAILY_LIMIT} predictions per day. Come back tomorrow!`,
+          access: buildAccessPayload(req.access),
+        });
+      }
+      await incrementDailyCount(req.user.id, today);
+    }
+
     const fixtureId = req.params.fixtureId;
 
     const bundle = await ensureFixtureData(fixtureId);
@@ -541,6 +604,66 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
   } catch (err) {
     console.error("[Refresh]", err.message);
     res.status(500).json({ error: "Refresh failed", detail: err.message });
+  }
+});
+
+// ─── GET /acca — Today's best 5 picks (premium only) ─────────────────────────
+router.get("/acca", requirePremiumAccess, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await db.execute({
+      sql: `SELECT id, home_team_name, away_team_name, tournament_name, match_date
+            FROM fixtures WHERE match_date LIKE ? AND enriched = 1 LIMIT 80`,
+      args: [`%${today}%`],
+    });
+
+    const fixtures = result.rows || [];
+    if (!fixtures.length) {
+      return res.json({ picks: [], message: "No enriched fixtures for today yet." });
+    }
+
+    // Score each fixture by running engine
+    const scored = [];
+    for (const fixture of fixtures.slice(0, 30)) { // cap at 30 to stay fast
+      try {
+        const bundle = await ensureFixtureData(fixture.id);
+        if (!bundle) continue;
+        const engineResult = await runPredictionEngine(fixture.id, bundle);
+        const homeTeam = engineResult.homeTeam || fixture.home_team_name;
+        const awayTeam = engineResult.awayTeam || fixture.away_team_name;
+        const prediction = adaptResponseFormat(engineResult, homeTeam, awayTeam);
+        const rec = prediction?.predictions?.recommendation;
+        if (!rec) continue;
+
+        // confidence score: HIGH=3, MEDIUM=2, LEAN=1, LOW=0
+        const confScore = { HIGH: 3, MEDIUM: 2, LEAN: 1, LOW: 0 }[rec.confidence] ?? 0;
+        const valueScore = { STRONG: 3, GOOD: 2, FAIR: 1, WEAK: 0 }[rec.value] ?? 0;
+        const totalScore = confScore * 2 + valueScore;
+
+        scored.push({
+          fixtureId: fixture.id,
+          homeTeam,
+          awayTeam,
+          tournament: fixture.tournament_name || "",
+          matchDate: fixture.match_date,
+          pick: rec.market,
+          selection: rec.selection,
+          confidence: rec.confidence,
+          value: rec.value,
+          reason: rec.reason || "",
+          score: totalScore,
+        });
+      } catch {}
+    }
+
+    // Sort by score, take top 5
+    scored.sort((a, b) => b.score - a.score);
+    const picks = scored.slice(0, 5);
+
+    res.json({ picks, total: scored.length, access: buildAccessPayload(req.access) });
+  } catch (err) {
+    console.error("[ACCA]", err.message);
+    res.status(500).json({ error: "ACCA failed", detail: err.message });
   }
 });
 
