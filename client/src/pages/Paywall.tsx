@@ -48,7 +48,7 @@ export default function Paywall() {
     // Open WhatsApp IMMEDIATELY — must be in the direct click handler, not in a callback,
     // or browsers will block it as a popup.
     const waText = encodeURIComponent(
-      `Hi, I just paid for ScorePhantom Premium.\n\nReference: ${paymentData.reference}\n\nHere is my payment receipt:`
+      `Hi, I just paid for ScorePhantom Premium.\n\nUser Email: ${user?.email || "N/A"}\nUser ID: ${user?.id || "N/A"}\nReference: ${paymentData.reference}\n\nHere is my payment receipt:`
     );
     const waUrl = `https://wa.me/2348117024699?text=${waText}`;
     // Use location.href as a fallback if window.open is blocked
