@@ -247,6 +247,16 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
     const cached = await loadCachedPrediction(fixtureId);
     if (cached) {
       console.log(`[predictionCache] Cache HIT for fixture ${fixtureId} — returning stored prediction`);
+
+      // Back-fill tier if missing from old cached predictions
+      if (cached.prediction?.dataQuality && cached.prediction.dataQuality.tier == null) {
+        const s = cached.prediction.dataQuality.completenessScore ?? 0.5;
+        if (s >= 0.8)       cached.prediction.dataQuality.tier = 'rich';
+        else if (s >= 0.55) cached.prediction.dataQuality.tier = 'good';
+        else if (s >= 0.35) cached.prediction.dataQuality.tier = 'partial';
+        else                cached.prediction.dataQuality.tier = 'thin';
+      }
+
       return {
         prediction: cached.prediction,
         odds,
