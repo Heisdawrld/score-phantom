@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Outfit', sans-serif;
+  --font-display: 'Bebas Neue', sans-serif;
+
+  /* ScorePhantom Dark Theme Palette */
+  --color-background: hsl(220 30% 4%);
+  --color-foreground: hsl(214 33% 97%);
+  
+  --color-panel: hsl(215 29% 8%);
+  --color-panel-light: hsl(216 28% 10%);
+  --color-panel-lighter: hsl(218 28% 13%);
+  
+  --color-primary: hsl(148 86% 48%);
+  --color-primary-foreground: hsl(220 30% 4%);
+  
+  --color-secondary: hsl(215 29% 12%);
+  --color-secondary-foreground: hsl(214 33% 97%);
+  
+  --color-muted: hsl(220 15% 65%);
+  --color-muted-foreground: hsl(220 15% 65%);
+  
+  --color-accent-blue: hsl(220 100% 65%);
+  --color-accent-orange: hsl(42 100% 50%);
+  
+  --color-destructive: hsl(349 100% 65%);
+  --color-destructive-foreground: hsl(214 33% 97%);
+  
+  --color-border: hsl(215 20% 15%);
+  --color-ring: hsl(148 86% 48%);
+
+  /* Shadcn standard mapping */
+  --color-card: var(--color-panel);
+  --color-card-foreground: var(--color-foreground);
+  --color-popover: var(--color-panel-light);
+  --color-popover-foreground: var(--color-foreground);
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased font-sans;
+    background-image: 
+      radial-gradient(circle at top, hsla(148, 86%, 48%, 0.05), transparent 22%),
+      radial-gradient(circle at 88% 8%, hsla(220, 100%, 65%, 0.05), transparent 18%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-panel/80 backdrop-blur-xl border border-white/5 shadow-2xl shadow-black/50;
+  }
+  
+  .text-glow-primary {
+    text-shadow: 0 0 20px hsla(148, 86%, 48%, 0.4);
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

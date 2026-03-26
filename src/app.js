@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
+import adminRoutes from "./api/adminRoutes.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
@@ -32,6 +33,7 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api", routes);
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ── Admin: trigger a manual reseed (protected by ADMIN_ACTIVATION secret) ────
 app.post("/api/admin/seed", async (req, res) => {
@@ -55,12 +57,37 @@ app.post("/api/admin/seed", async (req, res) => {
   }
 });
 
+// Serve React frontend (client/dist)
+const clientDistPath = path.join(__dirname, "..", "client", "dist");
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
+
+// Legacy admin page
 app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "admin.html"));
+  const adminHtmlPath = path.join(__dirname, "..", "admin.html");
+  if (fs.existsSync(adminHtmlPath)) {
+    res.sendFile(adminHtmlPath);
+  } else {
+    res.status(404).json({ error: "Admin page not found" });
+  }
 });
 
+// SPA fallback — serve index.html for all non-API routes
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "index.html"));
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  // Try React frontend first, then legacy index.html
+  const reactIndex = path.join(clientDistPath, "index.html");
+  if (fs.existsSync(reactIndex)) {
+    return res.sendFile(reactIndex);
+  }
+  const legacyIndex = path.join(__dirname, "..", "index.html");
+  if (fs.existsSync(legacyIndex)) {
+    return res.sendFile(legacyIndex);
+  }
+  res.status(404).send("Not found");
 });
 
 async function autoSeed() {
@@ -71,7 +98,7 @@ async function autoSeed() {
     }
 
     // Check for TODAY's fixtures specifically — not just any stale data
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     const result = await db.execute({
       sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
       args: [`${today}%`],
@@ -162,7 +189,6 @@ app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   // Clear stale prediction cache on deploy so new engine produces fresh predictions
   try {
-    const { default: db } = await import("./config/database.js");
     await db.execute({ sql: `DELETE FROM predictions`, args: [] });
     console.log("[Startup] Cleared prediction cache for fresh engine results");
   } catch (e) {

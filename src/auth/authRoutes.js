@@ -1,15 +1,20 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import db from "../config/database.js";
 
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "";
+const APP_URL = process.env.APP_URL || "";
 const PLAN_AMOUNT_NAIRA = 3000;
+const PLAN_AMOUNT_KOBO = 300000;
 const PLAN_DURATION_DAYS = 30;
 const TRIAL_DURATION_DAYS = 3;
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 
 // OPay bank details
 const OPAY_BANK_DETAILS = {
@@ -97,10 +102,18 @@ export async function initUsersTable() {
       reference TEXT UNIQUE NOT NULL,
       amount INTEGER NOT NULL,
       status TEXT DEFAULT 'initialized',
+      channel TEXT DEFAULT 'manual',
       paid_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Ensure channel column exists for older tables
+  await ensureColumn(
+    "payments",
+    "channel",
+    `ALTER TABLE payments ADD COLUMN channel TEXT DEFAULT 'manual'`
+  );
 }
 
 function signToken(user) {
@@ -109,7 +122,27 @@ function signToken(user) {
   });
 }
 
-function requireAuth(req, res, next) {
+// ── Access Status ────────────────────────────────────────────────────────────
+
+export function computeAccessStatus(user) {
+  const now = new Date();
+  const trialActive = user?.trial_ends_at && new Date(user.trial_ends_at) > now;
+  const premiumActive = user?.premium_expires_at && new Date(user.premium_expires_at) > now;
+  const subActive = user?.subscription_expires_at && new Date(user.subscription_expires_at) > now;
+  let status = "expired";
+  if (premiumActive || subActive) status = "active";
+  else if (trialActive) status = "trial";
+  return {
+    status,
+    trial_active: !!trialActive,
+    subscription_active: !!(premiumActive || subActive),
+    has_full_access: !!trialActive || !!premiumActive || !!subActive,
+  };
+}
+
+// ── Auth Middleware ───────────────────────────────────────────────────────────
+
+export function requireAuth(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -125,7 +158,27 @@ function requireAuth(req, res, next) {
   }
 }
 
+export async function requirePremiumAccess(req, res, next) {
+  const auth = req.headers.authorization || "";
+  const parts = auth.split(" ");
+  if (parts.length !== 2 || parts[0] !== "Bearer") return res.status(401).json({ error: "Not authenticated" });
+  try {
+    const decoded = jwt.verify(parts[1], JWT_SECRET);
+    const result = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [decoded.id] });
+    const user = result.rows?.[0];
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    const access = computeAccessStatus(user);
+    req.user = user;
+    req.access = access;
+    if (!access.has_full_access) {
+      return res.status(403).json({ error: "Subscription required", code: "subscription_required", access_status: access.status });
+    }
+    next();
+  } catch { return res.status(401).json({ error: "Invalid token" }); }
+}
+
 function publicUser(user) {
+  const access = computeAccessStatus(user);
   return {
     id: user.id,
     email: user.email,
@@ -134,6 +187,9 @@ function publicUser(user) {
     premium_expires_at: user.premium_expires_at,
     subscription_expires_at: user.subscription_expires_at,
     subscription_code: user.subscription_code,
+    has_access: access.has_full_access,
+    access_status: access.status,
+    is_admin: ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL,
   };
 }
 
@@ -196,7 +252,13 @@ router.post("/signup", async (req, res) => {
     }
 
     const token = signToken(user);
-    return res.json({ token, user: publicUser(user) });
+    const access = computeAccessStatus(user);
+    return res.json({
+      token,
+      user: publicUser(user),
+      has_access: access.has_full_access,
+      access_status: access.status,
+    });
   } catch (err) {
     console.error("Signup Error:", err);
     return res.status(500).json({ error: "Signup failed" });
@@ -236,7 +298,13 @@ router.post("/login", async (req, res) => {
     }
 
     const token = signToken(user);
-    return res.json({ token, user: publicUser(user) });
+    const access = computeAccessStatus(user);
+    return res.json({
+      token,
+      user: publicUser(user),
+      has_access: access.has_full_access,
+      access_status: access.status,
+    });
   } catch (err) {
     console.error("Login Error:", err);
     return res.status(500).json({ error: "Login failed" });
@@ -261,10 +329,169 @@ router.get("/me", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    return res.json(publicUser(user));
+    const access = computeAccessStatus(user);
+    return res.json({
+      ...publicUser(user),
+      has_access: access.has_full_access,
+      access_status: access.status,
+      is_admin: ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL,
+    });
   } catch (err) {
     console.error("Me Error:", err);
     return res.status(500).json({ error: "Failed to load account" });
+  }
+});
+
+// ── Payment Routes (Paystack) ────────────────────────────────────────────────
+
+router.post("/payment/initialize", requireAuth, async (req, res) => {
+  try {
+    if (!PAYSTACK_SECRET_KEY) {
+      return res.status(503).json({ error: "Payment service not configured" });
+    }
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      args: [req.user.id],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const reference = `PSK_${user.id}_${Date.now()}`;
+
+    // Initialize Paystack transaction
+    const response = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: user.email,
+        amount: PLAN_AMOUNT_KOBO,
+        reference,
+        callback_url: `${APP_URL}/payment/verify?reference=${reference}`,
+        metadata: {
+          user_id: user.id,
+          plan: "monthly_premium",
+        },
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!data.status) {
+      return res.status(400).json({ error: data.message || "Payment initialization failed" });
+    }
+
+    // Save payment record
+    await db.execute({
+      sql: `INSERT INTO payments (user_id, reference, amount, status, channel) VALUES (?, ?, ?, ?, ?)`,
+      args: [user.id, reference, PLAN_AMOUNT_KOBO, "initialized", "paystack"],
+    });
+
+    return res.json({
+      authorization_url: data.data.authorization_url,
+      access_code: data.data.access_code,
+      reference,
+    });
+  } catch (err) {
+    console.error("Paystack Init Error:", err);
+    return res.status(500).json({ error: "Failed to initialize payment" });
+  }
+});
+
+router.get("/payment/verify", requireAuth, async (req, res) => {
+  try {
+    const { reference } = req.query;
+    if (!reference) return res.status(400).json({ error: "Reference required" });
+    if (!PAYSTACK_SECRET_KEY) return res.status(503).json({ error: "Payment service not configured" });
+
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+    });
+    const data = await response.json();
+
+    if (!data.status || data.data.status !== "success") {
+      return res.status(400).json({ error: "Payment not verified", paystack_status: data.data?.status });
+    }
+
+    // Activate premium
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
+    const expiryISO = expiry.toISOString();
+    const subscriptionCode = `SUB_${req.user.id}_${Date.now()}`;
+
+    await db.execute({
+      sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
+      args: [expiryISO, expiryISO, subscriptionCode, req.user.id],
+    });
+
+    await db.execute({
+      sql: `UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?`,
+      args: [new Date().toISOString(), reference],
+    });
+
+    const userResult = await db.execute({
+      sql: "SELECT * FROM users WHERE id = ? LIMIT 1",
+      args: [req.user.id],
+    });
+    const updatedUser = userResult.rows?.[0];
+
+    return res.json({
+      success: true,
+      user: updatedUser ? publicUser(updatedUser) : null,
+      premium_expires_at: expiryISO,
+    });
+  } catch (err) {
+    console.error("Paystack Verify Error:", err);
+    return res.status(500).json({ error: "Verification failed" });
+  }
+});
+
+// Paystack Webhook
+router.post("/webhook/paystack", async (req, res) => {
+  try {
+    if (!PAYSTACK_SECRET_KEY) return res.sendStatus(200);
+
+    // Verify signature
+    const hash = crypto.createHmac("sha512", PAYSTACK_SECRET_KEY)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (hash !== req.headers["x-paystack-signature"]) {
+      return res.sendStatus(400);
+    }
+
+    const event = req.body;
+    if (event.event === "charge.success") {
+      const { reference, metadata } = event.data;
+      const userId = metadata?.user_id;
+
+      if (userId) {
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
+        const expiryISO = expiry.toISOString();
+        const subscriptionCode = `SUB_${userId}_${Date.now()}`;
+
+        await db.execute({
+          sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
+          args: [expiryISO, expiryISO, subscriptionCode, userId],
+        });
+
+        if (reference) {
+          await db.execute({
+            sql: `UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?`,
+            args: [new Date().toISOString(), reference],
+          });
+        }
+      }
+    }
+
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error("Paystack Webhook Error:", err);
+    return res.sendStatus(200); // Always respond 200 to webhooks
   }
 });
 
@@ -287,10 +514,10 @@ router.post("/payment/request", requireAuth, async (req, res) => {
 
     await db.execute({
       sql: `
-        INSERT INTO payments (user_id, reference, amount, status)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO payments (user_id, reference, amount, status, channel)
+        VALUES (?, ?, ?, ?, ?)
       `,
-      args: [user.id, reference, PLAN_AMOUNT_NAIRA, "initialized"],
+      args: [user.id, reference, PLAN_AMOUNT_NAIRA, "initialized", "opay"],
     });
 
     return res.json({
@@ -649,4 +876,3 @@ router.post("/admin/upgrade-by-email", async (req, res) => {
 });
 
 export default router;
-

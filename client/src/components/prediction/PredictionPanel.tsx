@@ -1,0 +1,338 @@
+import { motion, AnimatePresence } from "framer-motion";
+import { usePrediction } from "@/hooks/use-predictions";
+import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { ChatInterface } from "./ChatInterface";
+import { Skeleton } from "@/components/ui/skeleton";
+
+interface PredictionPanelProps {
+  fixtureId: string | null;
+  onClose: () => void;
+}
+
+function formatPct(val: number | undefined | null): string {
+  if (val === null || val === undefined) return "—";
+  const n = val <= 1 ? val * 100 : val;
+  return `${n.toFixed(0)}%`;
+}
+
+function ConfBadge({ level }: { level: string }) {
+  const map: Record<string, string> = {
+    HIGH: "bg-primary/20 text-primary border-primary/30",
+    MEDIUM: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    LEAN: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    LOW: "bg-white/10 text-muted-foreground border-white/10",
+  };
+  return (
+    <span className={cn("text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full", map[level] ?? map.LOW)}>
+      {level}
+    </span>
+  );
+}
+
+function FitBadge({ level }: { level: string }) {
+  const map: Record<string, string> = {
+    STRONG: "text-primary",
+    MODERATE: "text-accent-blue",
+    WEAK: "text-muted-foreground",
+  };
+  return <span className={cn("text-xs font-semibold", map[level] ?? "text-muted-foreground")}>{level} FIT</span>;
+}
+
+function ValueBadge({ level }: { level: string }) {
+  const map: Record<string, string> = {
+    STRONG: "bg-primary/15 text-primary",
+    GOOD: "bg-blue-500/15 text-blue-400",
+    FAIR: "bg-orange-500/15 text-orange-400",
+    WEAK: "bg-white/5 text-muted-foreground",
+  };
+  return (
+    <span className={cn("text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full", map[level] ?? map.WEAK)}>
+      {level} VALUE
+    </span>
+  );
+}
+
+const SCRIPT_COLORS: Record<string, string> = {
+  dominant_home: "text-primary",
+  dominant_away: "text-accent-blue",
+  open_end_to_end: "text-accent-orange",
+  balanced_high_event: "text-accent-orange",
+  tight_low_event: "text-muted-foreground",
+  chaotic: "text-destructive",
+};
+
+export function PredictionPanel({ fixtureId, onClose }: PredictionPanelProps) {
+  const { data, isLoading, error } = usePrediction(fixtureId);
+
+  if (!fixtureId) return null;
+
+  const pred = data?.predictions;
+  const fixture = data?.fixture;
+  const rec = pred?.recommendation;
+  const backups = pred?.backup_picks ?? [];
+  const gameScript = data?.gameScript;
+  const model = data?.model;
+
+  return (
+    <AnimatePresence>
+      {fixtureId && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+          />
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-b from-panel to-[#080b10] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.5)] max-h-[92vh] flex flex-col"
+          >
+            <div className="flex justify-center pt-4 pb-2">
+              <div className="w-16 h-1.5 rounded-full bg-white/20" />
+            </div>
+
+            <button
+              onClick={onClose}
+              className="absolute top-6 right-6 w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-12 hide-scrollbar">
+              {isLoading ? (
+                <div className="space-y-6 mt-6 max-w-xl mx-auto">
+                  <div className="text-center space-y-2">
+                    <Skeleton className="h-4 w-32 mx-auto" />
+                    <Skeleton className="h-8 w-64 mx-auto" />
+                  </div>
+                  <Skeleton className="h-36 w-full rounded-2xl" />
+                  <Skeleton className="h-28 w-full rounded-2xl" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Skeleton className="h-24 rounded-2xl" />
+                    <Skeleton className="h-24 rounded-2xl" />
+                  </div>
+                  <Skeleton className="h-40 w-full rounded-2xl" />
+                </div>
+              ) : error ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Failed to load prediction data.</p>
+                </div>
+              ) : data ? (
+                <div className="max-w-xl mx-auto mt-2 space-y-6">
+
+                  {/* Header */}
+                  <div className="text-center">
+                    <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-2">ScorePhantom Prediction</p>
+                    <h2 className="font-display text-3xl tracking-wide">
+                      {fixture?.homeTeam}{" "}
+                      <span className="text-muted-foreground font-sans text-xl mx-2">vs</span>{" "}
+                      {fixture?.awayTeam}
+                    </h2>
+                  </div>
+
+                  {/* Game Script */}
+                  {gameScript && (
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/8 flex items-start gap-3">
+                      <Zap className={cn("w-5 h-5 shrink-0 mt-0.5", SCRIPT_COLORS[gameScript.script] ?? "text-muted-foreground")} />
+                      <div>
+                        <p className={cn("text-xs font-bold tracking-widest uppercase mb-1", SCRIPT_COLORS[gameScript.script])}>
+                          {gameScript.label}
+                        </p>
+                        <p className="text-sm text-muted-foreground leading-snug">{gameScript.description}</p>
+                        <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
+                          <span>xG: <strong className="text-foreground">{model?.lambdaHome} – {model?.lambdaAway}</strong></span>
+                          <span>·</span>
+                          <span>Volatility: <strong className={gameScript.volatility === "LOW" ? "text-primary" : gameScript.volatility === "HIGH" ? "text-destructive" : "text-accent-orange"}>{gameScript.volatility}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Best Bet */}
+                  {rec && !rec.no_edge ? (
+                    <div className="bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/25 rounded-3xl p-6 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-3 opacity-8 pointer-events-none">
+                        <Target className="w-28 h-28 text-primary" />
+                      </div>
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                          <p className="text-[10px] font-bold tracking-widest text-primary uppercase">Best Bet Angle</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <ConfBadge level={rec.modelConfidence} />
+                            <ValueBadge level={rec.valueRating} />
+                            <FitBadge level={rec.tacticalFit} />
+                          </div>
+                        </div>
+
+                        <div className="flex items-end justify-between gap-4 mb-5">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">{rec.market}</p>
+                            <h3 className="font-display text-3xl sm:text-4xl text-white tracking-wide leading-none">{rec.pick}</h3>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-display text-4xl sm:text-5xl text-primary leading-none">{rec.probability_pct}%</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Model Prob.</p>
+                          </div>
+                        </div>
+
+                        {/* Pick reasons */}
+                        {rec.reasons?.length > 0 && (
+                          <div className="space-y-1.5 border-t border-white/10 pt-4">
+                            {rec.reasons.map((reason: string, i: number) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                                <p className="text-xs text-muted-foreground leading-snug">{reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-center">
+                      <AlertTriangle className="w-8 h-8 text-accent-orange mx-auto mb-3" />
+                      <h3 className="font-display text-2xl mb-2">No Safe Pick</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {rec?.reasons?.[0] ?? "The model found no market with a strong enough edge for this fixture. This match is best avoided."}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Backup Picks */}
+                  {backups.length > 0 && (
+                    <div>
+                      <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-3 ml-1">Backup Angles</p>
+                      <div className="space-y-3">
+                        {backups.map((b: any, i: number) => (
+                          <div key={i} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{b.market}</p>
+                              <p className="font-semibold text-sm">{b.pick}</p>
+                              {b.reasons?.[0] && <p className="text-xs text-muted-foreground mt-1">{b.reasons[0]}</p>}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="font-display text-2xl text-white">{b.probability_pct}%</p>
+                              <ConfBadge level={b.modelConfidence} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Analysis */}
+                  {data.explanation && (
+                    <div className="bg-black/30 rounded-3xl p-5 border border-white/5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-accent-blue" />
+                        <h4 className="font-bold text-sm">AI Analysis</h4>
+                      </div>
+                      <p className="text-muted-foreground leading-relaxed text-sm">{data.explanation}</p>
+                    </div>
+                  )}
+
+                  {/* Match Result Probabilities */}
+                  {pred?.match_result && (
+                    <div className="bg-white/5 rounded-2xl p-5 border border-white/5">
+                      <h4 className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-4">Match Outcome</h4>
+                      <div className="flex h-2.5 rounded-full overflow-hidden bg-black/40 mb-3">
+                        <div style={{ width: `${pred.match_result.home}%` }} className="bg-primary h-full" />
+                        <div style={{ width: `${pred.match_result.draw}%` }} className="bg-accent-orange h-full" />
+                        <div style={{ width: `${pred.match_result.away}%` }} className="bg-accent-blue h-full" />
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <div>
+                          <p className="text-[10px] text-primary uppercase tracking-widest font-bold">Home</p>
+                          <p className="font-display text-2xl text-primary">{pred.match_result.home}%</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] text-accent-orange uppercase tracking-widest font-bold">Draw</p>
+                          <p className="font-display text-2xl text-accent-orange">{pred.match_result.draw}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-accent-blue uppercase tracking-widest font-bold">Away</p>
+                          <p className="font-display text-2xl text-accent-blue">{pred.match_result.away}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Goals & BTTS */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                        <h4 className="font-bold text-xs">Goals</h4>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Over 2.5</span>
+                          <span className="font-semibold">{formatPct(pred?.over_under?.over_2_5)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Under 2.5</span>
+                          <span className="font-semibold">{formatPct(pred?.over_under?.under_2_5)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Over 1.5</span>
+                          <span className="font-semibold">{formatPct(pred?.over_under?.over_1_5)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Over 3.5</span>
+                          <span className="font-semibold">{formatPct(pred?.over_under?.over_3_5)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Activity className="w-4 h-4 text-muted-foreground" />
+                        <h4 className="font-bold text-xs">BTTS</h4>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Both Score</span>
+                          <span className="font-semibold text-primary">{formatPct(pred?.btts?.yes)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Clean Sheet</span>
+                          <span className="font-semibold">{formatPct(pred?.btts?.no)}</span>
+                        </div>
+                        {model && (
+                          <>
+                            <div className="border-t border-white/5 pt-2 mt-2 flex justify-between text-xs">
+                              <span className="text-muted-foreground">xG Home</span>
+                              <span className="font-semibold text-primary">{model.lambdaHome}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">xG Away</span>
+                              <span className="font-semibold text-accent-blue">{model.lambdaAway}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Chat */}
+                  <div className="pt-2 border-t border-white/5">
+                    <h4 className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-4 ml-1">Ask ScorePhantom AI</h4>
+                    <ChatInterface fixtureId={fixtureId} />
+                  </div>
+
+                </div>
+              ) : null}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
