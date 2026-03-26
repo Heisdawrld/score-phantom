@@ -1,7 +1,7 @@
 import { safeNum, clamp } from '../utils/math.js';
 
-const LEAGUE_GOAL_BASE = 1.35;
-const HOME_ADVANTAGE_BOOST = 1.12;
+const LEAGUE_GOAL_BASE = 1.48;          // avg goals per team across top leagues (~2.65 total / ~1.8 split)
+const HOME_ADVANTAGE_BOOST = 1.10;
 
 /**
  * Estimate expected goals using attack/defense ratings and contextual adjustments.
@@ -17,33 +17,34 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
   const script = scriptOutput || {};
 
   // Core attack/defense ratings
-  const homeAttack = safeNum(fv.homeAttackRating, 0.7);
-  const awayAttack = safeNum(fv.awayAttackRating, 0.7);
-  const homeDefWeakness = safeNum(fv.homeDefensiveWeakness, 0.44); // 0-1 scale
-  const awayDefWeakness = safeNum(fv.awayDefensiveWeakness, 0.44);
+  const homeAttack = safeNum(fv.homeAttackRating, 1.0);
+  const awayAttack = safeNum(fv.awayAttackRating, 0.95);
+  const homeDefWeakness = safeNum(fv.homeDefensiveWeakness, 0.50); // 0-1 scale
+  const awayDefWeakness = safeNum(fv.awayDefensiveWeakness, 0.50);
 
-  // Normalize attack ratings from 0-3 range to 0-2 effective range
-  // Using raw teamStrength attackRating which is ~0.7-1.5 for most teams
-  const homeAttackEff = clamp(homeAttack / 1.5, 0.2, 2.0);
-  const awayAttackEff = clamp(awayAttack / 1.5, 0.2, 2.0);
+  // Normalize attack ratings to effective range (0.4 – 2.2)
+  // Typical teams rate ~0.8-1.5, strong attackers 1.5-2.0
+  const homeAttackEff = clamp(homeAttack / 1.2, 0.4, 2.2);
+  const awayAttackEff = clamp(awayAttack / 1.2, 0.4, 2.2);
 
-  // Defense weakness: convert 0-1 normalized to effective multiplier (0.5 - 1.8)
-  const homeDefWeak = 0.5 + homeDefWeakness * 1.3;
-  const awayDefWeak = 0.5 + awayDefWeakness * 1.3;
+  // Defense weakness: convert 0-1 normalized to effective multiplier (0.6 – 1.6)
+  const homeDefWeak = 0.6 + homeDefWeakness * 1.0;
+  const awayDefWeak = 0.6 + awayDefWeakness * 1.0;
 
   // Base xG calculation
   let homeXg = homeAttackEff * awayDefWeak * LEAGUE_GOAL_BASE * HOME_ADVANTAGE_BOOST;
   let awayXg = awayAttackEff * homeDefWeak * LEAGUE_GOAL_BASE;
 
-  // Form adjustment: if team scored > 1.5 avg last 5, add 0.1; if < 0.8, subtract 0.1
-  const homeAvgScored = safeNum(fv.homeAvgScored, 1.2);
-  const awayAvgScored = safeNum(fv.awayAvgScored, 1.0);
+  // Form adjustment: scale continuously based on recent scoring form
+  const homeAvgScored = safeNum(fv.homeAvgScored, 1.25);
+  const awayAvgScored = safeNum(fv.awayAvgScored, 1.1);
 
-  if (homeAvgScored > 1.5) homeXg += 0.1;
-  else if (homeAvgScored < 0.8) homeXg -= 0.1;
+  // Continuous adjustment: +0.15 per goal above 1.3 baseline, -0.12 per goal below
+  const homeFormDelta = homeAvgScored - 1.3;
+  homeXg += homeFormDelta > 0 ? homeFormDelta * 0.15 : homeFormDelta * 0.12;
 
-  if (awayAvgScored > 1.5) awayXg += 0.1;
-  else if (awayAvgScored < 0.8) awayXg -= 0.1;
+  const awayFormDelta = awayAvgScored - 1.1;
+  awayXg += awayFormDelta > 0 ? awayFormDelta * 0.15 : awayFormDelta * 0.12;
 
   // Context adjustment
   const rotationRisk = Math.max(safeNum(fv.rotationRiskHome, 0), safeNum(fv.rotationRiskAway, 0));

@@ -558,8 +558,13 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
     // Check cache first for stable predictions
     const cached = await getCachedPrediction(fixtureId);
     if (cached) {
+      // Always re-attach fresh meta from DB so H2H/form/standings render correctly
+      const freshBundle = await ensureFixtureData(fixtureId);
+      const freshMeta = freshBundle ? freshBundle.meta : (cached.meta || {});
+
       const response = {
         ...cached,
+        meta: freshMeta,  // ← overwrite stale/missing meta with fresh data
         access: buildAccessPayload(req.access),
         _cached: true,
       };
@@ -571,8 +576,6 @@ router.get("/predict/:fixtureId", requireAuth, requireTrialOrPremium, async (req
         delete response.value_bets;
         if (response.predictions) {
           delete response.predictions.rejected_picks;
-          // Keep recommendation.confidence_detail for trial users — it's useful
-          // Only strip full reasons list (premium perk)
           if (response.predictions.recommendation) {
             delete response.predictions.recommendation.reasons;
           }

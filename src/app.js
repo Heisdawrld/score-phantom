@@ -160,6 +160,14 @@ async function backfillMissingCountries() {
 
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
+  // Clear stale prediction cache on deploy so new engine produces fresh predictions
+  try {
+    const { default: db } = await import("./config/database.js");
+    await db.execute({ sql: `DELETE FROM predictions`, args: [] });
+    console.log("[Startup] Cleared prediction cache for fresh engine results");
+  } catch (e) {
+    console.warn("[Startup] Cache clear skipped:", e.message);
+  }
   await initUsersTable();
   await autoSeed();
   await backfillMissingCountries();

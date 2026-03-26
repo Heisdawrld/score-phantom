@@ -174,6 +174,7 @@ export function adaptResponseFormat(newEngineResult, homeTeam, awayTeam) {
     fixtureId,
     script,
     expectedGoals,
+    calibratedProbs,
     bestPick,
     backupPicks,
     noSafePick,
@@ -227,10 +228,28 @@ export function adaptResponseFormat(newEngineResult, homeTeam, awayTeam) {
     };
   }
 
-  // Derive market probabilities
-  const matchResult = deriveMatchResultProbs(expectedGoals);
-  const overUnder = deriveOverUnderProbs(expectedGoals);
-  const btts = deriveBttsProbs(expectedGoals);
+  // Use real Poisson-derived probabilities from the engine (calibrated)
+  // Only fall back to heuristics if calibratedProbs is missing (e.g. engine error)
+  const cp = calibratedProbs || {};
+  const matchResult = cp.homeWin != null ? {
+    home: safeNum(cp.homeWin, 0.35),
+    draw: safeNum(cp.draw, 0.28),
+    away: safeNum(cp.awayWin, 0.35),
+  } : deriveMatchResultProbs(expectedGoals);
+
+  const overUnder = cp.over25 != null ? {
+    over_2_5: safeNum(cp.over25, 0.45),
+    under_2_5: safeNum(cp.under25, 0.55),
+    over_1_5: safeNum(cp.over15, 0.65),
+    under_1_5: safeNum(cp.under15, 0.35),
+    over_3_5: safeNum(cp.over35, 0.25),
+    under_3_5: safeNum(cp.under35, 0.75),
+  } : deriveOverUnderProbs(expectedGoals);
+
+  const btts = cp.bttsYes != null ? {
+    yes: safeNum(cp.bttsYes, 0.45),
+    no: safeNum(cp.bttsNo, 0.55),
+  } : deriveBttsProbs(expectedGoals);
 
   // Build rejected picks from backup picks
   const rejectedPicks = (backupPicks || []).slice(0, 3).map(bp => ({

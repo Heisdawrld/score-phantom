@@ -239,6 +239,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
         away: xg.awayExpectedGoals,
         total: xg.totalExpectedGoals,
       },
+      calibratedProbs,   // ← pass real Poisson probabilities to adapter
       bestPick,
       backupPicks,
       noSafePick,
