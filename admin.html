@@ -308,6 +308,13 @@
       <button class="tab-btn" onclick="switchTab('payments')" id="tab-payments">💳 Payments</button>
     </div>
 
+    <!-- Enrichment Control -->
+    <div class="card" style="margin-bottom:18px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span style="font-weight:600;font-size:14px;">🔍 Data Enrichment</span>
+      <button class="btn-primary" id="enrichBtn" onclick="runEnrichment()" style="padding:8px 18px;font-size:13px;">▶ Run Enrichment Now</button>
+      <span id="enrichStatus" style="font-size:13px;color:var(--text-muted);"></span>
+    </div>
+
     <!-- Users Tab -->
     <div id="panel-users">
       <!-- Search + Add Premium -->
@@ -621,6 +628,28 @@
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────
+  async function runEnrichment() {
+    const btn = document.getElementById('enrichBtn');
+    const status = document.getElementById('enrichStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ Running...';
+    status.textContent = 'Enrichment in progress — this may take a few minutes...';
+    try {
+      const res = await api('/admin/run-enrichment', { method: 'POST', body: JSON.stringify({ limit: 50 }) });
+      if (res.error) throw new Error(res.error);
+      if (res.enriched !== undefined) {
+        status.textContent = `✅ Done! Enriched: ${res.enriched} | Failed: ${res.failed}`;
+      } else {
+        status.textContent = `✅ ${res.message || 'Enrichment running in background'}`;
+      }
+    } catch (err) {
+      status.textContent = `❌ Error: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Enrichment Now';
+    }
+  }
+
   async function loadPayments(page = paymentPage) {
     paymentPage = page;
     const wrap = document.getElementById('paymentTableWrap');
