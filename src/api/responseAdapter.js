@@ -219,6 +219,19 @@ function mapMarketName(marketKey) {
 
 // ── Build a candidate pick object (shared for recommendation + backups) ─────
 
+// Team-total markets (home/away over/under) are niche — cap displayed probability at 93%
+// to avoid misleading users with 95%+ confidence on low-liquidity markets.
+const NICHE_MARKETS = new Set([
+  'home_over_05', 'home_over_15', 'home_over_25', 'home_under_15',
+  'away_over_05', 'away_over_15', 'away_over_25', 'away_under_15',
+]);
+
+function capProbabilityPct(marketKey, rawPct) {
+  const key = (marketKey || '').toLowerCase();
+  if (NICHE_MARKETS.has(key) && rawPct > 93) return 93.0;
+  return rawPct;
+}
+
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
 
@@ -227,12 +240,13 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   // fall back to ranking score only when no odds data exists
   const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
+  const rawPct = parseFloat((probability * 100).toFixed(1));
 
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
-    probability_pct: parseFloat((probability * 100).toFixed(1)),
+    probability_pct: capProbabilityPct(pick.marketKey, rawPct),
     edgeScore,
     modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
     tacticalFit: mapTacticalFit(tacticalFitScore),
@@ -342,11 +356,12 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const edgeScore = bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0);
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
 
+    const rawRecPct = parseFloat((probability * 100).toFixed(1));
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
-      probability_pct: parseFloat((probability * 100).toFixed(1)),
+      probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
       edgeScore,
       modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
       tacticalFit: mapTacticalFit(tacticalFitScore),

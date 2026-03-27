@@ -160,7 +160,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                         </p>
                         <p className="text-sm text-muted-foreground leading-snug">{gameScript.description}</p>
                         <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
-                          <span>xG: <strong className="text-foreground">{model?.lambdaHome} – {model?.lambdaAway}</strong></span>
+                          <span>xG: <strong className="text-foreground">{model?.lambdaHome != null ? Number(model.lambdaHome).toFixed(2) : '—'} – {model?.lambdaAway != null ? Number(model.lambdaAway).toFixed(2) : '—'}</strong></span>
                           <span>·</span>
                           <span>Volatility: <strong className={gameScript.volatility === "LOW" ? "text-primary" : gameScript.volatility === "HIGH" ? "text-destructive" : "text-accent-orange"}>{gameScript.volatility}</strong></span>
                         </div>

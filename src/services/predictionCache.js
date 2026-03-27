@@ -20,6 +20,10 @@ import { fetchAndCacheOddsForFixture } from './oddsService.js';
 // Cache is valid for 6 hours — predictions refresh each morning via automation
 const CACHE_VALID_HOURS = 6;
 
+// Bump this whenever the engine logic changes significantly.
+// Any cached prediction built with a different version is automatically rebuilt.
+const CURRENT_ENGINE_VERSION = '2.2.0';
+
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
 function safeJsonParse(value, fallback = {}) {
@@ -200,7 +204,10 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
   try {
     await db.execute({
       sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
-      args: [JSON.stringify({ prediction, engineResult: null }), String(fixtureId)],
+      args: [
+        JSON.stringify({ prediction, engineResult: null, engineVersion: CURRENT_ENGINE_VERSION }),
+        String(fixtureId),
+      ],
     });
   } catch (err) {
     console.error('[predictionCache] savePredictionToCache failed:', err.message);
@@ -215,7 +222,13 @@ async function loadCachedPrediction(fixtureId) {
     });
     const row = r.rows?.[0];
     if (!row?.prediction_json) return null;
-    return JSON.parse(row.prediction_json);
+    const cached = JSON.parse(row.prediction_json);
+    // Invalidate if built with a different engine version — forces a fresh rebuild
+    if (cached.engineVersion !== CURRENT_ENGINE_VERSION) {
+      console.log(`[predictionCache] Engine version mismatch for ${fixtureId} (stored: ${cached.engineVersion}, current: ${CURRENT_ENGINE_VERSION}) — forcing rebuild`);
+      return null;
+    }
+    return cached;
   } catch {
     return null;
   }
