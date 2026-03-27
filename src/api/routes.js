@@ -537,8 +537,10 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             WHERE f.match_date LIKE ?
               AND p.no_safe_pick = 0
               AND p.best_pick_selection IS NOT NULL
-              AND f.enrichment_status = 'deep'
-              AND f.data_quality IN ('excellent', 'good')
+              AND (
+                f.enrichment_status = 'deep'
+                OR (f.enrichment_status = 'basic' AND f.data_quality IN ('excellent', 'good'))
+              )
             ORDER BY p.best_pick_score DESC
             LIMIT 5`,
       args: [`%${today}%`],
@@ -565,7 +567,12 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     // ② Fallback: get today's fixtures (no enriched filter) and run engine on first 15
     const result = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name, tournament_name, match_date
-            FROM fixtures WHERE match_date LIKE ? AND enrichment_status = 'deep' LIMIT 15`,
+            FROM fixtures WHERE match_date LIKE ?
+              AND (
+                enrichment_status = 'deep'
+                OR (enrichment_status = 'basic' AND data_quality IN ('excellent', 'good'))
+              )
+            LIMIT 15`,
       args: [`%${today}%`],
     });
 
