@@ -635,6 +635,42 @@ router.get("/usage", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /debug/stats-probe/:fixtureId — raw stats test from server ──────────
+// Admin-only: tests if the stats API endpoint works, using the server's API credentials.
+router.get("/debug/stats-probe/:fixtureId", requirePremiumAccess, async (req, res) => {
+  try {
+    const { fixtureId } = req.params;
+    const { fetchTeamForm, fetchMatchStats } = await import("../services/livescore.js");
+
+    // Get fixture info
+    const row = await db.execute({ sql: `SELECT * FROM fixtures WHERE id = ? LIMIT 1`, args: [fixtureId] });
+    const fixture = row.rows?.[0];
+    if (!fixture) return res.status(404).json({ error: "Fixture not found" });
+
+    // Fetch form for home team
+    const form = await fetchTeamForm(fixture.home_team_id, fixture.home_team_name, 5);
+    const matchWithId = (form || []).find(m => m.match_id && m.match_id !== '');
+
+    if (!matchWithId) {
+      return res.json({ error: "No form matches with match_id found", formCount: (form || []).length, form: (form || []).slice(0, 3) });
+    }
+
+    // Try stats for that match
+    const stats = await fetchMatchStats(matchWithId.match_id);
+
+    res.json({
+      fixture: { id: fixtureId, home: fixture.home_team_name, homeTeamId: fixture.home_team_id },
+      probedMatchId: matchWithId.match_id,
+      probedMatch: `${matchWithId.home} vs ${matchWithId.away} [${matchWithId.date}]`,
+      statsResult: stats,
+      statsAvailable: !!stats,
+      formMatchCount: (form || []).length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
 // Admin-only: verifies that stats pipeline works end-to-end for a fixture.
 router.get("/debug/enrich/:fixtureId", requirePremiumAccess, async (req, res) => {
