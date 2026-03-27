@@ -239,6 +239,39 @@ export async function runPredictionEngine(fixtureId, rawData) {
     // Step 6: Derive raw market probabilities
     const rawProbs = deriveMarketProbabilities(scoreMatrix);
 
+    // ── Layer 2 Override Detection ────────────────────────────────────────────
+    // Build a L1-only score matrix (using base xG before form boosts) and compare
+    // its market probabilities to the final (L1+L2) ones.  If any key market
+    // shifts ≥ 6pp AND dataCompletenessScore ≥ 0.55 (good tier), we set the
+    // layer2Override flag, which relaxes the gap check in selectBestPick.
+    const baseScoreMatrix = buildScoreMatrix(xg.baseHomeXg, xg.baseAwayXg);
+    const baseProbs       = deriveMarketProbabilities(baseScoreMatrix);
+
+    const LAYER2_OVERRIDE_MARKETS = [
+      'homeWin', 'awayWin', 'draw', 'bttsYes', 'over25', 'under25', 'over15',
+    ];
+    let maxLayer2Shift       = 0;
+    let maxLayer2ShiftMarket = null;
+    for (const mkt of LAYER2_OVERRIDE_MARKETS) {
+      const shift = Math.abs((rawProbs[mkt] ?? 0) - (baseProbs[mkt] ?? 0));
+      if (shift > maxLayer2Shift) { maxLayer2Shift = shift; maxLayer2ShiftMarket = mkt; }
+    }
+
+    const isDataQualityGood = safeNum(features.dataCompletenessScore, 0) >= 0.55;
+    const layer2Override    = maxLayer2Shift >= 0.06 && isDataQualityGood;
+
+    if (layer2Override) {
+      const l1Pct   = ((baseProbs[maxLayer2ShiftMarket] ?? 0) * 100).toFixed(1);
+      const l2Pct   = ((rawProbs[maxLayer2ShiftMarket]  ?? 0) * 100).toFixed(1);
+      const shiftPp = (maxLayer2Shift * 100).toFixed(1);
+      console.log(
+        `[PICK OVERRIDE] Layer 2 override triggered | fixture=${fixtureId} ` +
+        `market="${maxLayer2ShiftMarket}" shift=${shiftPp}pp ` +
+        `(L1: ${l1Pct}% → L1+L2: ${l2Pct}%) ` +
+        `dataCompleteness=${features.dataCompletenessScore?.toFixed(2)}`
+      );
+    }
+
     // Step 7: Calibrate probabilities
     const calibratedProbs = calibrateProbabilities(rawProbs, script);
 
@@ -261,11 +294,13 @@ export async function runPredictionEngine(fixtureId, rawData) {
     const rankedCandidates = rankMarkets(filteredCandidates);
 
     // Step 13: Select best pick
-    const { bestPick, backupPicks, noSafePick, noSafePickReason } = selectBestPick(
-      rankedCandidates,
-      script,
-      features
-    );
+    // Pass layer2Override options — selectBestPick will relax the gap check when active.
+    const { bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied } =
+      selectBestPick(rankedCandidates, script, features, {
+        layer2Override,
+        layer2ShiftMarket: maxLayer2ShiftMarket,
+        layer2ShiftPp:     maxLayer2Shift,
+      });
 
     // Step 14: Build confidence profile
     const confidence = buildConfidenceProfile(bestPick, features);
@@ -296,6 +331,13 @@ export async function runPredictionEngine(fixtureId, rawData) {
       backupPicks,
       noSafePick,
       noSafePickReason: noSafePickReason || null,
+      layer2Override: {
+        triggered:    layer2Override,
+        applied:      layer2OverrideApplied ?? false,
+        shiftMarket:  maxLayer2ShiftMarket,
+        shiftPp:      parseFloat((maxLayer2Shift * 100).toFixed(1)),
+        dataComplete: features.dataCompletenessScore ?? null,
+      },
       confidence,
       reasonCodes,
       rankedMarkets: rankedCandidates,
