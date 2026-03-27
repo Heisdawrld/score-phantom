@@ -182,7 +182,8 @@ function parseLineupModifier(rawLineup) {
  *   AFCON qualifiers (both teams 3+ form):               0.30+0.30           = 0.60 → BASIC
  *   Liga Pro Serie B (both 5+ form, has standings):      0.30+0.30+0.10      = 0.70 → BASIC
  *   One team thin form (< 3 games):                      0.30                = 0.30 → LIMITED
- *   No form at all from either team:                     0.00                → NO DATA
+ *   National team (profiles only, API has no form):      0.20 [floor]        → LIMITED
+ *   No form at all from either team:                     0.00                → NO DATA (truly broken)
  */
 function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfile, awayProfile, lineupModifier }) {
   let score = 0;
@@ -212,10 +213,18 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfi
   if (checks.hasStandings) score += 0.10;
   if (checks.hasLineup) score += 0.05;
 
-  // ── Floor rule: if any form exists, never collapse to NO DATA ─────────────
-  // Matches where the API returns thin but non-zero form are Limited, not absent.
+  // ── Floor rules: prevent NO DATA when engine can still predict ───────────
+  //
+  // Floor 1: Any non-zero form from either team → minimum LIMITED (0.30)
   if (score < 0.30 && (homeCount > 0 || awayCount > 0)) {
     score = 0.30;
+    checks.floorApplied = true;
+  }
+  // Floor 2: Valid team profiles exist (e.g. national teams with no API form)
+  // The prediction engine CAN still compute baselines from team quality profiles,
+  // so this fixture is not truly "no data" — it's LIMITED quality.
+  if (score < 0.20 && homeProfile && awayProfile) {
+    score = 0.20;
     checks.floorApplied = true;
   }
 
@@ -224,7 +233,7 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfi
   let tier;
   if (completeness >= 0.80) tier = 'rich';
   else if (completeness >= 0.55) tier = 'good';
-  else if (completeness >= 0.30) tier = 'partial';
+  else if (completeness >= 0.20) tier = 'partial';   // was 0.30 — lowered to catch profile-only fixtures
   else tier = 'thin';
 
   return { score: completeness, tier, checks };
