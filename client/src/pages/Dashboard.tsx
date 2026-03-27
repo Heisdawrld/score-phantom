@@ -36,19 +36,22 @@ function EnrichmentBadge({ status }: { status?: string | null }) {
 // ── ACCA Banner (premium only) ────────────────────────────────────────────────
 function AccaSection({ isPremium }: { isPremium: boolean }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"safe" | "value">("safe");
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["/api/acca"],
-    queryFn: () => fetchApi("/acca"),
+    queryKey: ["/api/acca", mode],
+    queryFn: () => fetchApi(`/acca?mode=${mode}`),
     enabled: isPremium && open,
     staleTime: 10 * 60 * 1000,
   });
 
-  const confColor: Record<string, string> = {
-    HIGH: "text-primary",
-    MEDIUM: "text-blue-400",
-    LEAN: "text-orange-400",
-    LOW: "text-muted-foreground",
+  const riskColors: Record<string, string> = {
+    SAFE:       "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    MODERATE:   "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    AGGRESSIVE: "bg-red-500/20 text-red-400 border-red-500/30",
+    LOW:        "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    MEDIUM:     "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    HIGH:       "bg-red-500/20 text-red-400 border-red-500/30",
   };
 
   if (!isPremium) {
@@ -61,7 +64,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
           <Crown className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-bold text-primary tracking-wide">ACCA — Today's Best 5 Picks</p>
+          <p className="text-sm font-bold text-primary tracking-wide">ACCA Builder</p>
           <p className="text-xs text-muted-foreground mt-0.5">Upgrade to Premium to unlock your daily accumulator</p>
         </div>
         <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -71,6 +74,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
 
   return (
     <div className="rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/8 to-transparent overflow-hidden">
+      {/* Header */}
       <button
         className="w-full flex items-center gap-3 p-4 hover:bg-primary/5 transition-all"
         onClick={() => setOpen((o) => !o)}
@@ -79,8 +83,8 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
           <Zap className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1 text-left">
-          <p className="text-sm font-bold text-primary tracking-wide">ACCA — Today's Best 5 Picks</p>
-          <p className="text-xs text-muted-foreground">Built only from deeply enriched matches</p>
+          <p className="text-sm font-bold text-primary tracking-wide">ACCA Builder</p>
+          <p className="text-xs text-muted-foreground">Low-correlation, controlled-risk combinations</p>
         </div>
         {open ? (
           <ChevronUp className="w-4 h-4 text-primary shrink-0" />
@@ -90,10 +94,43 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-4 space-y-3">
+          {/* Mode toggle */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMode("safe")}
+              className={cn(
+                "flex-1 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all border",
+                mode === "safe"
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                  : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/8"
+              )}
+            >
+              ✅ SAFE ACCA
+            </button>
+            <button
+              onClick={() => setMode("value")}
+              className={cn(
+                "flex-1 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all border",
+                mode === "value"
+                  ? "bg-orange-500/20 text-orange-400 border-orange-500/40"
+                  : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/8"
+              )}
+            >
+              ⚡ VALUE ACCA
+            </button>
+          </div>
+
+          {/* Mode description */}
+          <p className="text-[10px] text-muted-foreground">
+            {mode === "safe"
+              ? "3 picks · all ≥75% · low volatility · stable markets only"
+              : "4–5 picks · ≥70% · allows 1 moderate risk pick · higher odds"}
+          </p>
+
           {isLoading &&
-            Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            Array.from({ length: mode === "safe" ? 3 : 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
             ))}
 
           {error && (
@@ -102,36 +139,66 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
             </p>
           )}
 
-          {data?.picks?.length === 0 && (
+          {/* Combined confidence header */}
+          {data?.picks?.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-primary/10 border border-primary/20">
+              <div>
+                <p className="text-xs font-bold text-primary">
+                  {data.accaType ?? (mode === "safe" ? "SAFE ACCA" : "VALUE ACCA")}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{data.totalMatches} matches</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Combined</p>
+                <p className="text-sm font-bold text-primary">{data.combinedConfidence?.toFixed(1)}%</p>
+              </div>
+              {data.riskLevel && (
+                <span className={cn(
+                  "text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full",
+                  riskColors[data.riskLevel] ?? "bg-white/10 text-muted-foreground border-white/10"
+                )}>
+                  {data.riskLevel} RISK
+                </span>
+              )}
+            </div>
+          )}
+
+          {(!data?.picks || data.picks.length === 0) && !isLoading && !error && (
             <p className="text-xs text-muted-foreground text-center py-4">
-              No picks available yet. Check back later today.
+              {data?.message ?? "No picks available yet. Check back later today."}
             </p>
           )}
 
           {data?.picks?.map((pick: any, i: number) => (
             <div
-              key={pick.fixtureId}
-              className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/8"
+              key={pick.fixtureId ?? i}
+              className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/8"
             >
-              <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">#{i + 1}</span>
+              <span className="text-xs font-bold text-muted-foreground w-5 shrink-0 pt-0.5">#{i + 1}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
                   {pick.homeTeam} <span className="text-muted-foreground text-xs">vs</span> {pick.awayTeam}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">{pick.tournament}</p>
+                <p className="text-xs font-bold text-white mt-0.5">{pick.selection || pick.market}</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs font-bold text-white">{pick.selection || pick.pick}</p>
-                <p className={cn("text-[10px] font-bold tracking-wide uppercase", confColor[pick.confidence] ?? "text-muted-foreground")}>
-                  {pick.confidence}
-                </p>
+              <div className="text-right shrink-0 space-y-1">
+                <p className="text-sm font-bold text-primary">{pick.probability?.toFixed(1)}%</p>
+                {pick.riskLevel && (
+                  <span className={cn(
+                    "text-[10px] font-bold tracking-widest uppercase border px-1.5 py-0.5 rounded-full block",
+                    riskColors[pick.riskLevel] ?? "bg-white/10 text-muted-foreground border-white/10"
+                  )}>
+                    {pick.riskLevel}
+                  </span>
+                )}
               </div>
             </div>
           ))}
 
           {data?.picks?.length > 0 && (
-            <p className="text-[10px] text-muted-foreground text-center pt-2">
-              ACCA is AI-generated. Always gamble responsibly.
+            <p className="text-[10px] text-muted-foreground text-center pt-1">
+              Picks sourced from enriched fixtures only · Always gamble responsibly
             </p>
           )}
         </div>

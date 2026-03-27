@@ -50,6 +50,38 @@ function FitBadge({ level }: { level: string }) {
   return <span className={cn("text-xs font-semibold", map[level] ?? "text-muted-foreground")}>{level} FIT</span>;
 }
 
+function EdgeBadge({ label }: { label?: string }) {
+  if (!label) return null;
+  const map: Record<string, string> = {
+    "STRONG EDGE (SAFE)":       "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    "STRONG EDGE (AGGRESSIVE)": "bg-primary/20 text-primary border-primary/30",
+    "LEAN":                     "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    "NO EDGE":                  "bg-white/5 text-muted-foreground border-white/10",
+  };
+  return (
+    <span className={cn(
+      "text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full",
+      map[label] ?? "bg-white/5 text-muted-foreground border-white/10"
+    )}>
+      {label}
+    </span>
+  );
+}
+
+function RiskBadge({ level }: { level?: string }) {
+  if (!level) return null;
+  const map: Record<string, string> = {
+    SAFE:       "text-emerald-400",
+    MODERATE:   "text-orange-400",
+    AGGRESSIVE: "text-red-400",
+  };
+  return (
+    <span className={cn("text-[10px] font-semibold uppercase tracking-wide", map[level] ?? "text-muted-foreground")}>
+      {level} RISK
+    </span>
+  );
+}
+
 function ValueBadge({ level }: { level: string }) {
   const map: Record<string, string> = {
     STRONG: "bg-primary/15 text-primary",
@@ -179,8 +211,10 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                           <p className="text-[10px] font-bold tracking-widest text-primary uppercase">Best Bet Angle</p>
                           <div className="flex items-center gap-2 flex-wrap">
                             <ConfBadge level={rec.modelConfidence} />
-                            <ValueBadge level={rec.valueRating} />
-                            <FitBadge level={rec.tacticalFit} />
+                            {rec.edgeLabel
+                              ? <EdgeBadge label={rec.edgeLabel} />
+                              : <FitBadge level={rec.tacticalFit} />}
+                            <RiskBadge level={rec.riskLevel} />
                           </div>
                         </div>
 

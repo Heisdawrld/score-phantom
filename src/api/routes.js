@@ -520,99 +520,94 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
   }
 });
 
-// ─── GET /acca — Today's best 5 picks (premium only) ─────────────────────────
+// ─── GET /acca — Intelligent ACCA builder (premium only) ──────────────────────
+// Query params:
+//   ?mode=safe   (default) — 3 picks, all >= 75%, low volatility, stable markets
+//   ?mode=value             — 4–5 picks, >= 70%, allows 1 moderate risk pick
 router.get("/acca", requirePremiumAccess, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
+    const mode  = req.query.mode === 'value' ? 'value' : 'safe';
 
-    // ① First try: use already-computed predictions_v2 cache joined with fixtures
-    const cached = await db.execute({
+    // Pull all today's qualifying predictions with enrichment + volatility data
+    const pool = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model, p.confidence_value,
-                   p.no_safe_pick,
+                   p.best_pick_score, p.confidence_model, p.confidence_volatility,
+                   p.script_primary, p.no_safe_pick,
                    f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
-              AND p.no_safe_pick = 0
               AND p.best_pick_selection IS NOT NULL
               AND (
                 f.enrichment_status = 'deep'
                 OR (f.enrichment_status = 'basic' AND f.data_quality IN ('excellent', 'good'))
               )
-            ORDER BY p.best_pick_score DESC
-            LIMIT 5`,
+            ORDER BY p.best_pick_probability DESC
+            LIMIT 50`,
       args: [`%${today}%`],
     });
 
-    if (cached.rows?.length) {
-      const picks = cached.rows.map((r) => ({
-        fixtureId: r.fixture_id,
-        homeTeam: r.home_team,
-        awayTeam: r.away_team,
-        tournament: r.tournament_name || "",
-        matchDate: r.match_date,
-        pick: r.best_pick_market,
-        selection: r.best_pick_selection,
-        confidence: r.confidence_model || r.confidence_value || "MEDIUM",
-        probability: r.best_pick_probability,
-        score: r.best_pick_score,
-        enrichmentStatus: r.enrichment_status || "deep",
-        dataQuality: r.data_quality || "excellent",
-      }));
-      return res.json({ picks, source: "cache", access: buildAccessPayload(req.access) });
+    const rows = pool.rows || [];
+
+    if (rows.length === 0) {
+      // No cached predictions yet — run engine on qualifying fixtures and retry
+      const fixtureResult = await db.execute({
+        sql: `SELECT id FROM fixtures
+              WHERE match_date LIKE ?
+                AND (
+                  enrichment_status = 'deep'
+                  OR (enrichment_status = 'basic' AND data_quality IN ('excellent', 'good'))
+                )
+              LIMIT 20`,
+        args: [`%${today}%`],
+      });
+
+      const fixtureIds = (fixtureResult.rows || []).map(r => r.id);
+      if (!fixtureIds.length) {
+        return res.json({
+          accaType: null, picks: [], totalMatches: 0, combinedConfidence: 0, riskLevel: null,
+          message: 'No qualifying fixtures available yet.',
+          access: buildAccessPayload(req.access),
+        });
+      }
+
+      // Warm predictions cache in parallel
+      await Promise.allSettled(fixtureIds.map(id => getOrBuildPrediction(id)));
+
+      // Re-query now that predictions are built
+      const retryPool = await db.execute({
+        sql: `SELECT p.fixture_id, p.home_team, p.away_team,
+                     p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+                     p.best_pick_score, p.confidence_model, p.confidence_volatility,
+                     p.script_primary, p.no_safe_pick,
+                     f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
+              FROM predictions_v2 p
+              JOIN fixtures f ON f.id = p.fixture_id
+              WHERE f.match_date LIKE ?
+                AND p.best_pick_selection IS NOT NULL
+                AND (
+                  f.enrichment_status = 'deep'
+                  OR (f.enrichment_status = 'basic' AND f.data_quality IN ('excellent', 'good'))
+                )
+              ORDER BY p.best_pick_probability DESC
+              LIMIT 50`,
+        args: [`%${today}%`],
+      });
+      rows.push(...(retryPool.rows || []));
     }
 
-    // ② Fallback: get today's fixtures (no enriched filter) and run engine on first 15
-    const result = await db.execute({
-      sql: `SELECT id, home_team_name, away_team_name, tournament_name, match_date
-            FROM fixtures WHERE match_date LIKE ?
-              AND (
-                enrichment_status = 'deep'
-                OR (enrichment_status = 'basic' AND data_quality IN ('excellent', 'good'))
-              )
-            LIMIT 15`,
-      args: [`%${today}%`],
+    // Build ACCA using the intelligent builder
+    const { buildAcca } = await import('../engine/buildAcca.js');
+    const acca = buildAcca(rows, mode);
+
+    return res.json({
+      ...acca,
+      mode,
+      source: rows.length > 0 ? 'cache' : 'live',
+      access: buildAccessPayload(req.access),
     });
-
-    const fixtures = result.rows || [];
-    if (!fixtures.length) {
-      return res.json({ picks: [], message: "No fixtures found for today yet." });
-    }
-
-    // Run engine in parallel for all fixtures via unified prediction cache
-    const results = await Promise.allSettled(
-      fixtures.map(async (fixture) => {
-        const result = await getOrBuildPrediction(fixture.id);
-        if (!result) return null;
-        const { prediction } = result;
-        const homeTeam = result.fixture?.home_team_name || fixture.home_team_name;
-        const awayTeam = result.fixture?.away_team_name || fixture.away_team_name;
-        const rec = prediction?.predictions?.recommendation;
-        if (!rec) return null;
-        const confScore = { HIGH: 3, MEDIUM: 2, LEAN: 1, LOW: 0 }[rec.confidence] ?? 0;
-        const valueScore = { STRONG: 3, GOOD: 2, FAIR: 1, WEAK: 0 }[rec.value] ?? 0;
-        return {
-          fixtureId: fixture.id,
-          homeTeam,
-          awayTeam,
-          tournament: fixture.tournament_name || "",
-          matchDate: fixture.match_date,
-          pick: rec.market,
-          selection: rec.selection,
-          confidence: rec.confidence,
-          value: rec.value,
-          score: confScore * 2 + valueScore,
-        };
-      })
-    );
-    const scored = results
-      .filter((r) => r.status === "fulfilled" && r.value !== null)
-      .map((r) => r.value);
-
-    scored.sort((a, b) => b.score - a.score);
-    res.json({ picks: scored.slice(0, 5), source: "live", access: buildAccessPayload(req.access) });
   } catch (err) {
     console.error("[ACCA]", err.message);
     res.status(500).json({ error: "ACCA failed", detail: err.message });

@@ -86,6 +86,30 @@ function mapTacticalFit(tacticalFitScore) {
   return "WEAK";
 }
 
+// ── Risk / Edge label passthrough ─────────────────────────────────────────────
+// riskLevel and edgeLabel are attached by selectBestPick — pass them through.
+// Fallback for any cached picks that predate the new engine.
+function resolveRiskLevel(pick) {
+  if (pick?.riskLevel) return pick.riskLevel;
+  // Heuristic fallback from probability + market key
+  const prob = safeNum(pick?.modelProbability, 0);
+  const mk   = (pick?.marketKey || '').toLowerCase();
+  const isStable = ['under_35','under_25','double_chance_home','double_chance_away',
+                    'home_under_15','away_under_15','dnb_home','dnb_away'].includes(mk);
+  if (prob >= 0.72 && isStable) return 'SAFE';
+  if (prob >= 0.65) return 'MODERATE';
+  return 'AGGRESSIVE';
+}
+
+function resolveEdgeLabel(pick) {
+  if (pick?.edgeLabel) return pick.edgeLabel;
+  const prob = safeNum(pick?.modelProbability, 0);
+  const risk = resolveRiskLevel(pick);
+  if (prob >= 0.70) return risk === 'SAFE' ? 'STRONG EDGE (SAFE)' : 'STRONG EDGE (AGGRESSIVE)';
+  if (prob >= 0.62) return 'LEAN';
+  return 'NO EDGE';
+}
+
 function mapValueRating(edgeScore) {
   const s = safeNum(edgeScore, 0);
   if (s >= 0.72) return "STRONG";
@@ -251,6 +275,8 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
     tacticalFit: mapTacticalFit(tacticalFitScore),
     valueRating: mapValueRating(edgeScore),
+    riskLevel: resolveRiskLevel(pick),
+    edgeLabel: resolveEdgeLabel(pick),
     reasons: (pick.reasons || []).map(humanizeReasonCode),
     no_edge: !!(pick.edge != null && pick.edge <= 0),
   };
@@ -366,6 +392,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
       tacticalFit: mapTacticalFit(tacticalFitScore),
       valueRating: mapValueRating(edgeScore),
+      riskLevel: resolveRiskLevel(bestPick),
+      edgeLabel: resolveEdgeLabel(bestPick),
       reasons: humanReasonCodes,
       no_edge: false,
     };
