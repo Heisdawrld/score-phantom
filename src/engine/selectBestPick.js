@@ -14,7 +14,7 @@ import { safeNum } from '../utils/math.js';
  * @param {object} featureVector
  * @returns {{ bestPick, backupPicks, noSafePick }}
  */
-export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
+export function selectBestPick(rankedCandidates, scriptOutput, featureVector, options = {}) {
   const ranked = rankedCandidates || [];
   const fv = featureVector || {};
   const script = scriptOutput || {};
@@ -60,6 +60,27 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector) {
     const minGap = hasOdds ? 0.018 : 0.012;
     const gap = safeNum(ranked[0].finalScore, 0) - safeNum(ranked[1].finalScore, 0);
     if (gap < minGap) {
+      // ── Layer 2 Pick Override ──────────────────────────────────────────────────
+      // If Layer 2 caused a ≥ 6pp probability shift AND data quality is ≥ good,
+      // trust the form signal and force the top-ranked pick even when the gap is
+      // too narrow for a normal selection.
+      if (options.layer2Override && ranked.length > 0) {
+        const shiftPp = ((options.layer2ShiftPp ?? 0) * 100).toFixed(1);
+        const mkt     = options.layer2ShiftMarket ?? 'unknown';
+        console.log(
+          `[PICK OVERRIDE] Gap too close (${gap.toFixed(3)} < ${minGap}) ` +
+          `— Layer 2 override active: ${shiftPp}pp shift on "${mkt}". ` +
+          `Forcing pick: "${ranked[0].marketKey}".`
+        );
+        return {
+          bestPick: ranked[0],
+          backupPicks: ranked.slice(1, 4),
+          noSafePick: false,
+          noSafePickReason: null,
+          layer2OverrideApplied: true,
+        };
+      }
+
       // Without odds, fall back to best tactical fit + probability instead of rejecting outright
       if (!hasOdds) {
         const byTacticalScore = [...ranked].sort((a, b) => {
