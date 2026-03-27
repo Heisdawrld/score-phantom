@@ -637,7 +637,7 @@ router.get("/usage", requireAuth, async (req, res) => {
 
 // ─── GET /debug/stats-probe/:fixtureId — raw stats test from server ──────────
 // Admin-only: tests if the stats API endpoint works, using the server's API credentials.
-router.get("/debug/stats-probe/:fixtureId", requirePremiumAccess, async (req, res) => {
+router.get("/debug/stats-probe/:fixtureId", requireAuth, async (req, res) => {
   try {
     const { fixtureId } = req.params;
     const { fetchTeamForm, fetchMatchStats } = await import("../services/livescore.js");
@@ -673,7 +673,7 @@ router.get("/debug/stats-probe/:fixtureId", requirePremiumAccess, async (req, re
 
 // ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
 // Admin-only: verifies that stats pipeline works end-to-end for a fixture.
-router.get("/debug/enrich/:fixtureId", requirePremiumAccess, async (req, res) => {
+router.get("/debug/enrich/:fixtureId", requireAuth, async (req, res) => {
   try {
     const { fixtureId } = req.params;
 
