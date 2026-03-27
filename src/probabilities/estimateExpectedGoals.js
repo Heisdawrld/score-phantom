@@ -86,6 +86,11 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
     awayXg = awayXg * 0.9 + LEAGUE_AVG * 0.1;
   }
 
+  // Snapshot Layer 1 (base) xG before form-derived boosts —
+  // returned so the engine can compare L1 vs L1+L2 probabilities.
+  const layer1HomeXg = homeXg;
+  const layer1AwayXg = awayXg;
+
   // ── Layer 2: Form-derived modifier ───────────────────────────────────────
   // Applies small multiplicative adjustments (±0–20%) based on form outcomes:
   // goals scored/conceded rates, BTTS rate, clean sheet rate, scoring consistency.
@@ -126,9 +131,20 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
     awayXg *= scale;
   }
 
+  // Apply the same per-team and total caps to L1 base xG so probability
+  // comparisons in the engine are fair (apples-to-apples after capping).
+  let baseHome = clamp(layer1HomeXg, 0.2, 2.5);
+  let baseAway = clamp(layer1AwayXg, 0.2, 2.5);
+  const baseTot = baseHome + baseAway;
+  if (baseTot > 4.5) { const s = 4.5 / baseTot; baseHome *= s; baseAway *= s; }
+  if (baseTot < 0.8) { const s = 0.8 / baseTot; baseHome *= s; baseAway *= s; }
+
   return {
     homeExpectedGoals: parseFloat(homeXg.toFixed(3)),
     awayExpectedGoals: parseFloat(awayXg.toFixed(3)),
     totalExpectedGoals: parseFloat((homeXg + awayXg).toFixed(3)),
+    // Layer 1-only base xG (before form-derived boosts) — used for override detection
+    baseHomeXg: parseFloat(baseHome.toFixed(3)),
+    baseAwayXg: parseFloat(baseAway.toFixed(3)),
   };
 }
