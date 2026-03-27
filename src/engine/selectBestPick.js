@@ -68,9 +68,11 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
         const shiftPp = ((options.layer2ShiftPp ?? 0) * 100).toFixed(1);
         const mkt     = options.layer2ShiftMarket ?? 'unknown';
         console.log(
-          `[PICK OVERRIDE] Gap too close (${gap.toFixed(3)} < ${minGap}) ` +
-          `— Layer 2 override active: ${shiftPp}pp shift on "${mkt}". ` +
-          `Forcing pick: "${ranked[0].marketKey}".`
+          `[PICK OVERRIDE] Applied | gap=${gap.toFixed(4)} (< ${minGap} threshold) ` +
+          `L2-shift=${shiftPp}pp on "${mkt}" | ` +
+          `pick="${ranked[0].marketKey}" ` +
+          `prob=${(safeNum(ranked[0].modelProbability, 0) * 100).toFixed(1)}% ` +
+          `tacticalFit=${safeNum(ranked[0].tacticalFitScore, 0).toFixed(3)}`
         );
         return {
           bestPick: ranked[0],
