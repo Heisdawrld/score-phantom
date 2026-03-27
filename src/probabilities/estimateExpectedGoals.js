@@ -1,4 +1,5 @@
 import { safeNum, clamp } from '../utils/math.js';
+import { computeStatBoosts } from './computeStatBoosts.js';
 
 const LEAGUE_AVG = 1.35;          // average goals per team per game across top leagues
 const HOME_ADVANTAGE_BOOST = 1.10;
@@ -81,6 +82,19 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
   } else if (primary === 'chaotic_unreliable') {
     homeXg = homeXg * 0.9 + LEAGUE_AVG * HOME_ADVANTAGE_BOOST * 0.1;
     awayXg = awayXg * 0.9 + LEAGUE_AVG * 0.1;
+  }
+
+  // ── Stat-profile boosts (pressure, efficiency, defensive leakiness) ─────────
+  // Applied AFTER base xG and script micro-adjustments, BEFORE hard caps.
+  // Each boost is ±5–20% max. Thin-data situations auto-scale to near zero.
+  const { homeXgBoost, awayXgBoost, _debug: statDebug } = computeStatBoosts(fv);
+  if (homeXgBoost !== 0 || awayXgBoost !== 0) {
+    console.log(
+      `[xG] stat boosts → home: ${(homeXgBoost * 100).toFixed(1)}%, away: ${(awayXgBoost * 100).toFixed(1)}%`,
+      statDebug
+    );
+    homeXg = homeXg * (1 + homeXgBoost);
+    awayXg = awayXg * (1 + awayXgBoost);
   }
 
   // Per-team hard cap: 0.2 – 2.5

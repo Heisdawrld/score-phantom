@@ -175,6 +175,10 @@ function flattenFeatureVector(fv) {
     awayProfileOver25Rate: safeNum(fv.awayProfileFeatures?.profileOver25Rate, null),
     hasHomeStatProfile: fv.homeProfileFeatures?.hasProfile === true,
     hasAwayStatProfile: fv.awayProfileFeatures?.hasProfile === true,
+    homeOpponentShotsOnTargetAllowed: safeNum(fv.homeProfileFeatures?.avgOpponentShotsOnTargetAllowed, null),
+    awayOpponentShotsOnTargetAllowed: safeNum(fv.awayProfileFeatures?.avgOpponentShotsOnTargetAllowed, null),
+    homeStatsMatchCount: safeNum(fv.homeProfileFeatures?.statsMatchesAvailable, 0),
+    awayStatsMatchCount: safeNum(fv.awayProfileFeatures?.statsMatchesAvailable, 0),
 
     // Lineup modifiers
     hasLineupData: fv.lineupFeatures?.hasLineup === true,
