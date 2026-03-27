@@ -28,7 +28,7 @@ const PLAN_AMOUNT_NAIRA = 3000;
 const PLAN_AMOUNT_KOBO = 300000;
 const PLAN_DURATION_DAYS = 30;
 const TRIAL_DURATION_DAYS = 3;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "davidadiele7@gmail.com").trim().toLowerCase();
 
 // OPay bank details
 const OPAY_BANK_DETAILS = {
