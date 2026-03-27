@@ -1,11 +1,15 @@
 /**
  * teamProfileBuilder.js
  *
- * Aggregates historical match data + optional match stats into a team style profile.
+ * Aggregates historical match data into a team style profile.
  * This profile feeds the prediction engine with richer signals beyond raw form rows.
  *
  * IMPORTANT: All data here comes from PAST matches only.
  * This is for pre-match prediction — we never use live/current-match stats.
+ *
+ * NOTE: Premium match stats (shots, possession, dangerous attacks, corners) are
+ * not included here — they require a higher LiveScore API plan. All profile
+ * intelligence comes from form-derived goal/outcome data.
  */
 
 /**
@@ -51,20 +55,14 @@ function getTeamSide(match, teamName) {
 }
 
 /**
- * Build a team profile from form matches + match stats rows.
+ * Build a team profile from form matches.
  *
  * @param {string} teamName - the team to profile
- * @param {Array} formMatches - form match objects (must include match_id, home, away, score)
- * @param {Array} matchStatsRows - rows from match_stats table for those matches
+ * @param {Array} formMatches - form match objects (must include home, away, score)
+ * @param {Array} matchStatsRows - unused (reserved for future premium stats activation)
  * @returns {object} team profile
  */
 export function buildTeamProfile(teamName, formMatches, matchStatsRows = []) {
-  // Build a stats lookup by match_id
-  const statsMap = new Map();
-  for (const row of matchStatsRows) {
-    if (row?.match_id) statsMap.set(String(row.match_id), row);
-  }
-
   const perspectives = [];
 
   for (const match of formMatches) {
@@ -89,31 +87,15 @@ export function buildTeamProfile(teamName, formMatches, matchStatsRows = []) {
       }
     }
 
-    // Look up stats for this match
-    const stats = match.match_id ? statsMap.get(String(match.match_id)) : null;
-
     perspectives.push({
       isHome,
       scored,
       conceded,
       date: match.date || null,
-      // Stats perspective (team's own side)
-      shots: stats ? (isHome ? stats.home_shots : stats.away_shots) : null,
-      shotsOnTarget: stats ? (isHome ? stats.home_shots_on_target : stats.away_shots_on_target) : null,
-      dangerousAttacks: stats ? (isHome ? stats.home_dangerous_attacks : stats.away_dangerous_attacks) : null,
-      corners: stats ? (isHome ? stats.home_corners : stats.away_corners) : null,
-      possession: stats ? (isHome ? stats.home_possession : stats.away_possession) : null,
-      fouls: stats ? (isHome ? stats.home_fouls : stats.away_fouls) : null,
-      yellowCards: stats ? (isHome ? stats.home_yellow_cards : stats.away_yellow_cards) : null,
-      // Opponent stats (for defensive analysis)
-      opponentShots: stats ? (!isHome ? stats.home_shots : stats.away_shots) : null,
-      opponentShotsOnTarget: stats ? (!isHome ? stats.home_shots_on_target : stats.away_shots_on_target) : null,
-      opponentCorners: stats ? (!isHome ? stats.home_corners : stats.away_corners) : null,
     });
   }
 
   const withScores = perspectives.filter((p) => p.scored != null && p.conceded != null);
-  const withStats = perspectives.filter((p) => p.shots != null || p.corners != null);
 
   // Home/away splits
   const homeGames = withScores.filter((p) => p.isHome);
@@ -122,21 +104,6 @@ export function buildTeamProfile(teamName, formMatches, matchStatsRows = []) {
   return {
     teamName,
     matchesAnalyzed: perspectives.length,
-    statsMatchesAvailable: withStats.length,
-    hasStatProfile: withStats.length >= 2,
-
-    // ── Attack profile ─────────────────────────────────────────────────
-    avgShotsFor: avg(withStats.map((p) => p.shots)),
-    avgShotsOnTargetFor: avg(withStats.map((p) => p.shotsOnTarget)),
-    avgDangerousAttacksFor: avg(withStats.map((p) => p.dangerousAttacks)),
-    avgCornersFor: avg(withStats.map((p) => p.corners)),
-    avgPossession: avg(withStats.map((p) => p.possession)),
-    avgFouls: avg(withStats.map((p) => p.fouls)),
-
-    // ── Defense profile ────────────────────────────────────────────────
-    avgOpponentShotsAllowed: avg(withStats.map((p) => p.opponentShots)),
-    avgOpponentShotsOnTargetAllowed: avg(withStats.map((p) => p.opponentShotsOnTarget)),
-    avgOpponentCornersAllowed: avg(withStats.map((p) => p.opponentCorners)),
 
     // ── Goal stats from results ────────────────────────────────────────
     avgGoalsScored: avg(withScores.map((p) => p.scored)),
@@ -172,7 +139,10 @@ export function profileCompleteness(profile) {
   let score = 0;
   if (profile.matchesAnalyzed >= 5) score += 0.3;
   else if (profile.matchesAnalyzed >= 3) score += 0.15;
-  if (profile.hasStatProfile) score += 0.4;
+  // Outcome pattern richness (BTTS, over2.5 rates) — form-derived, always available
+  if (profile.bttsRate != null && profile.over25Rate != null) score += 0.20;
+  // Venue split richness
+  if (profile.homeAvgScored != null && profile.awayAvgScored != null) score += 0.20;
   if (profile.avgGoalsScored != null) score += 0.15;
   if (profile.avgGoalsConceded != null) score += 0.15;
   return Math.min(1, parseFloat(score.toFixed(2)));

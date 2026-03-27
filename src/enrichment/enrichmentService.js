@@ -6,8 +6,8 @@
  *
  * Flow:
  *   1. Fetch H2H, team form, standings (parallel)
- *   2. Fetch historical match stats for recent form matches (cached)
- *   3. Build team profiles from form + stats
+ *   2. Merge form (prefer the richer source)
+ *   3. Build team profiles from form data (form-derived only, no premium stats)
  *   4. Optionally fetch lineup for upcoming match (close to kickoff)
  *   5. Compute data completeness score
  *   6. Store everything in DB
@@ -17,10 +17,8 @@ import {
   fetchH2H,
   fetchTeamForm,
   fetchStandings,
-  fetchMatchStats,
   fetchMatchLineups,
 } from '../services/livescore.js';
-import { saveMatchStats, getMatchStatsById } from '../storage/matchStatsStore.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,43 +110,6 @@ function computeMomentum(form, teamName) {
 }
 
 /**
- * Fetch and cache historical stats for up to `maxMatches` past matches.
- * Only fetches matches that have a match_id and haven't been cached.
- */
-async function fetchHistoricalStats(formMatches, maxMatches = 5) {
-  const toProcess = formMatches
-    .filter((m) => m.match_id && m.match_id !== '' && m.match_id !== 'undefined')
-    .slice(0, maxMatches);
-
-  const statsRows = [];
-
-  for (const match of toProcess) {
-    try {
-      // Check cache first
-      const cached = await getMatchStatsById(match.match_id);
-      if (cached) {
-        statsRows.push(cached);
-        continue;
-      }
-
-      // Fetch from API (past match stats)
-      const rawStats = await fetchMatchStats(match.match_id);
-      if (rawStats) {
-        await saveMatchStats(match.match_id, match.home, match.away, rawStats);
-        const stored = await getMatchStatsById(match.match_id);
-        if (stored) statsRows.push(stored);
-      }
-
-      await sleep(400); // respect rate limit between calls
-    } catch (err) {
-      console.warn(`[enrichmentService] Stats fetch failed for match ${match.match_id}:`, err.message);
-    }
-  }
-
-  return statsRows;
-}
-
-/**
  * Parse lineup data into a modifier object that adjusts strength estimates.
  * Returns null if lineup is unavailable or too thin to act on.
  */
@@ -201,21 +162,17 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfi
   checks.hasAwayForm = (awayForm?.length || 0) >= 3;
   checks.hasH2H = (h2h?.length || 0) >= 2;
   checks.hasStandings = (standings?.length || 0) >= 4;
-  checks.hasHomeStats = homeProfile?.hasStatProfile === true;
-  checks.hasAwayStats = awayProfile?.hasStatProfile === true;
   checks.hasLineup = lineupModifier?.homeLineupConfirmed || lineupModifier?.awayLineupConfirmed;
 
   if (checks.hasHomeForm) score += 0.20;
   if (checks.hasAwayForm) score += 0.20;
   if (checks.hasH2H) score += 0.15;
   if (checks.hasStandings) score += 0.15;
-  if (checks.hasHomeStats) score += 0.10;
-  if (checks.hasAwayStats) score += 0.10;
   if (checks.hasLineup) score += 0.10;
 
-  // Bonus for rich form
-  if ((homeForm?.length || 0) >= 8) score += 0.05;
-  if ((awayForm?.length || 0) >= 8) score += 0.05;
+  // Bonus for rich form (reallocated from dead premium stats weight)
+  if ((homeForm?.length || 0) >= 8) score += 0.10;
+  if ((awayForm?.length || 0) >= 8) score += 0.10;
 
   const completeness = Math.min(1, parseFloat(score.toFixed(2)));
 
@@ -271,34 +228,17 @@ export async function fetchAndStoreEnrichment(fixture) {
   const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 15);
   const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 15);
 
-  // ── Step 3: Fetch historical match stats (for PAST matches with IDs) ───────
-  // We only call fetchMatchStats on completed past matches, not the upcoming one.
-  const homeFormWithIds = homeForm.filter((m) => m.match_id);
-  const awayFormWithIds = awayForm.filter((m) => m.match_id);
+  // ── Step 3 (renumbered): Build team profiles from form data ────────────────
+  // Premium match stats (shots/possession) are not fetched — API plan required.
+  // All profile intelligence comes from form-derived goal/outcome data.
+  const homeProfile = buildTeamProfile(fixture.home_team_name, homeForm, []);
+  const awayProfile = buildTeamProfile(fixture.away_team_name, awayForm, []);
 
-  let homeStatsRows = [];
-  let awayStatsRows = [];
-
-  if (homeFormWithIds.length > 0 || awayFormWithIds.length > 0) {
-    // Fetch in parallel, cap at 5 each to respect rate limits
-    [homeStatsRows, awayStatsRows] = await Promise.all([
-      fetchHistoricalStats(homeFormWithIds, 5),
-      fetchHistoricalStats(awayFormWithIds, 5),
-    ]);
-    console.log(`[enrichmentService] Stats fetched: home=${homeStatsRows.length}, away=${awayStatsRows.length}`);
-  } else {
-    console.warn('[enrichmentService] No match IDs in form data — stats unavailable');
-  }
-
-  // ── Step 4: Build team profiles ───────────────────────────────────────────
-  const homeProfile = buildTeamProfile(fixture.home_team_name, homeForm, homeStatsRows);
-  const awayProfile = buildTeamProfile(fixture.away_team_name, awayForm, awayStatsRows);
-
-  // ── Step 5: Compute momentum ──────────────────────────────────────────────
+  // ── Step 4: Compute momentum ──────────────────────────────────────────────
   const homeMomentum = computeMomentum(homeForm, fixture.home_team_name);
   const awayMomentum = computeMomentum(awayForm, fixture.away_team_name);
 
-  // ── Step 6: Optional lineup (non-blocking, typically only near kickoff) ────
+  // ── Step 5: Optional lineup (non-blocking, typically only near kickoff) ────
   let lineupModifier = null;
   try {
     const matchId = fixture.match_id || fixture.id;
@@ -311,7 +251,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     // Lineups not available — this is expected for pre-match enrichment
   }
 
-  // ── Step 7: Data completeness ─────────────────────────────────────────────
+  // ── Step 6: Data completeness ─────────────────────────────────────────────
   const completeness = computeDataCompleteness({
     homeForm,
     awayForm,
@@ -322,9 +262,9 @@ export async function fetchAndStoreEnrichment(fixture) {
     lineupModifier,
   });
 
-  console.log(`[enrichmentService] Completeness: ${completeness.score} (${completeness.tier}) | home_form=${homeForm.length} away_form=${awayForm.length} h2h=${h2hData.h2h.length} standings=${standings.length} home_stats=${homeStatsRows.length} away_stats=${awayStatsRows.length}`);
+  console.log(`[enrichmentService] Completeness: ${completeness.score} (${completeness.tier}) | home_form=${homeForm.length} away_form=${awayForm.length} h2h=${h2hData.h2h.length} standings=${standings.length}`);
 
-  // ── Step 8: Assemble enrichment bundle ────────────────────────────────────
+  // ── Step 7: Assemble enrichment bundle ────────────────────────────────────
   return {
     h2h: h2hData.h2h,
     homeForm,
@@ -336,9 +276,8 @@ export async function fetchAndStoreEnrichment(fixture) {
     awayProfile,
     lineupModifier,
     completeness,
-    // homeStats / awayStats set to profile if rich enough, null otherwise
-    homeStats: homeProfile.hasStatProfile ? homeProfile : null,
-    awayStats: awayProfile.hasStatProfile ? awayProfile : null,
+    homeStats: homeProfile,  // form-derived profile (always available when form exists)
+    awayStats: awayProfile,
     odds: null, // fetched separately via oddsService
   };
 }

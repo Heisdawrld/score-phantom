@@ -1,5 +1,5 @@
 /**
- * computeStatBoosts.js — Form-Derived Intelligence Layer
+ * computeFormDerivedBoosts.js — Form-Derived Modifier (Layer 2)
  *
  * Computes small multiplicative xG boosts using results-based team features:
  *   - Goals scored / conceded (attack efficiency, defensive solidity)
@@ -19,7 +19,7 @@
  *  - When data quality is thin, boost is proportionally scaled down.
  *
  * Usage:
- *   const { homeXgBoost, awayXgBoost } = computeStatBoosts(flatFeatureVector);
+ *   const { homeXgBoost, awayXgBoost } = computeFormDerivedBoosts(flatFeatureVector);
  *   homeXg = homeXg * (1 + homeXgBoost);
  *   awayXg = awayXg * (1 + awayXgBoost);
  */
@@ -76,10 +76,11 @@ function qualityScale(completenessScore, matchesAvailable) {
 /**
  * Main export — computes xG boosts from form-derived team features.
  *
+ * @layer 2
  * @param {object} fv - flat feature vector from flattenFeatureVector()
  * @returns {{ homeXgBoost, awayXgBoost, qScale, _debug }}
  */
-export function computeStatBoosts(fv) {
+export function computeFormDerivedBoosts(fv) {
   const {
     // Form-average goals (core attack/defense signals)
     homeAvgScored,

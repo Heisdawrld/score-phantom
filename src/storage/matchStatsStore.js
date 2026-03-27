@@ -1,4 +1,22 @@
 /**
+ * matchStatsStore.js — FUTURE USE: Premium Stats Storage
+ *
+ * STATUS: NOT ACTIVE — requires a higher LiveScore API plan.
+ *
+ * This module handles storage of per-match stats (shots, possession,
+ * dangerous attacks, corners) from the LiveScore /matches/stats.json endpoint.
+ *
+ * The endpoint currently returns null for all match IDs, even in top leagues.
+ * This module is preserved and ready to activate once the API plan is upgraded.
+ *
+ * To activate:
+ *   1. Upgrade LiveScore API plan to include match stats
+ *   2. Re-enable fetchHistoricalStats() in enrichmentService.js
+ *   3. Re-enable Layer 3 in estimateExpectedGoals.js
+ *   4. Verify data flowing into teamProfileBuilder.js
+ */
+
+/**
  * matchStatsStore.js
  * Stores and retrieves historical match statistics from the match_stats table.
  * These stats come from /matches/stats.json fetched for PAST matches only.

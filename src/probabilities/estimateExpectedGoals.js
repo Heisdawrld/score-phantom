@@ -1,5 +1,6 @@
 import { safeNum, clamp } from '../utils/math.js';
-import { computeStatBoosts } from './computeStatBoosts.js';
+import { computeFormDerivedBoosts } from './computeFormDerivedBoosts.js';
+import { computePremiumStatsBoosts } from './computePremiumStatsBoosts.js';
 
 const LEAGUE_AVG = 1.35;          // average goals per team per game across top leagues
 const HOME_ADVANTAGE_BOOST = 1.10;
@@ -7,9 +8,10 @@ const HOME_ADVANTAGE_BOOST = 1.10;
 /**
  * Estimate expected goals using attack/defense strength ratios.
  *
- * Formula:
- *   home_xg = (homeAvgScored / LEAGUE_AVG) * (awayAvgConceded / LEAGUE_AVG) * LEAGUE_AVG * HOME_BOOST
- *   away_xg = (awayAvgScored / LEAGUE_AVG) * (homeAvgConceded / LEAGUE_AVG) * LEAGUE_AVG
+ * 3-layer xG estimation:
+ *   Layer 1 — Base xG: team strength ratios, home advantage, thin-data dampening, venue anchoring
+ *   Layer 2 — Form-derived modifier: ±0–20% from goal rates, BTTS, clean sheets
+ *   Layer 3 — Premium stats modifier: NOT ACTIVE (shots/possession — requires API upgrade)
  *
  * Hard caps: per-team 0.2–2.5, total 0.8–4.5.
  * Thin-data dampening: regress toward mean when < 3 matches available.
@@ -84,18 +86,28 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
     awayXg = awayXg * 0.9 + LEAGUE_AVG * 0.1;
   }
 
-  // ── Stat-profile boosts (pressure, efficiency, defensive leakiness) ─────────
-  // Applied AFTER base xG and script micro-adjustments, BEFORE hard caps.
-  // Each boost is ±5–20% max. Thin-data situations auto-scale to near zero.
-  const { homeXgBoost, awayXgBoost, _debug: statDebug } = computeStatBoosts(fv);
-  if (homeXgBoost !== 0 || awayXgBoost !== 0) {
+  // ── Layer 2: Form-derived modifier ───────────────────────────────────────
+  // Applies small multiplicative adjustments (±0–20%) based on form outcomes:
+  // goals scored/conceded rates, BTTS rate, clean sheet rate, scoring consistency.
+  // Always available for teams with ≥3 form matches.
+  const { homeXgBoost: formHomeBoost, awayXgBoost: formAwayBoost, _debug: formDebug } =
+    computeFormDerivedBoosts(fv);
+  if (formHomeBoost !== 0 || formAwayBoost !== 0) {
     console.log(
-      `[xG] stat boosts → home: ${(homeXgBoost * 100).toFixed(1)}%, away: ${(awayXgBoost * 100).toFixed(1)}%`,
-      statDebug
+      `[xG] layer2 form boosts → home: ${(formHomeBoost * 100).toFixed(1)}%, away: ${(formAwayBoost * 100).toFixed(1)}%`,
+      formDebug
     );
-    homeXg = homeXg * (1 + homeXgBoost);
-    awayXg = awayXg * (1 + awayXgBoost);
+    homeXg = homeXg * (1 + formHomeBoost);
+    awayXg = awayXg * (1 + formAwayBoost);
   }
+
+  // ── Layer 3: Premium stats modifier (NOT ACTIVE) ──────────────────────────
+  // Requires higher LiveScore API plan. Currently returns zero boosts.
+  // To activate: upgrade API plan, then uncomment and wire in fetchHistoricalStats.
+  // const { homeXgBoost: premHomeBoost, awayXgBoost: premAwayBoost } =
+  //   computePremiumStatsBoosts(fv);
+  // homeXg = homeXg * (1 + premHomeBoost);
+  // awayXg = awayXg * (1 + premAwayBoost);
 
   // Per-team hard cap: 0.2 – 2.5
   homeXg = clamp(homeXg, 0.2, 2.5);

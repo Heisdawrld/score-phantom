@@ -100,14 +100,6 @@ function extractProfileFeatures(profile) {
   if (!profile) {
     return {
       hasProfile: false,
-      avgShotsFor: null,
-      avgShotsOnTargetFor: null,
-      avgDangerousAttacksFor: null,
-      avgCornersFor: null,
-      avgPossession: null,
-      avgOpponentShotsAllowed: null,
-      avgOpponentShotsOnTargetAllowed: null,
-      avgOpponentCornersAllowed: null,
       profileWinRate: null,
       profileBttsRate: null,
       profileCleanSheetRate: null,
@@ -116,20 +108,11 @@ function extractProfileFeatures(profile) {
       profileOver15Rate: null,
       homeWinRate: null,
       awayWinRate: null,
-      statsMatchesAvailable: 0,
     };
   }
 
   return {
     hasProfile: true,
-    avgShotsFor: safeNum(profile.avgShotsFor, null),
-    avgShotsOnTargetFor: safeNum(profile.avgShotsOnTargetFor, null),
-    avgDangerousAttacksFor: safeNum(profile.avgDangerousAttacksFor, null),
-    avgCornersFor: safeNum(profile.avgCornersFor, null),
-    avgPossession: safeNum(profile.avgPossession, null),
-    avgOpponentShotsAllowed: safeNum(profile.avgOpponentShotsAllowed, null),
-    avgOpponentShotsOnTargetAllowed: safeNum(profile.avgOpponentShotsOnTargetAllowed, null),
-    avgOpponentCornersAllowed: safeNum(profile.avgOpponentCornersAllowed, null),
     profileWinRate: safeNum(profile.winRate, null),
     profileBttsRate: safeNum(profile.bttsRate, null),
     profileCleanSheetRate: safeNum(profile.cleanSheetRate, null),
@@ -138,17 +121,7 @@ function extractProfileFeatures(profile) {
     profileOver15Rate: safeNum(profile.over15Rate, null),
     homeWinRate: safeNum(profile.homeWinRate, null),
     awayWinRate: safeNum(profile.awayWinRate, null),
-    statsMatchesAvailable: safeNum(profile.statsMatchesAvailable, 0),
   };
-}
-
-/**
- * Compute shot/attack quality ratio (shots on target / shots).
- * Higher = more clinical attack.
- */
-function shotQuality(avgShots, avgShotsOnTarget) {
-  if (!avgShots || !avgShotsOnTarget || avgShots === 0) return null;
-  return parseFloat(Math.min(1, avgShotsOnTarget / avgShots).toFixed(3));
 }
 
 /**
@@ -222,28 +195,13 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   // ── Market features ────────────────────────────────────────────────────────
   const marketFeatures = computeMarketFeatures(odds);
 
-  // ── Team profile features (new) ────────────────────────────────────────────
+  // ── Team profile features (form-derived) ───────────────────────────────────
   const homeProfile = meta?.homeProfile || meta?.homeStats || null;
   const awayProfile = meta?.awayProfile || meta?.awayStats || null;
   const homeProfileFeatures = extractProfileFeatures(homeProfile);
   const awayProfileFeatures = extractProfileFeatures(awayProfile);
 
-  // Shot quality ratios
-  const homeShotQuality = shotQuality(homeProfileFeatures.avgShotsFor, homeProfileFeatures.avgShotsOnTargetFor);
-  const awayShotQuality = shotQuality(awayProfileFeatures.avgShotsFor, awayProfileFeatures.avgShotsOnTargetFor);
-
-  // Dominance signal: possession + dangerous attack differential
-  const possessionDiff =
-    homeProfileFeatures.avgPossession != null && awayProfileFeatures.avgPossession != null
-      ? homeProfileFeatures.avgPossession - awayProfileFeatures.avgPossession
-      : null;
-
-  const attackPressDiff =
-    homeProfileFeatures.avgDangerousAttacksFor != null && awayProfileFeatures.avgDangerousAttacksFor != null
-      ? homeProfileFeatures.avgDangerousAttacksFor - awayProfileFeatures.avgDangerousAttacksFor
-      : null;
-
-  // ── Lineup modifiers (new) ─────────────────────────────────────────────────
+  // ── Lineup modifiers ───────────────────────────────────────────────────────
   const lineupModifier = meta?.lineupModifier || null;
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
@@ -270,20 +228,14 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     volatilityFeatures,
     marketFeatures,
 
-    // New: team profiles from historical stats
+    // Team profiles from form-derived data
     homeProfileFeatures,
     awayProfileFeatures,
 
-    // New: derived signals from profiles
-    homeShotQuality,
-    awayShotQuality,
-    possessionDiff,
-    attackPressDiff,
-
-    // New: lineup modifiers
+    // Lineup modifiers
     lineupFeatures,
 
-    // New: data completeness from enrichment layer
+    // Data completeness from enrichment layer
     enrichmentCompleteness: completeness,
   };
 }
