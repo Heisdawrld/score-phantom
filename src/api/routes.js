@@ -635,4 +635,63 @@ router.get("/usage", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
+// Admin-only: verifies that stats pipeline works end-to-end for a fixture.
+router.get("/debug/enrich/:fixtureId", requirePremiumAccess, async (req, res) => {
+  try {
+    const { fixtureId } = req.params;
+
+    // Fetch fixture row
+    const row = await db.execute({
+      sql: `SELECT * FROM fixtures WHERE id = ? LIMIT 1`,
+      args: [fixtureId],
+    });
+    const fixture = row.rows?.[0];
+    if (!fixture) return res.status(404).json({ error: "Fixture not found" });
+
+    // Dynamically import enrichment service
+    const { fetchAndStoreEnrichment } = await import("../enrichment/enrichmentService.js");
+    const { storeEnrichment } = await import("../enrichment/enrichOne.js");
+
+    console.log(`[debug/enrich] Running fresh enrichment for fixture ${fixtureId}`);
+    const data = await fetchAndStoreEnrichment(fixture);
+    await storeEnrichment(fixtureId, data, true);
+
+    const hp = data.homeProfile || {};
+    const ap = data.awayProfile || {};
+
+    res.json({
+      fixtureId,
+      home: fixture.home_team_name,
+      away: fixture.away_team_name,
+      homeProfile: {
+        statsMatchesAvailable: hp.statsMatchesAvailable,
+        hasStatProfile: hp.hasStatProfile,
+        avgShotsOnTargetFor: hp.avgShotsOnTargetFor,
+        avgDangerousAttacksFor: hp.avgDangerousAttacksFor,
+        avgPossession: hp.avgPossession,
+        avgOpponentShotsOnTargetAllowed: hp.avgOpponentShotsOnTargetAllowed,
+        bttsRate: hp.bttsRate,
+        over25Rate: hp.over25Rate,
+      },
+      awayProfile: {
+        statsMatchesAvailable: ap.statsMatchesAvailable,
+        hasStatProfile: ap.hasStatProfile,
+        avgShotsOnTargetFor: ap.avgShotsOnTargetFor,
+        avgDangerousAttacksFor: ap.avgDangerousAttacksFor,
+        avgPossession: ap.avgPossession,
+        avgOpponentShotsOnTargetAllowed: ap.avgOpponentShotsOnTargetAllowed,
+        bttsRate: ap.bttsRate,
+        over25Rate: ap.over25Rate,
+      },
+      completeness: data.completeness,
+      homeFormCount: data.homeForm?.length,
+      awayFormCount: data.awayForm?.length,
+    });
+  } catch (err) {
+    console.error("[debug/enrich]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
