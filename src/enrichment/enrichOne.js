@@ -110,9 +110,20 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     awayForm: Array.isArray(data?.awayForm) ? data.awayForm : [],
   };
 
+  // Derive enrichment_status and data_quality from completeness tier
+  const completenessScore = data?.completeness?.score ?? 0;
+  const completenessTier = data?.completeness?.tier ?? 'thin';
+  const tierMap = {
+    rich:    { enrichment_status: 'deep',     data_quality: 'excellent' },
+    good:    { enrichment_status: 'basic',    data_quality: 'good' },
+    partial: { enrichment_status: 'limited',  data_quality: 'moderate' },
+    thin:    { enrichment_status: 'no_data',  data_quality: 'poor' },
+  };
+  const { enrichment_status, data_quality } = tierMap[completenessTier] ?? tierMap.thin;
+
   await db.execute({
-    sql: `UPDATE fixtures SET enriched = ?, meta = ? WHERE id = ?`,
-    args: [markEnriched ? 1 : 0, JSON.stringify(meta), fixtureId],
+    sql: `UPDATE fixtures SET enriched = ?, meta = ?, enrichment_status = ?, data_quality = ? WHERE id = ?`,
+    args: [markEnriched ? 1 : 0, JSON.stringify(meta), enrichment_status, data_quality, fixtureId],
   });
 }
 

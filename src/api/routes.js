@@ -222,8 +222,19 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     const result = await db.execute({ sql: query, args });
     const fixtures = result.rows;
 
+    // Count deeply-enriched fixtures for the requested date
+    let enrichedDeepCount = 0;
+    if (date) {
+      const deepResult = await db.execute({
+        sql: `SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ? AND enrichment_status = 'deep'`,
+        args: [`%${date}%`],
+      });
+      enrichedDeepCount = Number(deepResult.rows[0]?.count || 0);
+    }
+
     res.json({
       total: fixtures.length,
+      enrichedDeepCount,
       fixtures,
       access: buildAccessPayload(req.access),
     });
@@ -520,12 +531,14 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                    p.best_pick_score, p.confidence_model, p.confidence_value,
                    p.no_safe_pick,
-                   f.tournament_name, f.match_date
+                   f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
               AND p.no_safe_pick = 0
               AND p.best_pick_selection IS NOT NULL
+              AND f.enrichment_status = 'deep'
+              AND f.data_quality IN ('excellent', 'good')
             ORDER BY p.best_pick_score DESC
             LIMIT 5`,
       args: [`%${today}%`],
@@ -543,6 +556,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         confidence: r.confidence_model || r.confidence_value || "MEDIUM",
         probability: r.best_pick_probability,
         score: r.best_pick_score,
+        enrichmentStatus: r.enrichment_status || "deep",
+        dataQuality: r.data_quality || "excellent",
       }));
       return res.json({ picks, source: "cache", access: buildAccessPayload(req.access) });
     }
@@ -550,7 +565,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     // ② Fallback: get today's fixtures (no enriched filter) and run engine on first 15
     const result = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name, tournament_name, match_date
-            FROM fixtures WHERE match_date LIKE ? LIMIT 15`,
+            FROM fixtures WHERE match_date LIKE ? AND enrichment_status = 'deep' LIMIT 15`,
       args: [`%${today}%`],
     });
 

@@ -90,6 +90,14 @@ async function runSchema() {
   if (!hasMeta) {
     await db.execute(`ALTER TABLE fixtures ADD COLUMN meta TEXT`);
   }
+  const hasEnrichmentStatus = tableInfo.rows.some((col) => col.name === "enrichment_status");
+  if (!hasEnrichmentStatus) {
+    await db.execute(`ALTER TABLE fixtures ADD COLUMN enrichment_status TEXT DEFAULT 'none'`);
+  }
+  const hasDataQuality = tableInfo.rows.some((col) => col.name === "data_quality");
+  if (!hasDataQuality) {
+    await db.execute(`ALTER TABLE fixtures ADD COLUMN data_quality TEXT DEFAULT 'unknown'`);
+  }
 }
 
 await runSchema();

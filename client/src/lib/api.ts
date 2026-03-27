@@ -64,6 +64,8 @@ export const FixtureSchema = z.object({
   category_name: z.string().optional().nullable(),
   match_date: z.string(),
   enriched: z.number().or(z.boolean()),
+  enrichment_status: z.string().optional().nullable(),
+  data_quality: z.string().optional().nullable(),
 });
 
 export type Fixture = z.infer<typeof FixtureSchema>;

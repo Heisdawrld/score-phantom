@@ -9,6 +9,7 @@ export function useFixtures(date: string) {
       const data = await fetchApi(`/fixtures?date=${date}`);
       return z.object({
         total: z.number(),
+        enrichedDeepCount: z.number().optional().default(0),
         fixtures: z.array(FixtureSchema),
         access_status: z.string().optional()
       }).parse(data);

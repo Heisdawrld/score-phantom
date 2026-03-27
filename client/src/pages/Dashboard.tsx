@@ -17,6 +17,22 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
+// ── Enrichment Badge ──────────────────────────────────────────────────────────
+function EnrichmentBadge({ status }: { status?: string | null }) {
+  const config: Record<string, { label: string; cls: string }> = {
+    deep:    { label: "Deep",     cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+    basic:   { label: "Basic",    cls: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+    limited: { label: "Limited",  cls: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+    no_data: { label: "No Data",  cls: "bg-white/5 text-white/30 border-white/10" },
+  };
+  const c = config[status ?? "no_data"] ?? config["no_data"];
+  return (
+    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${c.cls}`}>
+      {c.label}
+    </span>
+  );
+}
+
 // ── ACCA Banner (premium only) ────────────────────────────────────────────────
 function AccaSection({ isPremium }: { isPremium: boolean }) {
   const [open, setOpen] = useState(false);
@@ -64,7 +80,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
         </div>
         <div className="flex-1 text-left">
           <p className="text-sm font-bold text-primary tracking-wide">ACCA — Today's Best 5 Picks</p>
-          <p className="text-xs text-muted-foreground">AI-selected accumulator for today</p>
+          <p className="text-xs text-muted-foreground">Built only from deeply enriched matches</p>
         </div>
         {open ? (
           <ChevronUp className="w-4 h-4 text-primary shrink-0" />
@@ -180,9 +196,7 @@ function LeagueGroup({
                 </div>
 
                 <div className="flex flex-col items-end gap-2">
-                  {fixture.enriched ? (
-                    <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#10e774]" title="AI Analyzed" />
-                  ) : null}
+                  <EnrichmentBadge status={fixture.enrichment_status} />
                   <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
               </button>
@@ -347,6 +361,17 @@ export default function Dashboard() {
             className="pl-11 h-12 bg-panel/50 border-white/10 rounded-2xl"
           />
         </div>
+
+        {/* Enrichment count */}
+        {data && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399] shrink-0" />
+            <span className="text-xs text-muted-foreground">
+              <span className="text-emerald-400 font-semibold">{(data as any).enrichedDeepCount ?? 0}</span>
+              {" "}deeply enriched fixtures today · {data.total} total
+            </span>
+          </div>
+        )}
 
         {/* Fixtures List — Grouped & Collapsible */}
         <div className="space-y-4">
