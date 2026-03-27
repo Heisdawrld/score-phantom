@@ -269,9 +269,10 @@ router.post("/signup", authLimiter, async (req, res) => {
 
     const token = signToken(user);
     const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL;
     return res.json({
       token,
-      user: publicUser(user),
+      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
       has_access: access.has_full_access,
       access_status: access.status,
     });
@@ -315,9 +316,10 @@ router.post("/login", authLimiter, async (req, res) => {
 
     const token = signToken(user);
     const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL;
     return res.json({
       token,
-      user: publicUser(user),
+      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
       has_access: access.has_full_access,
       access_status: access.status,
     });
