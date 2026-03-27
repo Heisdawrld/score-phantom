@@ -636,6 +636,22 @@ router.get("/usage", requireAuth, async (req, res) => {
   }
 });
 
+// ─── POST /reset-trial — reset the current user's daily prediction count ──────
+// Allows owner to clear their own trial count for testing / debugging.
+router.post("/reset-trial", requireAuth, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await db.execute({
+      sql: `DELETE FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
+      args: [req.user.id, today],
+    });
+    res.json({ ok: true, message: `Trial count reset for user ${req.user.id} on ${today}` });
+  } catch (err) {
+    console.error("[ResetTrial]", err.message);
+    res.status(500).json({ error: "Reset failed", detail: err.message });
+  }
+});
+
 // ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
 // Admin-only: verifies that stats pipeline works end-to-end for a fixture.
 router.get("/debug/enrich/:fixtureId", requireAuth, async (req, res) => {
