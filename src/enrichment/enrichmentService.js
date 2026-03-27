@@ -152,34 +152,79 @@ function parseLineupModifier(rawLineup) {
 
 /**
  * Compute a data completeness score and reliability tier.
- * This flows into the engine's confidence calculation.
+ *
+ * Design philosophy:
+ * ─────────────────
+ * CORE DATA  (form) = the engine's primary fuel. Both teams having recent form
+ *   is sufficient to produce a trustworthy prediction.
+ *
+ * CONTEXT ENHANCERS (H2H, standings, lineup) = upgrades that push a match
+ *   from Basic toward Deep. Their *absence* reduces confidence but does NOT
+ *   make a match "No Data".
+ *
+ * Status mapping:
+ *   Deep    ≥ 0.80  — rich multi-source, high trust
+ *   Basic   ≥ 0.55  — solid form-based, trustworthy
+ *   Limited ≥ 0.30  — thin data, viewable but low confidence
+ *   No Data  < 0.30  — almost nothing usable
+ *
+ * Scoring weights:
+ *   homeForm ≥ 3 games     → +0.30  (core)
+ *   awayForm ≥ 3 games     → +0.30  (core)
+ *   homeForm ≥ 8 games     → +0.10  (rich form bonus)
+ *   awayForm ≥ 8 games     → +0.10  (rich form bonus)
+ *   H2H ≥ 2 records        → +0.10  (context enhancer)
+ *   Standings ≥ 4 entries  → +0.10  (context enhancer)
+ *   Lineup confirmed        → +0.05  (optional near-match bonus)
+ *
+ * Examples:
+ *   Championship (both teams 8+ form, no H2H/standings): 0.30+0.30+0.10+0.10 = 0.80 → DEEP
+ *   AFCON qualifiers (both teams 3+ form):               0.30+0.30           = 0.60 → BASIC
+ *   Liga Pro Serie B (both 5+ form, has standings):      0.30+0.30+0.10      = 0.70 → BASIC
+ *   One team thin form (< 3 games):                      0.30                = 0.30 → LIMITED
+ *   No form at all from either team:                     0.00                → NO DATA
  */
 function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfile, awayProfile, lineupModifier }) {
   let score = 0;
   const checks = {};
 
-  checks.hasHomeForm = (homeForm?.length || 0) >= 3;
-  checks.hasAwayForm = (awayForm?.length || 0) >= 3;
+  const homeCount = homeForm?.length || 0;
+  const awayCount = awayForm?.length || 0;
+
+  // ── Core: form data (primary engine fuel) ────────────────────────────────
+  checks.hasHomeForm = homeCount >= 3;
+  checks.hasAwayForm = awayCount >= 3;
+  if (checks.hasHomeForm) score += 0.30;
+  if (checks.hasAwayForm) score += 0.30;
+
+  // ── Rich form bonus (strong bilateral sample) ─────────────────────────────
+  checks.homeFormRich = homeCount >= 8;
+  checks.awayFormRich = awayCount >= 8;
+  if (checks.homeFormRich) score += 0.10;
+  if (checks.awayFormRich) score += 0.10;
+
+  // ── Context enhancers (upgrade quality, not requirements) ─────────────────
   checks.hasH2H = (h2h?.length || 0) >= 2;
   checks.hasStandings = (standings?.length || 0) >= 4;
   checks.hasLineup = lineupModifier?.homeLineupConfirmed || lineupModifier?.awayLineupConfirmed;
 
-  if (checks.hasHomeForm) score += 0.20;
-  if (checks.hasAwayForm) score += 0.20;
-  if (checks.hasH2H) score += 0.15;
-  if (checks.hasStandings) score += 0.15;
-  if (checks.hasLineup) score += 0.10;
+  if (checks.hasH2H) score += 0.10;
+  if (checks.hasStandings) score += 0.10;
+  if (checks.hasLineup) score += 0.05;
 
-  // Bonus for rich form (reallocated from dead premium stats weight)
-  if ((homeForm?.length || 0) >= 8) score += 0.10;
-  if ((awayForm?.length || 0) >= 8) score += 0.10;
+  // ── Floor rule: if any form exists, never collapse to NO DATA ─────────────
+  // Matches where the API returns thin but non-zero form are Limited, not absent.
+  if (score < 0.30 && (homeCount > 0 || awayCount > 0)) {
+    score = 0.30;
+    checks.floorApplied = true;
+  }
 
   const completeness = Math.min(1, parseFloat(score.toFixed(2)));
 
   let tier;
-  if (completeness >= 0.8) tier = 'rich';
+  if (completeness >= 0.80) tier = 'rich';
   else if (completeness >= 0.55) tier = 'good';
-  else if (completeness >= 0.35) tier = 'partial';
+  else if (completeness >= 0.30) tier = 'partial';
   else tier = 'thin';
 
   return { score: completeness, tier, checks };
@@ -262,7 +307,14 @@ export async function fetchAndStoreEnrichment(fixture) {
     lineupModifier,
   });
 
-  console.log(`[enrichmentService] Completeness: ${completeness.score} (${completeness.tier}) | home_form=${homeForm.length} away_form=${awayForm.length} h2h=${h2hData.h2h.length} standings=${standings.length}`);
+  const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
+  console.log(
+    `[enrichmentService] ${fixture.home_team_name} vs ${fixture.away_team_name} → ` +
+    `${tierLabel} (${completeness.score}) | ` +
+    `home_form=${homeForm.length} away_form=${awayForm.length} ` +
+    `h2h=${h2hData.h2h.length} standings=${standings.length}` +
+    (completeness.checks.floorApplied ? ' [floor applied]' : '')
+  );
 
   // ── Step 7: Assemble enrichment bundle ────────────────────────────────────
   return {

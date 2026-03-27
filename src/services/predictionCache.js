@@ -22,7 +22,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.3.0';
+const CURRENT_ENGINE_VERSION = '2.3.1';
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
