@@ -132,6 +132,62 @@ async function autoSeed() {
   }
 }
 
+// ── Auto-enrichment: runs at startup and every 4 hours ───────────────────────
+const ENRICH_BATCH = 50;
+const ENRICH_DELAY_MS = 1500;
+
+async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
+  try {
+    const today = dateFilter || new Date().toISOString().split("T")[0];
+
+    // Count pending unenriched fixtures for today + next 6 days
+    const pending = await db.execute({
+      sql: `SELECT id, home_team_name, away_team_name, match_date
+            FROM fixtures
+            WHERE enriched = 0 AND match_date >= ?
+            ORDER BY match_date ASC
+            LIMIT ?`,
+      args: [today, limit],
+    });
+
+    const fixtures = pending.rows || [];
+    if (fixtures.length === 0) {
+      console.log(`[AutoEnrich] All fixtures already enriched for ${today}+`);
+      return { enriched: 0, failed: 0 };
+    }
+
+    console.log(`[AutoEnrich] Starting enrichment for ${fixtures.length} fixtures...`);
+
+    // Dynamic import to avoid circular dependencies at startup
+    const { enrichFixture } = await import("./enrichment/enrichOne.js");
+
+    let success = 0;
+    let failed = 0;
+
+    for (const fixture of fixtures) {
+      try {
+        await enrichFixture(fixture);
+        success++;
+        console.log(`[AutoEnrich] ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
+      } catch (err) {
+        failed++;
+        console.warn(`[AutoEnrich] ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
+      }
+      // Respect API rate limits
+      await new Promise((r) => setTimeout(r, ENRICH_DELAY_MS));
+    }
+
+    console.log(`[AutoEnrich] Done. Success: ${success} | Failed: ${failed}`);
+    return { enriched: success, failed };
+  } catch (err) {
+    console.error("[AutoEnrich] Fatal:", err.message);
+    return { enriched: 0, failed: 0, error: err.message };
+  }
+}
+
+// Expose autoEnrich so adminRoutes can call it via dynamic import
+export { autoEnrich };
+
 async function backfillMissingCountries() {
   try {
     const result = await db.execute(`
@@ -204,6 +260,14 @@ app.listen(PORT, async () => {
   await initUsersTable();
   await initPredictionsTable();
   await autoSeed();
+
+  // Enrich today's fixtures immediately after seed (non-blocking)
+  autoEnrich().catch((err) => console.error("[AutoEnrich] startup error:", err.message));
+
+  // Re-run enrichment every 4 hours to catch any newly added or failed fixtures
+  setInterval(() => {
+    autoEnrich().catch((err) => console.error("[AutoEnrich] scheduled error:", err.message));
+  }, 4 * 60 * 60 * 1000);
 });
 
 app.use(errorHandler);

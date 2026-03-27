@@ -253,4 +253,31 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /run-enrichment — trigger enrichment for today's pending fixtures ────
+router.post("/run-enrichment", requireAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.body?.limit || req.query?.limit || "50", 10);
+    const dateFilter = req.body?.date || req.query?.date || null;
+
+    console.log(`[Admin] Manual enrichment triggered. Limit: ${limit}, Date: ${dateFilter || "today+"}`);
+
+    // Dynamic import to avoid circular dependency
+    const { autoEnrich } = await import("../app.js");
+    // Run in background — return immediately so request doesn't timeout
+    const resultPromise = autoEnrich({ limit, dateFilter });
+
+    // Wait up to 10s for a quick result count, then return accepted
+    const timeoutPromise = new Promise((r) => setTimeout(() => r(null), 10000));
+    const quickResult = await Promise.race([resultPromise, timeoutPromise]);
+
+    if (quickResult) {
+      return res.json({ success: true, ...quickResult, message: "Enrichment complete" });
+    }
+    return res.json({ success: true, message: "Enrichment running in background", limit });
+  } catch (err) {
+    console.error("[Admin] run-enrichment error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
