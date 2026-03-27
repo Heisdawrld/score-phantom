@@ -362,6 +362,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
       await incrementDailyCount(req.user.id, trialToday);
     }
 
+    res.set("Cache-Control", "no-store");
     res.json({
       ...fullPayload,
       explanation,

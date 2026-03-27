@@ -17,7 +17,7 @@ export function usePrediction(fixtureId: string | null, onError?: (code: string)
       }
     },
     enabled: !!fixtureId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     retry: false,
   });
 }
