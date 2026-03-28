@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
@@ -304,6 +305,20 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
+  const { toast } = useToast();
+
+  // Payment success toast on return from Flutterwave
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      toast({
+        title: '🎉 Payment confirmed!',
+        description: 'ScorePhantom Premium is now active. Enjoy unlimited predictions!',
+        duration: 6000,
+      });
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
 
   const formattedDate = format(selectedDate, "yyyy-MM-dd");
   const { data, isLoading: fixturesLoading } = useFixtures(formattedDate);

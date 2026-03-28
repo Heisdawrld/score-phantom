@@ -144,6 +144,16 @@ export default function Paywall() {
                 )}
               </Button>
 
+              {/* Continue with trial */}
+              {user?.access_status === "trial" && (
+                <button
+                  onClick={() => setLocation("/")}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-white/70 transition-colors"
+                >
+                  Continue with free trial →
+                </button>
+              )}
+
               {/* Trust badges */}
               <div className="space-y-2">
                 <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">

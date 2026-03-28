@@ -48,6 +48,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       }),
       db.execute(`SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified'`),
       db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
+      db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
     const users = usersResult.rows || [];
@@ -73,6 +74,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
         currency: 'NGN',
         total: Number(totalRevenue.rows[0].total || 0),
         total_payments: Number(totalRevenue.rows[0].count || 0),
+        pending_verification: Number(pendingResult.rows[0].count || 0),
         pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {

@@ -321,6 +321,20 @@ export async function fetchAndStoreEnrichment(fixture) {
     // Stats not available pre-match — expected
   }
 
+  // ── Step 5.5: Fetch match stats and events for richer data ─────────────────
+  let matchStats = null;
+  let matchEvents = null;
+  try {
+    const matchId = fixture.match_id || fixture.id;
+    [matchStats, matchEvents] = await Promise.all([
+      fetchMatchStats(matchId).catch(() => null),
+      fetchMatchEvents(matchId).catch(() => null),
+    ]);
+    if (matchStats) console.log('[enrichmentService] Match stats available for fixture ' + matchId);
+  } catch (_) {
+    // Stats not available pre-match — expected
+  }
+
   // ── Step 6: Data completeness ─────────────────────────────────────────────
   const completeness = computeDataCompleteness({
     homeForm,
