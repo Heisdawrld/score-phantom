@@ -286,6 +286,7 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
     // Trial users: enforce 10 predictions/day cap
+    let trialToday = null; // declared here so it's in scope for increment below
     if (!req.access.subscription_active) {
       if (!req.access.has_full_access) {
         return res.status(403).json({
@@ -296,6 +297,7 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
       }
       // has_full_access but not subscription = trial
       const { count, today } = await getTodayCount(req.user.id);
+      trialToday = today; // save for use after prediction
       if (count >= TRIAL_DAILY_LIMIT) {
         return res.status(429).json({
           error: "Daily limit reached",
@@ -304,7 +306,6 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
           access: buildAccessPayload(req.access),
         });
       }
-      // NOTE: increment happens AFTER success to avoid charging for engine failures
     }
 
     const fixtureId = req.params.fixtureId;
@@ -316,9 +317,9 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const { prediction, odds, meta } = result;
 
-    // Increment trial count only after successful prediction (reuse today from above)
-    if (!req.access.subscription_active && req.access.has_full_access) {
-      await incrementDailyCount(req.user.id, today);
+    // Increment trial count only after successful prediction
+    if (!req.access.subscription_active && req.access.has_full_access && trialToday) {
+      await incrementDailyCount(req.user.id, trialToday);
     }
 
     const response = {

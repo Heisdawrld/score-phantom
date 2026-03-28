@@ -389,11 +389,21 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
 
     const reference  = `SP_${user.id}_${Date.now()}`;
 
-    // Step 1: Create/fetch Flutterwave customer
-    const customerId = await createOrFetchCustomer(user.email, user.email.split('@')[0]);
-
-    // Step 2: Generate dynamic virtual account (PWBT)
-    const account = await createVirtualAccount(customerId, reference, PLAN_AMOUNT_NGN);
+    // Step 1 & 2: Create virtual account via Flutterwave V4
+    let customerId, account;
+    try {
+      customerId = await createOrFetchCustomer(user.email, user.email.split('@')[0]);
+      account = await createVirtualAccount(customerId, reference, PLAN_AMOUNT_NGN);
+    } catch (flwErr) {
+      console.error('[Payment] Flutterwave V4 error:', flwErr.message);
+      // Clean pending record
+      await db.execute({ sql: 'DELETE FROM payments WHERE reference = ?', args: [reference] });
+      return res.status(503).json({
+        error: 'payment_service_unavailable',
+        message: 'Payment service is temporarily unavailable. Please try again or contact support.',
+        support: process.env.ADMIN_EMAIL || 'davidadiele7@gmail.com',
+      });
+    }
 
     // Save pending payment record
     await db.execute({
