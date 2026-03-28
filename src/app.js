@@ -29,7 +29,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Build allowed origins list — always include APP_URL and Render subdomain
-const APP_ORIGIN = (process.env.APP_URL || '').replace(//$/, '');
+const APP_ORIGIN = (process.env.APP_URL || '').trim();
 const allowedOrigins = [
   APP_ORIGIN,
   'https://score-phantom.onrender.com', // explicit fallback if APP_URL not set
