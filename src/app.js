@@ -28,15 +28,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Build allowed origins list — always include APP_URL and Render subdomain
+const APP_ORIGIN = (process.env.APP_URL || '').replace(//$/, '');
 const allowedOrigins = [
-  process.env.APP_URL,
+  APP_ORIGIN,
+  'https://score-phantom.onrender.com', // explicit fallback if APP_URL not set
   'http://localhost:5173',
   'http://localhost:3000',
 ].filter(Boolean);
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // mobile, curl, health checks
+    // Allow no-origin requests (mobile apps, curl, Render health checks)
+    if (!origin) return callback(null, true);
+    // Allow exact origin matches
     if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow all *.onrender.com subdomains (covers preview deployments)
+    if (origin.endsWith('.onrender.com')) return callback(null, true);
+    console.warn('[CORS] Blocked origin:', origin);
     return callback(new Error('CORS: origin not allowed'), false);
   },
   credentials: true,
