@@ -69,7 +69,21 @@ export function useLogout() {
   };
 }
 
-/** OPay: get bank details + reference for manual payment */
+/**
+ * Flutterwave V3 — initialize a hosted payment.
+ * Returns { link, reference } — frontend redirects to link.
+ * After payment, Flutterwave redirects to /api/auth/payment/callback
+ * which verifies + activates premium, then redirects to /?payment=success
+ */
+export function useInitPayment() {
+  return useMutation({
+    mutationFn: async () => {
+      return fetchApi("/auth/payment/initialize", { method: "POST" });
+    },
+  });
+}
+
+/** Keep legacy hooks below so nothing else breaks */
 export function useRequestPayment() {
   return useMutation({
     mutationFn: async () => {
@@ -78,7 +92,6 @@ export function useRequestPayment() {
   });
 }
 
-/** OPay: user confirms they paid — backend sets pending_verification and returns WhatsApp link */
 export function useConfirmPayment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -90,15 +103,6 @@ export function useConfirmPayment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-  });
-}
-
-/** Legacy Paystack hooks (kept for compatibility) */
-export function useInitPayment() {
-  return useMutation({
-    mutationFn: async () => {
-      return fetchApi("/auth/payment/initialize", { method: "POST" });
     },
   });
 }

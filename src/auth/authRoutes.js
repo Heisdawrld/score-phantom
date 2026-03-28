@@ -165,7 +165,7 @@ export async function requirePremiumAccess(req, res, next) {
 }
 
 // ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
-import { createOrFetchCustomer, createVirtualAccount, verifyCharge, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
+import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
 async function activatePremium(userId, flwChargeId, reference) {
   const expiry          = new Date();
@@ -364,82 +364,49 @@ router.post("/password/reset-confirm", authLimiter, async (req, res) => {
 // ── Flutterwave Payment ───────────────────────────────────────────────────────
 
 // POST /api/auth/payment/initialize
-// Flutterwave V4: creates a virtual bank account (PWBT) for the user to transfer to.
-// No redirect needed — user gets account details, transfers, webhook fires automatically.
+// Flutterwave V3: creates a hosted payment link, frontend redirects user to it.
+// After payment Flutterwave redirects to /api/auth/payment/callback automatically.
 router.post("/payment/initialize", requireAuth, async (req, res) => {
   try {
-    if (!flwConfigured()) return res.status(503).json({ error: "Payment service not configured" });
+    if (!flwConfigured()) return res.status(503).json({ error: 'Payment service not configured' });
 
     const userResult = await db.execute({
-      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      sql: 'SELECT id, email, status, premium_expires_at, subscription_expires_at FROM users WHERE id = ? LIMIT 1',
       args: [req.user.id],
     });
     const user = userResult.rows?.[0];
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Block if already active
-    const accessCheck = await db.execute({
-      sql: "SELECT status, premium_expires_at, subscription_expires_at FROM users WHERE id = ? LIMIT 1",
-      args: [req.user.id],
-    });
-    const access = computeAccessStatus(accessCheck.rows?.[0] || {});
+    const access = computeAccessStatus(user);
     if (access.subscription_active) {
-      return res.status(400).json({ error: "You already have an active subscription." });
+      return res.status(400).json({ error: 'You already have an active subscription.' });
     }
 
-    const reference  = `SP_${user.id}_${Date.now()}`;
+    const txRef     = `SP_${user.id}_${Date.now()}`;
+    const appUrl    = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+    const redirectUrl = `${appUrl}/api/auth/payment/callback`;
 
-    // Step 1 & 2: Create virtual account via Flutterwave V4
-    let customerId, account;
-    try {
-      customerId = await createOrFetchCustomer(user.email, user.email.split('@')[0]);
-      account = await createVirtualAccount(customerId, reference, PLAN_AMOUNT_NGN);
-    } catch (flwErr) {
-      console.error('[Payment] Flutterwave V4 error:', flwErr.message);
-      // Clean pending record
-      await db.execute({ sql: 'DELETE FROM payments WHERE reference = ?', args: [reference] });
-      return res.status(503).json({
-        error: 'payment_service_unavailable',
-        message: 'Payment service is temporarily unavailable. Please try again or contact support.',
-        support: process.env.ADMIN_EMAIL || 'davidadiele7@gmail.com',
-      });
-    }
+    const link = await initializePayment({
+      txRef,
+      amount:      PLAN_AMOUNT_NGN,
+      currency:    'NGN',
+      email:       user.email,
+      name:        user.email.split('@')[0],
+      redirectUrl,
+    });
+
+    if (!link) throw new Error('Flutterwave did not return a payment link');
 
     // Save pending payment record
     await db.execute({
-      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [user.id, reference, PLAN_AMOUNT_NGN, 'NGN', 'initialized', 'flutterwave'],
+      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [user.id, txRef, PLAN_AMOUNT_NGN, 'NGN', 'initialized', 'flutterwave'],
     });
 
-    // Store virtual account id for later webhook matching
-    await db.execute({
-      sql: `UPDATE payments SET flw_transaction_id = ? WHERE reference = ?`,
-      args: [account.id || '', reference],
-    });
-
-    return res.json({
-      reference,
-      amount:       PLAN_AMOUNT_NGN,
-      currency:     'NGN',
-      payment_method: 'bank_transfer',
-      bank_details: {
-        account_number:   account.account_number,
-        bank_name:        account.account_bank_name,
-        account_name:     'ScorePhantom Premium',
-        amount:           `₦${PLAN_AMOUNT_NGN.toLocaleString()}`,
-        expires_at:       account.account_expiration_datetime,
-        note:             'Transfer the exact amount to activate your premium subscription instantly.',
-      },
-      instructions: [
-        `1. Transfer exactly ₦${PLAN_AMOUNT_NGN.toLocaleString()} to the account above`,
-        '2. Use your registered email as the narration/description',
-        '3. Your subscription will activate automatically within seconds after transfer',
-        `4. Your reference code: ${reference}`,
-        '5. Account expires in 1 hour — generate a new one if needed',
-      ],
-    });
+    return res.json({ link, reference: txRef });
   } catch (err) {
-    console.error('[FLW Init Error]', err);
+    console.error('[FLW Init Error]', err.message);
     return res.status(500).json({ error: 'Failed to initialize payment: ' + err.message });
   }
 });
@@ -476,71 +443,109 @@ router.get("/payment/check", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/auth/payment/callback
+// Flutterwave V3 redirect — fires after user completes (or cancels) payment.
+// Verifies transaction, activates premium, redirects user to dashboard.
+router.get("/payment/callback", async (req, res) => {
+  const appUrl = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+
+  try {
+    const { status, tx_ref, transaction_id } = req.query;
+
+    if (status !== 'successful' || !transaction_id || !tx_ref) {
+      console.warn('[FLW Callback] Payment failed or cancelled:', req.query);
+      return res.redirect(`${appUrl}/paywall?payment=failed`);
+    }
+
+    // Verify with Flutterwave API (anti-fraud)
+    const txData = await verifyTransaction(String(transaction_id));
+
+    if (
+      txData?.status !== 'successful' ||
+      Number(txData?.amount) < PLAN_AMOUNT_NGN ||
+      txData?.currency !== 'NGN' ||
+      txData?.tx_ref !== String(tx_ref)
+    ) {
+      console.warn('[FLW Callback] Verification failed:', txData);
+      return res.redirect(`${appUrl}/paywall?payment=failed`);
+    }
+
+    // Find payment record by tx_ref
+    const paymentResult = await db.execute({
+      sql: 'SELECT * FROM payments WHERE reference = ? LIMIT 1',
+      args: [String(tx_ref).trim()],
+    });
+    const payment = paymentResult.rows?.[0];
+    if (!payment) {
+      console.warn('[FLW Callback] No payment record for tx_ref:', tx_ref);
+      return res.redirect(`${appUrl}/paywall?payment=failed`);
+    }
+
+    // Idempotency — already activated
+    if (payment.status === 'verified') {
+      return res.redirect(`${appUrl}/?payment=success`);
+    }
+
+    // Activate premium
+    await activatePremium(payment.user_id, String(transaction_id), String(tx_ref));
+    console.log('[FLW Callback] ✓ Premium activated — user=' + payment.user_id + ' tx=' + transaction_id);
+
+    return res.redirect(`${appUrl}/?payment=success`);
+  } catch (err) {
+    console.error('[FLW Callback Error]', err.message);
+    const appUrl2 = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+    return res.redirect(`${appUrl2}/paywall?payment=error`);
+  }
+});
+
 // POST /api/auth/webhook/flutterwave
-// Flutterwave V4 webhook — fires when payment is completed
-// Event type: charge.completed | data.status: succeeded
+// Flutterwave V3 webhook — fires when payment completes (backup to callback)
 router.post("/webhook/flutterwave", async (req, res) => {
   try {
-    // Always respond 200 immediately to prevent Flutterwave retries
     res.sendStatus(200);
 
-    // Verify signature
     if (!verifyWebhookSignature(req)) {
       console.warn('[FLW Webhook] Invalid signature — ignoring');
       return;
     }
 
     const event = req.body;
-    // V4 webhook event types
-    if (event.type !== 'charge.completed') return;
+    if (event.event !== 'charge.completed') return;
 
     const charge   = event.data;
-    const txRef    = charge?.reference;
-    const chargeId = charge?.id;
-    const amount   = charge?.amount;
+    const txRef    = charge?.tx_ref;
+    const txId     = charge?.id;
+    const amount   = Number(charge?.amount || 0);
     const currency = charge?.currency;
     const status   = charge?.status;
 
-    if (status !== 'succeeded') {
-      console.log(`[FLW Webhook] Charge ${chargeId} status=${status} — skipping`);
+    if (status !== 'successful') {
+      console.log('[FLW Webhook] status=' + status + ' — skipping');
       return;
     }
-
     if (currency !== 'NGN' || amount < PLAN_AMOUNT_NGN) {
-      console.warn(`[FLW Webhook] Amount mismatch: ${amount} ${currency} for ref ${txRef}`);
+      console.warn('[FLW Webhook] Amount/currency mismatch:', amount, currency);
       return;
     }
 
-    // Find payment by reference
     const paymentResult = await db.execute({
       sql: 'SELECT * FROM payments WHERE reference = ? LIMIT 1',
       args: [String(txRef || '').trim()],
     });
     const payment = paymentResult.rows?.[0];
-    if (!payment) {
-      console.warn(`[FLW Webhook] No payment record for reference=${txRef}`);
-      return;
+    if (!payment) { console.warn('[FLW Webhook] No record for tx_ref:', txRef); return; }
+    if (payment.status === 'verified') { console.log('[FLW Webhook] Already verified:', txRef); return; }
+
+    // Double-verify
+    const verified = await verifyTransaction(txId);
+    if (verified?.status !== 'successful' || Number(verified?.amount) < PLAN_AMOUNT_NGN) {
+      console.warn('[FLW Webhook] Re-verification failed for tx:', txId); return;
     }
 
-    // Idempotency — already processed
-    if (payment.status === 'verified') {
-      console.log(`[FLW Webhook] Already verified: ${txRef}`);
-      return;
-    }
-
-    // Double-verify with Flutterwave API (anti-fraud)
-    const verified = await verifyCharge(chargeId);
-    if (verified?.status !== 'succeeded' || verified?.amount < PLAN_AMOUNT_NGN) {
-      console.warn(`[FLW Webhook] Re-verification failed for charge ${chargeId}`);
-      return;
-    }
-
-    // Activate premium
-    await activatePremium(payment.user_id, chargeId, txRef);
-    console.log(`[FLW Webhook] ✓ Premium activated — user=${payment.user_id} charge=${chargeId}`);
+    await activatePremium(payment.user_id, String(txId), String(txRef));
+    console.log('[FLW Webhook] ✓ Premium activated — user=' + payment.user_id);
   } catch (err) {
     console.error('[FLW Webhook Error]', err.message);
-    // Already sent 200, nothing more to do
   }
 });
 
