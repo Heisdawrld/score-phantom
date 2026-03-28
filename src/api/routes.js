@@ -316,9 +316,8 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const { prediction, odds, meta } = result;
 
-    // Increment trial count only after a successful prediction
+    // Increment trial count only after successful prediction (reuse today from above)
     if (!req.access.subscription_active && req.access.has_full_access) {
-      const { today } = await getTodayCount(req.user.id);
       await incrementDailyCount(req.user.id, today);
     }
 
@@ -541,8 +540,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             WHERE f.match_date LIKE ?
               AND p.best_pick_selection IS NOT NULL
               AND (
-                f.enrichment_status = 'deep'
-                OR (f.enrichment_status = 'basic' AND f.data_quality IN ('excellent', 'good'))
+                f.enrichment_status IN ('deep', 'basic', 'limited')
+                AND f.data_quality IN ('excellent', 'good', 'moderate')
               )
             ORDER BY p.best_pick_probability DESC
             LIMIT 50`,

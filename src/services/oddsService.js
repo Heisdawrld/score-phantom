@@ -261,7 +261,14 @@ function parseOddsFromEvent(event) {
 }
 
 export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam, tournamentName) {
-  if (!ODDS_API_KEY) return null;
+  if (!ODDS_API_KEY) {
+    // Log once per process start, not every call
+    if (!globalThis.__oddsKeyWarned) {
+      console.warn('[OddsService] ODDS_API_KEY not set. Odds features disabled. Set it in Render dashboard.');
+      globalThis.__oddsKeyWarned = true;
+    }
+    return null;
+  }
   
   await ensureOddsTable();
   

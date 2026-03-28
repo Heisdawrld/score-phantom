@@ -195,13 +195,23 @@ export async function ensureFixtureData(fixtureId) {
 // ── Cache storage helpers ─────────────────────────────────────────────────────
 
 async function savePredictionToCache(fixtureId, prediction, engineResult) {
-  try {
-    await db.execute({
-      sql: `ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`,
-    });
-  } catch (_) { /* column already exists */ }
+  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT` }); } catch (_) {}
+
+  const rec = prediction || {};
+  const bestPick = rec.predictions?.recommendation;
+  const gameScript = rec.gameScript || {};
+  const dataQuality = rec.dataQuality || {};
+
+  // Volatility: convert numeric score to string label
+  const volRaw = gameScript.volatility || 'MEDIUM';
+  const volStr = typeof volRaw === 'number'
+    ? (volRaw >= 0.7 ? 'high' : volRaw >= 0.4 ? 'medium' : 'low')
+    : String(volRaw).toLowerCase();
+
+  const noSafePick = !bestPick || bestPick.market === 'No Edge' || !bestPick.pick || bestPick.pick === 'No Clear Edge' ? 1 : 0;
 
   try {
+    // Write prediction_json blob
     await db.execute({
       sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
       args: [
@@ -209,6 +219,34 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         String(fixtureId),
       ],
     });
+
+    // Write flat columns used by ACCA builder
+    await db.execute({
+      sql: `UPDATE predictions_v2 SET
+        best_pick_market      = ?,
+        best_pick_selection   = ?,
+        best_pick_probability = ?,
+        confidence_volatility = ?,
+        script_primary        = ?,
+        no_safe_pick          = ?,
+        home_team             = ?,
+        away_team             = ?,
+        updated_at            = ?
+      WHERE fixture_id = ?`,
+      args: [
+        noSafePick ? null : (bestPick?.market    || null),
+        noSafePick ? null : (bestPick?.pick       || null),
+        noSafePick ? null : (bestPick?.probability != null ? bestPick.probability : null),
+        volStr,
+        gameScript.script || null,
+        noSafePick,
+        rec.fixture?.homeTeam || null,
+        rec.fixture?.awayTeam || null,
+        new Date().toISOString(),
+        String(fixtureId),
+      ],
+    });
+    console.log(`[predictionCache] Flat columns written for fixture ${fixtureId}`);
   } catch (err) {
     console.error('[predictionCache] savePredictionToCache failed:', err.message);
   }
