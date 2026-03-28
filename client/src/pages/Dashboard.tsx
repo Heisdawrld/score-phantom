@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { format, addDays, isSameDay } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { useFixtures } from "@/hooks/use-fixtures";
@@ -8,7 +8,7 @@ import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChevronRight, ChevronDown, ChevronUp, Search, Trophy,
-  Crown, Zap, Lock, AlertCircle
+  Crown, Zap, Lock, AlertCircle, Radio, Goal
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -302,6 +302,14 @@ export default function Dashboard() {
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(dates[0]);
+  const dateStripRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll date strip to start (today) on mount
+  useEffect(() => {
+    if (dateStripRef.current) {
+      dateStripRef.current.scrollLeft = 0;
+    }
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
@@ -424,11 +432,14 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Live Scores Section */}
+        <LiveSection />
+
         {/* ACCA Section */}
         <AccaSection isPremium={!!isPremium} />
 
         {/* Date Strip */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 snap-x">
+        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 snap-x">
           {dates.map((date) => {
             const isSelected = isSameDay(date, selectedDate);
             return (

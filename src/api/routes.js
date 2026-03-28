@@ -121,7 +121,7 @@ async function ensureDailyCountTable() {
 ensureDailyCountTable();
 
 async function getTodayCount(userId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
   try {
     const r = await db.execute({
       sql: `SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
@@ -490,7 +490,7 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
       console.error("[Refresh] Seeder failed:", seedErr.message);
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const result = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name FROM fixtures WHERE match_date LIKE ? AND enriched = 1 LIMIT 50`,
       args: [`%${today}%`],

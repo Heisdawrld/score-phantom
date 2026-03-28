@@ -17,8 +17,11 @@ interface PredictionPanelProps {
 // Fix engine market labels: "Over 25" → "Over 2.5", "OVER 15" → "OVER 1.5", etc.
 function formatMarket(label: string | undefined | null): string {
   if (!label) return "";
-  // Replace patterns like "25", "15", "35", "45" when they appear as standalone numbers after a space
-  return label.replace(/\b([1-9])5\b/g, "$1.5");
+  // Replace patterns: " 25" → " 2.5", " 15" → " 1.5", " 35" → " 3.5", " 45" → " 4.5"
+  return label
+    .replace(/\b(Over|Under|OVER|UNDER|over|under)\s+(\d)(5)\b/gi, (_, word, d) => word + ' ' + d + '.5')
+    .replace(/\b([0-9])(5)\s+(Goals|GOALS|goals)/gi, (_, d, __, g) => d + '.5 ' + g)
+    .replace(/\b([1-4])(5)\b(?!\s*%)/g, (_, d) => d + '.5');
 }
 
 function formatPct(val: number | undefined | null): string {
@@ -136,7 +139,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-b from-panel to-[#080b10] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.5)] max-h-[92vh] flex flex-col"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-b from-panel to-[#080b10] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.5)] max-h-[92dvh] flex flex-col"
           >
             <div className="flex justify-center pt-4 pb-2">
               <div className="w-16 h-1.5 rounded-full bg-white/20" />
@@ -144,12 +147,12 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
 
             <button
               onClick={onClose}
-              className="absolute top-6 right-6 w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+              className="absolute top-5 right-5 w-9 h-9 bg-white/8 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/12 transition-all active:scale-95"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-12 hide-scrollbar">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-16 hide-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
               {isLoading ? (
                 <div className="space-y-6 mt-6 max-w-xl mx-auto">
                   <div className="text-center space-y-2">
