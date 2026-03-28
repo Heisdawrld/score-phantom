@@ -1,4 +1,13 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
+
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { error: "Too many admin requests." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 import db from "../config/database.js";
 import jwt from "jsonwebtoken";
 import { computeAccessStatus } from "../auth/authRoutes.js";
@@ -24,7 +33,7 @@ function requireAdmin(req, res, next) {
 }
 
 // ── GET /stats — user counts, revenue, payments today ────────────────────────
-router.get("/stats", requireAdmin, async (req, res) => {
+router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const now = new Date();
     const todayStart = now.toISOString().slice(0, 10);
@@ -59,6 +68,7 @@ router.get("/stats", requireAdmin, async (req, res) => {
         expired: expiredCount,
       },
       revenue: {
+        currency: 'NGN',
         total: Number(totalRevenue.rows[0].total || 0),
         total_payments: Number(totalRevenue.rows[0].count || 0),
       },
@@ -74,7 +84,7 @@ router.get("/stats", requireAdmin, async (req, res) => {
 });
 
 // ── GET /users — paginated users with access status ──────────────────────────
-router.get("/users", requireAdmin, async (req, res) => {
+router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
@@ -124,7 +134,7 @@ router.get("/users", requireAdmin, async (req, res) => {
 });
 
 // ── GET /payments — paginated payments with user email ───────────────────────
-router.get("/payments", requireAdmin, async (req, res) => {
+router.get("/payments", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
@@ -159,7 +169,7 @@ router.get("/payments", requireAdmin, async (req, res) => {
 });
 
 // ── POST /users/:id/grant — grant 30-day premium ────────────────────────────
-router.post("/users/:id/grant", requireAdmin, async (req, res) => {
+router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
     const days = parseInt(req.body?.days || PLAN_DURATION_DAYS, 10);
@@ -196,7 +206,7 @@ router.post("/users/:id/grant", requireAdmin, async (req, res) => {
 });
 
 // ── POST /users/:id/revoke — revoke premium ─────────────────────────────────
-router.post("/users/:id/revoke", requireAdmin, async (req, res) => {
+router.post("/users/:id/revoke", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
 
@@ -225,7 +235,7 @@ router.post("/users/:id/revoke", requireAdmin, async (req, res) => {
 });
 
 // ── DELETE /users/:id — delete a user and their data ─────────────────────────
-router.delete("/users/:id", requireAdmin, async (req, res) => {
+router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
 
@@ -254,15 +264,15 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
 });
 
 // ── POST /run-enrichment — trigger enrichment for today's pending fixtures ────
-router.post("/run-enrichment", requireAdmin, async (req, res) => {
+router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const limit = parseInt(req.body?.limit || req.query?.limit || "50", 10);
     const dateFilter = req.body?.date || req.query?.date || null;
 
     console.log(`[Admin] Manual enrichment triggered. Limit: ${limit}, Date: ${dateFilter || "today+"}`);
 
-    // Dynamic import to avoid circular dependency
-    const { autoEnrich } = await import("../app.js");
+    // Direct import to avoid circular dependency with app.js
+    const { autoEnrich } = await import("../services/enrichmentRunner.js");
     // Run in background — return immediately so request doesn't timeout
     const resultPromise = autoEnrich({ limit, dateFilter });
 

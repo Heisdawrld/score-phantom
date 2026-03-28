@@ -1,6 +1,6 @@
 import db from '../config/database.js';
 
-const MODEL_VERSION = '2.3.0';
+const MODEL_VERSION = '2.3.1';
 
 export async function initPredictionsTable() {
   await db.execute(`

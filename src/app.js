@@ -35,10 +35,9 @@ const allowedOrigins = [
 ].filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Render health checks)
-    if (!origin) return callback(null, true);
+    if (!origin) return callback(null, true); // mobile, curl, health checks
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(null, true); // Keep permissive in prod until APP_URL is confirmed set
+    return callback(new Error('CORS: origin not allowed'), false);
   },
   credentials: true,
 }));
@@ -49,12 +48,7 @@ app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 
-// ── Admin: trigger a manual reseed (protected by ADMIN_ACTIVATION secret) ────
-app.post("/api/admin/seed", async (req, res) => {
-  const secret = req.headers["x-admin-secret"] || req.query.secret;
-  const expected = process.env.ADMIN_ACTIVATION || process.env.ADMIN_SECRET;
-  if (!expected || secret !== expected) {
-    return res.status(403).json({ error: "Forbidden" });
+// [REMOVED duplicate /api/admin/seed — handled by adminRoutes.js]
   }
   try {
     const clearFirst = req.query.clear === "true";
@@ -112,7 +106,7 @@ async function autoSeed() {
     }
 
     // Check for TODAY's fixtures specifically — not just any stale data
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const result = await db.execute({
       sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
       args: [`${today}%`],
@@ -255,6 +249,8 @@ async function backfillMissingCountries() {
   }
 }
 
+app.use(errorHandler);
+
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   await initUsersTable();
@@ -269,7 +265,5 @@ app.listen(PORT, async () => {
     autoEnrich().catch((err) => console.error("[AutoEnrich] scheduled error:", err.message));
   }, 4 * 60 * 60 * 1000);
 });
-
-app.use(errorHandler);
 
 export default app;
