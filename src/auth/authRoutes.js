@@ -678,4 +678,99 @@ router.delete("/admin/remove-user", adminLimiter, requireAdminSecret, async (req
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/payment/request
+// OPay manual flow: returns fixed bank details + a unique reference for tracking.
+// No external API call needed — details are static, reference is generated here.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/request", requireAuth, async (req, res) => {
+  try {
+    const userResult = await db.execute({
+      sql: "SELECT id, email, status, premium_expires_at, subscription_expires_at FROM users WHERE id = ? LIMIT 1",
+      args: [req.user.id],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Block if already active
+    const access = computeAccessStatus(user);
+    if (access.subscription_active) {
+      return res.status(400).json({ error: "You already have an active subscription." });
+    }
+
+    const reference = `SP_${user.id}_${Date.now()}`;
+
+    // Insert pending payment record (idempotent — ignore if reference clashes)
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [user.id, reference, PLAN_AMOUNT_NGN, "NGN", "initialized", "opay_manual"],
+    });
+
+    return res.json({
+      reference,
+      amount: PLAN_AMOUNT_NGN,
+      currency: "NGN",
+      bank: "OPay",
+      account_name: "David .C (SCOREPHANTOM)",
+      account_number: "8117024699",
+    });
+  } catch (err) {
+    console.error("[Payment/Request]", err);
+    return res.status(500).json({ error: "Failed to initialize payment" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/payment/confirm
+// User claims they have paid. We mark payment as pending_verification and
+// return so the frontend can open WhatsApp. Admin then manually verifies
+// via /api/auth/admin/verify-payment or /api/auth/admin/upgrade-by-email.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/confirm", requireAuth, async (req, res) => {
+  try {
+    const { reference } = req.body || {};
+    if (!reference) return res.status(400).json({ error: "Reference is required" });
+
+    const paymentResult = await db.execute({
+      sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1",
+      args: [String(reference).trim()],
+    });
+    const payment = paymentResult.rows?.[0];
+    if (!payment) return res.status(404).json({ error: "Payment record not found" });
+    if (Number(payment.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Payment does not belong to this account" });
+    }
+
+    // Already verified — user is already premium, no action needed
+    if (payment.status === "verified") {
+      const userResult = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [req.user.id] });
+      const user = userResult.rows?.[0];
+      return res.json({
+        success: true,
+        already_verified: true,
+        access: computeAccessStatus(user || {}),
+        user: publicUser(user || {}),
+      });
+    }
+
+    // Mark as pending_verification so admin dashboard surfaces it
+    await db.execute({
+      sql: "UPDATE payments SET status = 'pending_verification' WHERE reference = ?",
+      args: [String(reference).trim()],
+    });
+
+    console.log(`[Payment/Confirm] User ${req.user.id} confirmed payment — ref=${reference} — awaiting admin verification`);
+
+    return res.json({
+      success: true,
+      already_verified: false,
+      message: "Payment confirmation received. Your account will be activated after verification.",
+    });
+  } catch (err) {
+    console.error("[Payment/Confirm]", err);
+    return res.status(500).json({ error: "Failed to confirm payment" });
+  }
+});
+
 export default router;
