@@ -48,22 +48,7 @@ app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 
-// [REMOVED duplicate /api/admin/seed — handled by adminRoutes.js]
-  }
-  try {
-    const clearFirst = req.query.clear === "true";
-    const days = parseInt(req.query.days || "7", 10);
-    const msgs = [];
-    const result = await seedFixtures({
-      days,
-      clearFirst,
-      log: (m) => { console.log(m); msgs.push(m); },
-    });
-    res.json({ success: true, ...result, log: msgs });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Duplicate /api/admin/seed removed — handled by adminRoutes.js
 
 // Serve React frontend (client/dist)
 const clientDistPath = path.join(__dirname, "..", "client", "dist");
