@@ -122,7 +122,7 @@ const ENRICH_DELAY_MS = 1500;
 
 async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
-    const today = dateFilter || new Date().toISOString().split("T")[0];
+    const today = dateFilter || new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     // Count pending unenriched fixtures for today + next 6 days
     const pending = await db.execute({
@@ -254,6 +254,30 @@ app.listen(PORT, async () => {
   setInterval(() => {
     autoEnrich().catch((err) => console.error("[AutoEnrich] scheduled error:", err.message));
   }, 4 * 60 * 60 * 1000);
+
+  // Re-seed fixtures daily at midnight Lagos time
+  function scheduleNextMidnightSeed() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const nextMidnight = new Date(lagosNow);
+    nextMidnight.setDate(nextMidnight.getDate() + 1);
+    nextMidnight.setHours(0, 5, 0, 0);
+    const msUntilMidnight = nextMidnight - lagosNow;
+    setTimeout(async () => {
+      console.log('[DailySeed] Midnight re-seed triggered');
+      try {
+        await seedFixtures({ days: 7, clearFirst: true });
+        console.log('[DailySeed] Fixtures re-seeded');
+        await autoEnrich();
+      } catch (err) {
+        console.error('[DailySeed] Failed:', err.message);
+      }
+      scheduleNextMidnightSeed();
+    }, msUntilMidnight);
+    const hrs = Math.round(msUntilMidnight / 3600000);
+    console.log('[DailySeed] Next seed in ~' + hrs + 'h');
+  }
+  scheduleNextMidnightSeed();
 });
 
 export default app;

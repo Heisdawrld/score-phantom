@@ -15,7 +15,8 @@ import { computeAccessStatus } from "../auth/authRoutes.js";
 const router = express.Router();
 // Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "davidadiele7@gmail.com").trim().toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+if (!ADMIN_EMAIL) console.warn('[Admin] ADMIN_EMAIL not set');
 const PLAN_DURATION_DAYS = 30;
 
 function requireAdmin(req, res, next) {
@@ -38,7 +39,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
     const now = new Date();
     const todayStart = now.toISOString().slice(0, 10);
 
-    const [totalResult, usersResult, paymentsToday, totalRevenue] = await Promise.all([
+    const [totalResult, usersResult, paymentsToday, totalRevenue, pendingResult] = await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM users`),
       db.execute(`SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at FROM users`),
       db.execute({
@@ -46,6 +47,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
         args: [`${todayStart}%`],
       }),
       db.execute(`SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified'`),
+      db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
     const users = usersResult.rows || [];
@@ -71,6 +73,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
         currency: 'NGN',
         total: Number(totalRevenue.rows[0].total || 0),
         total_payments: Number(totalRevenue.rows[0].count || 0),
+        pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {
         payments: Number(paymentsToday.rows[0].count || 0),

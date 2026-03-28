@@ -154,6 +154,15 @@ export default function Paywall() {
                   <Zap className="w-3.5 h-3.5 text-primary" />
                   Account activated instantly after payment
                 </p>
+
+              {user?.access_status === "trial" && (
+                <button
+                  onClick={() => setLocation("/")}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-white/70 transition-colors pt-1"
+                >
+                  Continue with free trial →
+                </button>
+              )}
               </div>
             </div>
           </Card>

@@ -16,7 +16,11 @@ import {
 
 const router = Router();
 // Must match authRoutes.js fallback exactly
-const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET not set in routes.js');
+  process.exit(1);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -526,7 +530,7 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 //   ?mode=value             — 4–5 picks, >= 70%, allows 1 moderate risk pick
 router.get("/acca", requirePremiumAccess, async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const mode  = req.query.mode === 'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
@@ -540,10 +544,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
               AND p.best_pick_selection IS NOT NULL
-              AND (
-                f.enrichment_status IN ('deep', 'basic', 'limited')
-                AND f.data_quality IN ('excellent', 'good', 'moderate')
-              )
+              AND f.enrichment_status IN ('deep', 'basic', 'limited')
             ORDER BY p.best_pick_probability DESC
             LIMIT 50`,
       args: [`%${today}%`],
@@ -556,10 +557,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       const fixtureResult = await db.execute({
         sql: `SELECT id FROM fixtures
               WHERE match_date LIKE ?
-                AND (
-                  enrichment_status = 'deep'
-                  OR (enrichment_status = 'basic' AND data_quality IN ('excellent', 'good'))
-                )
+                AND enrichment_status IN ('deep', 'basic', 'limited')
               LIMIT 20`,
         args: [`%${today}%`],
       });
@@ -587,10 +585,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
               JOIN fixtures f ON f.id = p.fixture_id
               WHERE f.match_date LIKE ?
                 AND p.best_pick_selection IS NOT NULL
-                AND (
-                  f.enrichment_status = 'deep'
-                  OR (f.enrichment_status = 'basic' AND f.data_quality IN ('excellent', 'good'))
-                )
+                AND f.enrichment_status IN ('deep', 'basic', 'limited')
               ORDER BY p.best_pick_probability DESC
               LIMIT 50`,
         args: [`%${today}%`],

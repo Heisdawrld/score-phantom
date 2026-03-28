@@ -29,18 +29,20 @@ async function fetchFixturesByDate(date) {
 
   while (true) {
     try {
-      const data = await get('/fixtures/list.json', { date, page });
+      // Correct endpoint: /fixtures/matches.json (NOT /fixtures/list.json)
+      const data = await get('/fixtures/matches.json', { date, page });
       const fixtures = data.data?.fixtures || [];
       if (!fixtures.length) break;
 
       for (const f of fixtures) {
-        const homeName = f.home?.name || f.home_name || '';
-        const awayName = f.away?.name || f.away_name || '';
-        const homeId = String(f.home?.id || f.home_id || f.id + '_h');
-        const awayId = String(f.away?.id || f.away_id || f.id + '_a');
-        const competitionId = String(f.competition?.id || f.competition_id || '0');
-        const competitionName = f.competition?.name || f.competition_name || '';
-        const countryName = f.country?.name || f.competition?.country || '';
+        // /fixtures/matches.json returns FLAT fields
+        const homeName = f.home_name || f.home?.name || '';
+        const awayName = f.away_name || f.away?.name || '';
+        const homeId   = String(f.home_id || f.home?.id || f.id + '_h');
+        const awayId   = String(f.away_id || f.away?.id || f.id + '_a');
+        const competitionId   = String(f.competition?.id || f.competition_id || '0');
+        const competitionName = f.competition?.name || f.competition_name || f.league_name || '';
+        const countryName     = f.country?.name || f.competition?.country || f.location || '';
 
         allFixtures.push({
           match_id: String(f.id),
@@ -54,7 +56,10 @@ async function fetchFixturesByDate(date) {
           tournament_name: competitionName,
           category_name: countryName,
           match_date: f.date + 'T' + (f.time || '00:00:00'),
-          match_url: String(f.id),
+          match_url:            String(f.id),
+          odds_home:            f.odds?.pre?.['1'] || null,
+          odds_draw:            f.odds?.pre?.['X'] || null,
+          odds_away:            f.odds?.pre?.['2'] || null,
         });
       }
 

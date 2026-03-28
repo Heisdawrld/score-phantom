@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format, addDays, isSameDay } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { useFixtures } from "@/hooks/use-fixtures";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
@@ -284,6 +285,21 @@ export default function Dashboard() {
     return Array.from({ length: 7 }).map((_, i) => addDays(new Date(), i));
   }, []);
 
+  const { toast } = useToast();
+
+  // Payment success toast from Flutterwave redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      toast({
+        title: '🎉 Payment confirmed!',
+        description: 'Your ScorePhantom Premium is now active. Enjoy unlimited predictions!',
+        duration: 6000,
+      });
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
@@ -430,12 +446,12 @@ export default function Dashboard() {
         </div>
 
         {/* Enrichment count */}
-        {data && (
+        {data && (data.total > 0 || (data as any).enrichedDeepCount > 0) && (
           <div className="flex items-center gap-2 px-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399] shrink-0" />
             <span className="text-xs text-muted-foreground">
               <span className="text-emerald-400 font-semibold">{(data as any).enrichedDeepCount ?? 0}</span>
-              {" "}deeply enriched fixtures today · {data.total} total
+              {" "}deeply enriched · {data.total} total fixtures
             </span>
           </div>
         )}
@@ -451,9 +467,14 @@ export default function Dashboard() {
               </div>
             ))
           ) : leagues.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              <Trophy className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              <p>No fixtures found for this date.</p>
+            <div className="text-center py-20 text-muted-foreground space-y-3">
+              <Trophy className="w-12 h-12 mx-auto opacity-20" />
+              <p className="font-medium">No fixtures found for {format(selectedDate, 'MMM d')}.</p>
+              <p className="text-xs text-muted-foreground/70">
+                {isSameDay(selectedDate, dates[0])
+                  ? 'Fixtures are loading — check back in a minute or try refreshing.'
+                  : 'No matches scheduled for this date.'}
+              </p>
             </div>
           ) : (
             leagues.map(([tournament, fixtures]: [string, any], idx) => (

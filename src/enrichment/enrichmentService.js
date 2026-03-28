@@ -18,6 +18,8 @@ import {
   fetchTeamForm,
   fetchStandings,
   fetchMatchLineups,
+  fetchMatchStats,
+  fetchMatchEvents,
 } from '../services/livescore.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 
@@ -261,11 +263,11 @@ export async function fetchAndStoreEnrichment(fixture) {
       console.warn('[enrichmentService] Standings failed:', e.message);
       return [];
     }),
-    fetchTeamForm(fixture.home_team_id, 12).catch((e) => {
+    fetchTeamForm(fixture.home_team_id, 15).catch((e) => {
       console.warn('[enrichmentService] Home form failed:', e.message);
       return [];
     }),
-    fetchTeamForm(fixture.away_team_id, 12).catch((e) => {
+    fetchTeamForm(fixture.away_team_id, 15).catch((e) => {
       console.warn('[enrichmentService] Away form failed:', e.message);
       return [];
     }),
@@ -305,6 +307,20 @@ export async function fetchAndStoreEnrichment(fixture) {
     // Lineups not available — this is expected for pre-match enrichment
   }
 
+  // ── Step 5.5: Fetch match stats and events ──────────────────────────────────
+  let matchStats = null;
+  let matchEvents = null;
+  try {
+    const matchId = fixture.match_id || fixture.id;
+    [matchStats, matchEvents] = await Promise.all([
+      fetchMatchStats(matchId).catch(() => null),
+      fetchMatchEvents(matchId).catch(() => null),
+    ]);
+    if (matchStats) console.log('[enrichmentService] Match stats available for fixture ' + matchId);
+  } catch {
+    // Stats not available pre-match — expected
+  }
+
   // ── Step 6: Data completeness ─────────────────────────────────────────────
   const completeness = computeDataCompleteness({
     homeForm,
@@ -337,8 +353,10 @@ export async function fetchAndStoreEnrichment(fixture) {
     awayProfile,
     lineupModifier,
     completeness,
-    homeStats: homeProfile,  // form-derived profile (always available when form exists)
+    homeStats: homeProfile,
     awayStats: awayProfile,
-    odds: null, // fetched separately via oddsService
+    matchStats,
+    matchEvents,
+    odds: null,
   };
 }
