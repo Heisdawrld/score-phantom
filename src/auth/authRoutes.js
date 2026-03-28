@@ -164,23 +164,10 @@ export async function requirePremiumAccess(req, res, next) {
   }
 }
 
-// ── Flutterwave helpers ───────────────────────────────────────────────────────
-function flwHeaders() {
-  return {
-    Authorization: `Bearer ${FLW_SECRET}`,
-    "Content-Type": "application/json",
-  };
-}
+// ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
+import { createOrFetchCustomer, createVirtualAccount, verifyCharge, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
-async function verifyFlwTransaction(transactionId) {
-  const res  = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
-    headers: flwHeaders(),
-  });
-  const data = await res.json();
-  return data;
-}
-
-async function activatePremium(userId, flwTxId, reference) {
+async function activatePremium(userId, flwChargeId, reference) {
   const expiry          = new Date();
   expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
   const expiryISO       = expiry.toISOString();
@@ -193,7 +180,7 @@ async function activatePremium(userId, flwTxId, reference) {
 
   await db.execute({
     sql: `UPDATE payments SET status = 'verified', flw_transaction_id = ?, paid_at = ? WHERE reference = ?`,
-    args: [String(flwTxId || ""), new Date().toISOString(), reference],
+    args: [String(flwChargeId || ""), new Date().toISOString(), reference],
   });
 
   return { expiryISO, subscriptionCode };
@@ -377,10 +364,11 @@ router.post("/password/reset-confirm", authLimiter, async (req, res) => {
 // ── Flutterwave Payment ───────────────────────────────────────────────────────
 
 // POST /api/auth/payment/initialize
-// Creates a payment session and returns Flutterwave hosted link
+// Flutterwave V4: creates a virtual bank account (PWBT) for the user to transfer to.
+// No redirect needed — user gets account details, transfers, webhook fires automatically.
 router.post("/payment/initialize", requireAuth, async (req, res) => {
   try {
-    if (!FLW_SECRET) return res.status(503).json({ error: "Payment service not configured" });
+    if (!flwConfigured()) return res.status(503).json({ error: "Payment service not configured" });
 
     const userResult = await db.execute({
       sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
@@ -389,7 +377,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
     const user = userResult.rows?.[0];
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Check if already premium
+    // Block if already active
     const accessCheck = await db.execute({
       sql: "SELECT status, premium_expires_at, subscription_expires_at FROM users WHERE id = ? LIMIT 1",
       args: [req.user.id],
@@ -399,179 +387,150 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "You already have an active subscription." });
     }
 
-    const reference = `SP_${user.id}_${Date.now()}`;
-    const callbackUrl = `${APP_URL}/payment/verify?reference=${reference}`;
-    const webhookUrl  = `${APP_URL}/api/auth/webhook/flutterwave`;
+    const reference  = `SP_${user.id}_${Date.now()}`;
 
-    // Initialize with Flutterwave
-    const flwRes  = await fetch("https://api.flutterwave.com/v3/payments", {
-      method:  "POST",
-      headers: flwHeaders(),
-      body: JSON.stringify({
-        tx_ref:       reference,
-        amount:       PLAN_AMOUNT_NGN,
-        currency:     "NGN",
-        redirect_url: callbackUrl,
-        customer: {
-          email:     user.email,
-          name:      user.email.split("@")[0],
-        },
-        customizations: {
-          title:       "ScorePhantom Premium",
-          description: `${PLAN_DURATION_DAYS}-day Premium Subscription`,
-          logo:        `${APP_URL}/images/logo.png`,
-        },
-        meta: {
-          user_id: user.id,
-          plan:    "monthly_premium",
-        },
-      }),
-    });
+    // Step 1: Create/fetch Flutterwave customer
+    const customerId = await createOrFetchCustomer(user.email, user.email.split('@')[0]);
 
-    const flwData = await flwRes.json();
+    // Step 2: Generate dynamic virtual account (PWBT)
+    const account = await createVirtualAccount(customerId, reference, PLAN_AMOUNT_NGN);
 
-    if (flwData.status !== "success") {
-      console.error("[FLW Init]", flwData);
-      return res.status(400).json({ error: flwData.message || "Payment initialization failed" });
-    }
-
-    // Save pending payment — always in naira
+    // Save pending payment record
     await db.execute({
       sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [user.id, reference, PLAN_AMOUNT_NGN, "NGN", "initialized", "flutterwave"],
+      args: [user.id, reference, PLAN_AMOUNT_NGN, 'NGN', 'initialized', 'flutterwave'],
+    });
+
+    // Store virtual account id for later webhook matching
+    await db.execute({
+      sql: `UPDATE payments SET flw_transaction_id = ? WHERE reference = ?`,
+      args: [account.id || '', reference],
     });
 
     return res.json({
-      payment_link: flwData.data.link,
       reference,
       amount:       PLAN_AMOUNT_NGN,
-      currency:     "NGN",
+      currency:     'NGN',
+      payment_method: 'bank_transfer',
+      bank_details: {
+        account_number:   account.account_number,
+        bank_name:        account.account_bank_name,
+        account_name:     'ScorePhantom Premium',
+        amount:           `₦${PLAN_AMOUNT_NGN.toLocaleString()}`,
+        expires_at:       account.account_expiration_datetime,
+        note:             'Transfer the exact amount to activate your premium subscription instantly.',
+      },
+      instructions: [
+        `1. Transfer exactly ₦${PLAN_AMOUNT_NGN.toLocaleString()} to the account above`,
+        '2. Use your registered email as the narration/description',
+        '3. Your subscription will activate automatically within seconds after transfer',
+        `4. Your reference code: ${reference}`,
+        '5. Account expires in 1 hour — generate a new one if needed',
+      ],
     });
   } catch (err) {
-    console.error("[FLW Init Error]", err);
-    return res.status(500).json({ error: "Failed to initialize payment" });
+    console.error('[FLW Init Error]', err);
+    return res.status(500).json({ error: 'Failed to initialize payment: ' + err.message });
   }
 });
 
-// GET /api/auth/payment/verify?reference=SP_xxx&transaction_id=xxx&status=xxx
-// Flutterwave redirects the user here after payment
-router.get("/payment/verify", requireAuth, async (req, res) => {
+// GET /api/auth/payment/check?reference=SP_xxx
+// Frontend polls this to check if webhook has fired and premium is active
+router.get("/payment/check", requireAuth, async (req, res) => {
   try {
-    const { reference, transaction_id, status: flwStatus } = req.query;
+    const { reference } = req.query;
+    if (!reference) return res.status(400).json({ error: 'Reference required' });
 
-    if (!reference) return res.status(400).json({ error: "Reference required" });
-    if (!FLW_SECRET)  return res.status(503).json({ error: "Payment service not configured" });
-
-    // Find payment record
     const paymentResult = await db.execute({
-      sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1",
+      sql: 'SELECT * FROM payments WHERE reference = ? LIMIT 1',
       args: [String(reference).trim()],
     });
     const payment = paymentResult.rows?.[0];
-    if (!payment) return res.status(404).json({ error: "Payment record not found" });
-
-    // Ownership check
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
     if (Number(payment.user_id) !== Number(req.user.id))
-      return res.status(403).json({ error: "Payment does not belong to this account" });
+      return res.status(403).json({ error: 'Payment does not belong to this account' });
 
-    // Already verified — idempotent
-    if (payment.status === "verified") {
-      const userResult = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [req.user.id] });
-      return res.json({ success: true, already_verified: true, user: publicUser(userResult.rows?.[0] || {}) });
-    }
-
-    // If Flutterwave says cancelled
-    if (flwStatus === "cancelled") {
-      await db.execute({ sql: "UPDATE payments SET status = 'cancelled' WHERE reference = ?", args: [reference] });
-      return res.status(400).json({ error: "Payment was cancelled" });
-    }
-
-    // Verify with Flutterwave API
-    if (!transaction_id) return res.status(400).json({ error: "transaction_id required for verification" });
-
-    const verifyData = await verifyFlwTransaction(transaction_id);
-    if (verifyData.status !== "success" || verifyData.data?.status !== "successful") {
-      console.error("[FLW Verify]", verifyData);
-      return res.status(400).json({ error: "Payment not confirmed by Flutterwave", flw_status: verifyData.data?.status });
-    }
-
-    // Validate amount and currency
-    const paidAmount   = verifyData.data.amount;
-    const paidCurrency = verifyData.data.currency;
-    if (paidCurrency !== "NGN" || paidAmount < PLAN_AMOUNT_NGN) {
-      console.error(`[FLW Verify] Amount mismatch: got ${paidAmount} ${paidCurrency}, expected ${PLAN_AMOUNT_NGN} NGN`);
-      return res.status(400).json({ error: "Payment amount mismatch" });
-    }
-
-    // Activate premium
-    const { expiryISO } = await activatePremium(req.user.id, verifyData.data.id, reference);
-    const userResult    = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [req.user.id] });
+    const userResult = await db.execute({ sql: 'SELECT * FROM users WHERE id = ? LIMIT 1', args: [req.user.id] });
+    const user = userResult.rows?.[0];
+    const access = computeAccessStatus(user || {});
 
     return res.json({
-      success:            true,
-      user:               publicUser(userResult.rows?.[0] || {}),
-      premium_expires_at: expiryISO,
+      payment_status:   payment.status,
+      is_verified:      payment.status === 'verified',
+      access:           access,
+      user:             publicUser(user || {}),
     });
   } catch (err) {
-    console.error("[FLW Verify Error]", err);
-    return res.status(500).json({ error: "Verification failed" });
+    console.error('[PaymentCheck]', err);
+    return res.status(500).json({ error: 'Failed to check payment' });
   }
 });
 
 // POST /api/auth/webhook/flutterwave
-// Flutterwave server-to-server webhook — activate premium automatically
+// Flutterwave V4 webhook — fires when payment is completed
+// Event type: charge.completed | data.status: succeeded
 router.post("/webhook/flutterwave", async (req, res) => {
   try {
-    // Verify webhook signature
-    const signature = req.headers["verif-hash"];
-    const expected  = process.env.FLUTTERWAVE_WEBHOOK_HASH || FLW_SECRET;
-    if (!signature || signature !== expected) {
-      console.warn("[FLW Webhook] Invalid signature");
-      return res.status(401).json({ error: "Invalid signature" });
+    // Always respond 200 immediately to prevent Flutterwave retries
+    res.sendStatus(200);
+
+    // Verify signature
+    if (!verifyWebhookSignature(req)) {
+      console.warn('[FLW Webhook] Invalid signature — ignoring');
+      return;
     }
 
     const event = req.body;
-    if (event.event !== "charge.completed") return res.sendStatus(200);
-    if (event.data?.status !== "successful")  return res.sendStatus(200);
+    // V4 webhook event types
+    if (event.type !== 'charge.completed') return;
 
-    const txRef    = event.data.tx_ref;
-    const flwTxId  = event.data.id;
-    const amount   = event.data.amount;
-    const currency = event.data.currency;
+    const charge   = event.data;
+    const txRef    = charge?.reference;
+    const chargeId = charge?.id;
+    const amount   = charge?.amount;
+    const currency = charge?.currency;
+    const status   = charge?.status;
 
-    if (currency !== "NGN" || amount < PLAN_AMOUNT_NGN) {
-      console.warn(`[FLW Webhook] Amount mismatch: ${amount} ${currency}`);
-      return res.sendStatus(200);
+    if (status !== 'succeeded') {
+      console.log(`[FLW Webhook] Charge ${chargeId} status=${status} — skipping`);
+      return;
     }
 
-    // Find payment
+    if (currency !== 'NGN' || amount < PLAN_AMOUNT_NGN) {
+      console.warn(`[FLW Webhook] Amount mismatch: ${amount} ${currency} for ref ${txRef}`);
+      return;
+    }
+
+    // Find payment by reference
     const paymentResult = await db.execute({
-      sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1",
-      args: [String(txRef).trim()],
+      sql: 'SELECT * FROM payments WHERE reference = ? LIMIT 1',
+      args: [String(txRef || '').trim()],
     });
     const payment = paymentResult.rows?.[0];
     if (!payment) {
-      console.warn(`[FLW Webhook] Payment not found for tx_ref=${txRef}`);
-      return res.sendStatus(200);
+      console.warn(`[FLW Webhook] No payment record for reference=${txRef}`);
+      return;
     }
 
-    // Idempotency — skip if already verified
-    if (payment.status === "verified") return res.sendStatus(200);
-
-    // Double-check with Flutterwave API
-    const verifyData = await verifyFlwTransaction(flwTxId);
-    if (verifyData.status !== "success" || verifyData.data?.status !== "successful") {
-      console.warn(`[FLW Webhook] Re-verification failed for ${flwTxId}`);
-      return res.sendStatus(200);
+    // Idempotency — already processed
+    if (payment.status === 'verified') {
+      console.log(`[FLW Webhook] Already verified: ${txRef}`);
+      return;
     }
 
-    await activatePremium(payment.user_id, flwTxId, txRef);
-    console.log(`[FLW Webhook] Premium activated for user ${payment.user_id} via tx ${flwTxId}`);
+    // Double-verify with Flutterwave API (anti-fraud)
+    const verified = await verifyCharge(chargeId);
+    if (verified?.status !== 'succeeded' || verified?.amount < PLAN_AMOUNT_NGN) {
+      console.warn(`[FLW Webhook] Re-verification failed for charge ${chargeId}`);
+      return;
+    }
 
-    return res.sendStatus(200);
+    // Activate premium
+    await activatePremium(payment.user_id, chargeId, txRef);
+    console.log(`[FLW Webhook] ✓ Premium activated — user=${payment.user_id} charge=${chargeId}`);
   } catch (err) {
-    console.error("[FLW Webhook Error]", err.message);
-    return res.sendStatus(200); // Always 200 to Flutterwave
+    console.error('[FLW Webhook Error]', err.message);
+    // Already sent 200, nothing more to do
   }
 });
 
