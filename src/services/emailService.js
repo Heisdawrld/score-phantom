@@ -27,41 +27,45 @@ function getTransporter() {
 export async function sendPasswordResetEmail(toEmail, resetToken) {
   const transporter = getTransporter();
   if (!transporter) {
-    console.warn('[Email] GMAIL_USER or GMAIL_APP_PASSWORD not set.');
-    console.log('[Email] DEV: reset link =', `${APP_URL}/reset-password?token=${resetToken}`);
+    console.warn('[Email] GMAIL_USER or GMAIL_APP_PASSWORD not set — cannot send reset email.');
+    console.log('[Email] DEV reset link:', `${APP_URL}/reset-password?token=${resetToken}`);
     return { success: false, reason: 'no_smtp_config' };
   }
 
   const resetLink = `${APP_URL}/reset-password?token=${resetToken}`;
 
   try {
-    const info = await transporter.sendMail({
-      from: `ScorePhantom <${process.env.GMAIL_USER}>`,
-      to: toEmail,
-      subject: 'Reset your ScorePhantom password',
-      html: `
-        <div style="background:#080b10;color:#fff;font-family:system-ui,sans-serif;padding:40px 24px;max-width:480px;margin:0 auto;border-radius:16px">
-          <div style="text-align:center;margin-bottom:32px">
-            <h1 style="font-size:28px;font-weight:900;letter-spacing:4px;margin:0">
-              SCORE<span style="color:#10e774">PHANTOM</span>
-            </h1>
+    // 12s timeout — prevents hanging if SMTP credentials are wrong
+    const info = await Promise.race([
+      transporter.sendMail({
+        from: `ScorePhantom <${process.env.GMAIL_USER}>`,
+        to: toEmail,
+        subject: 'Reset your ScorePhantom password',
+        html: `
+          <div style="background:#080b10;color:#fff;font-family:system-ui,sans-serif;padding:40px 24px;max-width:480px;margin:0 auto;border-radius:16px">
+            <div style="text-align:center;margin-bottom:32px">
+              <h1 style="font-size:28px;font-weight:900;letter-spacing:4px;margin:0">
+                SCORE<span style="color:#10e774">PHANTOM</span>
+              </h1>
+            </div>
+            <h2 style="font-size:20px;font-weight:700;margin:0 0 12px">Reset your password</h2>
+            <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6">
+              Click the button below to set a new password. Link expires in <strong style="color:#fff">1 hour</strong>.
+            </p>
+            <a href="${resetLink}" style="display:block;background:#10e774;color:#000;text-decoration:none;text-align:center;padding:14px 24px;border-radius:12px;font-weight:700;font-size:15px;margin-bottom:24px">
+              Reset Password
+            </a>
+            <p style="color:#475569;font-size:12px;word-break:break-all;background:#0f172a;padding:10px;border-radius:8px;margin:0 0 24px">${resetLink}</p>
+            <p style="color:#475569;font-size:12px;margin:0">If you didn't request this, ignore this email.</p>
           </div>
-          <h2 style="font-size:20px;font-weight:700;margin:0 0 12px">Reset your password</h2>
-          <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6">
-            Click the button below to set a new password. Link expires in <strong style="color:#fff">1 hour</strong>.
-          </p>
-          <a href="${resetLink}" style="display:block;background:#10e774;color:#000;text-decoration:none;text-align:center;padding:14px 24px;border-radius:12px;font-weight:700;font-size:15px;margin-bottom:24px">
-            Reset Password
-          </a>
-          <p style="color:#475569;font-size:12px;word-break:break-all;background:#0f172a;padding:10px;border-radius:8px;margin:0 0 24px">${resetLink}</p>
-          <p style="color:#475569;font-size:12px;margin:0">If you didn't request this, ignore this email.</p>
-        </div>
-      `,
-    });
-    console.log('[Email] Reset sent to', toEmail, '| messageId:', info.messageId);
+        `,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP timeout — check GMAIL_APP_PASSWORD in Render env')), 12000)),
+    ]);
+    console.log('[Email] ✅ Reset sent to', toEmail, '| id:', info.messageId);
     return { success: true, id: info.messageId };
   } catch (err) {
-    console.error('[Email] Send failed:', err.message);
+    console.error('[Email] ❌ Send failed:', err.message);
     return { success: false, reason: err.message };
   }
 }
