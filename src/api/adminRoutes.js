@@ -416,3 +416,50 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+// TEMP DEBUG: trace odds fetch for a fixture
+router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const f = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[fixtureId] });
+    const fixture = f.rows?.[0];
+    if (!fixture) return res.json({ error: 'fixture not found' });
+    
+    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
+    const ODDS_API_BASE = 'https://api.odds-api.io/v3';
+    const meta = fixture.meta ? JSON.parse(fixture.meta) : {};
+    const tournamentName = fixture.tournament_name || meta.tournament_name || '';
+    const countryName = fixture.category_name || '';
+    
+    // Build slug manually
+    const slugKey = `${countryName}|${tournamentName}`;
+    
+    // Try fetching directly
+    const testSlugs = [
+      tournamentName.toLowerCase().replace(/[^a-z0-9]+/g,'-'),
+      `${countryName}-${tournamentName}`.toLowerCase().replace(/[^a-z0-9]+/g,'-'),
+    ];
+    
+    const results = {};
+    for (const slug of testSlugs) {
+      const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=5`;
+      try {
+        const r = await fetch(url);
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.data || []);
+        results[slug] = { count: arr.length, sample: arr.slice(0,2).map(e=>({home:e.home,away:e.away,date:e.date})) };
+      } catch(e) { results[slug] = { error: e.message }; }
+    }
+    
+    // Also check league cache
+    const cached = await db.execute({ sql: 'SELECT league_slug, fetched_at, length(events_json) as size FROM odds_league_cache', args:[] });
+    
+    return res.json({
+      fixture: { id: fixture.id, home: fixture.home_team_name, away: fixture.away_team_name, tournament: tournamentName, country: countryName, slugKey },
+      apiKeySet: !!ODDS_API_KEY,
+      apiKeyPrefix: ODDS_API_KEY.slice(0,8),
+      testSlugs: results,
+      leagueCache: cached.rows
+    });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
