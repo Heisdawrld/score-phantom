@@ -1,6 +1,6 @@
 {
   "name": "scorephantom",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "start": "node src/app.js",
@@ -20,5 +20,6 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.4",
     "resend": "^6.9.4"
-  }
+  },
+  "buildTime": "2026-03-29T08:18:44.499Z"
 }
