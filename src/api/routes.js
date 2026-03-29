@@ -577,8 +577,16 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         });
       }
 
-      // Warm predictions cache in parallel
-      await Promise.allSettled(fixtureIds.map(id => getOrBuildPrediction(id)));
+      // Warm predictions cache in small batches to avoid request timeout
+      // Process 8 at a time, max 24 total, with a 15s total time budget
+      const warmStart = Date.now();
+      const batchSize = 8;
+      const maxWarm = Math.min(fixtureIds.length, 24);
+      for (let i = 0; i < maxWarm; i += batchSize) {
+        if (Date.now() - warmStart > 15000) break; // 15s budget
+        const batch = fixtureIds.slice(i, i + batchSize);
+        await Promise.allSettled(batch.map(id => getOrBuildPrediction(id).catch(() => null)));
+      }
 
       // Re-query now that predictions are built
       const retryPool = await db.execute({

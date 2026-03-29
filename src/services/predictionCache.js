@@ -205,6 +205,8 @@ export async function ensureFixtureData(fixtureId) {
 
 async function savePredictionToCache(fixtureId, prediction, engineResult) {
   try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT` }); } catch (_) {}
+  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN best_pick_score REAL` }); } catch (_) {}
+  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN confidence_model TEXT` }); } catch (_) {}
 
   const rec = prediction || {};
   const bestPick = rec.predictions?.recommendation;
@@ -235,6 +237,8 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         best_pick_market      = ?,
         best_pick_selection   = ?,
         best_pick_probability = ?,
+        best_pick_score       = ?,
+        confidence_model      = ?,
         confidence_volatility = ?,
         script_primary        = ?,
         no_safe_pick          = ?,
@@ -246,6 +250,8 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         noSafePick ? null : (bestPick?.market    || null),
         noSafePick ? null : (bestPick?.pick       || null),
         noSafePick ? null : (bestPick?.probability != null ? bestPick.probability : null),
+        noSafePick ? null : (bestPick?.edgeScore    != null ? bestPick.edgeScore    : null),
+        noSafePick ? null : (bestPick?.modelConfidence || null),
         volStr,
         gameScript.script || null,
         noSafePick,
