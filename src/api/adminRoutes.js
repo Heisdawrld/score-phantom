@@ -429,107 +429,111 @@ router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
 
-// COMPREHENSIVE SLUG AUDIT - tests all slugs from EXACT_MAP
+// COMPREHENSIVE SLUG AUDIT - tests all slugs from today's EXACT_MAP
 router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
     const ODDS_API_BASE = 'https://api.odds-api.io/v3';
     
-    // All slugs to test (from EXACT_MAP for today's leagues + common ones)
     const slugsToTest = [
-      // Africa
-      'nigeria-premier-league', 'ghana-premier-league', 'ghana-division-one',
-      'cameroon-elite-one', 'kenya-super-league', 'burkina-faso-premiere-division',
-      'tunisia-ligue-1', 'tunisia-ligue-2', 'dr-congo-linafoot',
-      'south-africa-premiership', 'egypt-premier-league', 'morocco-botola-pro',
-      'algeria-ligue-1', 'ethiopia-premier-league', 'tanzania-premier-league',
-      'uganda-super-league', 'zambia-super-league', 'zimbabwe-castle-lager-psl',
-      'senegal-premier-league', 'ivory-coast-ligue-1', 'mali-premiere-division',
-      // South America
-      'brazil-serie-a', 'brazil-serie-b', 'brazil-copa-do-nordeste',
-      'argentina-liga-profesional', 'argentina-primera-nacional', 'argentina-primera-b',
-      'argentina-torneo-federal-a', 'argentina-copa-argentina',
-      'colombia-primera-a-apertura', 'colombia-primera-b',
-      'chile-primera-division', 'chile-primera-b',
-      'uruguay-primera-division', 'uruguay-segunda-division',
-      'venezuela-primera-division', 'venezuela-segunda-division',
-      'peru-liga-1', 'peru-segunda-division',
-      'paraguay-division-profesional', 'bolivia-division-profesional',
-      'ecuador-liga-pro',
-      // Europe
-      'england-premier-league', 'england-championship', 'england-league-one', 'england-league-two',
-      'spain-la-liga', 'spain-segunda-division', 'spain-segunda-federacion',
-      'germany-bundesliga', 'germany-2-bundesliga', 'germany-3-liga',
-      'italy-serie-a', 'italy-serie-b', 'italy-serie-c-group-a', 'italy-serie-c-group-b', 'italy-serie-c-group-c',
-      'france-ligue-1', 'france-ligue-2',
-      'netherlands-eredivisie', 'netherlands-eerste-divisie',
-      'portugal-liga-nos', 'portugal-segunda-liga', 'portugal-liga-3',
-      'turkiye-super-lig', 'turkiye-1-lig', 'turkiye-2-lig',
-      'greece-super-league', 'greece-super-league-2',
-      'russia-premier-league', 'russia-fnl', 'russia-fnl-2',
-      'belgium-first-division-a', 'belgium-first-division-b',
-      'scotland-premiership', 'scotland-championship',
-      'poland-ekstraklasa', 'poland-i-liga', 'poland-2-liga',
-      'czech-republic-fortuna-liga', 'czechia-ceska-fotbalova-liga',
-      'hungary-otpbank-liga', 'romania-liga-1',
-      'austria-bundesliga', 'austria-2-liga',
-      'switzerland-super-league', 'switzerland-challenge-league', 'switzerland-1-liga-promotion',
-      'croatia-hnl', 'croatia-2nd-league',
-      'serbia-superliga', 'bulgaria-parva-liga', 'bulgaria-vtora-liga',
-      'slovakia-super-lig', 'slovenia-snl', 'slovenia-2nd-snl',
-      'bosnia-and-herzegovina-premijer-liga', 'bosnia-hercegovina-prva-liga',
-      'armenia-premier-league', 'armenia-first-league',
-      // Asia
-      'japan-jleague', 'japan-jleague-2', 'japan-jleague-3',
-      'south-korea-k-league-1', 'south-korea-k-league-2', 'south-korea-k3-league',
-      'china-super-league', 'india-isl', 'philippines-pfl',
-      'iran-persian-gulf-pro-league', 'iran-azadegan-league',
-      'saudi-arabia-professional-league', 'uae-arabian-gulf-league',
-      'qatar-stars-league',
-      // Americas
-      'usa-mls', 'usa-usl-championship', 'usa-usl-league-one',
-      'mexico-liga-mx', 'mexico-liga-de-expansion-mx',
-      'guatemala-liga-nacional',
-      'panama-lpf', 'costa-rica-primera-division',
-      'jamaica-premier-league', 'trinidad-and-tobago-tt-premier-league',
-      // International
-      'international-afc-asian-cup', 'international-copa-america',
-      'international-world-cup-qualification-africa',
-      'international-uefa-nations-league',
-    ];
+    "argentina-copa-argentina",
+    "argentina-primera-b",
+    "argentina-primera-nacional",
+    "argentina-torneo-federal-a",
+    "armenia-first-league",
+    "australia-nsw-league-one",
+    "australia-queensland-npl",
+    "bosnia-and-herzegovina-prva-liga-fbih",
+    "brazil-copa-do-nordeste",
+    "brazil-serie-a",
+    "bulgaria-vtora-liga",
+    "burkina-faso-premiere-division",
+    "cameroon-elite-one",
+    "chile-primera-b",
+    "colombia-primera-a-apertura",
+    "croatia-druga-nl",
+    "czechia-msfl",
+    "denmark-2nd-division",
+    "dr-congo-linafoot",
+    "ghana-division-one",
+    "ghana-premier-league",
+    "greece-super-league-2",
+    "guatemala-liga-nacional-clausura",
+    "iceland-cup",
+    "iceland-super-cup",
+    "international-clubs-club-friendly-games",
+    "international-int-friendly-games",
+    "iran-azadegan-league",
+    "italy-serie-c-group-a",
+    "italy-serie-c-group-b",
+    "italy-serie-c-group-c",
+    "jamaica-premier-league",
+    "japan-jleague-2",
+    "kenya-super-league",
+    "mexico-liga-de-expansion-mx-clausura",
+    "nigeria-premier-league",
+    "panama-liga-panamena-de-futbol-clausura",
+    "paraguay-division-de-honor-apertura",
+    "peru-segunda-division",
+    "philippines-pfl",
+    "poland-i-liga",
+    "portugal-liga-3",
+    "portugal-segunda-liga",
+    "republic-of-korea-k3-league",
+    "russia-fnl",
+    "russia-fnl-2",
+    "slovenia-2-liga",
+    "south-korea-k-league-2",
+    "spain-segunda-division",
+    "spain-segunda-federacion",
+    "spain-super-cup",
+    "switzerland-1-liga-promotion",
+    "trinidad-and-tobago-tt-premier-league",
+    "tunisia-ligue-2",
+    "turkiye-1-lig",
+    "uruguay-primera-division",
+    "uruguay-segunda-division",
+    "usa-usl-championship",
+    "usa-usl-league-one",
+    "venezuela-segunda-division",
+    "wales-cymru-premier",
+    "turkey-tff-1-lig",
+    "russia-1-liga",
+    "south-korea-k-league-2",
+    "south-korea-k3-league",
+    "bosnia-hercegovina-prva-liga",
+    "portugal-liga-portugal-2",
+    "switzerland-promotion-league"
+];
     
-    const results = { working: [], broken: [], error: [] };
+    const working = [], broken = [], errored = [];
     
-    // Test in batches of 5 (rate limit friendly)
     for (const slug of slugsToTest) {
       try {
-        // Test current/upcoming events
-        const urlFuture = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=3`;
-        const resFuture = await fetch(urlFuture);
-        const dFuture = await resFuture.json();
-        const futureArr = Array.isArray(dFuture) ? dFuture : (dFuture.data || []);
-        
-        if (futureArr.length > 0) {
-          results.working.push({
-            slug,
-            events: futureArr.length,
-            sample: futureArr.slice(0,1).map(e => e.home + ' vs ' + e.away)
-          });
+        const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=3`;
+        const r = await fetch(url);
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.data || []);
+        if (arr.length > 0) {
+          working.push({ slug, events: arr.length, sample: arr[0].home + ' vs ' + arr[0].away });
         } else {
-          results.broken.push({ slug, events: 0 });
+          broken.push(slug);
         }
-      } catch(e) {
-        results.error.push({ slug, error: e.message });
-      }
+      } catch(e) { errored.push({ slug, error: e.message }); }
     }
     
     return res.json({
-      tested: slugsToTest.length,
-      working: results.working.length,
-      broken: results.broken.length,
-      results
+      tested: slugsToTest.length, working: working.length, broken: broken.length,
+      workingSlugs: working,
+      brokenSlugs: broken,
+      erroredSlugs: errored
     });
   } catch(err) { return res.status(500).json({ error: err.message }); }
+}
+
+// Keep old debug-odds route
+router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+  return res.json({ message: 'Use /audit-all-slugs instead' });
 });
 
 // Keep old debug-odds route
