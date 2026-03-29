@@ -415,8 +415,8 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     } catch { checks.odds_api = 'error'; }
     // LiveScore API
     try {
-      const key = process.env.LIVESCORE_KEY || '';
-      const secret = process.env.LIVESCORE_SECRET || '';
+      const key = process.env.LIVESCORE_API_KEY || '';
+      const secret = process.env.LIVESCORE_API_SECRET || '';
       if (!key) { checks.livescore = 'no_key'; } else {
         const r = await fetch(`https://livescore-api.com/api-client/matches/live.json?key=${key}&secret=${secret}`);
         checks.livescore = r.ok ? 'ok' : `error:${r.status}`;
