@@ -212,6 +212,19 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   delete homeFormFeatures._teamGoals;
   delete awayFormFeatures._teamGoals;
 
+  // ── Bookmaker implied probabilities (Layer 3 signal) ─────────────────────
+  // Convert decimal odds to implied probabilities for xG anchoring
+  let impliedHomeProb = null;
+  let impliedAwayProb = null;
+  let impliedOver25   = null;
+  if (odds) {
+    const margin = odds.home && odds.draw && odds.away
+      ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
+    if (odds.home) impliedHomeProb = parseFloat(((1 / odds.home) / margin).toFixed(4));
+    if (odds.away) impliedAwayProb = parseFloat(((1 / odds.away) / margin).toFixed(4));
+    if (odds.over_2_5) impliedOver25 = parseFloat((1 / odds.over_2_5).toFixed(4));
+  }
+
   return {
     fixtureId,
     homeTeam: homeTeamName,
@@ -237,5 +250,10 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
     // Data completeness from enrichment layer
     enrichmentCompleteness: completeness,
+
+    // Layer 3: bookmaker-implied probabilities (when odds available)
+    impliedHomeProb,
+    impliedAwayProb,
+    impliedOver25,
   };
 }

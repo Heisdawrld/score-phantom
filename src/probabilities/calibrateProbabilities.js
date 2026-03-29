@@ -61,6 +61,20 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
     }
   }
 
+  // ── Over 1.5 confidence dampening ─────────────────────────────────────
+  // Over 1.5 is structurally overconfident in low-scoring matches.
+  if (cal.over15 != null) {
+    if (cal.over15 > 0.90) cal.over15 = 0.90;
+    if (cal.over25 != null && cal.over25 < 0.40) {
+      const df = 0.84 + (cal.over25 / 0.40) * 0.10;
+      cal.over15 = parseFloat((cal.over15 * df).toFixed(4));
+    }
+    if (primary === 'tight_low_event' && cal.over15 > 0.72) {
+      cal.over15 = parseFloat((cal.over15 * 0.87).toFixed(4));
+    }
+    cal.under15 = parseFloat((1 - cal.over15).toFixed(4));
+  }
+
   // ── Enforce monotonic ordering for over lines ─────────────────────────────
   // over15 >= over25 >= over35
   if (cal.over25 != null && cal.over15 != null && cal.over15 < cal.over25) {

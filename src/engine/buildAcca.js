@@ -133,7 +133,9 @@ function scoreAccaCandidate(row) {
   const prob     = parseFloat(row.best_pick_probability || 0);
   const dqWeight = dataQualityWeight(row.data_quality, row.enrichment_status);
   const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
-  return (prob * 0.6) + (dqWeight * 0.2) + (volBonus * 0.2);
+  const prestige = getLeaguePrestige(row.tournament_name);
+  // Prestige now accounts for 15% of score — big leagues get priority
+  return (prob * 0.50) + (dqWeight * 0.15) + (volBonus * 0.15) + (prestige * 0.20);
 }
 
 // ── Main ACCA builder ─────────────────────────────────────────────────────────
@@ -148,6 +150,47 @@ function scoreAccaCandidate(row) {
  * @param {string}   mode  - 'safe' | 'value'
  * @returns {object}        ACCA result
  */
+
+// ── League prestige weights ───────────────────────────────────────────────────────────────
+const LEAGUE_PRESTIGE = {
+  // Tier 1 — everyone bets these (1.0)
+  'UEFA Champions League':    1.0,
+  'Premier League':           1.0,
+  'La Liga':                  1.0,
+  'Bundesliga':               1.0,
+  'Serie A':                  1.0,
+  'Ligue 1':                  1.0,
+  'UEFA Europa League':       0.95,
+  // Tier 2 — popular (0.85)
+  'Championship':             0.85,
+  'Eredivisie':               0.85,
+  'Primeira Liga':            0.85,
+  'Scottish Premiership':     0.80,
+  'Jupiler Pro League':       0.80,
+  'Super Lig':                0.80,
+  'Brasileirao':              0.80,
+  'Liga MX':                  0.80,
+  'MLS':                      0.75,
+  'EFL League One':           0.75,
+  'EFL League Two':           0.70,
+  'Liga Nacional':            0.70,
+  // Tier 3 — niche (0.60)
+  'USL Championship':         0.60,
+  'K-League':                 0.60,
+  'J. League':                0.60,
+  'J. League 2':              0.55,
+};
+
+function getLeaguePrestige(tournamentName) {
+  if (!tournamentName) return 0.50;
+  const t = String(tournamentName).toLowerCase();
+  for (const [league, weight] of Object.entries(LEAGUE_PRESTIGE)) {
+    if (t.includes(league.toLowerCase())) return weight;
+  }
+  // Default for unknown leagues
+  return 0.50;
+}
+
 export function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
   const minProb     = isSafeMode ? 0.62 : 0.58;

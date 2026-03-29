@@ -114,6 +114,29 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
   // homeXg = homeXg * (1 + premHomeBoost);
   // awayXg = awayXg * (1 + premAwayBoost);
 
+  // ── Layer 3: Bookmaker implied probability signal ──────────────────────
+  // Use odds-derived implied probability to anchor xG when available.
+  // Bookmakers aggregate massive data — their price IS a premium stat.
+  const impliedHome = fv.impliedHomeProb != null ? safeNum(fv.impliedHomeProb) : null;
+  const impliedAway = fv.impliedAwayProb != null ? safeNum(fv.impliedAwayProb) : null;
+  const impliedOver25 = fv.impliedOver25 != null ? safeNum(fv.impliedOver25) : null;
+
+  if (impliedOver25 != null) {
+    // Convert bookmaker over 2.5 implied prob to expected total goals anchor
+    // P(over2.5) ≈ 1 - e^(-lambda) * (1 + lambda + lambda^2/2) where lambda = total xG
+    // Simpler: implied total ≈ -1.5 * ln(1 - impliedOver25) roughly maps prob to xG
+    const impliedTotal = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - impliedOver25)));
+    const engineTotal  = homeXg + awayXg;
+    const ratio        = impliedTotal / Math.max(0.5, engineTotal);
+    // Blend 35% bookmaker anchor, 65% engine (conservative — trust engine more)
+    const blendFactor = 0.35;
+    const blendedTotal = engineTotal * (1 - blendFactor) + impliedTotal * blendFactor;
+    const scale = blendedTotal / Math.max(0.5, engineTotal);
+    homeXg *= scale;
+    awayXg *= scale;
+    console.log('[xG] L3 odds anchor: implied_over25='+impliedOver25.toFixed(2)+' implied_total='+impliedTotal.toFixed(2)+' engine_total='+engineTotal.toFixed(2)+' blended='+blendedTotal.toFixed(2));
+  }
+
   // Per-team hard cap: 0.2 – 2.5
   homeXg = clamp(homeXg, 0.2, 2.5);
   awayXg = clamp(awayXg, 0.2, 2.5);

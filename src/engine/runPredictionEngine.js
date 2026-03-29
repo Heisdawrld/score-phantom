@@ -211,7 +211,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
     const odds = normalized.odds;
 
     // Step 2: Build feature vector (DB-backed)
-    const rawFeatures = await buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds);
+    const rawFeatures = await buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds || rawData?.odds || null);
 
     // Flatten nested feature vector to flat structure
     const features = flattenFeatureVector(rawFeatures);
