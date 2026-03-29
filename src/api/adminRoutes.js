@@ -529,7 +529,7 @@ router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
       erroredSlugs: errored
     });
   } catch(err) { return res.status(500).json({ error: err.message }); }
-}
+});
 
 // Keep old debug-odds route
 router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
