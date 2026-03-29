@@ -15,14 +15,30 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function get(path, params = {}) {
+async function get(path, params = {}, retries = 3) {
   const { KEY, SECRET } = getCredentials();
-  await sleep(350 + Math.random() * 200);
-  const res = await axios.get(`${BASE}${path}`, {
-    params: { key: KEY, secret: SECRET, ...params },
-    timeout: 15000,
-  });
-  return res.data;
+  await sleep(400 + Math.random() * 200);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await axios.get(`${BASE}${path}`, {
+        params: { key: KEY, secret: SECRET, ...params },
+        timeout: 15000,
+      });
+      if (res.data?.success === false) {
+        console.warn('[LiveScore] API error on ' + path + ':', res.data?.error || 'unknown');
+      }
+      return res.data;
+    } catch (err) {
+      const status = err?.response?.status;
+      if ((status === 503 || status === 429) && attempt < retries) {
+        const delay = 1000 * Math.pow(2, attempt);
+        console.warn('[LiveScore] ' + status + ' on ' + path + ' - retry ' + (attempt+1) + '/' + retries + ' in ' + delay + 'ms');
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function getCompetitionName(f) {

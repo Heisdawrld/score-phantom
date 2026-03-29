@@ -118,7 +118,7 @@ async function autoSeed() {
 
 // ── Auto-enrichment: runs at startup and every 4 hours ───────────────────────
 const ENRICH_BATCH = 50;
-const ENRICH_DELAY_MS = 1500;
+const ENRICH_DELAY_MS = 2500; // increased to avoid rate limiting
 
 async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
@@ -162,6 +162,33 @@ async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
     }
 
     console.log(`[AutoEnrich] Done. Success: ${success} | Failed: ${failed}`);
+
+    // Re-enrich fixtures that came back LIMITED with 0 form data (API returned empty last time)
+    if (success > 0) {
+      const retryResult = await db.execute({
+        sql: `SELECT id, home_team_name, away_team_name, match_date
+              FROM fixtures
+              WHERE enrichment_status IN ('limited', 'no_data')
+                AND match_date >= ?
+              ORDER BY match_date ASC
+              LIMIT 30`,
+        args: [today],
+      });
+      const retryFixtures = retryResult.rows || [];
+      if (retryFixtures.length > 0) {
+        console.log(`[AutoEnrich] Retrying ${retryFixtures.length} limited/no_data fixtures...`);
+        const { enrichFixture } = await import('./enrichment/enrichOne.js');
+        for (const fixture of retryFixtures) {
+          try {
+            await enrichFixture(fixture);
+            console.log(`[AutoEnrich] Retry ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
+          } catch (err) {
+            console.warn(`[AutoEnrich] Retry ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
+          }
+          await new Promise(r => setTimeout(r, ENRICH_DELAY_MS));
+        }
+      }
+    }
     return { enriched: success, failed };
   } catch (err) {
     console.error("[AutoEnrich] Fatal:", err.message);
