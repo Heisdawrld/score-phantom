@@ -61,6 +61,13 @@ if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
 }
 
+
+// Version endpoint — frontend polls this to detect new deploys
+const BUILD_VERSION = '2026-03-29T04:51:57.005Z';
+app.get('/api/version', (req, res) => {
+  res.json({ version: BUILD_VERSION, ts: Date.now() });
+});
+
 // Legacy admin page
 app.get("/admin", (req, res) => {
   const adminHtmlPath = path.join(__dirname, "..", "admin.html");
@@ -79,6 +86,10 @@ app.get("*", (req, res) => {
   // Try React frontend first, then legacy index.html
   const reactIndex = path.join(clientDistPath, "index.html");
   if (fs.existsSync(reactIndex)) {
+    // No-cache so browser always gets the latest index.html after a deploy
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.sendFile(reactIndex);
   }
   const legacyIndex = path.join(__dirname, "..", "index.html");

@@ -45,6 +45,7 @@ import Dashboard from "@/pages/Dashboard";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
+import { UpdateBanner } from "@/components/UpdateBanner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +117,7 @@ function App() {
             <Router />
           </WouterRouter>
           <Toaster />
+          <UpdateBanner />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
