@@ -431,6 +431,64 @@ router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res
     const tournamentName = fixture.tournament_name || meta.tournament_name || '';
     const countryName = fixture.category_name || '';
     
+    // Import and use the actual getLeagueSlug logic from oddsService
+    // Hardcode the EXACT_MAP test for common problem leagues
+    const slugsToTest = {
+      'turkey-tff-1-lig': 0,
+      'turkey-tff-2-lig': 0,
+      'turkiye-1-lig': 0,
+      'turkiye-2-lig': 0,
+      'ghana-premier-league': 0,
+      'japan-jleague-2': 0,
+      'japan-j2-league': 0,
+      'colombia-primera-a-apertura': 0,
+      'colombia-primera-a': 0,
+      'argentina-primera-b': 0,
+      'nigeria-premier-league': 0,
+      'cameroon-elite-one': 0,
+      'kenya-super-league': 0,
+      'jamaica-premier-league': 0,
+      'italy-serie-c': 0,
+      'spain-segunda-federacion': 0,
+    };
+    
+    const results = {};
+    for (const slug of Object.keys(slugsToTest)) {
+      const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=3`;
+      try {
+        const r = await fetch(url);
+        const d = await r.json();
+        const arr = Array.isArray(d) ? d : (d.data || []);
+        results[slug] = { count: arr.length, sample: arr.slice(0,2).map(e=>({home:e.home,away:e.away,date:e.date})) };
+      } catch(e) { results[slug] = { error: e.message }; }
+    }
+    
+    // Also check league cache
+    const cached = await db.execute({ sql: 'SELECT league_slug, fetched_at FROM odds_league_cache ORDER BY fetched_at DESC LIMIT 20', args:[] });
+    
+    return res.json({
+      fixture: { home: fixture.home_team_name, away: fixture.away_team_name, tournament: tournamentName, country: countryName },
+      apiKeySet: !!ODDS_API_KEY,
+      apiKeyPrefix: ODDS_API_KEY.slice(0,8),
+      slugResults: results,
+      leagueCache: cached.rows
+    });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const f = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[fixtureId] });
+    const fixture = f.rows?.[0];
+    if (!fixture) return res.json({ error: 'fixture not found' });
+    
+    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
+    const ODDS_API_BASE = 'https://api.odds-api.io/v3';
+    const meta = fixture.meta ? JSON.parse(fixture.meta) : {};
+    const tournamentName = fixture.tournament_name || meta.tournament_name || '';
+    const countryName = fixture.category_name || '';
+    
     // Build slug manually
     const slugKey = `${countryName}|${tournamentName}`;
     
