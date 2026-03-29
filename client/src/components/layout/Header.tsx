@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
-import { Zap, Crown, LogOut, User, Copy, Check, ChevronDown, LayoutDashboard } from "lucide-react";
+import { Zap, Crown, LogOut, User, Copy, Check, ChevronDown, LayoutDashboard, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function PlanBadge({ status }: { status: string }) {
@@ -148,6 +148,19 @@ export function Header() {
                         <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-all cursor-pointer">
                           <Crown className="w-3.5 h-3.5 text-primary shrink-0" />
                           <span className="text-xs font-bold text-primary">Upgrade to Premium</span>
+                        </div>
+                      </Link>
+                    </div>
+                  )}
+
+
+                  {/* Admin link — only shown if admin email matches */}
+                  {user.email?.toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase() && (
+                    <div className="px-4 py-2.5 border-b border-white/8">
+                      <Link href="/admin" onClick={() => setOpen(false)}>
+                        <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/8 transition-all cursor-pointer">
+                          <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="text-xs font-bold text-white">Admin Panel</span>
                         </div>
                       </Link>
                     </div>

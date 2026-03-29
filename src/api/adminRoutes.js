@@ -296,3 +296,123 @@ router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 export default router;
+
+// ── POST /clear-odds-cache — wipe league odds cache so slugs re-fetch ─────────
+router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.execute("DELETE FROM odds_league_cache");
+    console.log('[Admin] Odds league cache cleared');
+    return res.json({ success: true, message: "Odds league cache cleared — fresh odds will be fetched on next prediction" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /clear-fixture-odds — wipe per-fixture odds so they re-fetch ─────────
+router.post("/clear-fixture-odds", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    await db.execute("DELETE FROM fixture_odds");
+    console.log('[Admin] Fixture odds cache cleared');
+    return res.json({ success: true, message: "Fixture odds cleared — all matches will re-fetch fresh odds" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /clear-prediction-cache — wipe predictions so engine re-runs ─────────
+router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    await db.execute("DELETE FROM predictions_v2");
+    console.log('[Admin] Prediction cache cleared');
+    return res.json({ success: true, message: "Prediction cache cleared — engine will re-run fresh predictions" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /reseed — re-seed today's fixtures from LiveScore ────────────────────
+router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const date = req.body?.date || new Date().toISOString().slice(0, 10);
+    const { fetchFixturesByDate } = await import('../services/fixtureSeeder.js');
+    // Run in background
+    fetchFixturesByDate(date).then(r => console.log('[Admin] Reseed complete:', r)).catch(e => console.error('[Admin] Reseed error:', e.message));
+    return res.json({ success: true, message: `Reseeding fixtures for ${date} in background...` });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /fixture-stats — count fixtures, enriched, with odds ─────────────────
+router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const [total, enriched, withOdds, predictions, leagueCache, fixtureOdds] = await Promise.all([
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ?", args: [`${today}%`] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND enriched = 1", args: [`${today}%`] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND odds_home IS NOT NULL", args: [`${today}%`] }),
+      db.execute("SELECT COUNT(*) as c FROM predictions_v2"),
+      db.execute("SELECT COUNT(*) as c FROM odds_league_cache"),
+      db.execute("SELECT COUNT(*) as c FROM fixture_odds"),
+    ]);
+    return res.json({
+      today,
+      fixtures: { total: Number(total.rows[0].c), enriched: Number(enriched.rows[0].c), withOdds: Number(withOdds.rows[0].c) },
+      cache: { predictions: Number(predictions.rows[0].c), leagueSlugs: Number(leagueCache.rows[0].c), fixtureOdds: Number(fixtureOdds.rows[0].c) },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /verify-payment/:ref — manually verify a pending payment ─────────────
+router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const ref = req.params.ref;
+    const payResult = await db.execute({ sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1", args: [ref] });
+    const payment = payResult.rows?.[0];
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 30);
+    const expiryISO = expiry.toISOString();
+    await db.execute({ sql: "UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?", args: [new Date().toISOString(), ref] });
+    await db.execute({ sql: "UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ? WHERE id = ?", args: [expiryISO, expiryISO, payment.user_id] });
+    return res.json({ success: true, message: `Payment ${ref} verified, user upgraded to premium for 30 days` });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /system-health — check all integrations ───────────────────────────────
+router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const checks = {};
+    // DB
+    try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
+    // Odds API
+    try {
+      const r = await fetch(`https://api.odds-api.io/v3/leagues?apiKey=${process.env.ODDS_API_KEY}&sport=football&limit=1`);
+      checks.odds_api = r.ok ? 'ok' : `error:${r.status}`;
+    } catch { checks.odds_api = 'error'; }
+    // LiveScore API
+    try {
+      const key = process.env.LIVESCORE_KEY || '';
+      const secret = process.env.LIVESCORE_SECRET || '';
+      if (!key) { checks.livescore = 'no_key'; } else {
+        const r = await fetch(`https://livescore-api.com/api-client/matches/live.json?key=${key}&secret=${secret}`);
+        checks.livescore = r.ok ? 'ok' : `error:${r.status}`;
+      }
+    } catch { checks.livescore = 'error'; }
+    // Email
+    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    // Groq
+    checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
+    // Flutterwave
+    checks.flutterwave = process.env.FLW_SECRET_KEY ? 'configured' : 'not_configured';
+
+    const allOk = Object.values(checks).every(v => v === 'ok' || v.includes('configured'));
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});

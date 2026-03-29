@@ -44,6 +44,7 @@ import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
+import Admin from "@/pages/Admin";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -99,6 +100,7 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/signup" component={Signup} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
+      <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route component={() => <ProtectedRoute component={Dashboard} />} />
     </Switch>
