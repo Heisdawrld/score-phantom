@@ -1350,8 +1350,12 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
   const odds=parseBookmakerOdds(markets);
   const overUnder=JSON.stringify({over_2_5:odds.over_2_5,under_2_5:odds.under_2_5,over_1_5:odds.over_1_5,under_1_5:odds.under_1_5,over_3_5:odds.over_3_5,under_3_5:odds.under_3_5});
   try {
-    // Add event_id column if missing
+    // Ensure all columns exist (safe to run multiple times)
     try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN event_id TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN bet_link_sportybet TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN bet_link_bet365 TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN over_under TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN bookmaker TEXT"); } catch {}
     await db.execute({ sql:`INSERT OR REPLACE INTO fixture_odds (fixture_id,event_id,home,draw,away,over_1_5,under_1_5,over_2_5,under_2_5,over_3_5,under_3_5,btts_yes,btts_no,over_under,bookmaker,bet_link_sportybet,bet_link_bet365,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`, args:[String(fixtureId),String(matched.id),odds.home,odds.draw,odds.away,odds.over_1_5,odds.under_1_5,odds.over_2_5,odds.under_2_5,odds.over_3_5,odds.under_3_5,odds.btts_yes,odds.btts_no,overUnder,bookmakerUsed||'SportyBet',betLinkSportybet||null,betLinkBet365||null] });
     console.log(`[OddsService] ✅ Cached odds ${fixtureId} (${bookmakerUsed}) 1X2: ${odds.home}/${odds.draw}/${odds.away}`);
   } catch (err) { console.error('[OddsService] DB write:', err.message); }
