@@ -306,6 +306,8 @@
     <div style="display:flex;gap:6px;margin-bottom:20px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:6px;width:fit-content;">
       <button class="tab-btn active" onclick="switchTab('users')" id="tab-users">👥 Users</button>
       <button class="tab-btn" onclick="switchTab('payments')" id="tab-payments">💳 Payments</button>
+      <button class="tab-btn" onclick="switchTab('system')" id="tab-system">⚡ System</button>
+      <button class="tab-btn" onclick="switchTab('cache')" id="tab-cache">🗑️ Cache</button>
     </div>
 
     <!-- Enrichment Control -->
@@ -334,6 +336,65 @@
     </div>
 
     <!-- Payments Tab -->
+    
+    <!-- SYSTEM PANEL -->
+    <div id="panel-system" style="display:none;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;" id="healthGrid">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <p style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Loading health...</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="loadHealth()">↻ Refresh Health</button>
+      </div>
+    </div>
+
+    <!-- CACHE PANEL -->
+    <div id="panel-cache" style="display:none;">
+      <!-- Cache Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;" id="cacheStatsGrid">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <p style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Fixture Controls -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">📡 Fixture Seeding</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Re-pull today's fixtures from LiveScore API</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="reseedFixtures()">↻ Reseed Today's Fixtures</button>
+        </div>
+      </div>
+
+      <!-- Enrichment Controls -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🔍 Enrichment</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Pull form, H2H, standings for unenriched fixtures</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="runEnrichmentN(50)">▶ Run 50 Fixtures</button>
+          <button class="btn-primary" onclick="runEnrichmentN(200)">▶ Run All (200)</button>
+        </div>
+      </div>
+
+      <!-- Odds Cache -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">📊 Odds Cache</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Clear stale odds so new league mappings kick in immediately</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-warn" onclick="clearLeagueCache()">🗑️ Clear League Slug Cache</button>
+          <button class="btn-warn" onclick="clearFixtureOdds()">🗑️ Clear All Fixture Odds</button>
+        </div>
+      </div>
+
+      <!-- Prediction Cache -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🧠 Prediction Cache</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Force engine to re-run fresh predictions (use after accuracy upgrades)</p>
+        <button class="btn-danger" onclick="clearPredictions()">⚠️ Clear Prediction Cache</button>
+      </div>
+    </div>
+
     <div id="panel-payments" style="display:none;">
       <div class="card" style="overflow:auto;">
         <div id="paymentTableWrap">
@@ -734,7 +795,11 @@
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.getElementById('panel-users').style.display = tab === 'users' ? 'block' : 'none';
     document.getElementById('panel-payments').style.display = tab === 'payments' ? 'block' : 'none';
+    document.getElementById('panel-system').style.display = tab === 'system' ? 'block' : 'none';
+    document.getElementById('panel-cache').style.display = tab === 'cache' ? 'block' : 'none';
     if (tab === 'payments') loadPayments(1);
+    if (tab === 'system') loadHealth();
+    if (tab === 'cache') loadCacheStats();
   }
 
   // ── Search ────────────────────────────────────────────────────────────────
