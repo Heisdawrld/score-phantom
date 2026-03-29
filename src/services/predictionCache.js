@@ -15,7 +15,7 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchAndCacheOddsForFixture } from './oddsService.js';
+import { fetchAndCacheOddsForFixture, fetchValueBetsForEvent } from './oddsService.js';
 
 // Cache is valid for 6 hours — predictions refresh each morning via automation
 const CACHE_VALID_HOURS = 6;
@@ -177,6 +177,7 @@ export async function ensureFixtureData(fixtureId) {
 
   // Try live odds, fall back to cached
   let odds = null;
+  let valueBets = [];
   try {
     const meta0 = safeJsonParse(fixture.meta, {});
     const tournamentName = fixture.tournament_name || meta0.tournament_name || '';
@@ -187,8 +188,13 @@ export async function ensureFixtureData(fixtureId) {
       tournamentName,
       fixture.category_name || ''
     );
+    // Fetch value bets if we have a matched event (uses cached event ID)
+    if (odds && odds._eventId) {
+      try { valueBets = await fetchValueBetsForEvent(odds._eventId) || []; } catch {}
+    }
   } catch {}
   if (!odds) odds = await getOdds(fixtureId);
+  if (odds) odds.valueBets = valueBets;
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 

@@ -134,8 +134,10 @@ function scoreAccaCandidate(row) {
   const dqWeight = dataQualityWeight(row.data_quality, row.enrichment_status);
   const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
   const prestige = getLeaguePrestige(row.tournament_name);
-  // Prestige now accounts for 15% of score — big leagues get priority
-  return (prob * 0.50) + (dqWeight * 0.15) + (volBonus * 0.15) + (prestige * 0.20);
+  const mk       = (row.best_pick_market || '').toLowerCase();
+  // Diversity: mild penalty on Unders, bonus for clean wins
+  const diversityMult = mk.includes('under') ? 0.88 : (mk === 'home_win' || mk === 'away_win') ? 1.06 : 1.0;
+  return ((prob * 0.50) + (dqWeight * 0.15) + (volBonus * 0.15) + (prestige * 0.20)) * diversityMult;
 }
 
 // ── Main ACCA builder ─────────────────────────────────────────────────────────
@@ -241,6 +243,7 @@ export function buildAcca(rows, mode = 'safe') {
   const selected     = [];
   const usedLeagues  = new Map(); // tournamentName → count
   const scriptCounts = {};        // scriptCat → count
+  let   underCount  = 0; // track Under picks for diversity
   let   moderateUsed = 0;
 
   for (const pick of candidates) {
@@ -263,7 +266,12 @@ export function buildAcca(rows, mode = 'safe') {
       moderateUsed++;
     }
 
+    // Diversity: max 2 Under picks per ACCA
+    const isUnderPick = (pick.best_pick_market||'').toLowerCase().includes('under');
+    if (isUnderPick && underCount >= 2) continue;
+
     selected.push(pick);
+    if (isUnderPick) underCount++;
     usedLeagues.set(tournament, leagueCount + 1);
     scriptCounts[pick.scriptCat] = catCount + 1;
   }

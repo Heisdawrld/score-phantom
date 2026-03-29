@@ -1313,7 +1313,7 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
     const cached=await db.execute({ sql:`SELECT * FROM fixture_odds WHERE fixture_id=? AND fetched_at>datetime('now','-${FIXTURE_CACHE_HOURS} hours') LIMIT 1`, args:[String(fixtureId)] });
     if (cached.rows?.[0]?.home) {
       const r=cached.rows[0];
-      return {home:r.home,draw:r.draw,away:r.away,over_1_5:r.over_1_5,under_1_5:r.under_1_5,over_2_5:r.over_2_5,under_2_5:r.under_2_5,over_3_5:r.over_3_5,under_3_5:r.under_3_5,btts_yes:r.btts_yes,btts_no:r.btts_no,betLinkSportybet:r.bet_link_sportybet,betLinkBet365:r.bet_link_bet365};
+      return {home:r.home,draw:r.draw,away:r.away,over_1_5:r.over_1_5,under_1_5:r.under_1_5,over_2_5:r.over_2_5,under_2_5:r.under_2_5,over_3_5:r.over_3_5,under_3_5:r.under_3_5,btts_yes:r.btts_yes,btts_no:r.btts_no,betLinkSportybet:r.bet_link_sportybet,betLinkBet365:r.bet_link_bet365,_eventId:r.event_id||null};
     }
   } catch {}
 
@@ -1350,10 +1350,12 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
   const odds=parseBookmakerOdds(markets);
   const overUnder=JSON.stringify({over_2_5:odds.over_2_5,under_2_5:odds.under_2_5,over_1_5:odds.over_1_5,under_1_5:odds.under_1_5,over_3_5:odds.over_3_5,under_3_5:odds.under_3_5});
   try {
-    await db.execute({ sql:`INSERT OR REPLACE INTO fixture_odds (fixture_id,home,draw,away,over_1_5,under_1_5,over_2_5,under_2_5,over_3_5,under_3_5,btts_yes,btts_no,over_under,bookmaker,bet_link_sportybet,bet_link_bet365,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`, args:[String(fixtureId),odds.home,odds.draw,odds.away,odds.over_1_5,odds.under_1_5,odds.over_2_5,odds.under_2_5,odds.over_3_5,odds.under_3_5,odds.btts_yes,odds.btts_no,overUnder,bookmakerUsed||'SportyBet',betLinkSportybet||null,betLinkBet365||null] });
+    // Add event_id column if missing
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN event_id TEXT"); } catch {}
+    await db.execute({ sql:`INSERT OR REPLACE INTO fixture_odds (fixture_id,event_id,home,draw,away,over_1_5,under_1_5,over_2_5,under_2_5,over_3_5,under_3_5,btts_yes,btts_no,over_under,bookmaker,bet_link_sportybet,bet_link_bet365,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`, args:[String(fixtureId),String(matched.id),odds.home,odds.draw,odds.away,odds.over_1_5,odds.under_1_5,odds.over_2_5,odds.under_2_5,odds.over_3_5,odds.under_3_5,odds.btts_yes,odds.btts_no,overUnder,bookmakerUsed||'SportyBet',betLinkSportybet||null,betLinkBet365||null] });
     console.log(`[OddsService] ✅ Cached odds ${fixtureId} (${bookmakerUsed}) 1X2: ${odds.home}/${odds.draw}/${odds.away}`);
   } catch (err) { console.error('[OddsService] DB write:', err.message); }
-  return odds;
+  return {...odds, _eventId: String(matched.id)};
 }
 
 // ── Fetch value bets from odds-api.io for a specific event ──────────────────────

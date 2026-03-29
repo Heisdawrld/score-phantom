@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
 import adminRoutes from "./api/adminRoutes.js";
+import { initBacktestingTable } from "./storage/backtesting.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
@@ -283,6 +284,7 @@ app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   await initUsersTable();
   await initPredictionsTable();
+  initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
 
   // Migrate fixtures table for new columns (idempotent)
   const fixtureMigrations = [

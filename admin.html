@@ -308,6 +308,7 @@
       <button class="tab-btn" onclick="switchTab('payments')" id="tab-payments">💳 Payments</button>
       <button class="tab-btn" onclick="switchTab('system')" id="tab-system">⚡ System</button>
       <button class="tab-btn" onclick="switchTab('cache')" id="tab-cache">🗑️ Cache</button>
+      <button class="tab-btn" onclick="showTab('backtest')">&#127919; Accuracy</button>
     </div>
 
     <!-- Enrichment Control -->
@@ -919,6 +920,59 @@
   }
 
 
+
+async function loadBacktestStats() {
+  const r = await api('/admin/backtest/stats');
+  const el = document.getElementById('backtest-stats');
+  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  const o = r.overall || {};
+  let html = '<div style="background:#1e293b;padding:16px;border-radius:8px;margin-bottom:16px">';
+  html += '<h3 style="margin:0 0 8px">Overall</h3>';
+  html += '<p>Total: <b>'+( o.total||0)+'</b> | Correct: <b>'+(o.correct||0)+'</b> | Wrong: <b>'+(o.wrong||0)+'</b> | Win Rate: <b style="color:'+(parseFloat(o.win_rate||0)>=60?'#22c55e':'#ef4444')+'">'+( o.win_rate||'?')+'%</b></p></div>';
+  if ((r.byMarket||[]).length) {
+    html += '<h3>By Market</h3><table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="background:#334155"><th style="padding:8px;text-align:left">Market</th><th>Total</th><th>Correct</th><th>Win Rate</th></tr>';
+    r.byMarket.forEach(m => {
+      const wr = parseFloat(m.win_rate||0);
+      html += '<tr style="border-bottom:1px solid #334155"><td style="padding:8px">'+m.predicted_market+'</td><td style="text-align:center">'+m.total+'</td><td style="text-align:center">'+m.correct+'</td><td style="text-align:center;color:'+(wr>=60?'#22c55e':'#ef4444')+'">'+m.win_rate+'%</td></tr>';
+    });
+    html += '</table>';
+  }
+  if ((r.recent||[]).length) {
+    html += '<h3 style="margin-top:16px">Recent Results</h3><table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="background:#334155"><th style="padding:8px">Match</th><th>Pick</th><th>Score</th><th>Outcome</th></tr>';
+    r.recent.forEach(row => {
+      const icon = row.outcome==='correct'?'✅':row.outcome==='wrong'?'❌':'⚪';
+      html += '<tr style="border-bottom:1px solid #334155"><td style="padding:8px">'+row.home_team+' vs '+row.away_team+'</td><td>'+row.predicted_selection+'</td><td>'+row.full_score+'</td><td>'+icon+'</td></tr>';
+    });
+    html += '</table>';
+  }
+  if (!o.total) html += '<p style="color:#888;margin-top:16px">No results yet. Add scores using the Backtest Run button or via API.</p>';
+  el.innerHTML = html;
+}
+
+async function runBacktest() {
+  const r = await api('/admin/backtest/run', 'POST', {});
+  const el = document.getElementById('backtest-stats');
+  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  if (r.pending === 0) {
+    el.innerHTML = '<p style="color:#888">No finished fixtures awaiting evaluation. Once matches complete (2h+ ago), results appear here.</p>';
+  } else {
+    let html = '<p style="color:#22c55e">' + r.pending + ' fixtures found awaiting scores:</p><ul>';
+    (r.fixtures||[]).forEach(f => { html += '<li>'+f.home+' vs '+f.away+' — Pick: '+f.selection+'</li>'; });
+    html += '</ul><p style="color:#888">Submit scores via: POST /api/admin/backtest/run {fixtureId, homeScore, awayScore}</p>';
+    el.innerHTML = html;
+  }
+}
 </script>
 </body>
 </html>
+  <div id="tab-backtest" class="tab-content" style="display:none">
+    <h2>&#127919; Prediction Accuracy</h2>
+    <div style="margin-bottom:16px">
+      <button onclick="loadBacktestStats()" style="background:#6366f1;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer">&#128257; Load Stats</button>
+      <button onclick="runBacktest()" style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-left:8px">&#9654; Find Pending Results</button>
+    </div>
+    <div id="backtest-stats"><p style="color:#888">Click Load Stats to see accuracy data</p></div>
+  </div>
+

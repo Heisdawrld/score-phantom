@@ -1,4 +1,5 @@
 import express from "express";
+import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
 import rateLimit from "express-rate-limit";
 
 const adminLimiter = rateLimit({
@@ -293,6 +294,24 @@ router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
     console.error("[Admin] run-enrichment error:", err.message);
     return res.status(500).json({ error: err.message });
   }
+});
+
+// ── Backtesting routes ──────────────────────────────────────────────────────
+router.get("/backtest/stats", adminLimiter, requireAdmin, async (req, res) => {
+  const stats = await getAccuracyStats();
+  return res.json(stats);
+});
+
+router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
+  const { fixtureId, homeScore, awayScore } = req.body || {};
+  if (fixtureId && homeScore !== undefined && awayScore !== undefined) {
+    const pred = await db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id=? LIMIT 1', args:[String(fixtureId)] });
+    if (!pred.rows[0]) return res.json({ error: 'No prediction for that fixture' });
+    const outcome = await saveOutcome(fixtureId, pred.rows[0], homeScore, awayScore);
+    return res.json({ outcome, fixtureId, score: homeScore + '-' + awayScore });
+  }
+  const pending = await runBacktestForFinishedFixtures();
+  return res.json({ pending: pending.length, fixtures: pending.map(f => ({ id: f.fixture_id, home: f.home_team, away: f.away_team, market: f.best_pick_market, selection: f.best_pick_selection })) });
 });
 
 export default router;
