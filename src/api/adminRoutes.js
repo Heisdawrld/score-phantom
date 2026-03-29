@@ -417,6 +417,18 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
   }
 });
 
+// FAST: Get all football leagues from odds-api.io
+router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
+    const url = `https://api.odds-api.io/v3/leagues?apiKey=${ODDS_API_KEY}&sport=football`;
+    const r = await fetch(url);
+    const d = await r.json();
+    const leagues = Array.isArray(d) ? d : (d.data || d.leagues || []);
+    return res.json({ count: leagues.length, leagues });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
 // COMPREHENSIVE SLUG AUDIT - tests all slugs from EXACT_MAP
 router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
   try {
