@@ -755,9 +755,9 @@ const EXACT_MAP = {
   // Turkey
   'Turkey|Süper Lig': 'turkey-super-lig',
   'Turkey|Super Lig': 'turkey-super-lig',
-  'Turkey|TFF First League': 'turkey-tff-1-lig',
-  'Turkey|1. Lig': 'turkey-tff-1-lig',
-  'Turkey|2nd Lig': 'turkey-tff-1-lig',
+  'Turkey|TFF First League': 'turkiye-1-lig',
+  'Turkey|1. Lig': 'turkiye-1-lig',
+  'Turkey|2nd Lig': 'turkiye-1-lig',
   // Scotland
   'Scotland|Premiership': 'scotland-premiership',
   'Scotland|Championship': 'scotland-championship',
@@ -884,8 +884,8 @@ const EXACT_MAP = {
   // --- Asia ---
   'Japan|J1 League': 'japan-j1-league',
   'Japan|J. League': 'japan-j1-league',
-  'Japan|J. League 2': 'japan-j2-league',
-  'Japan|J2 League': 'japan-j2-league',
+  'Japan|J. League 2': 'japan-jleague-2',
+  'Japan|J2 League': 'japan-jleague-2',
   'Japan|J3 League': 'japan-j3-league',
   'South Korea|K League 1': 'republic-of-korea-k-league-1',
   'South Korea|K League 2': 'republic-of-korea-k-league-2',
@@ -955,6 +955,13 @@ const FUZZY_MAP = {
   'afc champions':      'international-clubs-afc-champions-league-elite',
   'friendly':           'international-int-friendly-games',
 };
+
+// Leagues split into groups on odds-api.io — try all groups and merge
+const MULTI_SLUG_MAP = {
+  'Italy|Serie C': ['italy-serie-c-group-a', 'italy-serie-c-group-b', 'italy-serie-c-group-c'],
+  'Italy|Serie D': ['italy-serie-d-group-a', 'italy-serie-d-group-b', 'italy-serie-d-group-c', 'italy-serie-d-group-d', 'italy-serie-d-group-e', 'italy-serie-d-group-f', 'italy-serie-d-group-g'],
+};
+
 
 async function ensureTables() {
   try {
@@ -1199,8 +1206,10 @@ function teamMatch(a, b) {
 function getLeagueSlug(tournamentName, countryName) {
   if (!tournamentName) return null;
   const country = String(countryName||'').trim();
-  // 1. Exact country+tournament match
   const exactKey = `${country}|${tournamentName}`;
+  // 0. Check multi-slug leagues (split into groups)
+  if (MULTI_SLUG_MAP[exactKey]) return MULTI_SLUG_MAP[exactKey]; // returns array
+  // 1. Exact country+tournament match
   if (EXACT_MAP[exactKey]) return EXACT_MAP[exactKey];
   // 2. Try common alternative country names
   const countryAliases = {
@@ -1259,6 +1268,15 @@ function parseBookmakerOdds(markets) {
 
 async function fetchLeagueEvents(leagueSlug) {
   if (!ODDS_API_KEY) return [];
+  // Handle array of slugs (for leagues split into groups like Italy Serie C)
+  if (Array.isArray(leagueSlug)) {
+    const all = [];
+    for (const slug of leagueSlug) {
+      const events = await fetchLeagueEvents(slug);
+      all.push(...events);
+    }
+    return all;
+  }
   try {
     const cached = await db.execute({ sql:`SELECT events_json FROM odds_league_cache WHERE league_slug=? AND fetched_at>datetime('now','-${LEAGUE_CACHE_HOURS} hours') LIMIT 1`, args:[leagueSlug] });
     if (cached.rows?.[0]?.events_json) { return JSON.parse(cached.rows[0].events_json); }
