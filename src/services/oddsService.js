@@ -900,6 +900,18 @@ async function ensureTables() {
 }
 ensureTables();
 
+// Clear stale league cache on startup so new slug mappings take effect immediately
+// (league cache rebuilds automatically on next prediction request)
+async function clearStaleLeagueCache() {
+  try {
+    const result = await db.execute("DELETE FROM odds_league_cache");
+    console.log('[OddsService] Cleared league cache — fresh mappings will be fetched on demand');
+  } catch (e) {
+    console.warn('[OddsService] Could not clear league cache:', e.message);
+  }
+}
+clearStaleLeagueCache();
+
 function normalize(name) {
   return String(name||'').toLowerCase()
     .replace(/\bfc\b|\baf c\b|\bsc\b|\bac\b|\bcf\b|\bif\b|\bfk\b|\bsk\b|\bik\b/g,'')
