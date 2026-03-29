@@ -8,7 +8,7 @@ import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChevronRight, ChevronDown, ChevronUp, Search, Trophy,
-  Crown, Zap, Lock, AlertCircle, Radio, Goal
+  Crown, Zap, Lock, AlertCircle, Radio
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
