@@ -47,14 +47,15 @@ function isAccaEligibleMarket(marketKey, volatility, probability) {
   if (BLOCKED_MARKETS.has(mk)) return false;
   if (ALWAYS_ALLOWED.has(mk)) return true;
 
-  // Home/Away win — only if very high probability (dominant game)
-  if (mk === 'home_win' || mk === 'away_win') return probability >= 0.72;
+  // Home/Away win
+  if (mk === 'home_win' || mk === 'away_win') return probability >= 0.65;
 
-  // BTTS — only high probability AND low volatility
-  if (mk === 'btts_yes') return probability >= 0.75 && volatility === 'low';
+  // BTTS
+  if (mk === 'btts_yes') return probability >= 0.65;
 
-  // Over 2.5 — allowed unless high volatility
-  if (mk === 'over_25') return volatility !== 'high';
+  // Over 1.5 and Over 2.5 — core ACCA markets
+  if (mk === 'over_15') return probability >= 0.60;
+  if (mk === 'over_25') return probability >= 0.58;
 
   // Home/Away over 1.5 — allowed if low/medium volatility
   if (mk === 'home_over_15' || mk === 'away_over_15') return volatility !== 'high' && probability >= 0.68;
@@ -109,13 +110,15 @@ function volatilityBonus(volatility) {
  * Used when riskLevel is not already persisted (older cached predictions).
  */
 function computeRiskLevelFromRow(row) {
-  const prob      = parseFloat(row.best_pick_probability || 0);
+  const prob       = parseFloat(row.best_pick_probability || 0);
   const volatility = (row.confidence_volatility || 'medium').toLowerCase();
   const marketKey  = (row.best_pick_market || '').toLowerCase();
   const isStable   = ALWAYS_ALLOWED.has(marketKey);
 
-  if (prob >= 0.72 && isStable && volatility === 'low') return 'SAFE';
-  if (prob >= 0.65 && volatility !== 'high') return 'MODERATE';
+  // Generous risk tiers - most high-prob picks should qualify
+  if (prob >= 0.70 && volatility === 'low') return 'SAFE';
+  if (prob >= 0.65 && volatility !== 'high') return 'SAFE';
+  if (prob >= 0.60) return 'MODERATE';
   return 'AGGRESSIVE';
 }
 
@@ -147,11 +150,11 @@ function scoreAccaCandidate(row) {
  */
 export function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
-  const minProb     = isSafeMode ? 0.65 : 0.60;  // lowered: 75/70 was too strict
-  const targetMin   = isSafeMode ? 3 : 4;
+  const minProb     = isSafeMode ? 0.62 : 0.58;
+  const targetMin   = 3;  // always need at least 3
   const targetMax   = isSafeMode ? 4 : 5;
-  const allowedRisk = isSafeMode ? ['SAFE', 'MODERATE'] : ['SAFE', 'MODERATE', 'AGGRESSIVE'];
-  const maxModerate = isSafeMode ? 1 : 2;
+  const allowedRisk = ['SAFE', 'MODERATE', 'AGGRESSIVE'];  // allow all, filter by prob instead
+  const maxModerate = isSafeMode ? 2 : 3;
 
   // ── Step 1: Filter eligible candidates ────────────────────────────────────
   const candidates = rows
@@ -207,9 +210,9 @@ export function buildAcca(rows, mode = 'safe') {
     const leagueMax   = isSafeMode ? 2 : 3;
     if (leagueCount >= leagueMax) continue;
 
-    // Correlation rule: max 2 of the same script pattern
+    // Correlation rule: max 3 of the same script pattern
     const catCount = scriptCounts[pick.scriptCat] || 0;
-    if (catCount >= 2) continue;
+    if (catCount >= 3) continue;
 
     // VALUE mode: max 1 MODERATE pick
     if (pick.riskLevel === 'MODERATE') {

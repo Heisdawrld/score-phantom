@@ -558,7 +558,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         sql: `SELECT id FROM fixtures
               WHERE match_date LIKE ?
                 AND enrichment_status IN ('deep', 'basic', 'limited')
-              LIMIT 20`,
+              ORDER BY CASE enrichment_status WHEN 'deep' THEN 1 WHEN 'basic' THEN 2 ELSE 3 END
+              LIMIT 40`,
         args: [`%${today}%`],
       });
 
