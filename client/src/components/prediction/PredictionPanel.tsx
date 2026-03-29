@@ -101,6 +101,81 @@ function ValueBadge({ level }: { level: string }) {
   );
 }
 
+
+function getOddsForPick(odds, pick, market) {
+  if (!odds) return null;
+  const p = String(pick || '').toLowerCase();
+  const m = String(market || '').toLowerCase();
+  if (m.includes('match result') || m.includes('1x2')) {
+    if (p.includes('draw')) return { value: odds.draw, label: 'Draw' };
+    if (p.includes(' win') && !p.includes('dnb') && !p.includes('either')) {
+      const val = odds.home ?? odds.away;
+      return val ? { value: val, label: 'Win' } : null;
+    }
+  }
+  if (m.includes('over/under') || m.includes('total')) {
+    const ou = odds.over_under || {};
+    if (p.includes('over 2.5')) return { value: ou.over_2_5, label: 'Over 2.5' };
+    if (p.includes('under 2.5')) return { value: ou.under_2_5, label: 'Under 2.5' };
+    if (p.includes('over 1.5')) return { value: ou.over_1_5, label: 'Over 1.5' };
+    if (p.includes('over 3.5')) return { value: ou.over_3_5, label: 'Over 3.5' };
+    if (p.includes('under 3.5')) return { value: ou.under_3_5, label: 'Under 3.5' };
+  }
+  if (m.includes('both teams') || m.includes('btts')) {
+    if (p.includes('not') || p === 'both teams not to score') return { value: odds.btts_no, label: 'BTTS No' };
+    return { value: odds.btts_yes, label: 'BTTS Yes' };
+  }
+  if (m.includes('draw no bet') || m.includes('dnb')) {
+    const val = odds.home ?? odds.away;
+    return val ? { value: val, label: 'DNB' } : null;
+  }
+  if (m.includes('double chance')) {
+    const val = odds.home ?? odds.away;
+    return val ? { value: val, label: 'DC' } : null;
+  }
+  return null;
+}
+
+function OddsDisplay({ odds, pick, market }: { odds: any; pick: string; market: string }) {
+  const oddsPick = getOddsForPick(odds, pick, market);
+  if (!oddsPick || !oddsPick.value || oddsPick.value <= 1) return null;
+  const bkOdds = parseFloat(oddsPick.value);
+  const implied = parseFloat(((1 / bkOdds) * 100).toFixed(1));
+  const isValue = implied < 60;
+  const isFair = implied < 68;
+  return (
+    <div className="mt-4 pt-4 border-t border-white/10">
+      <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-3">SportyBet Odds</p>
+      <div className="flex items-stretch gap-3">
+        <div className="flex-1 bg-white/5 rounded-2xl p-3 text-center border border-white/8">
+          <p className="text-[10px] text-muted-foreground mb-1">Odds</p>
+          <p className="font-display text-2xl text-white">{bkOdds.toFixed(2)}</p>
+        </div>
+        <div className="flex-1 bg-white/5 rounded-2xl p-3 text-center border border-white/8">
+          <p className="text-[10px] text-muted-foreground mb-1">Implied</p>
+          <p className="font-display text-2xl text-white">{implied}%</p>
+        </div>
+        <div className={cn(
+          "flex-1 rounded-2xl p-3 text-center border",
+          isValue ? "bg-primary/15 border-primary/30" : isFair ? "bg-orange-500/10 border-orange-500/20" : "bg-white/5 border-white/8"
+        )}>
+          <p className="text-[10px] text-muted-foreground mb-1">Value</p>
+          <p className={cn(
+            "font-display text-2xl",
+            isValue ? "text-primary" : isFair ? "text-orange-400" : "text-muted-foreground"
+          )}>{isValue ? "✓" : isFair ? "~" : "✗"}</p>
+        </div>
+      </div>
+      {isValue && (
+        <div className="mt-2 flex items-center gap-1.5 px-1">
+          <TrendingUp className="w-3 h-3 text-primary shrink-0" />
+          <p className="text-[11px] text-primary font-semibold">Value bet — bookmaker underpricing this outcome</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SCRIPT_COLORS: Record<string, string> = {
   dominant_home: "text-primary",
   dominant_away: "text-accent-blue",
@@ -124,6 +199,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
   const backups = pred?.backup_picks ?? [];
   const gameScript = data?.gameScript;
   const model = data?.model;
+  const odds = (data as any)?.odds ?? null;
 
   return (
     <AnimatePresence>
@@ -245,6 +321,8 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                             ))}
                           </div>
                         )}
+                        {/* Bookmaker Odds */}
+                        <OddsDisplay odds={odds} pick={rec.pick} market={rec.market} />
                       </div>
                     </div>
                   ) : (
