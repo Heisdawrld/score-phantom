@@ -2,7 +2,7 @@ services:
   - type: web
     name: scorephantom
     env: node
-    buildCommand: npm install && cd client && npm install && npm run build
+    buildCommand: npm install && cd client && rm -rf node_modules package-lock.json && npm install && npm run build
     startCommand: node src/app.js
     envVars:
       - key: NODE_ENV
