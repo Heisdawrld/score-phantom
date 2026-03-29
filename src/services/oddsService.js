@@ -979,24 +979,106 @@ async function clearStaleLeagueCache() {
 }
 clearStaleLeagueCache();
 
+// ── Team alias map: LiveScore name → odds-api.io name ──────────────────────
+// Keys are normalized lowercase. Used when direct matching fails.
+const TEAM_ALIASES = {
+  // Brazil Serie A - LiveScore uses nicknames, odds-api uses full names
+  'atletico pr':          'ca paranaense pr',
+  'athletico pr':         'ca paranaense pr',
+  'athletico paranaense': 'ca paranaense pr',
+  'atletico paranaense':  'ca paranaense pr',
+  'flamengo':             'cr flamengo rj',
+  'flamengo rj':          'cr flamengo rj',
+  'vasco':                'cr vasco da gama rj',
+  'vasco da gama':        'cr vasco da gama rj',
+  'vasco rj':             'cr vasco da gama rj',
+  'gremio':               'gremio fb porto alegrense rs',
+  'gremio rs':            'gremio fb porto alegrense rs',
+  'palmeiras':            'se palmeiras sp',
+  'corinthians':          'corinthians sp',
+  'sao paulo':            'sao paulo sp',
+  'internacional':        'internacional rs',
+  'inter rs':             'internacional rs',
+  'botafogo rj':          'botafogo fr rj',
+  'botafogo':             'botafogo fr rj',
+  'atletico mg':          'atletico mineiro mg',
+  'atletico mineiro':     'atletico mineiro mg',
+  'cruzeiro':             'cruzeiro ec mg',
+  'bahia':                'ec bahia ba',
+  'vitoria':              'ec vitoria ba',
+  'fluminense':           'fluminense fc rj',
+  'bragantino':           'red bull bragantino sp',
+  'rb bragantino':        'red bull bragantino sp',
+  // Argentina
+  'river plate':          'river plate',
+  'boca juniors':         'boca juniors',
+  'racing club':          'racing club de avellaneda',
+  'independiente':        'ca independiente',
+  'san lorenzo':          'san lorenzo de almagro',
+  'huracan':              'ca huracan',
+  'lanus':                'ca lanus',
+  // England shorthand
+  'man city':             'manchester city',
+  'man utd':              'manchester united',
+  'man united':           'manchester united',
+  'spurs':                'tottenham hotspur',
+  'wolves':               'wolverhampton wanderers',
+  // Spain
+  'atletico madrid':      'atletico de madrid',
+  'atletico':             'atletico de madrid',
+  'betis':                'real betis',
+  // Germany
+  'dortmund':             'borussia dortmund',
+  'bvb':                  'borussia dortmund',
+  'm gladbach':           'borussia monchengladbach',
+  // Italy
+  'inter milan':          'inter',
+  'inter':                'inter',
+  'ac milan':             'milan',
+  'juventus':             'juventus',
+};
+
 function normalize(name) {
   return String(name||'').toLowerCase()
-    .replace(/\bfc\b|\baf c\b|\bsc\b|\bac\b|\bcf\b|\bif\b|\bfk\b|\bsk\b|\bik\b/g,'')
+    .replace(/\bfc\b|\bsc\b|\bac\b|\bcf\b|\bif\b|\bfk\b|\bsk\b|\bik\b|\bca\b|\bcr\b|\bec\b|\bse\b|\bcd\b|\bad\b|\bfr\b|\bfb\b/g,'')
     .replace(/[^a-z0-9\s]/g,'')
     .replace(/\s+/g,' ').trim();
+}
+
+// Extract trailing 2-letter state/country code (e.g. 'PR', 'RJ', 'MG', 'SP')
+function getStateCode(name) {
+  const m = String(name||'').trim().match(/\b([A-Z]{2})$/);
+  return m ? m[1] : null;
 }
 
 function teamMatch(a, b) {
   const na = normalize(a), nb = normalize(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
+
+  // Alias lookup both ways
+  const aliasA = TEAM_ALIASES[na] || TEAM_ALIASES[String(a).toLowerCase().trim()];
+  const aliasB = TEAM_ALIASES[nb] || TEAM_ALIASES[String(b).toLowerCase().trim()];
+  if (aliasA && normalize(aliasA) === nb) return true;
+  if (aliasB && normalize(aliasB) === na) return true;
+  if (aliasA && aliasB && normalize(aliasA) === normalize(aliasB)) return true;
+
+  // State code guard: if BOTH names have a 2-letter state suffix, they must match
+  const stateA = getStateCode(String(a).trim());
+  const stateB = getStateCode(String(b).trim());
+  if (stateA && stateB && stateA !== stateB) return false; // different states = different club
+
+  // Substring match
   if (na.length > 4 && nb.includes(na)) return true;
   if (nb.length > 4 && na.includes(nb)) return true;
+
+  // Word-level match (meaningful words >= 4 chars)
   const wordsA = na.split(' ').filter(w => w.length >= 4);
   const wordsB = nb.split(' ').filter(w => w.length >= 4);
   for (const wa of wordsA) {
     for (const wb of wordsB) {
       if (wa === wb) return true;
+      // 1-char edit distance for typos/abbreviations
       if (wa.length >= 5 && wb.length >= 5) {
         const shorter = wa.length <= wb.length ? wa : wb;
         const longer  = wa.length <= wb.length ? wb : wa;
@@ -1008,9 +1090,10 @@ function teamMatch(a, b) {
       }
     }
   }
+  // First token match (city name)
   const firstA = na.split(' ')[0];
   const firstB = nb.split(' ')[0];
-  if (firstA.length >= 4 && firstA === firstB) return true;
+  if (firstA.length >= 5 && firstA === firstB) return true; // bumped to 5 to avoid false positives
   return false;
 }
 
