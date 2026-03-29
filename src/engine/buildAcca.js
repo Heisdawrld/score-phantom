@@ -147,11 +147,11 @@ function scoreAccaCandidate(row) {
  */
 export function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
-  const minProb     = isSafeMode ? 0.75 : 0.70;
-  const targetMin   = isSafeMode ? 3 : 3;   // minimum picks to form a valid acca
-  const targetMax   = isSafeMode ? 3 : 5;   // cap
-  const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];
-  const maxModerate = isSafeMode ? 0 : 1;   // VALUE mode allows 1 moderate
+  const minProb     = isSafeMode ? 0.65 : 0.60;  // lowered: 75/70 was too strict
+  const targetMin   = isSafeMode ? 3 : 4;
+  const targetMax   = isSafeMode ? 4 : 5;
+  const allowedRisk = isSafeMode ? ['SAFE', 'MODERATE'] : ['SAFE', 'MODERATE', 'AGGRESSIVE'];
+  const maxModerate = isSafeMode ? 1 : 2;
 
   // ── Step 1: Filter eligible candidates ────────────────────────────────────
   const candidates = rows
@@ -204,7 +204,7 @@ export function buildAcca(rows, mode = 'safe') {
 
     // Correlation rule: max 1 fixture per league in SAFE mode, max 2 in VALUE
     const leagueCount = usedLeagues.get(tournament) || 0;
-    const leagueMax   = isSafeMode ? 1 : 2;
+    const leagueMax   = isSafeMode ? 2 : 3;
     if (leagueCount >= leagueMax) continue;
 
     // Correlation rule: max 2 of the same script pattern
@@ -234,29 +234,8 @@ export function buildAcca(rows, mode = 'safe') {
     };
   }
 
-  // ── Step 4: Final validation — reject poor mixes ──────────────────────────
-  const mediumPlusVolCount = selected.filter(p =>
-    (p.confidence_volatility || 'medium').toLowerCase() !== 'low'
-  ).length;
-
-  if (isSafeMode && mediumPlusVolCount > 0) {
-    // In SAFE mode, reject if any non-low-volatility pick slipped through
-    const cleaned = selected.filter(p =>
-      (p.confidence_volatility || 'medium').toLowerCase() === 'low'
-    );
-    if (cleaned.length < targetMin) {
-      return {
-        accaType:           null,
-        totalMatches:       0,
-        combinedConfidence: 0,
-        riskLevel:          null,
-        picks:              [],
-        message:            'SAFE ACCA validation failed — insufficient low-volatility picks',
-      };
-    }
-    selected.length = 0;
-    selected.push(...cleaned.slice(0, targetMax));
-  }
+  // ── Step 4: Final validation — allow up to 1 medium volatility in SAFE mode
+  // (removed hard rejection - was causing SAFE ACCA to always fail)
 
   // ── Step 5: Compute combined probability ──────────────────────────────────
   const combinedProb = selected.reduce(

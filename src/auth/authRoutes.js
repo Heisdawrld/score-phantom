@@ -165,6 +165,7 @@ export async function requirePremiumAccess(req, res, next) {
 }
 
 // ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
+import { sendPasswordResetEmail } from '../services/emailService.js';
 import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
 async function activatePremium(userId, flwChargeId, reference) {
@@ -320,9 +321,8 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
       args: [resetToken, expiresAt, userId],
     });
 
-    // TODO: Wire to email service (Resend / Nodemailer)
-    // For now, admin can retrieve token via admin panel
-    console.log(`[PasswordReset] Token for ${normalizedEmail}: ${resetToken} (expires ${expiresAt})`);
+    // Send reset email via Resend
+    await sendPasswordResetEmail(normalizedEmail, resetToken);
 
     return res.json({ success: true, message: "If that email exists, a reset link has been sent.",
       // Remove in production:

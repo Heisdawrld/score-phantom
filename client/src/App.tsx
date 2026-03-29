@@ -43,6 +43,7 @@ class ErrorBoundary extends React.Component<
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Paywall from "@/pages/Paywall";
+import ResetPassword from "@/pages/ResetPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +96,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/signup" component={Signup} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
