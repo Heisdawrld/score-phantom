@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
-import { Zap, Crown, LogOut, User, Copy, Check, ChevronDown } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Zap, Crown, LogOut, User, Copy, Check, ChevronDown, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function PlanBadge({ status }: { status: string }) {
@@ -30,9 +29,9 @@ export function Header() {
   const logout = useLogout();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [location] = useLocation();
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -63,8 +62,18 @@ export function Header() {
           <span className="font-display text-2xl tracking-wider text-white">SCORE<span className="text-primary">PHANTOM</span></span>
         </Link>
 
-        {/* Right side */}
-        <div className="flex items-center gap-3">
+        {/* Nav links + right side */}
+        <div className="flex items-center gap-4">
+          {/* Dashboard nav link — visible when not on / */}
+          {!isLoading && user && location !== "/" && (
+            <Link href="/">
+              <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors">
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </button>
+            </Link>
+          )}
+
           {!isLoading && user && (
             <div ref={ref} className="relative">
               {/* Avatar button */}
@@ -98,13 +107,10 @@ export function Header() {
 
                   {/* User details */}
                   <div className="px-4 py-3 space-y-2.5 border-b border-white/8">
-                    {/* Email */}
                     <div className="flex items-center gap-2">
                       <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="text-xs text-muted-foreground flex-1 truncate">{user.email}</span>
                     </div>
-
-                    {/* Plan */}
                     <div className="flex items-center gap-2">
                       {user.access_status === "active" ? (
                         <Crown className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -119,8 +125,6 @@ export function Header() {
                           : "Plan Expired"}
                       </span>
                     </div>
-
-                    {/* ID */}
                     {user.id && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground font-mono flex-1">

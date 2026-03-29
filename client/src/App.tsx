@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 import Login from "@/pages/Login";
 
-// Global error boundary — prevents a single component crash from black-screening the app
+// Global error boundary
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -38,6 +39,7 @@ class ErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
+
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Paywall from "@/pages/Paywall";
@@ -59,6 +61,20 @@ function RedirectTo({ path }: { path: string }) {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading, error } = useAuth();
+  const { toast } = useToast();
+  const [location] = useLocation();
+
+  useEffect(() => {
+    // Only toast if actually trying to access a protected page without auth
+    if (!isLoading && (error || !user) && location !== "/login" && location !== "/signup") {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to access ScorePhantom.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  }, [isLoading, error, user]);
 
   if (isLoading) {
     return (
@@ -90,14 +106,14 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

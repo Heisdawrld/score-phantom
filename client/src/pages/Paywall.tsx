@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitPayment } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Check, ShieldCheck, Loader2, Crown, Zap } from "lucide-react";
+import { Check, ShieldCheck, Loader2, Crown, Zap, ArrowLeft } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -24,11 +24,10 @@ export default function Paywall() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const paymentStatus = params.get("payment"); // 'success' | 'failed' | 'error'
+  const paymentStatus = params.get("payment");
 
   const [error, setError] = useState<string | null>(null);
 
-  // If Flutterwave redirected back with ?payment=success, refresh user and go to dashboard
   useEffect(() => {
     if (paymentStatus === "success") {
       refetch().then(() => setLocation("/"));
@@ -39,7 +38,6 @@ export default function Paywall() {
     setError(null);
     initPayment.mutate(undefined, {
       onSuccess: (data: any) => {
-        // Redirect user to Flutterwave hosted checkout
         if (data?.link) {
           window.location.href = data.link;
         } else {
@@ -63,119 +61,120 @@ export default function Paywall() {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <main className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-4xl w-full grid md:grid-cols-2 gap-8 items-center">
+        <div className="max-w-4xl w-full">
 
-          {/* Left — features */}
-          <div className="space-y-6">
-            <Badge className="bg-primary/10 text-primary border-primary/20">PREMIUM ACCESS</Badge>
-            <h1 className="font-display text-5xl sm:text-6xl tracking-wide leading-none">
-              UNLOCK THE <br />
-              <span className="text-glow-primary text-primary">ALGORITHM</span>
-            </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              {user?.access_status === "trial"
-                ? "You're on a free trial. Subscribe now to keep access after your trial ends."
-                : "Your free trial has ended. Subscribe now for full AI-driven match predictions."}
-            </p>
-            <ul className="space-y-4 pt-4">
-              {[
-                "Unlimited daily match predictions",
-                "AI-powered bet explanations & chat",
-                "ACCA — 5 best picks daily",
-                "Advanced statistical modeling & xG",
-              ].map((feature, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                    <Check className="w-3.5 h-3.5 text-primary" />
+          {/* Back button */}
+          <button
+            onClick={() => setLocation("/")}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mb-8"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </button>
+
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            {/* Left — features */}
+            <div className="space-y-6">
+              <Badge className="bg-primary/10 text-primary border-primary/20">PREMIUM ACCESS</Badge>
+              <h1 className="font-display text-5xl sm:text-6xl tracking-wide leading-none">
+                UNLOCK THE <br />
+                <span className="text-glow-primary text-primary">ALGORITHM</span>
+              </h1>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                {user?.access_status === "trial"
+                  ? "You're on a free trial. Subscribe now to keep access after your trial ends."
+                  : "Your free trial has ended. Subscribe now for full AI-driven match predictions."}
+              </p>
+              <ul className="space-y-4 pt-4">
+                {[
+                  "Unlimited daily match predictions",
+                  "AI-powered bet explanations & chat",
+                  "ACCA — 5 best picks daily",
+                  "Advanced statistical modeling & xG",
+                ].map((feature, i) => (
+                  <li key={i} className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                      <Check className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <span className="text-white/90">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Right — payment card */}
+            <Card className="p-8 border-primary/20 bg-gradient-to-b from-panel-light to-panel relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+
+              <div className="space-y-8">
+                {/* Price */}
+                <div className="text-center">
+                  <p className="text-sm font-bold tracking-widest text-muted-foreground uppercase mb-2">
+                    Monthly Plan
+                  </p>
+                  <div className="flex items-start justify-center gap-1">
+                    <span className="text-2xl mt-1 text-muted-foreground">₦</span>
+                    <span className="font-display text-6xl tracking-wider">3,000</span>
+                    <span className="text-muted-foreground self-end mb-2">/mo</span>
                   </div>
-                  <span className="text-white/90">{feature}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Right — payment card */}
-          <Card className="p-8 border-primary/20 bg-gradient-to-b from-panel-light to-panel relative overflow-hidden">
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
-
-            <div className="space-y-8">
-              {/* Price */}
-              <div className="text-center">
-                <p className="text-sm font-bold tracking-widest text-muted-foreground uppercase mb-2">
-                  Monthly Plan
-                </p>
-                <div className="flex items-start justify-center gap-1">
-                  <span className="text-2xl mt-1 text-muted-foreground">₦</span>
-                  <span className="font-display text-6xl tracking-wider">3,000</span>
-                  <span className="text-muted-foreground self-end mb-2">/mo</span>
                 </div>
-              </div>
 
-              {/* Payment failed banner */}
-              {(paymentStatus === "failed" || paymentStatus === "error") && (
-                <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 text-center">
-                  <p className="text-sm text-destructive font-medium">
-                    Payment was not completed. Please try again.
+                {/* Payment failed banner */}
+                {(paymentStatus === "failed" || paymentStatus === "error") && (
+                  <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 text-center">
+                    <p className="text-sm text-destructive font-medium">
+                      Payment was not completed. Please try again.
+                    </p>
+                  </div>
+                )}
+
+                {error && (
+                  <p className="text-xs text-destructive text-center">{error}</p>
+                )}
+
+                {/* Subscribe button */}
+                <Button
+                  size="lg"
+                  className="w-full text-lg h-14"
+                  onClick={handleSubscribe}
+                  disabled={initPayment.isPending}
+                >
+                  {initPayment.isPending ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Redirecting to payment...
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="w-5 h-5 mr-2" />
+                      Pay with Flutterwave
+                    </>
+                  )}
+                </Button>
+
+                {/* Continue with trial — only once, only for trial users */}
+                {user?.access_status === "trial" && (
+                  <button
+                    onClick={() => setLocation("/")}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-white/70 transition-colors"
+                  >
+                    Continue with free trial →
+                  </button>
+                )}
+
+                {/* Trust badges */}
+                <div className="space-y-2">
+                  <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                    Secured by Flutterwave — Card, Bank Transfer, USSD
+                  </p>
+                  <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-primary" />
+                    Account activated instantly after payment
                   </p>
                 </div>
-              )}
-
-              {error && (
-                <p className="text-xs text-destructive text-center">{error}</p>
-              )}
-
-              {/* Subscribe button */}
-              <Button
-                size="lg"
-                className="w-full text-lg h-14"
-                onClick={handleSubscribe}
-                disabled={initPayment.isPending}
-              >
-                {initPayment.isPending ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Redirecting to payment...
-                  </>
-                ) : (
-                  <>
-                    <Crown className="w-5 h-5 mr-2" />
-                    Pay with Flutterwave
-                  </>
-                )}
-              </Button>
-
-              {/* Continue with trial */}
-              {user?.access_status === "trial" && (
-                <button
-                  onClick={() => setLocation("/")}
-                  className="w-full text-center text-xs text-muted-foreground hover:text-white/70 transition-colors"
-                >
-                  Continue with free trial →
-                </button>
-              )}
-
-              {/* Trust badges */}
-              <div className="space-y-2">
-                <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                  Secured by Flutterwave — Card, Bank Transfer, USSD
-                </p>
-                <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-primary" />
-                  Account activated instantly after payment
-                </p>
-
-              {user?.access_status === "trial" && (
-                <button
-                  onClick={() => setLocation("/")}
-                  className="w-full text-center text-xs text-muted-foreground hover:text-white/70 transition-colors pt-1"
-                >
-                  Continue with free trial →
-                </button>
-              )}
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       </main>
     </div>

@@ -4,7 +4,42 @@ import { useSignup } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Mail, Lock, Zap } from "lucide-react";
+import { Mail, Lock, Zap, Check, X } from "lucide-react";
+
+function PasswordStrength({ password }: { password: string }) {
+  if (!password) return null;
+  const checks = [
+    { label: "At least 6 characters", ok: password.length >= 6 },
+    { label: "Contains a number", ok: /\d/.test(password) },
+    { label: "Contains a letter", ok: /[a-zA-Z]/.test(password) },
+  ];
+  const score = checks.filter((c) => c.ok).length;
+  const bar = ["bg-red-500", "bg-orange-400", "bg-yellow-400", "bg-primary"][score] ?? "bg-white/10";
+  const label = ["Weak", "Weak", "Fair", "Strong"][score] ?? "";
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="flex gap-1">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-300 ${i < score ? bar : "bg-white/10"}`} />
+        ))}
+      </div>
+      <p className={`text-xs ${ score >= 3 ? "text-primary" : score >= 2 ? "text-yellow-400" : "text-muted-foreground" }`}>
+        {label}
+      </p>
+      <div className="space-y-1">
+        {checks.map((c) => (
+          <div key={c.label} className="flex items-center gap-1.5">
+            {c.ok
+              ? <Check className="w-3 h-3 text-primary" />
+              : <X className="w-3 h-3 text-white/20" />}
+            <span className={`text-[11px] ${c.ok ? "text-white/60" : "text-white/30"}`}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -43,13 +78,13 @@ export default function Signup() {
                 {error}
               </div>
             )}
-            
+
             <div className="space-y-4">
               <div className="relative">
                 <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                <Input 
-                  type="email" 
-                  placeholder="Email address" 
+                <Input
+                  type="email"
+                  placeholder="Email address"
                   className="pl-11"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -58,9 +93,9 @@ export default function Signup() {
               </div>
               <div className="relative">
                 <Lock className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                <Input 
-                  type="password" 
-                  placeholder="Create password (min 6 chars)" 
+                <Input
+                  type="password"
+                  placeholder="Create a password"
                   className="pl-11"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -68,9 +103,14 @@ export default function Signup() {
                   minLength={6}
                 />
               </div>
+              <PasswordStrength password={password} />
             </div>
 
-            <Button type="submit" className="w-full h-12 text-base" disabled={signupMutation.isPending}>
+            <Button
+              type="submit"
+              className="w-full h-12 text-base"
+              disabled={signupMutation.isPending || password.length < 6}
+            >
               {signupMutation.isPending ? "Creating Account..." : "Start Free Trial"}
             </Button>
           </form>

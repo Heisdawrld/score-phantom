@@ -17,11 +17,13 @@ interface PredictionPanelProps {
 // Fix engine market labels: "Over 25" → "Over 2.5", "OVER 15" → "OVER 1.5", etc.
 function formatMarket(label: string | undefined | null): string {
   if (!label) return "";
-  // Replace patterns: " 25" → " 2.5", " 15" → " 1.5", " 35" → " 3.5", " 45" → " 4.5"
+  // Robust decimal normaliser: "Over 25" → "Over 2.5", "Under 35 Goals" → "Under 3.5 Goals"
   return label
-    .replace(/\b(Over|Under|OVER|UNDER|over|under)\s+(\d)(5)\b/gi, (_, word, d) => word + ' ' + d + '.5')
-    .replace(/\b([0-9])(5)\s+(Goals|GOALS|goals)/gi, (_, d, __, g) => d + '.5 ' + g)
-    .replace(/\b([1-4])(5)\b(?!\s*%)/g, (_, d) => d + '.5');
+    // over/under + bare number like 15, 25, 35, 45 (with or without existing dot)
+    .replace(/\b(over|under)\s+(\d)\.?(5)\b/gi, (_m, word, d) =>
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() + ' ' + d + '.5')
+    // bare threshold numbers not followed by % or letters
+    .replace(/\b([1-4])(5)\b(?![\d.%a-zA-Z])/g, (_m, d) => d + '.5');
 }
 
 function formatPct(val: number | undefined | null): string {
