@@ -23,6 +23,21 @@ async function get(path, params = {}) {
   return res.data;
 }
 
+// Run column migrations inline (idempotent — ALTER TABLE fails silently if column exists)
+async function ensureFixtureColumns() {
+  const migrations = [
+    "ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN odds_home REAL",
+    "ALTER TABLE fixtures ADD COLUMN odds_draw REAL",
+    "ALTER TABLE fixtures ADD COLUMN odds_away REAL",
+  ];
+  for (const sql of migrations) {
+    try { await db.execute(sql); } catch (_) {}
+  }
+}
+
 async function fetchFixturesByDate(date) {
   const allFixtures = [];
   let page = 1;
@@ -44,6 +59,11 @@ async function fetchFixturesByDate(date) {
         const competitionName = f.competition?.name || f.competition_name || f.league_name || '';
         const countryName     = f.country?.name || f.competition?.country || f.location || '';
 
+        // New: extract country flag + team logos
+        const countryFlag   = f.country?.flag || f.country?.fifa_code || '';
+        const homeTeamLogo  = f.home?.logo || '';
+        const awayTeamLogo  = f.away?.logo || '';
+
         allFixtures.push({
           match_id: String(f.id),
           home_team_id: homeId,
@@ -57,6 +77,9 @@ async function fetchFixturesByDate(date) {
           category_name: countryName,
           match_date: f.date + 'T' + (f.time || '00:00:00'),
           match_url:            String(f.id),
+          country_flag:         countryFlag,
+          home_team_logo:       homeTeamLogo,
+          away_team_logo:       awayTeamLogo,
           odds_home:            f.odds?.pre?.['1'] || null,
           odds_draw:            f.odds?.pre?.['X'] || null,
           odds_away:            f.odds?.pre?.['2'] || null,
@@ -83,6 +106,9 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
   if (!KEY || !SECRET) {
     throw new Error('LIVESCORE_API_KEY and LIVESCORE_API_SECRET must be set');
   }
+
+  // Ensure new columns exist before inserting
+  await ensureFixtureColumns();
 
   if (clearFirst) {
     log('[Seeder] Clearing old fixture data...');
@@ -131,8 +157,9 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
           sql: `INSERT OR IGNORE INTO fixtures
                   (id, home_team_id, away_team_id, tournament_id,
                    home_team_name, away_team_name, tournament_name,
-                   category_name, match_date, match_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   category_name, match_date, match_url,
+                   country_flag, home_team_logo, away_team_logo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             f.match_id,
             f.home_team_id,
@@ -144,6 +171,9 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
             f.category_name,
             f.match_date,
             f.match_url,
+            f.country_flag,
+            f.home_team_logo,
+            f.away_team_logo,
           ],
         },
       ]);
@@ -154,6 +184,11 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
             sql: `INSERT OR IGNORE INTO fixture_odds (fixture_id, home, draw, away)
                   VALUES (?, ?, ?, ?)`,
             args: [f.match_id, f.odds_home || null, f.odds_draw || null, f.odds_away || null],
+          });
+          // Also store on fixtures table directly
+          await db.execute({
+            sql: `UPDATE fixtures SET odds_home = ?, odds_draw = ?, odds_away = ? WHERE id = ? AND odds_home IS NULL`,
+            args: [f.odds_home || null, f.odds_draw || null, f.odds_away || null, f.match_id],
           });
         } catch (_) {}
       }

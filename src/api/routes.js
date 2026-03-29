@@ -202,25 +202,30 @@ router.get("/fixtures", requireAuth, async (req, res) => {
   try {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
 
-    let query = `SELECT * FROM fixtures WHERE 1=1`;
+    let query = `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name,
+       f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
+       f.enriched, f.created_at, f.meta, f.enrichment_status, f.data_quality,
+       f.country_flag, f.home_team_logo, f.away_team_logo,
+       f.odds_home, f.odds_draw, f.odds_away
+ FROM fixtures f WHERE 1=1`;
     const args = [];
 
     if (date) {
-      query += ` AND match_date LIKE ?`;
+      query += ` AND f.match_date LIKE ?`;
       args.push(`%${date}%`);
     }
 
     if (tournament) {
-      query += ` AND tournament_name LIKE ?`;
+      query += ` AND f.tournament_name LIKE ?`;
       args.push(`%${tournament}%`);
     }
 
     if (enriched !== undefined) {
-      query += ` AND enriched = ?`;
+      query += ` AND f.enriched = ?`;
       args.push(enriched === "true" ? 1 : 0);
     }
 
-    query += ` ORDER BY match_date ASC LIMIT ? OFFSET ?`;
+    query += ` ORDER BY f.tournament_name ASC, f.match_date ASC LIMIT ? OFFSET ?`;
     args.push(parseInt(limit, 10), parseInt(offset, 10));
 
     const result = await db.execute({ sql: query, args });

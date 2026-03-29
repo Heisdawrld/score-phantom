@@ -272,6 +272,20 @@ app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   await initUsersTable();
   await initPredictionsTable();
+
+  // Migrate fixtures table for new columns (idempotent)
+  const fixtureMigrations = [
+    "ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''",
+    "ALTER TABLE fixtures ADD COLUMN odds_home REAL",
+    "ALTER TABLE fixtures ADD COLUMN odds_draw REAL",
+    "ALTER TABLE fixtures ADD COLUMN odds_away REAL",
+  ];
+  for (const sql of fixtureMigrations) {
+    try { await db.execute(sql); } catch (_) {}
+  }
+
   await autoSeed();
 
   // Enrich today's fixtures immediately after seed (non-blocking)

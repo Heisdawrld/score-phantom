@@ -258,6 +258,64 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
   );
 }
 
+
+// ── FIFA code → flag emoji helper ─────────────────────────────────────────────────────────────
+function fifaToEmoji(fifaCode: string): string {
+  if (!fifaCode) return '⚽';
+  const code = fifaCode.replace('.png', '').toUpperCase().slice(0, 3);
+  const FIFA_EMOJI: Record<string, string> = {
+    'ENG': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    'ESP': '🇪🇸',
+    'GER': '🇩🇪',
+    'ITA': '🇮🇹',
+    'FRA': '🇫🇷',
+    'POR': '🇵🇹',
+    'NED': '🇳🇱',
+    'BEL': '🇧🇪',
+    'SCO': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+    'TUR': '🇹🇷',
+    'ARG': '🇦🇷',
+    'BRA': '🇧🇷',
+    'MEX': '🇲🇽',
+    'USA': '🇺🇸',
+    'AUS': '🇦🇺',
+    'NGA': '🇳🇬',
+    'GHA': '🇬🇭',
+    'ZAF': '🇿🇦',
+    'EGY': '🇪🇬',
+    'MAR': '🇲🇦',
+    'JPN': '🇯🇵',
+    'KOR': '🇰🇷',
+    'CHN': '🇨🇳',
+    'GRE': '🇬🇷',
+    'URU': '🇺🇾',
+    'COL': '🇨🇴',
+    'CHI': '🇨🇱',
+    'PER': '🇵🇪',
+    'GTM': '🇬🇹',
+    'AUT': '🇦🇹',
+    'CHE': '🇨🇭',
+    'DNK': '🇩🇰',
+    'SWE': '🇸🇪',
+    'NOR': '🇳🇴',
+    'POL': '🇵🇱',
+    'CZE': '🇨🇿',
+    'ROU': '🇷🇴',
+    'RUS': '🇷🇺',
+    'UKR': '🇺🇦',
+    'HRV': '🇭🇷',
+    'SRB': '🇷🇸',
+    'SVK': '🇸🇰',
+    'HUN': '🇭🇺',
+    'ISR': '🇮🇱',
+    'SAU': '🇸🇦',
+    'ARE': '🇦🇪',
+    'SGP': '🇸🇬',
+    'IND': '🇮🇳',
+  };
+  return FIFA_EMOJI[code] || '⚽';
+}
+
 // ── Collapsible League Group ───────────────────────────────────────────────────
 function LeagueGroup({
   tournament,
@@ -270,6 +328,7 @@ function LeagueGroup({
   onSelectFixture: (id: string) => void;
   defaultOpen: boolean;
 }) {
+  const countryFlag = fixtures[0]?.country_flag ? fifaToEmoji(fixtures[0].country_flag) : '⚽';
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -279,7 +338,9 @@ function LeagueGroup({
         onClick={() => setOpen((o) => !o)}
       >
         <div className="w-1 h-4 bg-primary rounded-full shrink-0" />
-        <h3 className="text-sm font-bold tracking-wide text-white/90 flex-1 text-left">{tournament}</h3>
+        <h3 className="text-sm font-bold tracking-wide text-white/90 flex-1 text-left">
+          <span className="mr-1.5" aria-hidden="true">{countryFlag}</span>{tournament}
+        </h3>
         <span className="text-xs text-muted-foreground">{fixtures.length}</span>
         {open ? (
           <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -315,6 +376,13 @@ function LeagueGroup({
 
                 <div className="flex flex-col items-end gap-2">
                   <EnrichmentBadge status={fixture.enrichment_status} />
+                  {(fixture.odds_home || fixture.odds_draw || fixture.odds_away) && (
+                    <div className="flex items-center gap-1">
+                      {fixture.odds_home && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_home).toFixed(2)}</span>}
+                      {fixture.odds_draw && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_draw).toFixed(2)}</span>}
+                      {fixture.odds_away && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_away).toFixed(2)}</span>}
+                    </div>
+                  )}
                   <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
               </button>
@@ -406,7 +474,7 @@ export default function Dashboard() {
     }
   };
 
-  const leagues = Object.entries(groupedFixtures);
+  const leagues = Object.entries(groupedFixtures).sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">

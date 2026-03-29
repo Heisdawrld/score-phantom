@@ -162,15 +162,77 @@ const EXACT_MAP = {
 // ── Fallback fuzzy map by tournament name only ──────────────────────────────
 // Used when exact country match fails
 const FUZZY_MAP = {
-  'champions league':   'international-clubs-uefa-champions-league',
-  'europa league':      'international-clubs-uefa-europa-league',
-  'conference league':  'international-clubs-uefa-conference-league',
-  'premier league':     'england-premier-league',
-  'la liga':            'spain-la-liga',
-  'bundesliga':         'germany-bundesliga',
-  'serie a':            'italy-serie-a',
-  'ligue 1':            'france-ligue-1',
-  'eredivisie':         'netherlands-eredivisie',
+  // UEFA
+  'champions league':         'international-clubs-uefa-champions-league',
+  'europa league':            'international-clubs-uefa-europa-league',
+  'conference league':        'international-clubs-uefa-conference-league',
+  'nations league':           'international-uefa-nations-league',
+  // England
+  'premier league':           'england-premier-league',
+  'championship':             'england-championship',
+  'league one':               'england-league-one',
+  'league two':               'england-league-two',
+  'fa cup':                   'england-fa-cup',
+  'league cup':               'england-league-cup',
+  'carabao cup':              'england-league-cup',
+  // Spain
+  'la liga':                  'spain-la-liga',
+  'laliga':                   'spain-la-liga',
+  'primera division':         'spain-la-liga',
+  'segunda division':         'spain-segunda-division',
+  'copa del rey':             'spain-copa-del-rey',
+  // Germany
+  'bundesliga':               'germany-bundesliga',
+  '2. bundesliga':            'germany-2-bundesliga',
+  'dfb pokal':                'germany-dfb-pokal',
+  // Italy
+  'serie a':                  'italy-serie-a',
+  'serie b':                  'italy-serie-b',
+  'coppa italia':             'italy-coppa-italia',
+  // France
+  'ligue 1':                  'france-ligue-1',
+  'ligue 2':                  'france-ligue-2',
+  // Netherlands
+  'eredivisie':               'netherlands-eredivisie',
+  // Portugal
+  'primeira liga':            'portugal-primeira-liga',
+  'liga portugal':            'portugal-primeira-liga',
+  'liga nos':                 'portugal-primeira-liga',
+  // Belgium
+  'jupiler pro league':       'belgium-jupiler-pro-league',
+  'pro league':               'belgium-jupiler-pro-league',
+  // Turkey
+  'super lig':                'turkey-super-lig',
+  'supe':                     'turkey-super-lig',
+  // Scotland
+  'scottish premiership':     'scotland-premiership',
+  'spfl':                     'scotland-premiership',
+  // Greece
+  'super league':             'greece-super-league',
+  // Russia
+  'russian premier':          'russia-premier-league',
+  // Brazil
+  'brasileir':                'brazil-serie-a',
+  // Argentina
+  'liga profesional':         'argentina-liga-profesional',
+  // Mexico
+  'liga mx':                  'mexico-liga-mx',
+  // USA
+  'mls':                      'usa-mls',
+  'major league soccer':      'usa-mls',
+  // Saudi Arabia
+  'saudi pro league':         'saudi-arabia-professional-league',
+  'saudi professional':       'saudi-arabia-professional-league',
+  // J-League
+  'j1 league':                'japan-j1-league',
+  'j league':                 'japan-j1-league',
+  // K-League
+  'k league 1':               'south-korea-k-league-1',
+  // Nigeria
+  'npfl':                     'nigeria-npfl',
+  // South Africa
+  'dstv premiership':         'south-africa-premiership',
+  'betway premiership':       'south-africa-premiership',
 };
 
 // ── DB tables ───────────────────────────────────────────────────────────────
@@ -192,12 +254,32 @@ function normalize(name) {
 
 function teamMatch(a, b) {
   const na = normalize(a), nb = normalize(b);
+  if (!na || !nb) return false;
   if (na === nb) return true;
   if (na.length > 4 && nb.includes(na)) return true;
   if (nb.length > 4 && na.includes(nb)) return true;
-  const wa = na.split(' ').find(w => w.length >= 5);
-  const wb = nb.split(' ').find(w => w.length >= 5);
-  if (wa && wb && wa === wb) return true;
+  // Check all meaningful words (>= 5 chars) for any match
+  const wordsA = na.split(' ').filter(w => w.length >= 5);
+  const wordsB = nb.split(' ').filter(w => w.length >= 5);
+  for (const wa of wordsA) {
+    for (const wb of wordsB) {
+      if (wa === wb) return true;
+      // 1-char tolerance for abbreviations/typos
+      if (wa.length >= 6 && wb.length >= 6) {
+        const shorter = wa.length <= wb.length ? wa : wb;
+        const longer  = wa.length <= wb.length ? wb : wa;
+        let diff = longer.length - shorter.length;
+        for (let i = 0; i < shorter.length && diff <= 1; i++) {
+          if (shorter[i] !== longer[i]) diff++;
+        }
+        if (diff <= 1) return true;
+      }
+    }
+  }
+  // city/short-name match: first meaningful token
+  const firstA = na.split(' ')[0];
+  const firstB = nb.split(' ')[0];
+  if (firstA.length >= 4 && firstA === firstB) return true;
   return false;
 }
 
