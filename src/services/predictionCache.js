@@ -182,7 +182,8 @@ export async function ensureFixtureData(fixtureId) {
       fixtureId,
       fixture.home_team_name,
       fixture.away_team_name,
-      tournamentName
+      tournamentName,
+      fixture.category_name || ''
     );
   } catch {}
   if (!odds) odds = await getOdds(fixtureId);
