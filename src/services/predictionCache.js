@@ -109,7 +109,7 @@ export async function getHistoryRows(fixtureId) {
 export async function getOdds(fixtureId) {
   try {
     const result = await db.execute({
-      sql: `SELECT home, draw, away, btts_yes, btts_no, over_under FROM fixture_odds WHERE fixture_id = ? LIMIT 1`,
+      sql: `SELECT home, draw, away, btts_yes, btts_no, over_under, bet_link_sportybet, bet_link_bet365 FROM fixture_odds WHERE fixture_id = ? LIMIT 1`,
       args: [fixtureId],
     });
     const oddsRow = result.rows?.[0] || null;
@@ -122,6 +122,8 @@ export async function getOdds(fixtureId) {
       btts_yes: oddsRow.btts_yes,
       btts_no: oddsRow.btts_no,
       over_under: oddsRow.over_under ? safeJsonParse(oddsRow.over_under, {}) : {},
+      betLinkSportybet: oddsRow.bet_link_sportybet || null,
+      betLinkBet365: oddsRow.bet_link_bet365 || null,
     };
   } catch {
     return null;

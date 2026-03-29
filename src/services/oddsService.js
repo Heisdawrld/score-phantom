@@ -896,6 +896,11 @@ async function ensureTables() {
     for (const col of ['over_1_5','under_1_5','over_2_5','under_2_5','over_3_5','under_3_5','btts_yes','btts_no','bookmaker']) {
       try { await db.execute(`ALTER TABLE fixture_odds ADD COLUMN ${col} ${col==='bookmaker'?"TEXT DEFAULT 'SportyBet'":'REAL'}`); } catch {}
     }
+    // Bet links
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN bet_link_sportybet TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN bet_link_bet365 TEXT"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN ev_value REAL"); } catch {}
+    try { await db.execute("ALTER TABLE fixture_odds ADD COLUMN ev_market TEXT"); } catch {}
   } catch (err) { console.error('[OddsService] Table init:', err.message); }
 }
 ensureTables();
@@ -1046,7 +1051,7 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
     const cached=await db.execute({ sql:`SELECT * FROM fixture_odds WHERE fixture_id=? AND fetched_at>datetime('now','-${FIXTURE_CACHE_HOURS} hours') LIMIT 1`, args:[String(fixtureId)] });
     if (cached.rows?.[0]?.home) {
       const r=cached.rows[0];
-      return {home:r.home,draw:r.draw,away:r.away,over_1_5:r.over_1_5,under_1_5:r.under_1_5,over_2_5:r.over_2_5,under_2_5:r.under_2_5,over_3_5:r.over_3_5,under_3_5:r.under_3_5,btts_yes:r.btts_yes,btts_no:r.btts_no};
+      return {home:r.home,draw:r.draw,away:r.away,over_1_5:r.over_1_5,under_1_5:r.under_1_5,over_2_5:r.over_2_5,under_2_5:r.under_2_5,over_3_5:r.over_3_5,under_3_5:r.under_3_5,btts_yes:r.btts_yes,btts_no:r.btts_no,betLinkSportybet:r.bet_link_sportybet,betLinkBet365:r.bet_link_bet365};
     }
   } catch {}
 
@@ -1069,6 +1074,9 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
   }
 
   console.log(`[OddsService] Matched ${matched.id}: ${matched.home} vs ${matched.away}`);
+  // Extract direct bet links from event data
+  const betLinkSportybet = matched.urls?.SportyBet || matched.bookmakerIds?.SportyBet ? `https://www.sportybet.com/ng/sport/football/event/${matched.bookmakerIds?.SportyBet||matched.id}` : null;
+  const betLinkBet365 = matched.urls?.Bet365 || null;
   const oddsData=await fetchEventOdds(matched.id);
   if (!oddsData) return null;
 
@@ -1080,8 +1088,40 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
   const odds=parseBookmakerOdds(markets);
   const overUnder=JSON.stringify({over_2_5:odds.over_2_5,under_2_5:odds.under_2_5,over_1_5:odds.over_1_5,under_1_5:odds.under_1_5,over_3_5:odds.over_3_5,under_3_5:odds.under_3_5});
   try {
-    await db.execute({ sql:`INSERT OR REPLACE INTO fixture_odds (fixture_id,home,draw,away,over_1_5,under_1_5,over_2_5,under_2_5,over_3_5,under_3_5,btts_yes,btts_no,over_under,bookmaker,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`, args:[String(fixtureId),odds.home,odds.draw,odds.away,odds.over_1_5,odds.under_1_5,odds.over_2_5,odds.under_2_5,odds.over_3_5,odds.under_3_5,odds.btts_yes,odds.btts_no,overUnder,bookmakerUsed||'SportyBet'] });
+    await db.execute({ sql:`INSERT OR REPLACE INTO fixture_odds (fixture_id,home,draw,away,over_1_5,under_1_5,over_2_5,under_2_5,over_3_5,under_3_5,btts_yes,btts_no,over_under,bookmaker,bet_link_sportybet,bet_link_bet365,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`, args:[String(fixtureId),odds.home,odds.draw,odds.away,odds.over_1_5,odds.under_1_5,odds.over_2_5,odds.under_2_5,odds.over_3_5,odds.under_3_5,odds.btts_yes,odds.btts_no,overUnder,bookmakerUsed||'SportyBet',betLinkSportybet||null,betLinkBet365||null] });
     console.log(`[OddsService] ✅ Cached odds ${fixtureId} (${bookmakerUsed}) 1X2: ${odds.home}/${odds.draw}/${odds.away}`);
   } catch (err) { console.error('[OddsService] DB write:', err.message); }
   return odds;
+}
+
+// ── Fetch value bets from odds-api.io for a specific event ──────────────────────
+// Returns value bets with EV > 100 (bookmaker underpricing)
+export async function fetchValueBetsForEvent(eventId) {
+  if (!ODDS_API_KEY || !eventId) return [];
+  try {
+    const url = `${ODDS_API_BASE}/value-bets?apiKey=${ODDS_API_KEY}&sport=football&bookmaker=SportyBet&eventId=${eventId}&limit=20`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const bets = Array.isArray(data) ? data : [];
+    return bets
+      .filter(b => b.expectedValue > 100) // EV > 100 = value
+      .map(b => ({
+        market: b.market?.name,
+        side: b.betSide,
+        ev: b.expectedValue,
+        sportyOdds: b.bookmakerOdds?.home || b.bookmakerOdds?.away,
+        fairOdds: b.betSide === 'home' ? b.market?.home : b.market?.away,
+        betLink: b.bookmakerOdds?.href,
+      }));
+  } catch { return []; }
+}
+
+// ── Get bet links for an event directly ───────────────────────────────────
+export async function getEventBetLinks(eventId) {
+  if (!ODDS_API_KEY || !eventId) return {};
+  try {
+    const data = await fetchEventOdds(eventId);
+    return data?.urls || {};
+  } catch { return {}; }
 }

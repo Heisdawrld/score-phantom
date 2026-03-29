@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
-import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle, Lock, Crown } from "lucide-react";
+import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle, Lock, Crown, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChatInterface } from "./ChatInterface";
@@ -137,6 +137,8 @@ function getOddsForPick(odds, pick, market) {
 }
 
 function OddsDisplay({ odds, pick, market }: { odds: any; pick: string; market: string }) {
+  const betLink = odds?.betLinkSportybet || odds?.betLinkBet365 || null;
+  const bookmakerName = odds?.betLinkSportybet ? 'SportyBet' : odds?.betLinkBet365 ? 'Bet365' : 'SportyBet';
   const oddsPick = getOddsForPick(odds, pick, market);
   if (!oddsPick || !oddsPick.value || oddsPick.value <= 1) return null;
   const bkOdds = parseFloat(oddsPick.value);
@@ -145,7 +147,7 @@ function OddsDisplay({ odds, pick, market }: { odds: any; pick: string; market: 
   const isFair = implied < 68;
   return (
     <div className="mt-4 pt-4 border-t border-white/10">
-      <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-3">SportyBet Odds</p>
+      <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-3">{bookmakerName} Odds</p>
       <div className="flex items-stretch gap-3">
         <div className="flex-1 bg-white/5 rounded-2xl p-3 text-center border border-white/8">
           <p className="text-[10px] text-muted-foreground mb-1">Odds</p>
@@ -171,6 +173,17 @@ function OddsDisplay({ odds, pick, market }: { odds: any; pick: string; market: 
           <TrendingUp className="w-3 h-3 text-primary shrink-0" />
           <p className="text-[11px] text-primary font-semibold">Value bet — bookmaker underpricing this outcome</p>
         </div>
+      )}
+      {betLink && (
+        <a
+          href={betLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-primary text-black font-black text-sm tracking-wide hover:opacity-90 active:scale-95 transition-all"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Bet on {bookmakerName}
+        </a>
       )}
     </div>
   );

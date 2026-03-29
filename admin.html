@@ -832,6 +832,93 @@
       if (e.target === el) el.style.display = 'none';
     });
   });
+
+  async function loadCacheStats() {
+    const grid = document.getElementById('cacheStatsGrid');
+    if (!grid) return;
+    try {
+      const f = await api('/api/admin/fixture-stats');
+      const items = [
+        { label: "Today Fixtures", value: f.fixtures?.total ?? '-', sub: (f.fixtures?.enriched||0)+' enriched, '+(f.fixtures?.withOdds||0)+' with odds' },
+        { label: 'Predictions', value: f.cache?.predictions ?? '-', sub: 'cached' },
+        { label: 'League Slugs', value: f.cache?.leagueSlugs ?? '-', sub: 'cached' },
+        { label: 'Fixture Odds', value: f.cache?.fixtureOdds ?? '-', sub: 'cached' },
+      ];
+      grid.innerHTML = items.map(function(s) {
+        return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+          + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:4px;">'+s.label+'</p>'
+          + '<p style="font-size:24px;font-weight:900;color:#e2e8f0;">'+s.value+'</p>'
+          + (s.sub ? '<p style="font-size:11px;color:#64748b;">'+s.sub+'</p>' : '')
+          + '</div>';
+      }).join('');
+    } catch(e) {
+      if (grid) grid.innerHTML = '<p style="color:#f87171;font-size:12px;">Error: '+e.message+'</p>';
+    }
+  }
+
+  async function clearLeagueCache() {
+    if (!confirm('Clear league slug cache? Fresh odds will fetch on next prediction.')) return;
+    try { var r = await api('/api/admin/clear-odds-cache', { method: 'POST' }); showToast(r.message || 'League cache cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function clearFixtureOdds() {
+    if (!confirm('Clear all fixture odds? Matches re-fetch odds on next click.')) return;
+    try { var r = await api('/api/admin/clear-fixture-odds', { method: 'POST' }); showToast(r.message || 'Fixture odds cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function clearPredictions() {
+    if (!confirm('Clear ALL cached predictions? Engine re-runs fresh. Continue?')) return;
+    try { var r = await api('/api/admin/clear-prediction-cache', { method: 'POST' }); showToast(r.message || 'Prediction cache cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function reseedFixtures() {
+    try { var r = await api('/api/admin/reseed', { method: 'POST' }); showToast(r.message || 'Reseeding in background...'); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function runEnrichmentN(n) {
+    showToast('Starting enrichment for ' + n + ' fixtures...');
+    try { var r = await api('/api/admin/run-enrichment', { method: 'POST', body: JSON.stringify({ limit: n }) }); showToast(r.message || 'Done: ' + (r.enriched ?? '?') + ' enriched'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function loadHealth() {
+    var grid = document.getElementById('healthGrid');
+    if (!grid) return;
+    try {
+      var h = await api('/api/admin/system-health');
+      var checks = h.checks || {};
+      var overall = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;grid-column:1/-1;">'
+        + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Overall</p>'
+        + '<p style="font-size:18px;font-weight:900;color:'+(h.status==='healthy'?'#10e774':'#f87171')+';">'
+        + (h.status==='healthy' ? 'ALL SYSTEMS OK' : 'DEGRADED') + '</p></div>';
+      var rows = Object.entries(checks).map(function(entry) {
+        var key = entry[0], val = entry[1];
+        var ok = val==='ok' || String(val).includes('configured');
+        var warn = String(val).includes('no_') || val==='not_configured';
+        var color = ok ? '#10e774' : warn ? '#fb923c' : '#f87171';
+        var dot = ok ? 'OK' : warn ? 'WARN' : 'ERROR';
+        return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+          + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">'+key.replace(/_/g,' ')+'</p>'
+          + '<p style="font-size:13px;font-weight:900;color:'+color+';">'+String(val).toUpperCase()+'</p>'
+          + '</div>';
+      }).join('');
+      grid.innerHTML = overall + rows;
+    } catch(e) {
+      if (grid) grid.innerHTML = '<p style="color:#f87171;">Failed: '+e.message+'</p>';
+    }
+  }
+
+  async function verifyPayment(ref, email) {
+    if (!confirm('Verify ' + ref + ' and upgrade ' + email + ' to premium?')) return;
+    try { var r = await api('/api/admin/verify-payment/' + ref, { method: 'POST' }); showToast(r.message || 'Payment verified'); loadPayments(paymentPage); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+
 </script>
 </body>
 </html>
