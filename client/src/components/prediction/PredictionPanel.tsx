@@ -114,12 +114,15 @@ function getOddsForPick(odds, pick, market) {
     }
   }
   if (m.includes('over/under') || m.includes('total')) {
+    // Handle both nested over_under object AND flat top-level fields
     const ou = odds.over_under || {};
-    if (p.includes('over 2.5')) return { value: ou.over_2_5, label: 'Over 2.5' };
-    if (p.includes('under 2.5')) return { value: ou.under_2_5, label: 'Under 2.5' };
-    if (p.includes('over 1.5')) return { value: ou.over_1_5, label: 'Over 1.5' };
-    if (p.includes('over 3.5')) return { value: ou.over_3_5, label: 'Over 3.5' };
-    if (p.includes('under 3.5')) return { value: ou.under_3_5, label: 'Under 3.5' };
+    const get = (nested: any, flat: any) => nested ?? flat;
+    if (p.includes('over 2.5')) return { value: get(ou.over_2_5, odds.over_2_5), label: 'Over 2.5' };
+    if (p.includes('under 2.5')) return { value: get(ou.under_2_5, odds.under_2_5), label: 'Under 2.5' };
+    if (p.includes('over 1.5')) return { value: get(ou.over_1_5, odds.over_1_5), label: 'Over 1.5' };
+    if (p.includes('under 1.5')) return { value: get(ou.under_1_5, odds.under_1_5), label: 'Under 1.5' };
+    if (p.includes('over 3.5')) return { value: get(ou.over_3_5, odds.over_3_5), label: 'Over 3.5' };
+    if (p.includes('under 3.5')) return { value: get(ou.under_3_5, odds.under_3_5), label: 'Under 3.5' };
   }
   if (m.includes('both teams') || m.includes('btts')) {
     if (p.includes('not') || p === 'both teams not to score') return { value: odds.btts_no, label: 'BTTS No' };
