@@ -34,8 +34,58 @@ function EnrichmentBadge({ status }: { status?: string | null }) {
   );
 }
 
+// Live Scores Section
+function LiveSection() {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/live"],
+    queryFn: () => fetchApi("/live"),
+    enabled: open,
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+  const matches = (data as any)?.matches || [];
+  return (
+    <div className="rounded-2xl border border-white/10 bg-panel/40 overflow-hidden">
+      <button className="w-full flex items-center gap-3 p-4 hover:bg-white/5 transition-all" onClick={() => setOpen((o) => !o)}>
+        <div className="relative w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+          <Radio className="w-4 h-4 text-red-400" />
+          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+        </div>
+        <div className="flex-1 text-left">
+          <p className="text-sm font-bold tracking-wide">Live Scores</p>
+          <p className="text-xs text-muted-foreground">Matches happening right now</p>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-2">
+          {isLoading && <div className="flex justify-center py-6"><div className="w-6 h-6 rounded-full border-2 border-red-500/20 border-t-red-400 animate-spin" /></div>}
+          {!isLoading && matches.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No live matches right now.</p>}
+          {matches.map((m: any) => (
+            <div key={m.match_id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/8 gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold text-red-400">{m.minute ? m.minute + "'" : "LIVE"}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{m.competition_name}</span>
+                </div>
+                <p className="text-sm font-semibold truncate">{m.home_team_name}</p>
+                <p className="text-sm font-semibold truncate">{m.away_team_name}</p>
+              </div>
+              <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 min-w-[52px] text-center">
+                <p className="font-display text-lg font-bold">{m.score || "0 - 0"}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ACCA Banner (premium only) ────────────────────────────────────────────────
 function AccaSection({ isPremium }: { isPremium: boolean }) {
+  const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"safe" | "value">("safe");
 
@@ -286,29 +336,17 @@ export default function Dashboard() {
   }, []);
 
   const { toast } = useToast();
+  const dateStripRef = useRef(null);
 
-  // Payment success toast from Flutterwave redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('payment') === 'success') {
-      toast({
-        title: '🎉 Payment confirmed!',
-        description: 'Your ScorePhantom Premium is now active. Enjoy unlimited predictions!',
-        duration: 6000,
-      });
+      toast({ title: '🎉 Payment confirmed!', description: 'ScorePhantom Premium is now active!', duration: 6000 });
       window.history.replaceState({}, '', '/');
     }
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(dates[0]);
-  const dateStripRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll date strip to start (today) on mount
-  useEffect(() => {
-    if (dateStripRef.current) {
-      dateStripRef.current.scrollLeft = 0;
-    }
-  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
@@ -417,7 +455,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Live Scores Section */}
+        {/* Live Scores */}
         <LiveSection />
 
         {/* ACCA Section */}
@@ -457,12 +495,12 @@ export default function Dashboard() {
         </div>
 
         {/* Enrichment count */}
-        {data && (data.total > 0 || (data as any).enrichedDeepCount > 0) && (
+        {data && ((data as any).total > 0 || (data as any).enrichedDeepCount > 0) && (
           <div className="flex items-center gap-2 px-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399] shrink-0" />
             <span className="text-xs text-muted-foreground">
               <span className="text-emerald-400 font-semibold">{(data as any).enrichedDeepCount ?? 0}</span>
-              {" "}deeply enriched · {data.total} total fixtures
+              {" "}deeply enriched fixtures today · {data.total} total
             </span>
           </div>
         )}
@@ -480,12 +518,8 @@ export default function Dashboard() {
           ) : leagues.length === 0 ? (
             <div className="text-center py-20 text-muted-foreground space-y-3">
               <Trophy className="w-12 h-12 mx-auto opacity-20" />
-              <p className="font-medium">No fixtures found for {format(selectedDate, 'MMM d')}.</p>
-              <p className="text-xs text-muted-foreground/70">
-                {isSameDay(selectedDate, dates[0])
-                  ? 'Fixtures are loading — check back in a minute or try refreshing.'
-                  : 'No matches scheduled for this date.'}
-              </p>
+              <p className="font-medium">No fixtures for {format(selectedDate, 'MMM d')}.</p>
+              <p className="text-xs opacity-60">{isSameDay(selectedDate, dates[0]) ? 'Fixtures loading — check back soon.' : 'No matches scheduled.'}</p>
             </div>
           ) : (
             leagues.map(([tournament, fixtures]: [string, any], idx) => (
