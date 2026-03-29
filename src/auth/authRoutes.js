@@ -322,12 +322,18 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
     });
 
     // Send reset email via Resend
-    await sendPasswordResetEmail(normalizedEmail, resetToken);
+    const emailResult = await sendPasswordResetEmail(normalizedEmail, resetToken);
 
-    return res.json({ success: true, message: "If that email exists, a reset link has been sent.",
-      // Remove in production:
-      _dev_token: process.env.NODE_ENV !== "production" ? resetToken : undefined,
-    });
+    if (!emailResult.success) {
+      // Email not configured - return error so frontend can show a useful message
+      console.error('[PasswordReset] Email send failed:', emailResult.reason);
+      return res.status(503).json({ 
+        error: "Email service not configured. Please contact support.",
+        _dev_link: process.env.NODE_ENV !== 'production' ? `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/reset-password?token=${resetToken}` : undefined,
+      });
+    }
+
+    return res.json({ success: true, message: "Reset link sent to your email." });
   } catch (err) {
     console.error("[PasswordReset]", err);
     return res.status(500).json({ error: "Reset request failed" });

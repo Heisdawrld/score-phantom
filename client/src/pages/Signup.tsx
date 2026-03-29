@@ -42,14 +42,19 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function Signup() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [confirm, setConfirm]       = useState("");
+  const [error, setError]           = useState("");
   const signupMutation = useSignup();
+
+  const passwordsMatch = confirm === "" || password === confirm;
+  const canSubmit = password.length >= 6 && password === confirm && !signupMutation.isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (password !== confirm) { setError("Passwords don't match"); return; }
     signupMutation.mutate({ email, password }, {
       onError: (err: any) => setError(err.message || "Failed to create account")
     });
@@ -91,6 +96,7 @@ export default function Signup() {
                   required
                 />
               </div>
+
               <div className="relative">
                 <Lock className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
                 <Input
@@ -103,13 +109,42 @@ export default function Signup() {
                   minLength={6}
                 />
               </div>
+
               <PasswordStrength password={password} />
+
+              <div className="relative">
+                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="Confirm password"
+                  className={`pl-11 ${
+                    confirm && !passwordsMatch
+                      ? "border-destructive/60 focus-visible:ring-destructive/40"
+                      : confirm && passwordsMatch
+                      ? "border-primary/40"
+                      : ""
+                  }`}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                />
+                {confirm && (
+                  <span className="absolute right-4 top-3.5">
+                    {passwordsMatch
+                      ? <Check className="w-5 h-5 text-primary" />
+                      : <X className="w-5 h-5 text-destructive" />}
+                  </span>
+                )}
+              </div>
+              {confirm && !passwordsMatch && (
+                <p className="text-xs text-destructive">Passwords don't match</p>
+              )}
             </div>
 
             <Button
               type="submit"
               className="w-full h-12 text-base"
-              disabled={signupMutation.isPending || password.length < 6}
+              disabled={!canSubmit}
             >
               {signupMutation.isPending ? "Creating Account..." : "Start Free Trial"}
             </Button>
