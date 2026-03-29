@@ -1337,8 +1337,11 @@ export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam,
 
   console.log(`[OddsService] Matched ${matched.id}: ${matched.home} vs ${matched.away}`);
   // Extract direct bet links from event data
-  const betLinkSportybet = matched.urls?.SportyBet || matched.bookmakerIds?.SportyBet ? `https://www.sportybet.com/ng/sport/football/event/${matched.bookmakerIds?.SportyBet||matched.id}` : null;
-  const betLinkBet365 = matched.urls?.Bet365 || null;
+  // Always build bet link using event ID (works for all events on SportyBet)
+  const sportyId = matched.bookmakerIds?.SportyBet || matched.urls?.SportyBet || matched.id;
+  const betLinkSportybet = sportyId ? `https://www.sportybet.com/ng/sport/football/event/${sportyId}` : null;
+  const betLinkBet365    = matched.bookmakerIds?.Bet365 || matched.urls?.Bet365 || null;
+
   const oddsData=await fetchEventOdds(matched.id);
   if (!oddsData) return null;
 
@@ -1373,7 +1376,7 @@ export async function fetchValueBetsForEvent(eventId) {
     const data = await res.json();
     const bets = Array.isArray(data) ? data : [];
     return bets
-      .filter(b => b.expectedValue > 100) // EV > 100 = value
+      .filter(b => b.expectedValue > 105) // EV > 105 = meaningful value edge
       .map(b => ({
         market: b.market?.name,
         side: b.betSide,
@@ -1381,7 +1384,9 @@ export async function fetchValueBetsForEvent(eventId) {
         sportyOdds: b.bookmakerOdds?.home || b.bookmakerOdds?.away,
         fairOdds: b.betSide === 'home' ? b.market?.home : b.market?.away,
         betLink: b.bookmakerOdds?.href,
-      }));
+      }))
+      .sort((a, b) => b.ev - a.ev)
+      .slice(0, 5); // top 5 value bets only
   } catch { return []; }
 }
 

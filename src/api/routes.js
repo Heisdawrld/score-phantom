@@ -534,6 +534,14 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 //   ?mode=safe   (default) — 3 picks, all >= 75%, low volatility, stable markets
 //   ?mode=value             — 4–5 picks, >= 70%, allows 1 moderate risk pick
 router.get("/acca", requirePremiumAccess, async (req, res) => {
+  // ACCA is premium-only — block trial users
+  if (!req.access.subscription_active) {
+    return res.status(403).json({
+      error: 'ACCA is a premium feature. Upgrade to access accumulator picks.',
+      code: 'subscription_required',
+      access: buildAccessPayload(req.access),
+    });
+  }
   try {
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const mode  = req.query.mode === 'value' ? 'value' : 'safe';

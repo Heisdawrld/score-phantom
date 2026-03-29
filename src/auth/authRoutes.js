@@ -286,10 +286,14 @@ router.get("/me", requireAuth, async (req, res) => {
     const access  = computeAccessStatus(user);
     const isAdmin = ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL;
     return res.json({
-      ...publicUser(user),
+      user: {
+        ...publicUser(user),
+        has_access:    access.has_full_access,
+        access_status: access.status,
+        ...(isAdmin ? { is_admin: true } : {}),
+      },
       has_access:    access.has_full_access,
       access_status: access.status,
-      ...(isAdmin ? { is_admin: true } : {}),
     });
   } catch (err) {
     console.error("[Me]", err);
