@@ -1,22 +1,21 @@
 /**
- * emailService.js — Resend (HTTP API, works on all cloud hosts)
- * Set ONE env var in Render:
- *   RESEND_API_KEY = re_xxxxxxxxxxxx  (get from resend.com → API Keys)
+ * emailService.js — Brevo (formerly Sendinblue) transactional email
+ * Free: 300 emails/day, no domain/DNS setup needed.
  *
- * Free tier: 100 emails/day, no domain needed for testing
- * (uses onboarding@resend.dev as sender on free tier)
+ * Setup:
+ *   1. Sign up at brevo.com
+ *   2. Go to Settings → API Keys → Generate API Key
+ *   3. Add to Render env: BREVO_API_KEY = xkeysib-...
+ *   4. Also set: EMAIL_FROM = your verified sender email
  */
 
-const APP_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-
-// From address — on free Resend plan use onboarding@resend.dev
-// Once you add a domain on Resend, change this to e.g. noreply@scorephantom.com
-const FROM_ADDRESS = process.env.EMAIL_FROM || 'ScorePhantom <onboarding@resend.dev>';
+const APP_URL    = process.env.APP_URL    || 'https://score-phantom.onrender.com';
+const API_KEY    = process.env.BREVO_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM   || 'Davidadiele7@gmail.com';
 
 export async function sendPasswordResetEmail(toEmail, resetToken) {
-  if (!RESEND_API_KEY) {
-    console.warn('[Email] RESEND_API_KEY not set — cannot send reset email.');
+  if (!API_KEY) {
+    console.warn('[Email] BREVO_API_KEY not set.');
     console.log('[Email] DEV reset link:', `${APP_URL}/reset-password?token=${resetToken}`);
     return { success: false, reason: 'no_smtp_config' };
   }
@@ -24,17 +23,18 @@ export async function sendPasswordResetEmail(toEmail, resetToken) {
   const resetLink = `${APP_URL}/reset-password?token=${resetToken}`;
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'api-key': API_KEY,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to: [toEmail],
+        sender:  { name: 'ScorePhantom', email: EMAIL_FROM },
+        to:      [{ email: toEmail }],
         subject: 'Reset your ScorePhantom password',
-        html: `
+        htmlContent: `
           <div style="background:#080b10;color:#fff;font-family:system-ui,sans-serif;padding:40px 24px;max-width:480px;margin:0 auto;border-radius:16px">
             <div style="text-align:center;margin-bottom:32px">
               <h1 style="font-size:28px;font-weight:900;letter-spacing:4px;margin:0">
@@ -55,17 +55,18 @@ export async function sendPasswordResetEmail(toEmail, resetToken) {
       }),
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error('[Email] Resend error:', data);
-      return { success: false, reason: data?.message || `HTTP ${res.status}` };
+    if (res.status === 201) {
+      const data = await res.json().catch(() => ({}));
+      console.log('[Email] ✅ Reset sent to', toEmail, '| messageId:', data.messageId);
+      return { success: true, id: data.messageId };
     }
 
-    console.log('[Email] ✅ Reset sent to', toEmail, '| id:', data.id);
-    return { success: true, id: data.id };
+    const err = await res.json().catch(() => ({}));
+    console.error('[Email] Brevo error:', res.status, err);
+    return { success: false, reason: err?.message || `HTTP ${res.status}` };
+
   } catch (err) {
-    console.error('[Email] ❌ Fetch failed:', err.message);
+    console.error('[Email] Fetch failed:', err.message);
     return { success: false, reason: err.message };
   }
 }
