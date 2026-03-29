@@ -1,3 +1,15 @@
+
+function fuzzyTeamMatch(a, b) {
+  if (!a || !b) return false;
+  const na = String(a).toLowerCase().trim();
+  const nb = String(b).toLowerCase().trim();
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const wa = na.split(/\s+/)[0];
+  const wb = nb.split(/\s+/)[0];
+  if (wa.length >= 4 && (wa === wb || wa.includes(wb) || wb.includes(wa))) return true;
+  return false;
+}
 /**
  * buildFeatureVector.js
  *
@@ -55,8 +67,8 @@ function buildStandingsMap(standings = []) {
 }
 
 function buildTableContext(homeTeamName, awayTeamName, standings, homeMomentum, awayMomentum) {
-  const homeRow = standings.find((r) => r.team === homeTeamName);
-  const awayRow = standings.find((r) => r.team === awayTeamName);
+  const homeRow = standings.find((r) => fuzzyTeamMatch(r.team, homeTeamName));
+  const awayRow = standings.find((r) => fuzzyTeamMatch(r.team, awayTeamName));
   const homePos = safeNum(homeRow?.position, null);
   const awayPos = safeNum(awayRow?.position, null);
   const homePts = safeNum(homeRow?.points, null);

@@ -1,3 +1,15 @@
+
+function fuzzyTeamMatch(a, b) {
+  if (!a || !b) return false;
+  const na = String(a).toLowerCase().trim();
+  const nb = String(b).toLowerCase().trim();
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const wa = na.split(/\s+/)[0];
+  const wb = nb.split(/\s+/)[0];
+  if (wa.length >= 4 && (wa === wb || wa.includes(wb) || wb.includes(wa))) return true;
+  return false;
+}
 import { safeNum, avg, weightedRate, weightedAvg } from '../utils/math.js';
 
 function recencyWeight(match, idx) {
@@ -13,8 +25,8 @@ function recencyWeight(match, idx) {
 
 function teamGoals(matches, teamName) {
   return matches.map(m => {
-    if (m.home_team === teamName) return { ...m, scored: safeNum(m.home_goals, null), conceded: safeNum(m.away_goals, null), isHome: true };
-    if (m.away_team === teamName) return { ...m, scored: safeNum(m.away_goals, null), conceded: safeNum(m.home_goals, null), isHome: false };
+    if (fuzzyTeamMatch(m.home_team, teamName)) return { ...m, scored: safeNum(m.home_goals, null), conceded: safeNum(m.away_goals, null), isHome: true };
+    if (fuzzyTeamMatch(m.away_team, teamName)) return { ...m, scored: safeNum(m.away_goals, null), conceded: safeNum(m.home_goals, null), isHome: false };
     return null;
   }).filter(Boolean);
 }

@@ -103,11 +103,25 @@ function safeNum(v, fallback = null) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+
+function teamNameMatch(a, b) {
+  if (!a || !b) return false;
+  const na = String(a).toLowerCase().trim();
+  const nb = String(b).toLowerCase().trim();
+  if (na === nb) return true;
+  // One contains the other (handles 'Slavija' vs 'Slavija Sarajevo')
+  if (na.includes(nb) || nb.includes(na)) return true;
+  // First word match (length >= 4) - handles 'Atletico PR' vs 'Atletico Paranaense'
+  const wa = na.split(' ')[0];
+  const wb = nb.split(' ')[0];
+  if (wa.length >= 4 && wb.length >= 4 && (wa === wb || wa.includes(wb) || wb.includes(wa))) return true;
+  return false;
+}
 function extractScoringStats(matches, teamName) {
   if (!matches.length) return { avg: null, count: 0 };
   const goals = matches.map(m => {
-    if (m.home_team === teamName) return safeNum(m.home_goals);
-    if (m.away_team === teamName) return safeNum(m.away_goals);
+    if (teamNameMatch(m.home_team, teamName)) return safeNum(m.home_goals);
+    if (teamNameMatch(m.away_team, teamName)) return safeNum(m.away_goals);
     return null;
   }).filter(v => v !== null);
   const avg = goals.length ? goals.reduce((a, b) => a + b, 0) / goals.length : null;
@@ -117,8 +131,8 @@ function extractScoringStats(matches, teamName) {
 function extractConcedingStats(matches, teamName) {
   if (!matches.length) return { avg: null, count: 0 };
   const goals = matches.map(m => {
-    if (m.home_team === teamName) return safeNum(m.away_goals);
-    if (m.away_team === teamName) return safeNum(m.home_goals);
+    if (teamNameMatch(m.home_team, teamName)) return safeNum(m.away_goals);
+    if (teamNameMatch(m.away_team, teamName)) return safeNum(m.home_goals);
     return null;
   }).filter(v => v !== null);
   const avg = goals.length ? goals.reduce((a, b) => a + b, 0) / goals.length : null;
@@ -126,7 +140,7 @@ function extractConcedingStats(matches, teamName) {
 }
 
 function extractSplits(matches, teamName, isHomeTeam) {
-  const venue = isHomeTeam ? matches.filter(m => m.home_team === teamName) : matches.filter(m => m.away_team === teamName);
+  const venue = isHomeTeam ? matches.filter(m => teamNameMatch(m.home_team, teamName)) : matches.filter(m => teamNameMatch(m.away_team, teamName));
   if (!venue.length) return { goalsFor: null, goalsAgainst: null, count: 0 };
   const gf = venue.map(m => isHomeTeam ? safeNum(m.home_goals) : safeNum(m.away_goals)).filter(v => v !== null);
   const ga = venue.map(m => isHomeTeam ? safeNum(m.away_goals) : safeNum(m.home_goals)).filter(v => v !== null);

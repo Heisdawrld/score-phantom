@@ -1,3 +1,15 @@
+
+function fuzzyTeamMatch(a, b) {
+  if (!a || !b) return false;
+  const na = String(a).toLowerCase().trim();
+  const nb = String(b).toLowerCase().trim();
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const wa = na.split(/\s+/)[0];
+  const wb = nb.split(/\s+/)[0];
+  if (wa.length >= 4 && (wa === wb || wa.includes(wb) || wb.includes(wa))) return true;
+  return false;
+}
 import { safeNum, weightedAvg, weightedRate } from '../utils/math.js';
 
 function recencyWeight(match, idx) {
@@ -20,10 +32,10 @@ export function computeH2HFeatures(h2hMatches, homeTeamName, awayTeamName) {
     const ag = safeNum(m.away_goals, 0);
     let homeWon = false, awayWon = false;
 
-    if (m.home_team === homeTeamName) homeWon = hg > ag;
-    else if (m.away_team === homeTeamName) homeWon = ag > hg;
-    if (m.home_team === awayTeamName) awayWon = hg > ag;
-    else if (m.away_team === awayTeamName) awayWon = ag > hg;
+    if (fuzzyTeamMatch(m.home_team, homeTeamName)) homeWon = hg > ag;
+    else if (fuzzyTeamMatch(m.away_team, homeTeamName)) homeWon = ag > hg;
+    if (fuzzyTeamMatch(m.home_team, awayTeamName)) awayWon = hg > ag;
+    else if (fuzzyTeamMatch(m.away_team, awayTeamName)) awayWon = ag > hg;
 
     return { ...m, total_goals: hg + ag, homeWon, awayWon };
   });
