@@ -1,323 +1,398 @@
+/**
+ * oddsService.js — Odds-API.io integration
+ *
+ * API: https://api.odds-api.io/v3
+ * Auth: apiKey query param
+ * Bookmakers: SportyBet + Bet365 (user-configured)
+ * Rate limit: 100 calls/hr
+ *
+ * Strategy:
+ *   1. Cache league events for 6 hours (one call per league per session)
+ *   2. Cache fixture-level odds for 4 hours
+ *   3. Fuzzy-match team names from LiveScore vs odds-api event names
+ *   4. Parse ML (1X2), Totals (over/under), BTTS into our internal format
+ */
+
 import db from '../config/database.js';
 
-const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
-const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const ODDS_API_KEY  = process.env.ODDS_API_KEY || '';
+const ODDS_API_BASE = 'https://api.odds-api.io/v3';
+const BOOKMAKERS    = 'SportyBet,Bet365';   // configurable
 
-// Map tournament names (lowercase) to Odds API sport keys
-const LEAGUE_MAP = {
+// ── Cache TTLs ────────────────────────────────────────────────────────────────
+const LEAGUE_CACHE_HOURS   = 6;   // how long to cache the full league event list
+const FIXTURE_CACHE_HOURS  = 4;   // how long to cache per-fixture odds
+
+// ── League slug map (LiveScore tournament name → odds-api.io league slug) ────
+// Slugs confirmed from /v3/leagues endpoint
+const LEAGUE_SLUG_MAP = {
   // England
-  'premier league': 'soccer_epl',
-  'efl championship': 'soccer_efl_champ',
-  'championship': 'soccer_efl_champ',
-  'efl league one': 'soccer_england_league1',
-  'league one': 'soccer_england_league1',
-  'efl league two': 'soccer_england_league2',
-  'league two': 'soccer_england_league2',
-  'fa cup': 'soccer_fa_cup',
-  'efl cup': 'soccer_league_cup',
-  'league cup': 'soccer_league_cup',
+  'premier league':            'england-premier-league',
+  'efl championship':          'england-championship',
+  'championship':              'england-championship',
+  'efl league one':            'england-league-one',
+  'league one':                'england-league-one',
+  'efl league two':            'england-league-two',
+  'league two':                'england-league-two',
+  'fa cup':                    'england-fa-cup',
+  'efl cup':                   'england-league-cup',
+  'league cup':                'england-league-cup',
   // Spain
-  'la liga': 'soccer_spain_la_liga',
-  'laliga': 'soccer_spain_la_liga',
-  'segunda division': 'soccer_spain_segunda_division',
-  'copa del rey': 'soccer_spain_copa_del_rey',
+  'la liga':                   'spain-la-liga',
+  'laliga':                    'spain-la-liga',
+  'segunda division':          'spain-segunda-division',
+  'copa del rey':              'spain-copa-del-rey',
   // Germany
-  'bundesliga': 'soccer_germany_bundesliga',
-  '1. bundesliga': 'soccer_germany_bundesliga',
-  '2. bundesliga': 'soccer_germany_bundesliga2',
-  'dfb pokal': 'soccer_germany_dfb_pokal',
+  'bundesliga':                'germany-bundesliga',
+  '1. bundesliga':             'germany-bundesliga',
+  '2. bundesliga':             'germany-2-bundesliga',
+  'dfb pokal':                 'germany-dfb-pokal',
   // Italy
-  'serie a': 'soccer_italy_serie_a',
-  'serie b': 'soccer_italy_serie_b',
-  'coppa italia': 'soccer_italy_coppa_italia',
+  'serie a':                   'italy-serie-a',
+  'serie b':                   'italy-serie-b',
+  'coppa italia':              'italy-coppa-italia',
   // France
-  'ligue 1': 'soccer_france_ligue_one',
-  'ligue 2': 'soccer_france_ligue_two',
-  'coupe de france': 'soccer_france_coupe_de_france',
+  'ligue 1':                   'france-ligue-1',
+  'ligue 2':                   'france-ligue-2',
   // Netherlands
-  'eredivisie': 'soccer_netherlands_eredivisie',
-  'eerste divisie': 'soccer_netherlands_eerste_divisie',
-  // Scotland
-  'scottish premiership': 'soccer_scotland_premiership',
-  'spfl premiership': 'soccer_scotland_premiership',
+  'eredivisie':                'netherlands-eredivisie',
   // Portugal
-  'primeira liga': 'soccer_portugal_primeira_liga',
-  'liga nos': 'soccer_portugal_primeira_liga',
+  'primeira liga':             'portugal-primeira-liga',
+  'liga nos':                  'portugal-primeira-liga',
   // Belgium
-  'jupiler pro league': 'soccer_belgium_first_div_a',
-  'pro league': 'soccer_belgium_first_div_a',
-  'first division a': 'soccer_belgium_first_div_a',
+  'jupiler pro league':        'belgium-jupiler-pro-league',
+  'pro league':                'belgium-jupiler-pro-league',
   // Turkey
-  'süper lig': 'soccer_turkey_super_league',
-  'super lig': 'soccer_turkey_super_league',
+  'süper lig':                 'turkey-super-lig',
+  'super lig':                 'turkey-super-lig',
+  // Scotland
+  'scottish premiership':      'scotland-premiership',
+  'spfl premiership':          'scotland-premiership',
   // Greece
-  'super league': 'soccer_greece_super_league',
-  'super league 1': 'soccer_greece_super_league',
+  'super league 1':            'greece-super-league',
   // USA
-  'mls': 'soccer_usa_mls',
-  'major league soccer': 'soccer_usa_mls',
+  'mls':                       'usa-mls',
+  'major league soccer':       'usa-mls',
   // Brazil
-  'brasileirao': 'soccer_brazil_campeonato',
-  'serie a brasileira': 'soccer_brazil_campeonato',
-  'brasileirão série a': 'soccer_brazil_campeonato',
+  'brasileirao':               'brazil-serie-a',
+  'brasileirão série a':       'brazil-serie-a',
   // Argentina
-  'primera division': 'soccer_argentina_primera_division',
-  'liga profesional': 'soccer_argentina_primera_division',
-  // Australia
-  'a-league': 'soccer_australia_aleague',
+  'liga profesional':          'argentina-liga-profesional',
+  'primera division':          'argentina-primera-division',
   // Mexico
-  'liga mx': 'soccer_mexico_ligamx',
-  'ligamx': 'soccer_mexico_ligamx',
+  'liga mx':                   'mexico-liga-mx',
+  // Australia
+  'a-league':                  'australia-a-league',
+  // Nigeria
+  'npfl':                      'nigeria-npfl',
+  'nigeria professional football league': 'nigeria-npfl',
+  // South Africa
+  'dstv premiership':          'south-africa-premiership',
   // UEFA
-  'champions league': 'soccer_uefa_champs_league',
-  'uefa champions league': 'soccer_uefa_champs_league',
-  'europa league': 'soccer_uefa_europa_league',
-  'uefa europa league': 'soccer_uefa_europa_league',
-  'conference league': 'soccer_uefa_conference_league',
-  'europa conference league': 'soccer_uefa_conference_league',
-  // Austria
-  'bundesliga austria': 'soccer_austria_bundesliga',
-  'austrian bundesliga': 'soccer_austria_bundesliga',
-  // Switzerland
-  'super league switzerland': 'soccer_switzerland_superleague',
-  'swiss super league': 'soccer_switzerland_superleague',
-  // Denmark
-  'superliga': 'soccer_denmark_superliga',
-  'danish superliga': 'soccer_denmark_superliga',
-  // Norway
-  'eliteserien': 'soccer_norway_eliteserien',
-  // Sweden
-  'allsvenskan': 'soccer_sweden_allsvenskan',
-  // Finland
-  'veikkausliiga': 'soccer_finland_veikkausliiga',
-  // Czech Republic
-  'czech liga': 'soccer_czech_liga',
-  'fortuna liga': 'soccer_czech_liga',
-  // Poland
-  'ekstraklasa': 'soccer_poland_ekstraklasa',
-  // Romania
-  'liga i': 'soccer_romania_liga_i',
-  // Russia
-  'premier league russia': 'soccer_russia_premier_league',
-  // Ukraine
-  'premier league ukraine': 'soccer_ukraine_premier_league',
-  // Japan
-  'j1 league': 'soccer_japan_j_league',
-  'j league': 'soccer_japan_j_league',
-  // South Korea
-  'k league 1': 'soccer_south_korea_kleague1',
-  // China
-  'chinese super league': 'soccer_china_superleague',
+  'champions league':          'international-clubs-uefa-champions-league',
+  'uefa champions league':     'international-clubs-uefa-champions-league',
+  'europa league':             'international-clubs-uefa-europa-league',
+  'uefa europa league':        'international-clubs-uefa-europa-league',
+  'conference league':         'international-clubs-uefa-conference-league',
 };
 
-async function ensureOddsTable() {
+// ── DB setup ──────────────────────────────────────────────────────────────────
+async function ensureTables() {
   try {
     await db.execute(`
-      CREATE TABLE IF NOT EXISTS league_odds_cache (
-        sport_key TEXT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS odds_league_cache (
+        league_slug TEXT PRIMARY KEY,
         events_json TEXT NOT NULL,
-        fetched_at TEXT DEFAULT (datetime('now'))
+        fetched_at  TEXT DEFAULT (datetime('now'))
       )
     `);
     await db.execute(`
       CREATE TABLE IF NOT EXISTS fixture_odds (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fixture_id TEXT NOT NULL,
-        home REAL,
-        draw REAL,
-        away REAL,
-        over_1_5 REAL,
-        under_1_5 REAL,
-        over_2_5 REAL,
-        under_2_5 REAL,
-        over_3_5 REAL,
-        under_3_5 REAL,
-        btts_yes REAL,
-        btts_no REAL,
-        over_under TEXT,
-        fetched_at TEXT DEFAULT (datetime('now')),
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        fixture_id  TEXT NOT NULL,
+        home        REAL,
+        draw        REAL,
+        away        REAL,
+        over_1_5    REAL,
+        under_1_5   REAL,
+        over_2_5    REAL,
+        under_2_5   REAL,
+        over_3_5    REAL,
+        under_3_5   REAL,
+        btts_yes    REAL,
+        btts_no     REAL,
+        over_under  TEXT,
+        bookmaker   TEXT DEFAULT 'SportyBet',
+        fetched_at  TEXT DEFAULT (datetime('now')),
         UNIQUE(fixture_id)
       )
     `);
-    // Add columns if they don't exist (for existing tables)
-    const cols = ['over_1_5','under_1_5','over_2_5','under_2_5','over_3_5','under_3_5'];
-    for (const col of cols) {
+    // add bookmaker col if missing
+    try { await db.execute(`ALTER TABLE fixture_odds ADD COLUMN bookmaker TEXT DEFAULT 'SportyBet'`); } catch {}
+    // Ensure over/under cols exist for older tables
+    for (const col of ['over_1_5','under_1_5','over_2_5','under_2_5','over_3_5','under_3_5','btts_yes','btts_no']) {
       try { await db.execute(`ALTER TABLE fixture_odds ADD COLUMN ${col} REAL`); } catch {}
     }
   } catch (err) {
     console.error('[OddsService] Table init error:', err.message);
   }
 }
+ensureTables();
 
-function getSportKey(tournamentName) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function normalize(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\bfc\b|\baf c\b|\bsc\b|\bac\b|\bif\b|\bcf\b/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function teamMatch(a, b) {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na === nb) return true;
+  if (na.length > 4 && nb.includes(na)) return true;
+  if (nb.length > 4 && na.includes(nb)) return true;
+  // first meaningful word match (≥5 chars)
+  const wa = na.split(' ').find(w => w.length >= 5);
+  const wb = nb.split(' ').find(w => w.length >= 5);
+  if (wa && wb && wa === wb) return true;
+  return false;
+}
+
+function getLeagueSlug(tournamentName) {
   if (!tournamentName) return null;
   const key = String(tournamentName).toLowerCase().trim();
-  // Direct match
-  if (LEAGUE_MAP[key]) return LEAGUE_MAP[key];
-  // Partial match
-  for (const [mapKey, sportKey] of Object.entries(LEAGUE_MAP)) {
-    if (key.includes(mapKey) || mapKey.includes(key)) return sportKey;
+  if (LEAGUE_SLUG_MAP[key]) return LEAGUE_SLUG_MAP[key];
+  // partial match
+  for (const [mapKey, slug] of Object.entries(LEAGUE_SLUG_MAP)) {
+    if (key.includes(mapKey) || mapKey.includes(key)) return slug;
   }
   return null;
 }
 
-function normalizeTeamName(name) {
-  return String(name || '').toLowerCase()
-    .replace(/\bfc\b/g, '').replace(/\baf c\b/g, '').replace(/\bsc\b/g, '')
-    .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+// ── Parse odds from odds-api.io bookmaker market array ───────────────────────
+function parseBookmakerOdds(bookmakerMarkets) {
+  const result = {
+    home: null, draw: null, away: null,
+    over_1_5: null, under_1_5: null,
+    over_2_5: null, under_2_5: null,
+    over_3_5: null, under_3_5: null,
+    btts_yes: null, btts_no: null,
+  };
+
+  if (!Array.isArray(bookmakerMarkets)) return result;
+
+  for (const market of bookmakerMarkets) {
+    const name = String(market.name || '').toLowerCase();
+    const odds = Array.isArray(market.odds) ? market.odds : [];
+
+    // 1X2 / ML
+    if (name === 'ml' || name === '1x2' || name === 'match result') {
+      const row = odds[0] || {};
+      if (row.home) result.home = parseFloat(row.home);
+      if (row.draw) result.draw = parseFloat(row.draw);
+      if (row.away) result.away = parseFloat(row.away);
+    }
+
+    // Totals / Goals Over Under
+    if (name === 'totals' || name === 'goals over/under' || name === 'total goals') {
+      for (const row of odds) {
+        const hdp = parseFloat(row.hdp);
+        if (hdp === 1.5) {
+          if (row.over)  result.over_1_5  = parseFloat(row.over);
+          if (row.under) result.under_1_5 = parseFloat(row.under);
+        }
+        if (hdp === 2.5) {
+          if (row.over)  result.over_2_5  = parseFloat(row.over);
+          if (row.under) result.under_2_5 = parseFloat(row.under);
+        }
+        if (hdp === 3.5) {
+          if (row.over)  result.over_3_5  = parseFloat(row.over);
+          if (row.under) result.under_3_5 = parseFloat(row.under);
+        }
+      }
+    }
+
+    // BTTS
+    if (name === 'both teams to score' || name === 'btts' || name === 'gg/ng') {
+      const row = odds[0] || {};
+      if (row.yes) result.btts_yes = parseFloat(row.yes);
+      if (row.no)  result.btts_no  = parseFloat(row.no);
+    }
+  }
+
+  return result;
 }
 
-function teamNamesMatch(a, b) {
-  const na = normalizeTeamName(a);
-  const nb = normalizeTeamName(b);
-  if (na === nb) return true;
-  // Check if either contains the other (for shortened names)
-  if (na.length > 3 && nb.includes(na)) return true;
-  if (nb.length > 3 && na.includes(nb)) return true;
-  // Check first word match
-  const wa = na.split(' ')[0];
-  const wb = nb.split(' ')[0];
-  if (wa.length > 4 && wa === wb) return true;
-  return false;
-}
+// ── Fetch league event list (cached 6h) ───────────────────────────────────────
+async function fetchLeagueEvents(leagueSlug) {
+  if (!ODDS_API_KEY) return [];
 
-async function fetchLeagueOdds(sportKey) {
-  if (!ODDS_API_KEY) return null;
-  
-  // Check league-level cache first (shared across all fixtures in same league)
+  // Check DB cache
   try {
     const cached = await db.execute({
-      sql: `SELECT events_json FROM league_odds_cache WHERE sport_key = ? AND fetched_at > datetime('now', '-4 hours') LIMIT 1`,
-      args: [sportKey],
+      sql: `SELECT events_json FROM odds_league_cache WHERE league_slug = ? AND fetched_at > datetime('now', '-${LEAGUE_CACHE_HOURS} hours') LIMIT 1`,
+      args: [leagueSlug],
     });
     if (cached.rows?.[0]?.events_json) {
-      const events = JSON.parse(cached.rows[0].events_json);
-      console.log(`[OddsService] League cache HIT for ${sportKey} (${events.length} events)`);
-      return events;
+      console.log(`[OddsService] Cache HIT for league: ${leagueSlug}`);
+      return JSON.parse(cached.rows[0].events_json);
     }
   } catch {}
 
-  // Cache miss — fetch from API
+  // Fetch from API
   try {
-    const url = `${ODDS_API_BASE}/sports/${sportKey}/odds?apiKey=${ODDS_API_KEY}&regions=eu&markets=h2h,totals&oddsFormat=decimal&dateFormat=iso`;
+    const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(leagueSlug)}&limit=100`;
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`[OddsService] API error ${res.status} for ${sportKey}`);
+      console.error(`[OddsService] Events API error ${res.status} for league: ${leagueSlug}`);
+      return [];
+    }
+    const data = await res.json();
+    const events = Array.isArray(data) ? data : (data.data || []);
+
+    // Filter to upcoming only for caching (pending/upcoming status)
+    const relevant = events.filter(e => e.status === 'upcoming' || e.status === 'pending' || !e.status);
+
+    // Store in cache
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO odds_league_cache (league_slug, events_json, fetched_at) VALUES (?, ?, datetime('now'))`,
+      args: [leagueSlug, JSON.stringify(relevant)],
+    });
+    console.log(`[OddsService] Fetched ${relevant.length} upcoming events for league: ${leagueSlug}`);
+    return relevant;
+  } catch (err) {
+    console.error('[OddsService] fetchLeagueEvents error:', err.message);
+    return [];
+  }
+}
+
+// ── Fetch odds for a specific event ID ───────────────────────────────────────
+async function fetchEventOdds(eventId) {
+  if (!ODDS_API_KEY || !eventId) return null;
+
+  try {
+    const url = `${ODDS_API_BASE}/odds?apiKey=${ODDS_API_KEY}&eventId=${eventId}&bookmakers=${encodeURIComponent(BOOKMAKERS)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`[OddsService] Odds API error ${res.status} for eventId: ${eventId}`);
       return null;
     }
     const data = await res.json();
-    if (!Array.isArray(data)) return null;
-
-    // Store in league cache
-    try {
-      await db.execute({
-        sql: `INSERT OR REPLACE INTO league_odds_cache (sport_key, events_json, fetched_at) VALUES (?, ?, datetime('now'))`,
-        args: [sportKey, JSON.stringify(data)],
-      });
-      console.log(`[OddsService] League cache STORED for ${sportKey} (${data.length} events)`);
-    } catch (err) {
-      console.error('[OddsService] League cache write error:', err.message);
-    }
-
     return data;
   } catch (err) {
-    console.error('[OddsService] Fetch error:', err.message);
+    console.error('[OddsService] fetchEventOdds error:', err.message);
     return null;
   }
 }
 
-function parseOddsFromEvent(event) {
-  const result = { home: null, draw: null, away: null, over_1_5: null, under_1_5: null, over_2_5: null, under_2_5: null, over_3_5: null, under_3_5: null };
-  
-  if (!event || !Array.isArray(event.bookmakers) || !event.bookmakers.length) return result;
-  
-  // Use first available bookmaker
-  const bookmaker = event.bookmakers[0];
-  
-  for (const market of (bookmaker.markets || [])) {
-    if (market.key === 'h2h') {
-      for (const outcome of (market.outcomes || [])) {
-        const name = String(outcome.name || '').toLowerCase();
-        if (name === 'draw') result.draw = outcome.price;
-        else if (teamNamesMatch(outcome.name, event.home_team)) result.home = outcome.price;
-        else if (teamNamesMatch(outcome.name, event.away_team)) result.away = outcome.price;
-      }
-    } else if (market.key === 'totals') {
-      for (const outcome of (market.outcomes || [])) {
-        const name = String(outcome.name || '').toLowerCase();
-        const point = outcome.point;
-        if (name === 'over' && point === 1.5) result.over_1_5 = outcome.price;
-        if (name === 'under' && point === 1.5) result.under_1_5 = outcome.price;
-        if (name === 'over' && point === 2.5) result.over_2_5 = outcome.price;
-        if (name === 'under' && point === 2.5) result.under_2_5 = outcome.price;
-        if (name === 'over' && point === 3.5) result.over_3_5 = outcome.price;
-        if (name === 'under' && point === 3.5) result.under_3_5 = outcome.price;
-      }
-    }
-  }
-  
-  return result;
-}
-
+// ── Main export ───────────────────────────────────────────────────────────────
+/**
+ * Fetch and cache odds for a fixture.
+ * Returns { home, draw, away, over_1_5, under_1_5, over_2_5, under_2_5, over_3_5, under_3_5, btts_yes, btts_no }
+ * or null if unavailable.
+ */
 export async function fetchAndCacheOddsForFixture(fixtureId, homeTeam, awayTeam, tournamentName) {
   if (!ODDS_API_KEY) {
-    // Log once per process start, not every call
     if (!globalThis.__oddsKeyWarned) {
-      console.warn('[OddsService] ODDS_API_KEY not set. Odds features disabled. Set it in Render dashboard.');
+      console.warn('[OddsService] ODDS_API_KEY not set. Odds features disabled.');
       globalThis.__oddsKeyWarned = true;
     }
     return null;
   }
-  
-  await ensureOddsTable();
-  
-  // Check if we have fresh cached odds for this fixture
+
+  // 1. Check fixture-level cache first
   try {
     const cached = await db.execute({
-      sql: `SELECT * FROM fixture_odds WHERE fixture_id = ? AND fetched_at > datetime('now', '-4 hours') LIMIT 1`,
+      sql: `SELECT * FROM fixture_odds WHERE fixture_id = ? AND fetched_at > datetime('now', '-${FIXTURE_CACHE_HOURS} hours') LIMIT 1`,
       args: [String(fixtureId)],
     });
     if (cached.rows?.[0]) {
       const r = cached.rows[0];
-      return {
-        home: r.home, draw: r.draw, away: r.away,
-        over_1_5: r.over_1_5, under_1_5: r.under_1_5,
-        over_2_5: r.over_2_5, under_2_5: r.under_2_5,
-        over_3_5: r.over_3_5, under_3_5: r.under_3_5,
-      };
+      // Only return if we have at least 1X2 odds
+      if (r.home) {
+        return {
+          home: r.home, draw: r.draw, away: r.away,
+          over_1_5: r.over_1_5, under_1_5: r.under_1_5,
+          over_2_5: r.over_2_5, under_2_5: r.under_2_5,
+          over_3_5: r.over_3_5, under_3_5: r.under_3_5,
+          btts_yes: r.btts_yes, btts_no: r.btts_no,
+        };
+      }
     }
   } catch {}
-  
-  const sportKey = getSportKey(tournamentName);
-  if (!sportKey) return null;
-  
-  const events = await fetchLeagueOdds(sportKey);
-  if (!events) return null;
-  
-  // Find matching event
-  let matchedEvent = null;
-  for (const event of events) {
-    if (teamNamesMatch(event.home_team, homeTeam) && teamNamesMatch(event.away_team, awayTeam)) {
-      matchedEvent = event;
-      break;
-    }
+
+  // 2. Get league slug
+  const leagueSlug = getLeagueSlug(tournamentName);
+  if (!leagueSlug) {
+    console.log(`[OddsService] No league slug for tournament: ${tournamentName}`);
+    return null;
   }
-  
-  if (!matchedEvent) return null;
-  
-  const odds = parseOddsFromEvent(matchedEvent);
-  const overUnder = JSON.stringify({ over_2_5: odds.over_2_5, under_2_5: odds.under_2_5, over_1_5: odds.over_1_5, under_1_5: odds.under_1_5, over_3_5: odds.over_3_5, under_3_5: odds.under_3_5 });
-  
+
+  // 3. Fetch league events (cached 6h — cheap!)
+  const events = await fetchLeagueEvents(leagueSlug);
+  if (!events.length) return null;
+
+  // 4. Fuzzy-match the fixture
+  const matched = events.find(ev =>
+    teamMatch(ev.home, homeTeam) && teamMatch(ev.away, awayTeam)
+  );
+
+  if (!matched) {
+    console.log(`[OddsService] No match found for: ${homeTeam} vs ${awayTeam} in ${leagueSlug}`);
+    return null;
+  }
+
+  console.log(`[OddsService] Matched event ${matched.id}: ${matched.home} vs ${matched.away}`);
+
+  // 5. Fetch odds for this event (costs 1 API call)
+  const oddsData = await fetchEventOdds(matched.id);
+  if (!oddsData) return null;
+
+  // 6. Parse — prefer SportyBet, fall back to Bet365
+  const bookmakerData = oddsData.bookmakers || {};
+  const sportyMarkets = bookmakerData['SportyBet'];
+  const bet365Markets = bookmakerData['Bet365'];
+  const markets = sportyMarkets || bet365Markets;
+  const bookmakerUsed = sportyMarkets ? 'SportyBet' : (bet365Markets ? 'Bet365' : null);
+
+  if (!markets) {
+    console.log(`[OddsService] No bookmaker data returned for event ${matched.id}`);
+    return null;
+  }
+
+  const odds = parseBookmakerOdds(markets);
+
+  // 7. Store in DB cache
+  const overUnder = JSON.stringify({
+    over_2_5: odds.over_2_5, under_2_5: odds.under_2_5,
+    over_1_5: odds.over_1_5, under_1_5: odds.under_1_5,
+    over_3_5: odds.over_3_5, under_3_5: odds.under_3_5,
+  });
+
   try {
     await db.execute({
-      sql: `INSERT OR REPLACE INTO fixture_odds (fixture_id, home, draw, away, over_1_5, under_1_5, over_2_5, under_2_5, over_3_5, under_3_5, btts_yes, btts_no, over_under, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, ?, datetime('now'))`,
-      args: [String(fixtureId), odds.home, odds.draw, odds.away, odds.over_1_5, odds.under_1_5, odds.over_2_5, odds.under_2_5, odds.over_3_5, odds.under_3_5, overUnder],
+      sql: `INSERT OR REPLACE INTO fixture_odds
+            (fixture_id, home, draw, away, over_1_5, under_1_5, over_2_5, under_2_5, over_3_5, under_3_5, btts_yes, btts_no, over_under, bookmaker, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      args: [
+        String(fixtureId),
+        odds.home, odds.draw, odds.away,
+        odds.over_1_5, odds.under_1_5,
+        odds.over_2_5, odds.under_2_5,
+        odds.over_3_5, odds.under_3_5,
+        odds.btts_yes, odds.btts_no,
+        overUnder,
+        bookmakerUsed || 'SportyBet',
+      ],
     });
+    console.log(`[OddsService] Cached odds for fixture ${fixtureId} (${bookmakerUsed}) — 1X2: ${odds.home}/${odds.draw}/${odds.away} | Over2.5: ${odds.over_2_5} | BTTS: ${odds.btts_yes}`);
   } catch (err) {
-    console.error('[OddsService] Cache write error:', err.message);
+    console.error('[OddsService] DB write error:', err.message);
   }
-  
+
   return odds;
 }
