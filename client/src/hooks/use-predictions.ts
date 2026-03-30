@@ -8,10 +8,18 @@ export function usePrediction(fixtureId: string | null, onError?: (code: string)
       try {
         return await fetchApi(`/predict/${fixtureId}/explain`);
       } catch (err: any) {
-        // Check if it's a daily limit error
-        const msg = err.message || "";
-        if (msg.includes("daily_limit") || msg.includes("Daily limit")) {
+        // Robust check — match on message text OR structured error code
+        const msg = (err.message || "").toLowerCase();
+        const code = err.code || "";
+        if (
+          code === "daily_limit_reached" ||
+          msg.includes("daily_limit") ||
+          msg.includes("daily limit") ||
+          msg.includes("limit reached")
+        ) {
           onError?.("daily_limit_reached");
+        } else if (code === "subscription_required" || msg.includes("subscription required")) {
+          onError?.("subscription_required");
         }
         throw err;
       }
