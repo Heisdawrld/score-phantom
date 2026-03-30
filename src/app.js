@@ -129,7 +129,7 @@ async function autoSeed() {
 }
 
 // ── Auto-enrichment: runs at startup and every 4 hours ───────────────────────
-const ENRICH_BATCH = 50;
+const ENRICH_BATCH = 200; // full week of fixtures in one pass
 const ENRICH_DELAY_MS = 2500; // increased to avoid rate limiting
 
 async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
@@ -301,13 +301,15 @@ app.listen(PORT, async () => {
 
   await autoSeed();
 
-  // Enrich today's fixtures immediately after seed (non-blocking)
-  autoEnrich().catch((err) => console.error("[AutoEnrich] startup error:", err.message));
+  // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
+  // This ensures all fixtures for the week get enriched on startup
+  console.log('[AutoEnrich] Starting full startup enrichment pass...');
+  autoEnrich({ limit: 200 }).catch((err) => console.error("[AutoEnrich] startup error:", err.message));
 
   // Re-run enrichment every 4 hours to catch any newly added or failed fixtures
   setInterval(() => {
     autoEnrich().catch((err) => console.error("[AutoEnrich] scheduled error:", err.message));
-  }, 4 * 60 * 60 * 1000);
+  }, 60 * 60 * 1000); // every 1 hour
 
   // Re-seed fixtures daily at midnight Lagos time
   function scheduleNextMidnightSeed() {
