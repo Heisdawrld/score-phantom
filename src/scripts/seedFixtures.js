@@ -79,7 +79,7 @@ async function main() {
   for (let i = 0; i <= 14; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     process.stdout.write(`Fetching ${dateStr}... `);
     const fixtures = await fetchFixturesByDate(dateStr);
     console.log(`${fixtures.length} fixtures`);
