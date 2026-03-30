@@ -63,22 +63,36 @@ function RedirectTo({ path }: { path: string }) {
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: user, isLoading, error } = useAuth();
+  const { data: user, isLoading, error, refetch } = useAuth();
   const { toast } = useToast();
   const [location] = useLocation();
+  const [retryCount, setRetryCount] = React.useState(0);
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('sp_token');
 
+  // Auto-retry up to 3 times with 3s delay (handles Render cold starts)
+  React.useEffect(() => {
+    if (error && hasToken && retryCount < 3) {
+      const timer = setTimeout(() => {
+        setRetryCount(c => c + 1);
+        refetch();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, hasToken, retryCount]);
+
+  // Only show sign-in toast when we're sure there's no session at all
   useEffect(() => {
-    // Only toast if actually trying to access a protected page without auth
-    if (!isLoading && (error || !user) && location !== "/login" && location !== "/signup") {
+    if (!isLoading && !error && !user && !hasToken && location !== '/login' && location !== '/signup') {
       toast({
-        title: "Sign in required",
-        description: "Please sign in to access ScorePhantom.",
-        variant: "destructive",
+        title: 'Sign in required',
+        description: 'Please sign in to access ScorePhantom.',
+        variant: 'destructive',
         duration: 3000,
       });
     }
   }, [isLoading, error, user]);
 
+  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -87,25 +101,39 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  // Don't boot user if token exists but /auth/me errored (e.g. cold start)
-  const hasToken = !!localStorage.getItem('sp_token');
-  if (!user && !hasToken) {
-    return <RedirectTo path="/login" />;
-  }
+  // Auth errored but token exists — Render cold start or network blip
+  // Show reconnecting screen with auto-retry and manual retry button
   if (error && hasToken) {
-    // Server error with valid token — show spinner, don't logout
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
+        {retryCount < 3 ? (
+          <>
+            <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <p className="text-sm text-muted-foreground">Reconnecting... ({retryCount + 1}/3)</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">Connection failed. Server may be starting up.</p>
+            <button
+              onClick={() => { setRetryCount(0); refetch(); }}
+              className="px-6 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold"
+            >
+              Try Again
+            </button>
+          </>
+        )}
       </div>
     );
   }
+
+  // No user and no token — genuine logout
   if (!user) {
     return <RedirectTo path="/login" />;
   }
 
   return <Component />;
 }
+
 
 function Router() {
   return (
