@@ -427,7 +427,7 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     // Groq
     checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
     // Flutterwave
-    checks.flutterwave = process.env.FLW_SECRET_KEY ? 'configured' : 'not_configured';
+    checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
 
     const allOk = Object.values(checks).every(v => v === 'ok' || v.includes('configured'));
     return res.json({ status: allOk ? 'healthy' : 'degraded', checks });
