@@ -87,7 +87,20 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (error || !user) {
+  // Don't boot user if token exists but /auth/me errored (e.g. cold start)
+  const hasToken = !!localStorage.getItem('sp_token');
+  if (!user && !hasToken) {
+    return <RedirectTo path="/login" />;
+  }
+  if (error && hasToken) {
+    // Server error with valid token — show spinner, don't logout
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+      </div>
+    );
+  }
+  if (!user) {
     return <RedirectTo path="/login" />;
   }
 
