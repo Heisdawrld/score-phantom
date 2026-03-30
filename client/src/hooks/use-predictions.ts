@@ -1,7 +1,8 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
 export function usePrediction(fixtureId: string | null, onError?: (code: string) => void) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: ["/api/predict", fixtureId],
     queryFn: async () => {
@@ -27,6 +28,12 @@ export function usePrediction(fixtureId: string | null, onError?: (code: string)
     enabled: !!fixtureId,
     staleTime: 0,
     retry: false,
+    // Invalidate fixtures list so enrichment badge updates immediately
+    meta: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/fixtures"] });
+      },
+    },
   });
 }
 
