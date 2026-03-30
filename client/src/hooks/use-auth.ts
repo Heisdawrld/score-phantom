@@ -15,7 +15,11 @@ export function useAuth() {
       const data = await fetchApi("/auth/me");
       return UserSchema.parse(data);
     },
-    retry: false,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 401 (bad token), but do retry on network/server errors
+      if (error?.message?.includes('401') || error?.message?.includes('Unauthorized')) return false;
+      return failureCount < 2;
+    },
     staleTime: 5 * 60 * 1000,
   });
 }
