@@ -448,9 +448,14 @@ export default function Dashboard() {
     }
 
     return filtered.reduce((acc: any, fixture) => {
-      const key = fixture.tournament_name || "Other Competitions";
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(fixture);
+      // Use tournament_id as key so "Ligue 1 France" and "Ligue 1 Algeria"
+      // don't get merged into the same group (they share tournament_name but have different IDs)
+      const groupId = fixture.tournament_id
+        ? String(fixture.tournament_id)
+        : (fixture.tournament_name || "Other Competitions");
+      const key = groupId;
+      if (!acc[key]) acc[key] = { label: fixture.tournament_name || "Other Competitions", fixtures: [] };
+      acc[key].fixtures.push(fixture);
       return acc;
     }, {});
   }, [data?.fixtures, searchQuery]);
@@ -478,7 +483,8 @@ export default function Dashboard() {
     }
   };
 
-  const leagues = Object.entries(groupedFixtures).sort(([a], [b]) => a.localeCompare(b));
+  const leagues = Object.entries(groupedFixtures)
+    .sort(([, a]: any, [, b]: any) => a.label.localeCompare(b.label));
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
@@ -594,11 +600,11 @@ export default function Dashboard() {
               <p className="text-xs opacity-60">{isSameDay(selectedDate, dates[0]) ? 'Fixtures loading — check back soon.' : 'No matches scheduled.'}</p>
             </div>
           ) : (
-            leagues.map(([tournament, fixtures]: [string, any], idx) => (
+            leagues.map(([groupId, group]: [string, any], idx) => (
               <LeagueGroup
-                key={tournament}
-                tournament={tournament}
-                fixtures={fixtures}
+                key={groupId}
+                tournament={group.label}
+                fixtures={group.fixtures}
                 onSelectFixture={handleSelectFixture}
                 defaultOpen={idx < 2}
               />
