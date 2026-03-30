@@ -251,6 +251,11 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfi
  * @returns {object} enrichment data bundle
  */
 export async function fetchAndStoreEnrichment(fixture) {
+  // Guard: skip fixtures with missing team IDs
+  if (!fixture.home_team_id || !fixture.away_team_id || String(fixture.home_team_id).trim() === '' || String(fixture.away_team_id).trim() === '') {
+    console.warn('[enrichmentService] Skipping ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' — missing team IDs');
+    return { h2h: [], homeForm: [], awayForm: [], standings: [], homeMomentum: null, awayMomentum: null, homeProfile: null, awayProfile: null, lineupModifier: null, completeness: { score: 0, tier: 'thin', checks: {} }, homeStats: null, awayStats: null, matchStats: null, matchEvents: null, odds: null };
+  }
   console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
 
   // ── Step 1: Core data (SEQUENTIAL — avoids 503 rate limiting) ──────────────
