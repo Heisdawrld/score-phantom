@@ -34,6 +34,54 @@ function EnrichmentBadge({ status }: { status?: string | null }) {
   );
 }
 
+
+// ── Tournament ID → Country lookup ────────────────────────────────────────────
+// Used to disambiguate leagues that share the same name (e.g. multiple "Ligue 1"
+// or "Premier League" from different countries).
+const TOURNAMENT_COUNTRY: Record<string, string> = {
+  // Ligue 1/2
+  '5': 'France', '35': 'Algeria', '84': 'Senegal', '42': 'Tunisia',
+  '97': 'France', '229': 'Ivory Coast', '343': 'Morocco',
+  // Premier League
+  '7': 'England', '16': 'Scotland', '30': 'Russia', '36': 'Nigeria',
+  '37': 'South Africa', '64': 'Bangladesh', '80': 'Tajikistan',
+  '86': 'India', '91': 'Zambia', '183': 'Thailand', '238': 'Rwanda',
+  '258': 'Uganda', '273': 'Gambia', '278': 'Ethiopia', '281': 'Iraq',
+  '282': 'Jamaica', '287': 'Bahrain', '292': 'South Sudan',
+  '313': 'Eswatini', '399': 'Liberia',
+  // Primera Division
+  '25': 'Uruguay', '46': 'Dominican Rep', '47': 'Cuba', '48': 'Paraguay',
+  '52': 'Bolivia', '54': 'El Salvador',
+  // Primera B
+  '259': 'Ecuador', '265': 'Colombia',
+  // Liga Nacional
+  '55': 'Guatemala', '56': 'Honduras',
+  // Super League
+  '9': 'Greece', '15': 'Kosovo', '26': 'Switzerland', '63': 'China',
+  '290': 'Egypt', '408': 'Bangladesh',
+  // 1st League
+  '72': 'Hungary', '138': 'Bosnia', '187': 'Moldova', '239': 'Armenia',
+  // 1st Division
+  '44': 'Andorra', '132': 'Lithuania', '147': 'Estonia',
+  '216': 'Yemen', '327': 'South Africa',
+  // 2nd Division
+  '144': 'Croatia', '148': 'Denmark',
+  // Cup
+  '126': 'Serbia', '135': 'Turkmenistan', '190': 'Malta',
+  '202': 'N. Macedonia', '272': 'Iceland', '295': 'Luxembourg', '434': 'Armenia',
+  // Challenge League
+  '191': 'Malta', '338': 'Switzerland',
+  // Serie A/B/C
+  '4': 'Brazil', '24': 'Brazil B', '95': 'Brazil Ser.B',
+};
+
+function getTournamentLabel(tournamentName: string, tournamentId: string | number | null | undefined): string {
+  if (!tournamentId) return tournamentName;
+  const country = TOURNAMENT_COUNTRY[String(tournamentId)];
+  if (country) return tournamentName + ' (' + country + ')';
+  return tournamentName;
+}
+
 // Live Scores Section
 function LiveSection() {
   const [open, setOpen] = useState(false);
@@ -454,7 +502,7 @@ export default function Dashboard() {
         ? String(fixture.tournament_id)
         : (fixture.tournament_name || "Other Competitions");
       const key = groupId;
-      if (!acc[key]) acc[key] = { label: fixture.tournament_name || "Other Competitions", fixtures: [] };
+      if (!acc[key]) acc[key] = { label: getTournamentLabel(fixture.tournament_name || "Other Competitions", fixture.tournament_id), fixtures: [] };
       acc[key].fixtures.push(fixture);
       return acc;
     }, {});
