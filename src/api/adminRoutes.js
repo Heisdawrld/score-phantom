@@ -353,9 +353,9 @@ router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, r
 router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const date = req.body?.date || new Date().toISOString().slice(0, 10);
-    const { fetchFixturesByDate } = await import('../services/fixtureSeeder.js');
+    const { seedFixtures } = await import("../services/fixtureSeeder.js");
     // Run in background
-    fetchFixturesByDate(date).then(r => console.log('[Admin] Reseed complete:', r)).catch(e => console.error('[Admin] Reseed error:', e.message));
+    seedFixtures({ days: 7, clearFirst: true }).then(r => console.log("[Admin] Reseed complete:", r)).catch(e => console.error("[Admin] Reseed error:", e.message));
     return res.json({ success: true, message: `Reseeding fixtures for ${date} in background...` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
