@@ -46,6 +46,7 @@ import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,7 @@ function App() {
           </WouterRouter>
           <Toaster />
           <UpdateBanner />
+          <InstallPrompt />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
