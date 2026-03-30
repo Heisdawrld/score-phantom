@@ -332,6 +332,20 @@ app.listen(PORT, async () => {
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');
   }
   scheduleNextMidnightSeed();
+
+  // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
+  // Without this, Render spins down after 15 min of inactivity causing
+  // the server to cold-start on the next request, which makes /auth/me
+  // fail and logs users out on browser refresh.
+  const SELF_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
+  setInterval(() => {
+    fetch(SELF_URL + '/api/version')
+      .then(() => console.log('[KeepAlive] ping ok'))
+      .catch((e) => console.warn('[KeepAlive] ping failed:', e.message));
+  }, 10 * 60 * 1000); // every 10 minutes
+  console.log('[KeepAlive] Self-ping started — pinging every 10 min');
+
 });
+
 
 export default app;
