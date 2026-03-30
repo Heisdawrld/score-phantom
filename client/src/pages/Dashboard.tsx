@@ -457,10 +457,14 @@ export default function Dashboard() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  if (user && user.access_status === "expired") {
-    setLocation("/paywall");
-    return null;
-  }
+  // Use useEffect so this only fires once, not on every render (prevents redirect loop)
+  useEffect(() => {
+    if (user && user.access_status === "expired") {
+      setLocation("/paywall");
+    }
+  }, [user?.access_status]);
+
+  if (user && user.access_status === "expired") return null;
 
   const handleSelectFixture = (id: string) => {
     setDailyLimitHit(false);
