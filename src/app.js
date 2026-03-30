@@ -120,8 +120,8 @@ async function autoSeed() {
       return;
     }
 
-    console.log(`[AutoSeed] No fixtures for today (${today}) — clearing stale data and reseeding...`);
-    const result2 = await seedFixtures({ days: 7, clearFirst: true });
+    console.log(`[AutoSeed] No fixtures for today — reseeding without clearing (safe startup fill)...`);
+    const result2 = await seedFixtures({ days: 7, clearFirst: false });
     console.log(`[AutoSeed] Seeded ${result2.inserted} fixtures.`);
   } catch (err) {
     console.error("[AutoSeed] Failed:", err.message);
