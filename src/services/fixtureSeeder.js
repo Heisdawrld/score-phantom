@@ -126,7 +126,7 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
   for (let i = 0; i <= days; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const fixtures = await fetchFixturesByDate(dateStr);
     log(`[Seeder] ${dateStr}: ${fixtures.length} fixtures`);
     allFixtures.push(...fixtures);
