@@ -64,7 +64,7 @@ if (fs.existsSync(clientDistPath)) {
 
 
 // Version endpoint — frontend polls this to detect new deploys
-const BUILD_VERSION = '2026-03-29T04:51:57.005Z';
+const BUILD_VERSION = process.env.BUILD_VERSION || new Date().toISOString();
 app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
 });
