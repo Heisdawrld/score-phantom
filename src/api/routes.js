@@ -674,7 +674,7 @@ router.get("/usage", requireAuth, async (req, res) => {
 // Allows owner to clear their own trial count for testing / debugging.
 router.post("/reset-trial", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     await db.execute({
       sql: `DELETE FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
       args: [req.user.id, today],
