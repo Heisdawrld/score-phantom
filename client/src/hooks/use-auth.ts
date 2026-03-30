@@ -15,16 +15,8 @@ export function useAuth() {
       const data = await fetchApi("/auth/me");
       return UserSchema.parse(data);
     },
-    // Don't retry on 401 — that means the token is genuinely invalid.
-    // Do retry on 503/network errors (Render cold start takes ~30s).
-    retry: (failureCount, error: any) => {
-      const msg = String((error as any)?.message || '');
-      if (msg.includes('401') || msg.includes('Unauthorized')) return false;
-      return failureCount < 1; // 1 quick retry from React Query, ProtectedRoute handles the rest
-    },
-    retryDelay: 2000,
+    retry: false,
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 }
 
