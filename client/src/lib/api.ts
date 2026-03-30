@@ -32,7 +32,7 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    if (response.status === 401 && !path.includes("/auth/me")) {
+    if (response.status === 401) {
       removeAuthToken();
       window.location.href = "/login";
     }
