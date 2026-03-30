@@ -15,6 +15,10 @@ export function useFixtures(date: string) {
       }).parse(data);
     },
     enabled: !!date,
+    // Refetch every 90s so enrichment badges update automatically
+    refetchInterval: 90 * 1000,
+    refetchOnWindowFocus: true,
+    staleTime: 30 * 1000,
   });
 }
 
