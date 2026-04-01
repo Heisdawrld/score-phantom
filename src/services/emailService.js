@@ -16,15 +16,20 @@ const EMAIL_FROM = process.env.EMAIL_FROM   || 'Davidadiele7@gmail.com';
 export async function sendPasswordResetEmail(toEmail, resetToken) {
   if (!API_KEY) {
     console.warn('[Email] BREVO_API_KEY not set.');
-    console.log('[Email] DEV reset link:', `${APP_URL}/reset-password?token=${resetToken}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Email] DEV reset link:', `${APP_URL}/reset-password?token=${resetToken}`);
+    }
     return { success: false, reason: 'no_smtp_config' };
   }
 
   const resetLink = `${APP_URL}/reset-password?token=${resetToken}`;
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'api-key': API_KEY,
         'Content-Type': 'application/json',
@@ -55,9 +60,11 @@ export async function sendPasswordResetEmail(toEmail, resetToken) {
       }),
     });
 
+    clearTimeout(timeout);
+
     if (res.status === 201) {
       const data = await res.json().catch(() => ({}));
-      console.log('[Email] ✅ Reset sent to', toEmail, '| messageId:', data.messageId);
+      console.log('[Email] Reset sent to', toEmail, '| messageId:', data.messageId);
       return { success: true, id: data.messageId };
     }
 

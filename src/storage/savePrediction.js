@@ -46,6 +46,14 @@ export async function initPredictionsTable() {
   for (const sql of migrations) {
     try { await db.execute(sql); } catch (_) { /* column already exists */ }
   }
+
+  // Ensure indexes exist for cache lookup performance
+  const indexes = [
+    `CREATE INDEX IF NOT EXISTS idx_predictions_v2_updated_at ON predictions_v2(updated_at)`,
+  ];
+  for (const sql of indexes) {
+    try { await db.execute(sql); } catch (_) { /* already exists */ }
+  }
 }
 
 /**
