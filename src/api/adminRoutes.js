@@ -14,8 +14,11 @@ import jwt from "jsonwebtoken";
 import { computeAccessStatus } from "../auth/authRoutes.js";
 
 const router = express.Router();
-// Must match authRoutes.js fallback exactly
-const JWT_SECRET = process.env.JWT_SECRET || "scorephantom_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET not set in adminRoutes.js');
+  process.exit(1);
+}
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 if (!ADMIN_EMAIL) console.warn('[Admin] ADMIN_EMAIL not set');
 const PLAN_DURATION_DAYS = 30;
@@ -49,7 +52,6 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       }),
       db.execute(`SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified'`),
       db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
-      db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
     const users = usersResult.rows || [];
@@ -75,7 +77,6 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
         currency: 'NGN',
         total: Number(totalRevenue.rows[0].total || 0),
         total_payments: Number(totalRevenue.rows[0].count || 0),
-        pending_verification: Number(pendingResult.rows[0].count || 0),
         pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {
@@ -314,8 +315,6 @@ router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
   return res.json({ pending: pending.length, fixtures: pending.map(f => ({ id: f.fixture_id, home: f.home_team, away: f.away_team, market: f.best_pick_market, selection: f.best_pick_selection })) });
 });
 
-export default router;
-
 // ── POST /clear-odds-cache — wipe league odds cache so slugs re-fetch ─────────
 router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
   try {
@@ -550,15 +549,7 @@ router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
 
-// Keep old debug-odds route
-router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
-  return res.json({ message: 'Use /audit-all-slugs instead' });
-});
-
-// Keep old debug-odds route
-router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
-  return res.json({ message: 'Use /audit-all-slugs instead' });
-});
+// Debug odds for a specific fixture
 router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
   const { fixtureId } = req.params;
   try {
@@ -604,3 +595,5 @@ router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res
     });
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
+
+export default router;

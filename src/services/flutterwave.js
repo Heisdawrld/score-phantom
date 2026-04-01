@@ -16,16 +16,24 @@ if (!FLW_SECRET_KEY) {
 }
 
 async function flwRequest(method, path, body = null) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
   const opts = {
     method,
     headers: {
       'Authorization': `Bearer ${FLW_SECRET_KEY}`,
       'Content-Type':  'application/json',
     },
+    signal: controller.signal,
   };
   if (body) opts.body = JSON.stringify(body);
 
-  const res  = await fetch(`${FLW_BASE_URL}${path}`, opts);
+  let res;
+  try {
+    res = await fetch(`${FLW_BASE_URL}${path}`, opts);
+  } finally {
+    clearTimeout(timeout);
+  }
   const data = await res.json();
 
   if (!res.ok || data.status === 'error') {
@@ -67,14 +75,25 @@ export async function verifyTransaction(transactionId) {
 
 // ── Webhook signature verification ───────────────────────────────────────────
 // Flutterwave sends verif-hash header = your FLUTTERWAVE_WEBHOOK_HASH
+import crypto from 'crypto';
+
 export function verifyWebhookSignature(req) {
   const signature = req.headers['verif-hash'];
   const expected  = process.env.FLUTTERWAVE_WEBHOOK_HASH || '';
   if (!expected) {
-    console.warn('[Flutterwave] FLUTTERWAVE_WEBHOOK_HASH not set — skipping webhook validation!');
-    return true;
+    console.error('[Flutterwave] FLUTTERWAVE_WEBHOOK_HASH not set — rejecting webhook for security.');
+    return false;
   }
-  return signature === expected;
+  if (!signature) return false;
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'utf8'),
+      Buffer.from(expected, 'utf8')
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function isConfigured() {

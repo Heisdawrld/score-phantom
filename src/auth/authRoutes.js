@@ -329,12 +329,13 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
     const emailResult = await sendPasswordResetEmail(normalizedEmail, resetToken);
 
     if (!emailResult.success) {
-      // Email not configured - return error so frontend can show a useful message
       console.error('[PasswordReset] Email send failed:', emailResult.reason);
-      return res.status(503).json({ 
-        error: "Email service not configured. Please contact support.",
-        _dev_link: process.env.NODE_ENV !== 'production' ? `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/reset-password?token=${resetToken}` : undefined,
-      });
+      const response = { error: "Email service not configured. Please contact support." };
+      // Only include reset link in non-production environments
+      if (process.env.NODE_ENV !== 'production') {
+        response._dev_link = `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/reset-password?token=${resetToken}`;
+      }
+      return res.status(503).json(response);
     }
 
     return res.json({ success: true, message: "Reset link sent to your email." });

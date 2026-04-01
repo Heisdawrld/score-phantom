@@ -120,17 +120,18 @@ export async function chatAboutMatch(payload, message, history = []) {
     { role: "system", content: systemContent },
   ];
 
-  // Add conversation history
+  // Add conversation history (limit to last 10 messages to prevent abuse)
   if (Array.isArray(history)) {
-    for (const msg of history) {
-      if (msg.role && msg.content) {
-        messages.push({ role: msg.role, content: msg.content });
+    const recentHistory = history.slice(-10);
+    for (const msg of recentHistory) {
+      if (msg.role && msg.content && (msg.role === 'user' || msg.role === 'assistant')) {
+        messages.push({ role: msg.role, content: String(msg.content).slice(0, 2000) });
       }
     }
   }
 
-  // Add current message
-  messages.push({ role: "user", content: String(message || "") });
+  // Add current message (cap length to prevent abuse)
+  messages.push({ role: "user", content: String(message || "").slice(0, 1000) });
 
   try {
     const response = await groq.chat.completions.create({
