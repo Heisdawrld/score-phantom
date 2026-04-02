@@ -50,7 +50,17 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
         sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND paid_at LIKE ?`,
         args: [`${todayStart}%`],
       }),
-      db.execute(`SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified'`),
+      // Revenue = verified payments + estimated from premium users without payment records (manual upgrades)
+      db.execute(`
+        SELECT
+          COUNT(*) as count,
+          COALESCE(SUM(amount), 0) +
+          (SELECT COUNT(*) * 3000 FROM users
+           WHERE (status = 'premium' OR (premium_expires_at IS NOT NULL AND premium_expires_at > datetime('now')))
+           AND id NOT IN (SELECT DISTINCT user_id FROM payments WHERE status = 'verified')
+          ) as total
+        FROM payments WHERE status = 'verified'
+      `),
       db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
