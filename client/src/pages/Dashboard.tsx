@@ -443,6 +443,60 @@ function LeagueGroup({
 }
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
+
+// ── Email Verify Gate ────────────────────────────────────────────────────
+function EmailVerifyGate({ email, token }: { email: string; token: string }) {
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const resend = async () => {
+    setLoading(true); setErr('');
+    try {
+      const r = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to resend');
+      setSent(true);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-6 text-center">
+      <div className="w-16 h-16 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center mb-6">
+        <span className="text-3xl">✉️</span>
+      </div>
+      <h2 className="font-display text-2xl font-bold text-white mb-3">Verify your email</h2>
+      <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mb-2">
+        We sent a link to <strong className="text-white">{email}</strong>.{' '}
+        Click it to activate your{' '}
+        <span className="text-primary font-semibold">1-day free trial</span>.
+      </p>
+      <p className="text-xs text-muted-foreground mb-6">
+        Check your spam folder if you don&apos;t see it.
+      </p>
+      {sent ? (
+        <p className="text-primary text-sm font-semibold">✅ Verification email resent!</p>
+      ) : (
+        <button
+          onClick={resend}
+          disabled={loading}
+          className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Sending...' : 'Resend verification email'}
+        </button>
+      )}
+      {err && <p className="text-destructive text-xs mt-2">{err}</p>}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { data: user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -567,19 +621,7 @@ export default function Dashboard() {
 
         {/* Email verification HARD GATE */}
         {user && (user as any).email_verified === false && (
-          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center mb-6">
-              <span className="text-3xl">✉️</span>
-            </div>
-            <h2 className="font-display text-2xl font-bold text-white mb-3">Verify your email</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mb-6">
-              We sent a verification link to <strong className="text-white">{(user as any).email}</strong>.
-              Click it to activate your <span className="text-primary font-semibold">1-day free trial</span>.
-            </p>
-            <p className="text-xs text-muted-foreground max-w-xs">
-              Didn&#39;t get it? Check your spam folder, or contact support.
-            </p>
-          </div>
+          <EmailVerifyGate email={(user as any).email} token={localStorage.getItem('sp_token') || ''} />
         )}
         {/* Daily limit hit banner */}
         {dailyLimitHit && (

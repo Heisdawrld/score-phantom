@@ -840,4 +840,26 @@ router.post("/payment/confirm", requireAuth, async (req, res) => {
   }
 });
 
+
+// POST /api/auth/resend-verification — re-send verification email for logged-in user
+router.post("/resend-verification", requireAuth, authLimiter, async (req, res) => {
+  try {
+    const result = await db.execute({ sql: 'SELECT * FROM users WHERE id = ? LIMIT 1', args: [req.user.id] });
+    const user = result.rows?.[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.email_verified === 1) return res.json({ success: true, message: 'Email already verified' });
+
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    await db.execute({ sql: 'UPDATE users SET email_verification_token = ? WHERE id = ?', args: [verifyToken, user.id] });
+    const result2 = await sendVerificationEmail(user.email, verifyToken);
+    if (!result2.success && result2.reason === 'no_smtp_config') {
+      return res.status(503).json({ error: 'Email service not configured. Contact support.' });
+    }
+    return res.json({ success: true, message: 'Verification email sent' });
+  } catch (err) {
+    console.error('[ResendVerification]', err);
+    return res.status(500).json({ error: 'Failed to resend verification email' });
+  }
+});
+
 export default router;
