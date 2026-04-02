@@ -276,7 +276,7 @@ router.get("/verify-email", async (req, res) => {
           try {
             localStorage.setItem('sp_token', '${token}');
           } catch(e) {}
-          setTimeout(function(){ window.location.href = '${appUrl}/'; }, 2500);
+          setTimeout(function(){ window.location.href = '${appUrl}/?verified=success'; }, 2500);
         </script>`
       : '';
     const btn   = success
@@ -338,7 +338,7 @@ router.get("/verify-email", async (req, res) => {
     const freshUser = await db.execute({ sql: 'SELECT * FROM users WHERE id = ? LIMIT 1', args: [user.id] });
     const verifiedUser = freshUser.rows?.[0];
     const loginToken = verifiedUser ? signToken(verifiedUser) : null;
-    return res.send(htmlPage(true, 'Email verified!', 'Your email is confirmed. Your 1-day free trial starts now. You will be redirected automatically…', loginToken));
+    return res.send(htmlPage(true, 'Email verified!', 'Your email is confirmed. Your free trial is now active — redirecting you to the app…', loginToken));
   } catch (err) {
     console.error('[VerifyEmail]', err.message);
     return res.status(500).send(htmlPage(false, 'Something went wrong', 'Please try again or contact support.'));

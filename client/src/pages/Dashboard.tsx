@@ -449,6 +449,7 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [checking, setChecking] = useState(false);
 
   // Lock body scroll while gate is visible
   useEffect(() => {
@@ -456,6 +457,27 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
+
+  // Auto-poll every 5s — if user verified in another tab, dismiss automatically
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      if (!token) return;
+      try {
+        const r = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        const isVerified = d?.user?.email_verified === true || d?.user?.email_verified === 1;
+        if (isVerified) {
+          // Token in localStorage may have been updated by the verification page
+          // Force a full reload to pick up new state cleanly
+          window.location.href = '/?verified=success';
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [token]);
 
   const resend = async () => {
     setLoading(true); setErr('');
@@ -474,40 +496,81 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
     }
   };
 
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const r = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const d = await r.json();
+        const isVerified = d?.user?.email_verified === true || d?.user?.email_verified === 1;
+        if (isVerified) {
+          window.location.href = '/?verified=success';
+          return;
+        }
+      }
+      setErr('Not verified yet. Check your inbox and click the link first.');
+    } catch {
+      setErr('Could not check status. Try again.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-6 text-center">
-      <div className="w-16 h-16 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center mb-6">
-        <span className="text-3xl">✉️</span>
+      {/* Animated envelope icon */}
+      <div className="relative w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
+        <span className="text-4xl">✉️</span>
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full animate-pulse" />
       </div>
-      <h2 className="font-display text-2xl font-bold text-white mb-3">Verify your email</h2>
-      <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mb-2">
-        We sent a link to <strong className="text-white">{email}</strong>.{' '}
-        Click it to activate your{' '}
-        <span className="text-primary font-semibold">1-day free trial</span>.
+
+      <h2 className="font-display text-2xl font-bold text-white mb-3">Check your inbox</h2>
+      <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mb-1">
+        We sent a verification link to
       </p>
-      <p className="text-xs text-muted-foreground mb-6">
-        Check your spam folder if you don&apos;t see it.
+      <p className="text-white font-semibold text-sm mb-4">{email}</p>
+
+      <div className="max-w-xs w-full bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 text-left space-y-2">
+        <div className="flex items-center gap-2 text-xs text-white/70">
+          <span className="text-primary font-bold">1.</span> Open the email from ScorePhantom
+        </div>
+        <div className="flex items-center gap-2 text-xs text-white/70">
+          <span className="text-primary font-bold">2.</span> Click <strong className="text-white">"Verify my email"</strong>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-white/70">
+          <span className="text-primary font-bold">3.</span> You'll be redirected back here automatically
+        </div>
+      </div>
+
+      <p className="text-xs text-white/30 mb-5">
+        Can't find it? Check your spam / promotions folder.
       </p>
+
+      {/* Primary CTA — check now */}
+      <button
+        onClick={checkNow}
+        disabled={checking}
+        className="w-full max-w-xs bg-primary text-black font-bold py-3 rounded-xl text-sm mb-3 disabled:opacity-60 transition-all active:scale-95"
+      >
+        {checking ? 'Checking...' : "I've verified my email →"}
+      </button>
+
+      {/* Resend */}
       {sent ? (
-        <p className="text-primary text-sm font-semibold">✅ Verification email resent!</p>
+        <p className="text-primary text-sm font-semibold">✅ New email sent! Check your inbox.</p>
       ) : (
         <button
           onClick={resend}
           disabled={loading}
-          className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 disabled:opacity-50 transition-colors"
+          className="text-sm text-white/40 hover:text-white/70 disabled:opacity-50 transition-colors underline underline-offset-2"
         >
           {loading ? 'Sending...' : 'Resend verification email'}
         </button>
       )}
-      {err && <p className="text-destructive text-xs mt-2">{err}</p>}
 
-      {/* Force-check: if user already clicked the link but gate is still showing */}
-      <button
-        onClick={() => window.location.reload()}
-        className="mt-6 text-xs text-white/30 hover:text-white/60 transition-colors underline underline-offset-2"
-      >
-        Already verified? Tap here to open the app
-      </button>
+      {err && <p className="text-orange-400 text-xs mt-3 max-w-xs">{err}</p>}
     </div>
   );
 }
@@ -612,24 +675,31 @@ export default function Dashboard() {
         {/* Trial subscribe banner */}
         {isTrial && (
           <div
-            className="flex items-center gap-3 p-3 rounded-2xl bg-primary/8 border border-primary/20 cursor-pointer hover:bg-primary/12 transition-all"
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/25 cursor-pointer hover:border-primary/40 transition-all group"
             onClick={() => setLocation("/paywall")}
           >
             <Crown className="w-5 h-5 text-primary shrink-0" />
-            <p className="text-sm text-white/90 flex-1">
-              <span className="font-bold text-primary">Free trial active.</span>{" "}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-primary tracking-wide leading-none mb-0.5">Free Trial Active</p>
               {usageData ? (
-                <>
-                  <span className={usageData.remaining <= 2 ? "text-orange-400 font-bold" : ""}>
+                <p className="text-xs text-white/60">
+                  <span className={usageData.remaining === 0 ? "text-red-400 font-bold" : usageData.remaining <= 1 ? "text-orange-400 font-bold" : "text-white/80 font-semibold"}>
                     {usageData.remaining}/{usageData.limit} predictions left today
-                  </span>{" · "}
-                </>
+                  </span>
+                  {" · "}No AI chat · No ACCA builder
+                </p>
               ) : (
-                "2 predictions/day · "
+                <p className="text-xs text-white/60">
+                  <span className="text-white/80 font-semibold">2 predictions/day</span>
+                  {" · "}No AI chat · No ACCA builder
+                </p>
               )}
-              No AI chat · No ACCA
-            </p>
-            <Button size="sm" className="shrink-0 h-7 text-xs">Upgrade</Button>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl group-hover:opacity-90 transition-opacity">
+                Upgrade
+              </span>
+            </div>
           </div>
         )}
 
@@ -640,18 +710,20 @@ export default function Dashboard() {
         )}
         {/* Daily limit hit banner */}
         {dailyLimitHit && (
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20">
-            <AlertCircle className="w-5 h-5 text-orange-400 shrink-0" />
-            <p className="text-sm text-white/90 flex-1">
-              You've used all <strong>2 free predictions</strong> for today. Come back tomorrow or{" "}
-              <span
-                className="text-primary underline cursor-pointer"
-                onClick={() => setLocation("/paywall")}
-              >
-                upgrade to Premium
-              </span>
-              .
-            </p>
+          <div
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-orange-500/15 to-orange-500/5 border border-orange-500/30 cursor-pointer hover:border-orange-500/50 transition-all"
+            onClick={() => setLocation("/paywall")}
+          >
+            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-4 h-4 text-orange-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-orange-400 leading-none mb-0.5">2/2 predictions used today</p>
+              <p className="text-xs text-white/50">Upgrade for unlimited · Resets at midnight</p>
+            </div>
+            <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl shrink-0">
+              Unlock All
+            </span>
           </div>
         )}
 
