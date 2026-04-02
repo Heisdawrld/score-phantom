@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
 
 import Login from "@/pages/Login";
 
@@ -83,30 +82,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 
-function VerifyEmailHandler() {
-  const { toast } = useToast();
-  const { refetch } = useAuth();
-  const [location] = useLocation();
-
-  useEffect(() => {
-    // Only run on the root/dashboard — skip on auth pages to prevent reload loops
-    if (location !== '/') return;
-    const params = new URLSearchParams(window.location.search);
-    const v = params.get('verified');
-    if (v === 'success') {
-      // Clean URL first, then refetch and show toast
-      window.history.replaceState({}, '', '/');
-      refetch().then(() => {
-        toast({ title: '✅ Email verified!', description: 'Your email is confirmed. Predictions are now unlocked.', duration: 5000 });
-      });
-    } else if (v === 'invalid' || v === 'error') {
-      window.history.replaceState({}, '', '/');
-      toast({ title: 'Verification failed', description: 'The link may have expired. Please sign up again or contact support.', variant: 'destructive', duration: 5000 });
-    }
-  }, [location]);
-
-  return null;
-}
+// VerifyEmailHandler removed — Google Auth handles email verification
 
 function Router() {
   return (
@@ -133,7 +109,7 @@ function App() {
           <Toaster />
           <UpdateBanner />
           <InstallPrompt />
-          <VerifyEmailHandler />
+          {/* VerifyEmailHandler removed — Google Auth */}
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

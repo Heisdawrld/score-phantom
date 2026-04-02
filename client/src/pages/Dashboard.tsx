@@ -444,8 +444,9 @@ function LeagueGroup({
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
-// ── Email Verify Gate ────────────────────────────────────────────────────
-function EmailVerifyGate({ email, token }: { email: string; token: string }) {
+// EmailVerifyGate removed — Google Auth handles email verification
+
+function _unused_EmailVerifyGate_stub({ email, token }: { email: string; token: string }) {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -727,10 +728,7 @@ export default function Dashboard() {
         )}
 
 
-        {/* Email verification HARD GATE */}
-        {user && (user as any).email_verified === false && (
-          <EmailVerifyGate email={(user as any).email} token={localStorage.getItem('sp_token') || ''} />
-        )}
+        {/* Email verification gate removed — Google Auth */}
         {/* Daily limit hit banner */}
         {isDailyLimitHit && !isExpired && (
           <div

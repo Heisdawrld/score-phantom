@@ -1,215 +1,116 @@
 import { useState } from "react";
-import { Link } from "wouter";
-import { useLogin } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Mail, Lock, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { fetchApi } from "@/lib/api";
-
-// Check if user was redirected here after email verification
-const searchParams = new URLSearchParams(window.location.search);
-const justVerified = searchParams.get("verified") === "success";
-
-type View = "login" | "forgot" | "forgot-sent";
+import { useGoogleSignIn } from "@/hooks/use-auth";
+import { Chrome } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const googleSignIn = useGoogleSignIn();
   const [error, setError] = useState("");
-  const [view, setView] = useState<View>("login");
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetError, setResetError] = useState("");
-  const loginMutation = useLogin();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogle = async () => {
     setError("");
-    loginMutation.mutate({ email, password }, {
-      onError: (err: any) => setError(err.message || "Failed to login")
+    googleSignIn.mutate(undefined, {
+      onError: (err: any) => {
+        const msg = err?.message || "Sign in failed";
+        // Friendly message for popup-closed
+        if (msg.includes("popup-closed") || msg.includes("cancelled")) {
+          setError("Sign-in cancelled. Tap the button to try again.");
+        } else if (msg.includes("popup-blocked")) {
+          setError("Popup was blocked. Please allow popups for this site.");
+        } else {
+          setError(msg);
+        }
+      },
     });
   };
 
-  const handleForgot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResetError("");
-    setResetLoading(true);
-    try {
-      await fetchApi("/auth/password/reset-request", {
-        method: "POST",
-        body: JSON.stringify({ email: resetEmail }),
-      });
-      setView("forgot-sent");
-    } catch (err: any) {
-      setResetError(err.message || "Failed to send reset email");
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
-  // ── Forgot password sent confirmation ────────────────────────────────────
-  if (view === "forgot-sent") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img src={`${import.meta.env.BASE_URL}images/auth-bg.png`} alt="Background" className="w-full h-full object-cover opacity-40 mix-blend-screen" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
-        </div>
-        <div className="relative z-10 w-full max-w-md text-center">
-          <div className="w-16 h-16 rounded-full bg-primary/20 border border-primary/30 mx-auto flex items-center justify-center mb-6">
-            <CheckCircle2 className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="font-display text-4xl tracking-widest mb-3 text-white">CHECK YOUR EMAIL</h1>
-          <p className="text-muted-foreground mb-2">We sent a password reset link to</p>
-          <p className="text-white font-semibold mb-8">{resetEmail}</p>
-          <p className="text-xs text-muted-foreground mb-8">Didn't receive it? Check your spam folder or try again.</p>
-          <button
-            onClick={() => { setView("login"); setResetEmail(""); }}
-            className="text-sm text-primary hover:text-primary/80 transition-colors font-medium"
-          >
-            ← Back to Sign In
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Forgot password form ─────────────────────────────────────────────────
-  if (view === "forgot") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img src={`${import.meta.env.BASE_URL}images/auth-bg.png`} alt="Background" className="w-full h-full object-cover opacity-40 mix-blend-screen" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
-        </div>
-        <div className="relative z-10 w-full max-w-md">
-          <button
-            onClick={() => { setView("login"); setResetError(""); }}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mb-8"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Sign In
-          </button>
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-panel border border-primary/20 mx-auto flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,231,116,0.15)]">
-              <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-10 h-10 object-contain" />
-            </div>
-            <h1 className="font-display text-4xl tracking-widest mb-2 text-white">RESET PASSWORD</h1>
-            <p className="text-muted-foreground">Enter your email and we'll send you a reset link.</p>
-          </div>
-          <Card className="p-8 backdrop-blur-2xl bg-panel/60 border-white/10">
-            <form onSubmit={handleForgot} className="space-y-5">
-              {resetError && (
-                <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center">
-                  {resetError}
-                </div>
-              )}
-              <div className="relative">
-                <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="Your email address"
-                  className="pl-11"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-12 text-base" disabled={resetLoading}>
-                {resetLoading ? "Sending..." : "Send Reset Link"}
-              </Button>
-            </form>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Main login form ──────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background */}
       <div className="absolute inset-0 z-0">
-        <img src={`${import.meta.env.BASE_URL}images/auth-bg.png`} alt="Background" className="w-full h-full object-cover opacity-40 mix-blend-screen" />
+        <img
+          src={`${import.meta.env.BASE_URL}images/auth-bg.png`}
+          alt=""
+          className="w-full h-full object-cover opacity-40 mix-blend-screen"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-panel border border-primary/20 mx-auto flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,231,116,0.15)]">
-            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-10 h-10 object-contain" />
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-20 h-20 rounded-2xl bg-panel border border-primary/20 flex items-center justify-center shadow-[0_0_40px_rgba(16,231,116,0.2)]">
+            <img
+              src={`${import.meta.env.BASE_URL}images/logo.png`}
+              alt="ScorePhantom"
+              className="w-12 h-12 object-contain"
+            />
           </div>
-          <h1 className="font-display text-5xl tracking-widest mb-2 text-glow-primary text-white">WELCOME BACK</h1>
-          <p className="text-muted-foreground">Sign in to access premium predictions.</p>
+          <div className="text-center">
+            <h1 className="font-display text-4xl tracking-widest text-white">
+              SCORE<span className="text-primary">PHANTOM</span>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              AI-powered football predictions
+            </p>
+          </div>
         </div>
 
-        <Card className="p-8 backdrop-blur-2xl bg-panel/60 border-white/10">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Show success banner when redirected here after email verification */}
-            {justVerified && (
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm text-center font-semibold">
-                ✅ Email verified! Sign in to start your free trial.
-              </div>
-            )}
-            {error && (
-              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center">
-                {error}
-              </div>
-            )}
-            <div className="space-y-4">
-              <div className="relative">
-                <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="Email address"
-                  className="pl-11"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  className="pl-11"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Forgot password link */}
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => { setView("forgot"); setResetEmail(email); setResetError(""); }}
-                className="text-xs text-muted-foreground hover:text-primary transition-colors"
-              >
-                Forgot password?
-              </button>
-            </div>
-
-            <Button type="submit" className="w-full h-12 text-base" disabled={loginMutation.isPending}>
-              {loginMutation.isPending ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-
-          <div className="mt-6 space-y-3">
-            <div className="relative flex items-center justify-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10" />
-              </div>
-              <span className="relative bg-panel px-3 text-xs text-muted-foreground">or</span>
-            </div>
-            <Link href="/signup">
-              <button type="button" className="w-full h-11 rounded-xl border border-primary/30 bg-primary/5 text-primary font-semibold text-sm hover:bg-primary/15 hover:border-primary/50 transition-all tracking-wide">
-                🚀 Start Free Trial — 1 Day Free
-              </button>
-            </Link>
+        {/* Sign-in card */}
+        <div className="w-full bg-panel/60 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 flex flex-col items-center gap-6">
+          <div className="text-center">
+            <p className="text-white font-semibold text-lg">Get started free</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              1-day free trial · No credit card required
+            </p>
           </div>
-        </Card>
+
+          {/* Google button */}
+          <button
+            onClick={handleGoogle}
+            disabled={googleSignIn.isPending}
+            className="w-full flex items-center justify-center gap-3 bg-white text-gray-800 font-semibold text-[15px] py-3.5 px-6 rounded-2xl hover:bg-gray-50 active:scale-[0.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+          >
+            {googleSignIn.isPending ? (
+              <div className="w-5 h-5 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+            )}
+            {googleSignIn.isPending ? "Signing in…" : "Continue with Google"}
+          </button>
+
+          {error && (
+            <p className="text-sm text-red-400 text-center -mt-2">{error}</p>
+          )}
+
+          <p className="text-xs text-muted-foreground text-center leading-relaxed">
+            By continuing, you agree to our terms of service.
+            <br />
+            Your Google account keeps things secure — no passwords needed.
+          </p>
+        </div>
+
+        {/* Stats teaser */}
+        <div className="flex items-center gap-6 text-center">
+          <div>
+            <p className="text-primary font-black text-xl">500+</p>
+            <p className="text-xs text-muted-foreground">matches/week</p>
+          </div>
+          <div className="w-px h-8 bg-white/10" />
+          <div>
+            <p className="text-primary font-black text-xl">AI</p>
+            <p className="text-xs text-muted-foreground">predictions</p>
+          </div>
+          <div className="w-px h-8 bg-white/10" />
+          <div>
+            <p className="text-primary font-black text-xl">134+</p>
+            <p className="text-xs text-muted-foreground">users</p>
+          </div>
+        </div>
       </div>
     </div>
   );

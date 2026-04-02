@@ -67,6 +67,7 @@ export async function initUsersTable() {
     ["subscription_expires_at",   "ALTER TABLE users ADD COLUMN subscription_expires_at TEXT"],
     ["subscription_code",         "ALTER TABLE users ADD COLUMN subscription_code TEXT"],
     ["email_verified",             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"],
+    ["firebase_uid",               "ALTER TABLE users ADD COLUMN firebase_uid TEXT"],
     ["email_verification_token",   "ALTER TABLE users ADD COLUMN email_verification_token TEXT"],
     ["reset_token",               "ALTER TABLE users ADD COLUMN reset_token TEXT"],
     ["reset_token_expires_at",    "ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT"],
@@ -206,6 +207,102 @@ async function activatePremium(userId, flwChargeId, reference) {
 
   return { expiryISO, subscriptionCode };
 }
+
+// ── Firebase token verification (no firebase-admin needed) ───────────────────
+async function verifyFirebaseToken(idToken) {
+  const FIREBASE_PROJECT_ID = 'scorephantom-app';
+
+  // Fetch Google's current RSA signing certificates
+  const certsRes = await fetch(
+    'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+    { headers: { 'Cache-Control': 'no-cache' } }
+  );
+  if (!certsRes.ok) throw new Error('Failed to fetch Google signing certificates');
+  const certs = await certsRes.json();
+
+  // Decode JWT header to find which key was used
+  const parts = idToken.split('.');
+  if (parts.length !== 3) throw new Error('Invalid ID token format');
+  const header = JSON.parse(Buffer.from(parts[0], 'base64').toString('utf8'));
+  const cert = certs[header.kid];
+  if (!cert) throw new Error(`Unknown signing key: ${header.kid}`);
+
+  // Verify signature, audience, and issuer
+  const payload = jwt.verify(idToken, cert, {
+    algorithms: ['RS256'],
+    audience: FIREBASE_PROJECT_ID,
+    issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+  });
+
+  return payload;
+}
+
+// ── POST /api/auth/google ─────────────────────────────────────────────────────
+// Accepts a Firebase ID token, verifies it, returns our own JWT.
+// Creates new users automatically; matches existing users by email.
+router.post("/google", authLimiter, async (req, res) => {
+  try {
+    const { idToken } = req.body || {};
+    if (!idToken) return res.status(400).json({ error: "Firebase ID token required" });
+
+    // Verify the token with Google's public keys
+    let firebasePayload;
+    try {
+      firebasePayload = await verifyFirebaseToken(idToken);
+    } catch (err) {
+      console.error('[GoogleAuth] Token verification failed:', err.message);
+      return res.status(401).json({ error: "Invalid Google token. Please sign in again." });
+    }
+
+    const email = String(firebasePayload.email || "").trim().toLowerCase();
+    const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
+    if (!email) return res.status(400).json({ error: "No email address in Google account" });
+
+    // Find existing user or create new one
+    let result = await db.execute({
+      sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
+      args: [email],
+    });
+    let user = result.rows?.[0];
+
+    if (!user) {
+      // Brand-new user — create with trial starting NOW
+      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      await db.execute({
+        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        args: [email, firebaseUid, trialEnds],
+      });
+      const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
+      user = created.rows?.[0];
+      console.log(`[GoogleAuth] ✓ New user created: ${email} (uid=${firebaseUid})`);
+    } else {
+      // Existing user — stamp firebase_uid if not set, and mark email verified
+      await db.execute({
+        sql: "UPDATE users SET firebase_uid = COALESCE(NULLIF(firebase_uid,''), ?), email_verified = 1 WHERE id = ?",
+        args: [firebaseUid, user.id],
+      });
+      const updated = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [user.id] });
+      user = updated.rows?.[0];
+      console.log(`[GoogleAuth] ✓ Existing user signed in: ${email} (id=${user.id})`);
+    }
+
+    if (!user) throw new Error("Failed to find or create user");
+
+    const token = signToken(user);
+    const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && email === ADMIN_EMAIL;
+
+    return res.json({
+      token,
+      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      has_access: access.has_full_access,
+      access_status: access.status,
+    });
+  } catch (err) {
+    console.error("[GoogleAuth]", err.message);
+    return res.status(500).json({ error: "Authentication failed. Please try again." });
+  }
+});
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 router.post("/signup", authLimiter, async (req, res) => {
