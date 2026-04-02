@@ -616,6 +616,7 @@ export default function Dashboard() {
 
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   const isTrial = user?.access_status === "trial";
+  const isExpired = user?.access_status === "expired";
 
   const { data: usageData } = useQuery({
     queryKey: ["/api/usage"],
@@ -624,6 +625,8 @@ export default function Dashboard() {
     refetchInterval: 30000, // refresh every 30s
     staleTime: 10000,
   });
+
+  const isDailyLimitHit = dailyLimitHit || (!!usageData && (usageData as any).remaining === 0 && isTrial);
 
   const groupedFixtures = useMemo(() => {
     if (!data?.fixtures) return {};
@@ -654,17 +657,8 @@ export default function Dashboard() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  // Use useEffect so this only fires once, not on every render (prevents redirect loop)
-  useEffect(() => {
-    if (user && user.access_status === "expired") {
-      setLocation("/paywall");
-    }
-  }, [user?.access_status]);
-
-  if (user && user.access_status === "expired") return null;
 
   const handleSelectFixture = (id: string) => {
-    setDailyLimitHit(false);
     setSelectedFixtureId(id);
   };
 
@@ -683,6 +677,23 @@ export default function Dashboard() {
       <Header />
 
       <main className="flex-1 container mx-auto max-w-3xl px-4 pt-6 space-y-5">
+
+        {/* Expired trial FOMO banner — stay on dashboard, blur all predictions */}
+        {isExpired && (
+          <div
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-orange-500/10 to-orange-500/5 border border-orange-500/25 cursor-pointer hover:border-orange-500/40 transition-all"
+            onClick={() => setLocation("/paywall")}
+          >
+            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+              <Lock className="w-4 h-4 text-orange-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-orange-400 tracking-wide leading-none mb-0.5">Free Trial Expired</p>
+              <p className="text-xs text-white/50">All predictions are blurred · Upgrade to unlock everything</p>
+            </div>
+            <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl shrink-0">Unlock All</span>
+          </div>
+        )}
 
         {/* Trial subscribe banner */}
         {isTrial && (
@@ -721,7 +732,7 @@ export default function Dashboard() {
           <EmailVerifyGate email={(user as any).email} token={localStorage.getItem('sp_token') || ''} />
         )}
         {/* Daily limit hit banner */}
-        {dailyLimitHit && (
+        {isDailyLimitHit && !isExpired && (
           <div
             className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-orange-500/15 to-orange-500/5 border border-orange-500/30 cursor-pointer hover:border-orange-500/50 transition-all"
             onClick={() => setLocation("/paywall")}
@@ -823,6 +834,7 @@ export default function Dashboard() {
         fixtureId={selectedFixtureId}
         onClose={() => setSelectedFixtureId(null)}
         onError={handlePredictionError}
+        limitReached={isDailyLimitHit}
       />
     </div>
   );
