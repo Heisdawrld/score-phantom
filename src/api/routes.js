@@ -63,7 +63,7 @@ async function getCurrentUser(req) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const result = await db.execute({
-      sql: `SELECT * FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT *, email_verified FROM users WHERE id = ? LIMIT 1`,
       args: [decoded.id],
     });
     return result.rows?.[0] || null;
@@ -104,7 +104,7 @@ async function requireAuth(req, res, next) {
 
 // ─── Daily prediction limit for trial users ──────────────────────────────────
 
-const TRIAL_DAILY_LIMIT = 10;
+const TRIAL_DAILY_LIMIT = 2;
 
 async function ensureDailyCountTable() {
   try {
@@ -291,7 +291,7 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /predict/:fixtureId — trial (10/day) or premium ────────────────────
+// ─── GET /predict/:fixtureId — trial (2/day) or premium ─────────────────────
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
     // Trial users: enforce 10 predictions/day cap
@@ -315,6 +315,14 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
           access: buildAccessPayload(req.access),
         });
       }
+    }
+
+    // Gate: require email verification for predictions
+    if (req.user.email_verified === 0 || req.user.email_verified === '0') {
+      return res.status(403).json({
+        error: 'Please verify your email to access predictions.',
+        code: 'email_not_verified',
+      });
     }
 
     const fixtureId = req.params.fixtureId;
