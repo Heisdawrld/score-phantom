@@ -295,7 +295,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                             </p>
                             <p className="text-muted-foreground text-sm">
                               {isLimitHit
-                                ? 'You've used your 2 free predictions today. Upgrade for unlimited access.'
+                                ? "You've used your 2 free predictions today. Upgrade for unlimited access."
                                 : 'Subscribe to unlock AI predictions, ACCA builder, and more.'}
                             </p>
                           </div>
