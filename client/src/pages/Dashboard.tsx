@@ -470,9 +470,8 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
         const d = await r.json();
         const isVerified = d?.user?.email_verified === true || d?.user?.email_verified === 1;
         if (isVerified) {
-          // Token in localStorage may have been updated by the verification page
-          // Force a full reload to pick up new state cleanly
-          window.location.href = '/?verified=success';
+          // Full reload — bypasses any stale React Query cache
+          window.location.href = '/';
         }
       } catch {}
     }, 5000);
@@ -506,16 +505,21 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
         const d = await r.json();
         const isVerified = d?.user?.email_verified === true || d?.user?.email_verified === 1;
         if (isVerified) {
-          window.location.href = '/?verified=success';
+          window.location.href = '/';
           return;
         }
       }
-      setErr('Not verified yet. Check your inbox and click the link first.');
+      setErr('Not verified yet — click the link in the email first, then tap here.');
     } catch {
       setErr('Could not check status. Try again.');
     } finally {
       setChecking(false);
     }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('sp_token');
+    window.location.href = '/login';
   };
 
   return (
@@ -571,6 +575,14 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
       )}
 
       {err && <p className="text-orange-400 text-xs mt-3 max-w-xs">{err}</p>}
+
+      {/* Escape hatch — always visible */}
+      <button
+        onClick={logout}
+        className="mt-8 text-xs text-white/20 hover:text-white/50 transition-colors"
+      >
+        Log out & use a different account
+      </button>
     </div>
   );
 }
