@@ -79,7 +79,9 @@ async function main() {
   for (let i = 0; i <= 14; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
-    const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    // Use manual YYYY-MM-DD formatter — toLocaleString('en-CA') is unreliable on Alpine Linux
+    const wat = new Date(d.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const dateStr = `${wat.getFullYear()}-${String(wat.getMonth() + 1).padStart(2, '0')}-${String(wat.getDate()).padStart(2, '0')}`;
     process.stdout.write(`Fetching ${dateStr}... `);
     const fixtures = await fetchFixturesByDate(dateStr);
     console.log(`${fixtures.length} fixtures`);
