@@ -1,4 +1,4 @@
-import { Lock, motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
 import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle, Lock, Crown, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -329,7 +329,7 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                     </div>
                   );
                 })()
-              ) : data ? (
+              : data ? (
                 <div className="max-w-xl mx-auto mt-2 space-y-6">
 
                   {/* Header */}
