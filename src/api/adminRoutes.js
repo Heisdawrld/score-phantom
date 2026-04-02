@@ -231,19 +231,6 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
   }
 });
 
-// ── GET /debug/verify-token/:id — TEMP: get email verification token for a user ──
-// REMOVE after testing
-router.get("/debug/verify-token/:id", requireAdmin, async (req, res) => {
-  try {
-    const result = await db.execute({ sql: 'SELECT id, email, email_verification_token FROM users WHERE id = ? LIMIT 1', args: [req.params.id] });
-    const user = result.rows?.[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ id: user.id, email: user.email, token: user.email_verification_token });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 // ── POST /users/:id/verify-email — manually verify a user's email ─────────────
 router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, res) => {
   try {
