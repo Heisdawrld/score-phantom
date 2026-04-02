@@ -527,7 +527,7 @@ export default function Dashboard() {
   const handlePredictionError = (code: string) => {
     if (code === "daily_limit_reached") {
       setDailyLimitHit(true);
-      setSelectedFixtureId(null);
+      // Don't close the panel — PredictionPanel shows a blur overlay with upgrade CTA
     }
   };
 
@@ -564,6 +564,17 @@ export default function Dashboard() {
           </div>
         )}
 
+
+        {/* Email verification banner */}
+        {user && (user as any).email_verified === false && (
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
+            <span className="text-lg">✉️</span>
+            <p className="text-sm text-white/90 flex-1">
+              <span className="font-bold text-yellow-400">Verify your email</span>{" — "}
+              Check your inbox to unlock predictions.
+            </p>
+          </div>
+        )}
         {/* Daily limit hit banner */}
         {dailyLimitHit && (
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20">
