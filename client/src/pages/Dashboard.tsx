@@ -556,7 +556,7 @@ export default function Dashboard() {
                   </span>{" · "}
                 </>
               ) : (
-                "10 predictions/day · "
+                "2 predictions/day · "
               )}
               No AI chat · No ACCA
             </p>
@@ -565,13 +565,19 @@ export default function Dashboard() {
         )}
 
 
-        {/* Email verification banner */}
+        {/* Email verification HARD GATE */}
         {user && (user as any).email_verified === false && (
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
-            <span className="text-lg">✉️</span>
-            <p className="text-sm text-white/90 flex-1">
-              <span className="font-bold text-yellow-400">Verify your email</span>{" — "}
-              Check your inbox to unlock predictions.
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center mb-6">
+              <span className="text-3xl">✉️</span>
+            </div>
+            <h2 className="font-display text-2xl font-bold text-white mb-3">Verify your email</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mb-6">
+              We sent a verification link to <strong className="text-white">{(user as any).email}</strong>.
+              Click it to activate your <span className="text-primary font-semibold">1-day free trial</span>.
+            </p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              Didn&#39;t get it? Check your spam folder, or contact support.
             </p>
           </div>
         )}
@@ -580,7 +586,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20">
             <AlertCircle className="w-5 h-5 text-orange-400 shrink-0" />
             <p className="text-sm text-white/90 flex-1">
-              You've used all <strong>10 free predictions</strong> for today. Come back tomorrow or{" "}
+              You've used all <strong>2 free predictions</strong> for today. Come back tomorrow or{" "}
               <span
                 className="text-primary underline cursor-pointer"
                 onClick={() => setLocation("/paywall")}

@@ -356,7 +356,15 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId/explain — requires premium access ──────────────
 router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
   try {
-    // Trial users: enforce 10 predictions/day cap
+    // Gate: require email verification
+    if (req.user.email_verified === 0 || req.user.email_verified === '0') {
+      return res.status(403).json({
+        error: 'Please verify your email to access predictions.',
+        code: 'email_not_verified',
+      });
+    }
+
+    // Trial users: enforce daily cap
     let predictionsRemaining = null;
     let trialToday = null;
     if (!req.access.subscription_active && req.access.trial_active) {
