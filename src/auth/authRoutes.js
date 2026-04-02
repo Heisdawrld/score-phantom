@@ -307,6 +307,7 @@ router.get("/verify-email", async (req, res) => {
     <h2>${message}</h2>
     <p>${subtext}</p>
     ${btn}
+    ${script}
     <p class="sub">scorephantom.onrender.com</p>
   </div>
 </body>

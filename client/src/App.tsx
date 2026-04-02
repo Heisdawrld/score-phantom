@@ -65,20 +65,7 @@ function RedirectTo({ path }: { path: string }) {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading, error } = useAuth();
-  const { toast } = useToast();
-  const [location] = useLocation();
-
-  useEffect(() => {
-    // Only toast if actually trying to access a protected page without auth
-    if (!isLoading && (error || !user) && location !== "/login" && location !== "/signup") {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to access ScorePhantom.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  }, [isLoading, error, user]);
+  // (Sign in required toast removed - redirect to login is sufficient UX)
 
   if (isLoading) {
     return (
