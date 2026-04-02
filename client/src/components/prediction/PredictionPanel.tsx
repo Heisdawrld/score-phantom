@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { Lock, motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
 import { X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap, CheckCircle2, AlertTriangle, Lock, Crown, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -261,11 +261,74 @@ export function PredictionPanel({ fixtureId, onClose, onError }: PredictionPanel
                   </div>
                   <Skeleton className="h-40 w-full rounded-2xl" />
                 </div>
-              ) : error ? (
-                <div className="text-center py-20 text-muted-foreground">
-                  <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Failed to load prediction data.</p>
-                </div>
+              ) : error ? (() => {
+                  const msg = (error.message || '').toLowerCase();
+                  const isLimitHit = msg.includes('limit') || msg.includes('daily');
+                  const isEmailUnverified = msg.includes('verify your email') || msg.includes('email_not_verified') || msg.includes('email');
+                  const isSubRequired = msg.includes('subscription') || msg.includes('upgrade');
+
+                  if (isLimitHit || isSubRequired) {
+                    return (
+                      <div className="relative mt-4 rounded-3xl overflow-hidden">
+                        {/* Blurred fake content */}
+                        <div className="blur-md select-none pointer-events-none space-y-4 p-6 opacity-60">
+                          <div className="bg-white/8 rounded-2xl p-5 space-y-3">
+                            <div className="h-3 bg-white/20 rounded w-1/3" />
+                            <div className="h-8 bg-primary/30 rounded w-2/3" />
+                            <div className="h-3 bg-white/15 rounded w-1/2" />
+                            <div className="h-3 bg-white/15 rounded w-3/4" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white/5 rounded-2xl p-4 h-24" />
+                            <div className="bg-white/5 rounded-2xl p-4 h-24" />
+                          </div>
+                          <div className="bg-white/5 rounded-2xl p-4 h-32" />
+                        </div>
+                        {/* Lock overlay */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/50 rounded-3xl p-6 text-center">
+                          <div className="w-14 h-14 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center">
+                            <Lock className="w-6 h-6 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-white font-bold text-lg mb-1">
+                              {isLimitHit ? 'Daily limit reached' : 'Premium required'}
+                            </p>
+                            <p className="text-muted-foreground text-sm">
+                              {isLimitHit
+                                ? 'You've used your 2 free predictions today. Upgrade for unlimited access.'
+                                : 'Subscribe to unlock AI predictions, ACCA builder, and more.'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => { onClose(); setLocation('/paywall'); }}
+                            className="bg-primary text-black font-bold px-8 py-3 rounded-xl text-sm active:scale-95 transition-transform"
+                          >
+                            Upgrade to Premium →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (isEmailUnverified) {
+                    return (
+                      <div className="text-center py-16 space-y-4 px-4">
+                        <div className="w-14 h-14 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center mx-auto">
+                          <ShieldAlert className="w-6 h-6 text-yellow-400" />
+                        </div>
+                        <p className="text-white font-bold text-lg">Verify your email</p>
+                        <p className="text-muted-foreground text-sm">Check your inbox and click the verification link to unlock predictions.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="text-center py-20 text-muted-foreground">
+                      <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Failed to load prediction data.</p>
+                    </div>
+                  );
+                })()
               ) : data ? (
                 <div className="max-w-xl mx-auto mt-2 space-y-6">
 
