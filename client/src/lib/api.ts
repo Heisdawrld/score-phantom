@@ -38,7 +38,11 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
       const msg = (errorData.error || '').toLowerCase();
       if (msg.includes('invalid token') || msg.includes('not authenticated') || msg.includes('unauthorized')) {
         removeAuthToken();
-        window.location.href = '/login';
+        // Only redirect if not already on an auth page (prevents reload loops)
+        const currentPath = window.location.pathname;
+        if (!currentPath.startsWith('/login') && !currentPath.startsWith('/signup') && !currentPath.startsWith('/reset-password')) {
+          window.location.href = '/login';
+        }
       }
     }
     const apiErr: any = new Error(errorData.error || errorData.message || 'An error occurred');

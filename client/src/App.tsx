@@ -86,8 +86,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function VerifyEmailHandler() {
   const { toast } = useToast();
   const { refetch } = useAuth();
+  const [location] = useLocation();
 
   useEffect(() => {
+    // Only run on the root/dashboard — skip on auth pages to prevent reload loops
+    if (location !== '/') return;
     const params = new URLSearchParams(window.location.search);
     const v = params.get('verified');
     if (v === 'success') {
@@ -100,7 +103,7 @@ function VerifyEmailHandler() {
       window.history.replaceState({}, '', '/');
       toast({ title: 'Verification failed', description: 'The link may have expired. Please sign up again or contact support.', variant: 'destructive', duration: 5000 });
     }
-  }, []);
+  }, [location]);
 
   return null;
 }
