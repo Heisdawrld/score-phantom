@@ -920,27 +920,91 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
   }
 });
 
+// ─── POST /league-favorites — Save user's favorite leagues (premium) ──────────
+router.post("/league-favorites", requireAuth, async (req, res) => {
+  try {
+    const { leagues } = req.body || {};
+    if (!Array.isArray(leagues)) {
+      return res.status(400).json({ error: "Leagues must be an array" });
+    }
+
+    const favoritesJSON = JSON.stringify(leagues);
+    await db.execute({
+      sql: `UPDATE users SET league_favorites = ? WHERE id = ?`,
+      args: [favoritesJSON, req.user.id],
+    });
+
+    return res.json({
+      ok: true,
+      favorites: leagues,
+      message: `Saved ${leagues.length} favorite leagues`,
+    });
+  } catch (err) {
+    console.error("[LeagueFavorites]", err.message);
+    res.status(500).json({ error: "Failed to save favorites" });
+  }
+});
+
+// ─── GET /league-favorites — Retrieve user's favorite leagues ────────────────
+router.get("/league-favorites", requireAuth, async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT league_favorites FROM users WHERE id = ? LIMIT 1`,
+      args: [req.user.id],
+    });
+    const user = result.rows?.[0];
+    const leagues = user?.league_favorites ? JSON.parse(user.league_favorites) : [];
+
+    return res.json({
+      favorites: leagues,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[LeagueFavorites]", err.message);
+    res.json({ favorites: [], access: buildAccessPayload(req.access) });
+  }
+});
+
 // ─── GET /top-picks-today — Show best predictions for today ────────────────
 // Premium feature: gives users confidence that the AI actually finds good picks
 router.get("/top-picks-today", requireAuth, async (req, res) => {
   try {
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const limit = parseInt(req.query.limit || 10, 10);
+    const favoritesOnly = req.query.favorites === 'true';
 
-    const result = await db.execute({
-      sql: `SELECT p.fixture_id, p.home_team, p.away_team,
-                   p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model,
-                   f.tournament_name, f.match_date, f.enrichment_status
-            FROM predictions_v2 p
-            JOIN fixtures f ON f.id = p.fixture_id
-            WHERE f.match_date LIKE ?
-              AND p.best_pick_selection IS NOT NULL
-              AND f.enrichment_status IN ('deep', 'basic')
-            ORDER BY p.best_pick_score DESC
-            LIMIT ?`,
-      args: [`%${today}%`, limit],
-    });
+    let query = `SELECT p.fixture_id, p.home_team, p.away_team,
+                        p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+                        p.best_pick_score, p.confidence_model,
+                        f.tournament_name, f.match_date, f.enrichment_status
+                 FROM predictions_v2 p
+                 JOIN fixtures f ON f.id = p.fixture_id
+                 WHERE f.match_date LIKE ?
+                   AND p.best_pick_selection IS NOT NULL
+                   AND f.enrichment_status IN ('deep', 'basic')`;
+    
+    const args = [`%${today}%`];
+
+    // Filter by favorite leagues if requested
+    if (favoritesOnly) {
+      const userResult = await db.execute({
+        sql: `SELECT league_favorites FROM users WHERE id = ? LIMIT 1`,
+        args: [req.user.id],
+      });
+      const user = userResult.rows?.[0];
+      const favorites = user?.league_favorites ? JSON.parse(user.league_favorites) : [];
+      
+      if (favorites.length > 0) {
+        const placeholders = favorites.map(() => '?').join(',');
+        query += ` AND f.tournament_name IN (${placeholders})`;
+        args.push(...favorites);
+      }
+    }
+
+    query += ` ORDER BY p.best_pick_score DESC LIMIT ?`;
+    args.push(limit);
+
+    const result = await db.execute({ sql: query, args });
 
     const picks = (result.rows || []).map(row => ({
       fixtureId: row.fixture_id,
@@ -958,6 +1022,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       date: today,
       topPicksCount: picks.length,
       picks,
+      filtered: favoritesOnly,
       access: buildAccessPayload(req.access),
     });
   } catch (err) {

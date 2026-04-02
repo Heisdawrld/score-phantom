@@ -80,6 +80,7 @@ export async function initUsersTable() {
     ["email_verification_token",   "ALTER TABLE users ADD COLUMN email_verification_token TEXT"],
     ["reset_token",               "ALTER TABLE users ADD COLUMN reset_token TEXT"],
     ["reset_token_expires_at",    "ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT"],
+    ["league_favorites",          "ALTER TABLE users ADD COLUMN league_favorites TEXT"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
