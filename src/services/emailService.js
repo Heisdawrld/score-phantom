@@ -77,3 +77,57 @@ export async function sendPasswordResetEmail(toEmail, resetToken) {
     return { success: false, reason: err.message };
   }
 }
+
+
+export async function sendVerificationEmail(toEmail, verifyToken) {
+  const verifyLink = `${APP_URL}/api/auth/verify-email?token=${verifyToken}`;
+
+  if (!API_KEY) {
+    console.warn('[Email] BREVO_API_KEY not set — verification link:', verifyLink);
+    return { success: false, reason: 'no_smtp_config' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'api-key': API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        sender:  { name: 'ScorePhantom', email: EMAIL_FROM },
+        to:      [{ email: toEmail }],
+        subject: 'Verify your ScorePhantom email',
+        htmlContent: `
+          <div style="font-family:Inter,sans-serif;background:#0a0f0d;color:#fff;padding:40px 20px;max-width:480px;margin:0 auto;border-radius:16px">
+            <img src="https://score-phantom.onrender.com/images/logo.png" style="width:80px;margin-bottom:24px" />
+            <h2 style="color:#10e774;font-size:22px;margin-bottom:8px">Verify your email</h2>
+            <p style="color:rgba(255,255,255,0.7);font-size:15px;line-height:1.6;margin-bottom:24px">
+              Welcome to ScorePhantom! Click the button below to verify your email and unlock AI predictions.
+            </p>
+            <a href="${verifyLink}"
+               style="display:inline-block;background:#10e774;color:#000;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;margin-bottom:24px">
+              Verify Email
+            </a>
+            <p style="color:rgba(255,255,255,0.4);font-size:12px">This link expires in 24 hours. If you didn't sign up, ignore this email.</p>
+          </div>
+        `,
+      }),
+    });
+    clearTimeout(timeout);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[Email] Brevo verify error:', data);
+      return { success: false, reason: 'brevo_error', detail: data };
+    }
+    console.log('[Email] Verification email sent to', toEmail);
+    return { success: true };
+  } catch (err) {
+    console.error('[Email] sendVerificationEmail failed:', err.message);
+    return { success: false, reason: err.message };
+  }
+}
