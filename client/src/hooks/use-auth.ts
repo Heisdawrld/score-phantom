@@ -12,8 +12,11 @@ export function useAuth() {
   return useQuery({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const data = await fetchApi("/auth/me");
-      return UserSchema.parse(data);
+      const res = await fetchApi("/auth/me");
+      // /auth/me returns { user: {...}, has_access, access_status }
+      // Merge top-level fields into user so has_access/access_status are accessible
+      const user = res?.user ? { ...res.user, has_access: res.has_access, access_status: res.access_status } : res;
+      return UserSchema.parse(user);
     },
     retry: 2,               // retry twice before giving up (handles Render cold start)
     retryDelay: 1500,        // 1.5s between retries
@@ -35,7 +38,9 @@ export function useLogin() {
     },
     onSuccess: (data) => {
       setAuthToken(data.token);
-      queryClient.setQueryData(["/api/auth/me"], data.user);
+      // Merge has_access/access_status into the user object for consistency
+      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
       setLocation("/");
     },
   });
@@ -54,7 +59,8 @@ export function useSignup() {
     },
     onSuccess: (data) => {
       setAuthToken(data.token);
-      queryClient.setQueryData(["/api/auth/me"], data.user);
+      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
       setLocation("/");
     },
   });
