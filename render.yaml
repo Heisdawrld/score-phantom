@@ -35,9 +35,7 @@ services:
         sync: false
       - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
-      - key: GMAIL_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: GMAIL_APP_PASSWORD
-        sync: false
-      - key: BREVO_API_KEY
+      - key: EMAIL_FROM
         sync: false

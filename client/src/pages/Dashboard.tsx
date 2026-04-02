@@ -450,6 +450,13 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
+  // Lock body scroll while gate is visible
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const resend = async () => {
     setLoading(true); setErr('');
     try {
