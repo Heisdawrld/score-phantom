@@ -101,6 +101,16 @@ function signToken(user) {
 }
 
 export function computeAccessStatus(user) {
+  // Admins always have full access (check both is_admin flag and ADMIN_EMAIL)
+  const userEmail = String(user?.email || "").trim().toLowerCase();
+  if (user?.is_admin || (ADMIN_EMAIL && userEmail === ADMIN_EMAIL)) {
+    return {
+      status:              "active",
+      trial_active:        false,
+      subscription_active: true,
+      has_full_access:     true,
+    };
+  }
   const now = new Date();
   const trialActive   = user?.trial_ends_at           && new Date(user.trial_ends_at)           > now;
   const premiumActive = user?.premium_expires_at      && new Date(user.premium_expires_at)      > now;
