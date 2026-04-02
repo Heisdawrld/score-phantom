@@ -861,6 +861,65 @@ router.get("/track-record", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /prediction-results — Show user's recent prediction outcomes ───────
+// Visible to all users: track which picks hit and which didn't
+router.get("/prediction-results", requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || 20, 10);
+    const days = parseInt(req.query.days || 7, 10);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startISO = startDate.toISOString().slice(0, 10);
+
+    const results = await db.execute({
+      sql: `SELECT 
+              fixture_id, home_team, away_team, match_date,
+              market_type, prediction, actual_result, outcome,
+              prediction_confidence, created_at
+            FROM prediction_outcomes
+            WHERE DATE(created_at) >= ?
+            ORDER BY created_at DESC
+            LIMIT ?`,
+      args: [startISO, limit],
+    });
+
+    const outcomes = (results.rows || []).map(row => ({
+      fixtureId: row.fixture_id,
+      match: `${row.home_team} vs ${row.away_team}`,
+      date: row.match_date,
+      market: row.market_type,
+      predicted: row.prediction,
+      actual: row.actual_result,
+      outcome: row.outcome || 'pending', // 'win', 'loss', 'void'
+      confidence: parseFloat(row.prediction_confidence || 0),
+      isWin: row.outcome === 'win',
+    }));
+
+    const summary = {
+      total: outcomes.length,
+      wins: outcomes.filter(o => o.isWin).length,
+      losses: outcomes.filter(o => o.outcome === 'loss').length,
+      pending: outcomes.filter(o => o.outcome === 'pending').length,
+    };
+
+    return res.json({
+      summary,
+      period: `Last ${days} days`,
+      results: outcomes,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[PredictionResults]", err.message);
+    return res.json({
+      summary: { total: 0, wins: 0, losses: 0, pending: 0 },
+      period: "Last 7 days",
+      results: [],
+      message: "No prediction results yet.",
+      access: buildAccessPayload(req.access),
+    });
+  }
+});
+
 // ─── GET /top-picks-today — Show best predictions for today ────────────────
 // Premium feature: gives users confidence that the AI actually finds good picks
 router.get("/top-picks-today", requireAuth, async (req, res) => {
