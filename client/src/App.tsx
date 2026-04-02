@@ -95,6 +95,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+
+function VerifyEmailHandler() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const { refetch } = useAuth();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('verified');
+    if (v === 'success') {
+      refetch();
+      toast({ title: '✅ Email verified!', description: 'Your email has been verified. Predictions are now unlocked.', duration: 5000 });
+      setLocation('/');
+    } else if (v === 'invalid' || v === 'error') {
+      toast({ title: 'Verification failed', description: 'The link may have expired. Please sign up again or contact support.', variant: 'destructive', duration: 5000 });
+      setLocation('/');
+    }
+  }, []);
+
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
@@ -120,6 +142,7 @@ function App() {
           <Toaster />
           <UpdateBanner />
           <InstallPrompt />
+          <VerifyEmailHandler />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
