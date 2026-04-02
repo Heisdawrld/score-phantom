@@ -52,6 +52,7 @@ export const UserSchema = z.object({
   premium_expires_at: z.string().nullable().optional(),
   has_access: z.boolean().optional(),
   access_status: z.string().optional(),
+  email_verified: z.union([z.boolean(), z.number()]).optional(),
 });
 
 export type User = z.infer<typeof UserSchema>;
