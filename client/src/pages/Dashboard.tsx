@@ -500,6 +500,14 @@ function EmailVerifyGate({ email, token }: { email: string; token: string }) {
         </button>
       )}
       {err && <p className="text-destructive text-xs mt-2">{err}</p>}
+
+      {/* Force-check: if user already clicked the link but gate is still showing */}
+      <button
+        onClick={() => window.location.reload()}
+        className="mt-6 text-xs text-white/30 hover:text-white/60 transition-colors underline underline-offset-2"
+      >
+        Already verified? Tap here to open the app
+      </button>
     </div>
   );
 }
