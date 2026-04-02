@@ -5,6 +5,15 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
 
+// SECURITY: Common disposable email domains
+const DISPOSABLE_DOMAINS = new Set([
+  'tempmail.com', 'temp-mail.org', '10minutemail.com', 'throwaway.email',
+  'mailinator.com', 'yopmail.com', 'trashmail.com', 'fakeinbox.com',
+  'maildrop.cc', 'mintemail.com', 'sneakemail.com', 'spam4.me',
+  'mytrashmail.com', 'temp-mail.io', 'dispostable.com', '33mail.com',
+  'mailnesia.com', 'maildisposable.com', 'tempmail.info', 'fake-mail.com'
+]);
+
 const router = express.Router();
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -314,6 +323,15 @@ router.post("/signup", authLimiter, async (req, res) => {
     const normalizedEmail = String(email).trim().toLowerCase();
     if (!normalizedEmail.includes("@") || normalizedEmail.length > 254)
       return res.status(400).json({ error: "Please enter a valid email address" });
+    
+    // SECURITY FIX: Block disposable email domains to prevent trial spam
+    const domain = normalizedEmail.split('@')[1];
+    if (DISPOSABLE_DOMAINS.has(domain)) {
+      return res.status(400).json({ 
+        error: "Disposable email addresses are not allowed. Please use a permanent email address." 
+      });
+    }
+    
     if (String(password).length < 6)
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     if (String(password).length > 128)

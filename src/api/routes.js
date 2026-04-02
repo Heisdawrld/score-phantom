@@ -17,6 +17,7 @@ import {
 const router = Router();
 // Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 if (!JWT_SECRET) {
   console.error('[FATAL] JWT_SECRET not set in routes.js');
   process.exit(1);
@@ -141,6 +142,24 @@ async function incrementDailyCount(userId, today) {
       args: [userId, today],
     });
   } catch {}
+}
+
+// ─── Middleware: requireAdmin ──────────────────────────────────────────────────
+// Verifies JWT and checks if user is admin (by email).
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization || "";
+  try {
+    const token = auth.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 }
 
 // ─── Middleware: requireTrialOrPremium ────────────────────────────────────────
@@ -694,25 +713,12 @@ router.get("/usage", requireAuth, async (req, res) => {
   }
 });
 
-// ─── POST /reset-trial — reset the current user's daily prediction count ──────
-// Allows owner to clear their own trial count for testing / debugging.
-router.post("/reset-trial", requireAuth, async (req, res) => {
-  try {
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-    await db.execute({
-      sql: `DELETE FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
-      args: [req.user.id, today],
-    });
-    res.json({ ok: true, message: `Trial count reset for user ${req.user.id} on ${today}` });
-  } catch (err) {
-    console.error("[ResetTrial]", err.message);
-    res.status(500).json({ error: "Reset failed", detail: err.message });
-  }
-});
-
 // ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
 // Admin-only: verifies that stats pipeline works end-to-end for a fixture.
-router.get("/debug/enrich/:fixtureId", requireAuth, async (req, res) => {
+// SECURITY FIX: Changed from requireAuth to requireAdmin to prevent API quota abuse
+router.get("/debug/enrich/:fixtureId", requireAdmin, async (req, res) => {
+  // Admin middleware already attached req.user from adminRoutes pattern
+  // Extract fixtureId the same way other routes do
   try {
     const { fixtureId } = req.params;
 
