@@ -606,4 +606,21 @@ router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
 
+
+// POST /api/admin/users/:id/verify-email — manually verify a user's email
+router.post('/users/:id/verify-email', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' });
+    const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
+    const user = result.rows?.[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    await db.execute({ sql: 'UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?', args: [userId] });
+    console.log('[Admin] Force-verified email for user', userId, user.email);
+    return res.json({ success: true, userId, email: user.email, was_verified: !!user.email_verified });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
