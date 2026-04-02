@@ -23,7 +23,7 @@ const FLW_ENCRYPTION  = process.env.FLUTTERWAVE_ENCRYPTION_KEY || "";
 
 const PLAN_AMOUNT_NGN  = 3000;       // ₦3,000 — always store in naira
 const PLAN_DURATION_DAYS = 30;
-const TRIAL_DURATION_DAYS = 3;
+const TRIAL_DURATION_DAYS = 1;
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
@@ -66,6 +66,8 @@ export async function initUsersTable() {
     ["premium_expires_at",        "ALTER TABLE users ADD COLUMN premium_expires_at TEXT"],
     ["subscription_expires_at",   "ALTER TABLE users ADD COLUMN subscription_expires_at TEXT"],
     ["subscription_code",         "ALTER TABLE users ADD COLUMN subscription_code TEXT"],
+    ["email_verified",             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"],
+    ["email_verification_token",   "ALTER TABLE users ADD COLUMN email_verification_token TEXT"],
     ["reset_token",               "ALTER TABLE users ADD COLUMN reset_token TEXT"],
     ["reset_token_expires_at",    "ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT"],
   ];
@@ -126,6 +128,7 @@ function publicUser(user) {
     subscription_code:     user.subscription_code,
     has_access:            access.has_full_access,
     access_status:         access.status,
+    email_verified:        user.email_verified === 1 || user.email_verified === true,
   };
 }
 
@@ -165,7 +168,7 @@ export async function requirePremiumAccess(req, res, next) {
 }
 
 // ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
-import { sendPasswordResetEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
 import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
 async function activatePremium(userId, flwChargeId, reference) {
@@ -177,6 +180,13 @@ async function activatePremium(userId, flwChargeId, reference) {
   await db.execute({
     sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
     args: [expiryISO, expiryISO, subscriptionCode, userId],
+  });
+
+  // Ensure a payment record exists (handles manual admin upgrades)
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
+          VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
+    args: [userId, reference, PLAN_AMOUNT_NGN, new Date().toISOString()],
   });
 
   await db.execute({
@@ -214,7 +224,7 @@ router.post("/signup", authLimiter, async (req, res) => {
     trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS);
 
     await db.execute({
-      sql: `INSERT INTO users (email, password_hash, status, trial_ends_at) VALUES (?, ?, ?, ?)`,
+      sql: `INSERT INTO users (email, password_hash, status, trial_ends_at, email_verified) VALUES (?, ?, ?, ?, 0)`,
       args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
     });
 
@@ -225,18 +235,59 @@ router.post("/signup", authLimiter, async (req, res) => {
     const user   = created.rows?.[0];
     if (!user) throw new Error("User created but could not be reloaded");
 
+    // Generate and store email verification token
+    const crypto = await import('crypto');
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    await db.execute({
+      sql: `UPDATE users SET email_verification_token = ? WHERE id = ?`,
+      args: [verifyToken, user.id],
+    });
+    // Send verification email (non-blocking — don't fail signup if email fails)
+    sendVerificationEmail(normalizedEmail, verifyToken).catch(e =>
+      console.warn('[Signup] Verification email failed:', e.message)
+    );
+
     const token   = signToken(user);
     const access  = computeAccessStatus(user);
     const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
     return res.json({
       token,
-      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      user: { ...publicUser(user), email_verified: false, ...(isAdmin ? { is_admin: true } : {}) },
       has_access:    access.has_full_access,
       access_status: access.status,
     });
   } catch (err) {
     console.error("[Signup]", err);
     return res.status(500).json({ error: "Signup failed" });
+  }
+});
+
+
+// GET /api/auth/verify-email?token=xxx
+// Verifies user email from link in verification email
+router.get("/verify-email", async (req, res) => {
+  const appUrl = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+  try {
+    const { token } = req.query;
+    if (!token) return res.redirect(`${appUrl}/?verified=invalid`);
+
+    const result = await db.execute({
+      sql: `SELECT id FROM users WHERE email_verification_token = ? LIMIT 1`,
+      args: [String(token).trim()],
+    });
+    const user = result.rows?.[0];
+    if (!user) return res.redirect(`${appUrl}/?verified=invalid`);
+
+    await db.execute({
+      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?`,
+      args: [user.id],
+    });
+    console.log('[VerifyEmail] ✓ User', user.id, 'verified email');
+    return res.redirect(`${appUrl}/?verified=success`);
+  } catch (err) {
+    console.error('[VerifyEmail]', err.message);
+    const appUrl2 = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+    return res.redirect(`${appUrl2}/?verified=error`);
   }
 });
 
@@ -277,7 +328,7 @@ router.post("/login", authLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE id = ? LIMIT 1`,
       args: [req.user.id],
     });
     const user = result.rows?.[0];
