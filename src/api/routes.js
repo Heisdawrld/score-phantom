@@ -781,4 +781,136 @@ router.get("/debug/enrich/:fixtureId", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── GET /track-record — Show app-wide prediction accuracy stats ────────────
+// Premium feature: visible to free users too (drives conversions)
+// Shows win rates by market type, historical accuracy, and performance trends
+router.get("/track-record", requireAuth, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days || 30, 10);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startISO = startDate.toISOString().slice(0, 10);
+
+    // Query backtesting outcomes (must exist in schema)
+    const outcomes = await db.execute({
+      sql: `SELECT 
+              market_type,
+              COUNT(*) as total_picks,
+              SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
+              SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
+              SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
+            FROM prediction_outcomes
+            WHERE DATE(created_at) >= ?
+            GROUP BY market_type
+            ORDER BY total_picks DESC`,
+      args: [startISO],
+    });
+
+    const marketStats = (outcomes.rows || []).map(row => ({
+      market: row.market_type,
+      totalPicks: Number(row.total_picks || 0),
+      wins: Number(row.wins || 0),
+      losses: Number(row.losses || 0),
+      voids: Number(row.voids || 0),
+      winRate: row.total_picks > 0 ? parseFloat(((Number(row.wins || 0) / Number(row.total_picks || 0)) * 100).toFixed(1)) : 0,
+    }));
+
+    // Overall stats
+    const totalRow = marketStats.reduce((acc, stat) => ({
+      totalPicks: acc.totalPicks + stat.totalPicks,
+      wins: acc.wins + stat.wins,
+      losses: acc.losses + stat.losses,
+      voids: acc.voids + stat.voids,
+    }), { totalPicks: 0, wins: 0, losses: 0, voids: 0 });
+
+    const overallWinRate = totalRow.totalPicks > 0
+      ? parseFloat(((totalRow.wins / totalRow.totalPicks) * 100).toFixed(1))
+      : 0;
+
+    return res.json({
+      period: `Last ${days} days`,
+      overallStats: {
+        totalPicks: totalRow.totalPicks,
+        wins: totalRow.wins,
+        losses: totalRow.losses,
+        voids: totalRow.voids,
+        winRate: overallWinRate,
+      },
+      byMarket: marketStats,
+      message: totalRow.totalPicks === 0 
+        ? "No prediction history yet. Make some picks to see your track record!" 
+        : null,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[TrackRecord]", err.message);
+    // Return empty stats if table doesn't exist yet (DB migration pending)
+    return res.json({
+      period: "Last 30 days",
+      overallStats: {
+        totalPicks: 0,
+        wins: 0,
+        losses: 0,
+        voids: 0,
+        winRate: 0,
+      },
+      byMarket: [],
+      message: "Track record data will appear once predictions resolve.",
+      access: buildAccessPayload(req.access),
+    });
+  }
+});
+
+// ─── GET /top-picks-today — Show best predictions for today ────────────────
+// Premium feature: gives users confidence that the AI actually finds good picks
+router.get("/top-picks-today", requireAuth, async (req, res) => {
+  try {
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const limit = parseInt(req.query.limit || 10, 10);
+
+    const result = await db.execute({
+      sql: `SELECT p.fixture_id, p.home_team, p.away_team,
+                   p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+                   p.best_pick_score, p.confidence_model,
+                   f.tournament_name, f.match_date, f.enrichment_status
+            FROM predictions_v2 p
+            JOIN fixtures f ON f.id = p.fixture_id
+            WHERE f.match_date LIKE ?
+              AND p.best_pick_selection IS NOT NULL
+              AND f.enrichment_status IN ('deep', 'basic')
+            ORDER BY p.best_pick_score DESC
+            LIMIT ?`,
+      args: [`%${today}%`, limit],
+    });
+
+    const picks = (result.rows || []).map(row => ({
+      fixtureId: row.fixture_id,
+      match: `${row.home_team} vs ${row.away_team}`,
+      market: row.best_pick_market,
+      pick: row.best_pick_selection,
+      probability: parseFloat((parseFloat(row.best_pick_probability || 0) * 100).toFixed(1)),
+      score: parseFloat(row.best_pick_score || 0),
+      confidence: parseFloat((parseFloat(row.confidence_model || 0) * 100).toFixed(1)),
+      tournament: row.tournament_name,
+      time: row.match_date,
+    }));
+
+    return res.json({
+      date: today,
+      topPicksCount: picks.length,
+      picks,
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[TopPicks]", err.message);
+    return res.json({
+      date: new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim(),
+      topPicksCount: 0,
+      picks: [],
+      message: "No predictions available yet for today.",
+      access: buildAccessPayload(req.access),
+    });
+  }
+});
+
 export default router;
