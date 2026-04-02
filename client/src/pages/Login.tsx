@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Mail, Lock, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
+// Check if user was redirected here after email verification
+const searchParams = new URLSearchParams(window.location.search);
+const justVerified = searchParams.get("verified") === "success";
+
 type View = "login" | "forgot" | "forgot-sent";
 
 export default function Login() {
@@ -140,6 +144,12 @@ export default function Login() {
 
         <Card className="p-8 backdrop-blur-2xl bg-panel/60 border-white/10">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Show success banner when redirected here after email verification */}
+            {justVerified && (
+              <div className="p-3 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm text-center font-semibold">
+                ✅ Email verified! Sign in to start your free trial.
+              </div>
+            )}
             {error && (
               <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center">
                 {error}

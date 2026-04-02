@@ -345,6 +345,13 @@ export default function Admin() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {/* Manual email verification for stuck users */}
+                    {!u.email_verified && (
+                      <ActionBtn label="Verify Email" icon={CheckCircle2} variant="green"
+                        confirm={`Manually verify email for ${u.email}?`}
+                        onClick={() => run(() => adminPost(`/users/${u.id}/verify-email`), `Email verified for ${u.email}`)}
+                      />
+                    )}
                     <ActionBtn label="Grant 30d" icon={Gift} variant="green"
                       onClick={() => run(() => adminPost(`/users/${u.id}/grant`, { days: 30 }), `Premium granted to ${u.email}`)}
                     />

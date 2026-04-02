@@ -231,6 +231,26 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
   }
 });
 
+// ── POST /users/:id/verify-email — manually verify a user's email ─────────────
+router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
+    const user = result.rows?.[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.email_verified === 1) return res.json({ success: true, message: 'Already verified' });
+    await db.execute({
+      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?`,
+      args: [userId],
+    });
+    console.log('[Admin] Manually verified email for user', userId, user.email);
+    return res.json({ success: true, message: `Email verified for ${user.email}` });
+  } catch (err) {
+    console.error('[Admin/verify-email]', err);
+    return res.status(500).json({ error: 'Failed to verify email' });
+  }
+});
+
 // ── POST /users/:id/revoke — revoke premium ─────────────────────────────────
 router.post("/users/:id/revoke", adminLimiter, requireAdmin, async (req, res) => {
   try {
