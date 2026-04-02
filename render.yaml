@@ -35,7 +35,7 @@ services:
         sync: false
       - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
-      - key: RESEND_API_KEY
+      - key: SENDGRID_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
