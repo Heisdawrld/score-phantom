@@ -69,7 +69,7 @@ export async function sendVerificationEmail(toEmail, verifyToken) {
     await sgMail.send({
       from: { name: 'ScorePhantom', email: FROM_EMAIL },
       to: toEmail,
-      subject: 'Verify your ScorePhantom email ✅',
+      subject: 'Activate your ScorePhantom account',
       html: `<div style="background:${DARK_BG};padding:40px 24px;max-width:480px;margin:0 auto;border-radius:16px;font-family:system-ui,sans-serif">
         ${logo}
         <h2 style="color:${BRAND};font-size:22px;margin-bottom:8px">Verify your email</h2>

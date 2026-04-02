@@ -264,30 +264,70 @@ router.post("/signup", authLimiter, async (req, res) => {
 
 
 // GET /api/auth/verify-email?token=xxx
-// Verifies user email from link in verification email
 router.get("/verify-email", async (req, res) => {
   const appUrl = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
+
+  function htmlPage(success, message, subtext) {
+    const icon  = success ? '✅' : '❌';
+    const color = success ? '#10e774' : '#ef4444';
+    const btn   = success
+      ? `<a href="${appUrl}/?verified=success" style="display:inline-block;background:#10e774;color:#000;font-weight:700;font-size:16px;padding:14px 36px;border-radius:14px;text-decoration:none;margin-top:8px">Open ScorePhantom →</a>`
+      : `<a href="${appUrl}/signup" style="display:inline-block;background:#ef4444;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:14px;text-decoration:none;margin-top:8px">Sign up again</a>`;
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ScorePhantom</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#080b10;color:#fff;font-family:system-ui,sans-serif;
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
+    .card{background:#0f172a;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:48px 32px;max-width:420px;width:100%}
+    h1{font-size:28px;font-weight:900;letter-spacing:4px;margin-bottom:32px;color:#fff}
+    .icon{font-size:56px;margin-bottom:16px}
+    h2{font-size:22px;font-weight:700;color:${color};margin-bottom:10px}
+    p{color:rgba(255,255,255,.6);font-size:15px;line-height:1.6;margin-bottom:24px}
+    .sub{font-size:12px;color:rgba(255,255,255,.3);margin-top:24px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>SCORE<span style="color:#10e774">PHANTOM</span></h1>
+    <div class="icon">${icon}</div>
+    <h2>${message}</h2>
+    <p>${subtext}</p>
+    ${btn}
+    <p class="sub">scorephantom.onrender.com</p>
+  </div>
+</body>
+</html>`;
+  }
+
   try {
     const { token } = req.query;
-    if (!token) return res.redirect(`${appUrl}/?verified=invalid`);
+    if (!token) {
+      return res.status(400).send(htmlPage(false, 'Invalid link', 'This verification link is missing a token. Please sign up again.'));
+    }
 
     const result = await db.execute({
       sql: `SELECT id FROM users WHERE email_verification_token = ? LIMIT 1`,
       args: [String(token).trim()],
     });
     const user = result.rows?.[0];
-    if (!user) return res.redirect(`${appUrl}/?verified=invalid`);
+    if (!user) {
+      return res.status(400).send(htmlPage(false, 'Link expired or invalid', 'This verification link has already been used or has expired. Log in to your account — your email may already be verified.'));
+    }
 
     await db.execute({
       sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?`,
       args: [user.id],
     });
-    console.log('[VerifyEmail] ✓ User', user.id, 'verified email');
-    return res.redirect(`${appUrl}/?verified=success`);
+    console.log('[VerifyEmail] ✓ User', user.id, 'email verified');
+    return res.send(htmlPage(true, 'Email verified!', 'Your email is confirmed. Your 1-day free trial is now active. Click below to start using ScorePhantom.'));
   } catch (err) {
     console.error('[VerifyEmail]', err.message);
-    const appUrl2 = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
-    return res.redirect(`${appUrl2}/?verified=error`);
+    return res.status(500).send(htmlPage(false, 'Something went wrong', 'Please try again or contact support.'));
   }
 });
 
