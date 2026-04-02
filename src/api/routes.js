@@ -391,9 +391,17 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
     const { prediction, odds, meta } = result;
     const fullPayload = { ...prediction, odds, meta };
 
-    const explanation = await explainPrediction(fullPayload);
+    // Groq explanation — wrap in try/catch so a Groq failure doesn't kill the
+    // whole prediction. Trial users get prediction data; premium users get explanation
+    // when Groq is available.
+    let explanation = null;
+    try {
+      explanation = await explainPrediction(fullPayload);
+    } catch (groqErr) {
+      console.warn('[Explain] Groq unavailable, returning prediction without explanation:', groqErr.message);
+    }
 
-    // Increment trial count only after successful response
+    // Increment trial count only after successfully reaching this point
     if (trialToday) {
       await incrementDailyCount(req.user.id, trialToday);
     }
@@ -407,7 +415,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Explain failed", detail: err.message });
+    res.status(500).json({ error: "Prediction failed", detail: err.message });
   }
 });
 
