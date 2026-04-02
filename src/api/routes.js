@@ -294,7 +294,7 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId — trial (2/day) or premium ─────────────────────
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
-    // Trial users: enforce 10 predictions/day cap
+    // Trial users: enforce daily predictions cap (TRIAL_DAILY_LIMIT)
     let trialToday = null; // declared here so it's in scope for increment below
     if (!req.access.subscription_active) {
       if (!req.access.has_full_access) {

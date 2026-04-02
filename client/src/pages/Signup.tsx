@@ -70,7 +70,7 @@ export default function Signup() {
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-semibold mb-6">
-            <Zap className="w-4 h-4" /> 3-Day Free Trial
+            <Zap className="w-4 h-4" /> 1-Day Free Trial
           </div>
           <h1 className="font-display text-5xl tracking-widest mb-2 text-white">JOIN THE PHANTOM</h1>
           <p className="text-muted-foreground">Get AI-driven football predictions today.</p>

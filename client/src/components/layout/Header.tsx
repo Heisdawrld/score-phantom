@@ -121,7 +121,7 @@ export function Header() {
                         {user.access_status === "active"
                           ? "Premium Plan"
                           : user.access_status === "trial"
-                          ? "Free Trial (10 predictions/day)"
+                          ? "Free Trial (2 predictions/day)"
                           : "Plan Expired"}
                       </span>
                     </div>

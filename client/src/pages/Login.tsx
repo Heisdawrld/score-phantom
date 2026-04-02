@@ -195,7 +195,7 @@ export default function Login() {
             </div>
             <Link href="/signup">
               <button type="button" className="w-full h-11 rounded-xl border border-primary/30 bg-primary/5 text-primary font-semibold text-sm hover:bg-primary/15 hover:border-primary/50 transition-all tracking-wide">
-                🚀 Start Free Trial — 3 Days Free
+                🚀 Start Free Trial — 1 Day Free
               </button>
             </Link>
           </div>
