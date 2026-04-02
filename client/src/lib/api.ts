@@ -32,12 +32,16 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      removeAuthToken();
-      window.location.href = "/login";
-    }
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.message || "An error occurred");
+    if (response.status === 401) {
+      // Only force-logout on definitive token rejection, not transient errors
+      const msg = (errorData.error || '').toLowerCase();
+      if (msg.includes('invalid token') || msg.includes('not authenticated') || msg.includes('unauthorized')) {
+        removeAuthToken();
+        window.location.href = '/login';
+      }
+    }
+    throw new Error(errorData.error || errorData.message || 'An error occurred');
   }
 
   return response.json();

@@ -15,8 +15,10 @@ export function useAuth() {
       const data = await fetchApi("/auth/me");
       return UserSchema.parse(data);
     },
-    retry: false,
-    staleTime: 5 * 60 * 1000,
+    retry: 2,               // retry twice before giving up (handles Render cold start)
+    retryDelay: 1500,        // 1.5s between retries
+    staleTime: 10 * 60 * 1000, // 10 min cache
+    gcTime: 30 * 60 * 1000,    // keep in memory 30 min
   });
 }
 

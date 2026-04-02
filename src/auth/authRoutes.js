@@ -267,11 +267,20 @@ router.post("/signup", authLimiter, async (req, res) => {
 router.get("/verify-email", async (req, res) => {
   const appUrl = (process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/$/, '');
 
-  function htmlPage(success, message, subtext) {
+  function htmlPage(success, message, subtext, token) {
     const icon  = success ? '✅' : '❌';
     const color = success ? '#10e774' : '#ef4444';
+    // On success: embed token + auto-redirect script so user is logged in instantly
+    const script = success && token
+      ? `<script>
+          try {
+            localStorage.setItem('sp_token', '${token}');
+          } catch(e) {}
+          setTimeout(function(){ window.location.href = '${appUrl}/'; }, 2500);
+        </script>`
+      : '';
     const btn   = success
-      ? `<a href="${appUrl}/?verified=success" style="display:inline-block;background:#10e774;color:#000;font-weight:700;font-size:16px;padding:14px 36px;border-radius:14px;text-decoration:none;margin-top:8px">Open ScorePhantom →</a>`
+      ? `<a href="${appUrl}/" style="display:inline-block;background:#10e774;color:#000;font-weight:700;font-size:16px;padding:14px 36px;border-radius:14px;text-decoration:none;margin-top:8px">Open ScorePhantom →</a>`
       : `<a href="${appUrl}/signup" style="display:inline-block;background:#ef4444;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:14px;text-decoration:none;margin-top:8px">Sign up again</a>`;
     return `<!DOCTYPE html>
 <html lang="en">
@@ -324,7 +333,11 @@ router.get("/verify-email", async (req, res) => {
       args: [user.id],
     });
     console.log('[VerifyEmail] ✓ User', user.id, 'email verified');
-    return res.send(htmlPage(true, 'Email verified!', 'Your email is confirmed. Your 1-day free trial is now active. Click below to start using ScorePhantom.'));
+    // Fetch user to generate login token so they're auto-logged in
+    const freshUser = await db.execute({ sql: 'SELECT * FROM users WHERE id = ? LIMIT 1', args: [user.id] });
+    const verifiedUser = freshUser.rows?.[0];
+    const loginToken = verifiedUser ? signToken(verifiedUser) : null;
+    return res.send(htmlPage(true, 'Email verified!', 'Your email is confirmed. Your 1-day free trial starts now. You will be redirected automatically…', loginToken));
   } catch (err) {
     console.error('[VerifyEmail]', err.message);
     return res.status(500).send(htmlPage(false, 'Something went wrong', 'Please try again or contact support.'));
