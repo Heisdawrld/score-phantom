@@ -21,13 +21,16 @@ export function usePrediction(fixtureId: string | null, onError?: (code: string)
           onError?.("daily_limit_reached");
         } else if (code === "subscription_required" || msg.includes("subscription required")) {
           onError?.("subscription_required");
+        } else if (code === "email_not_verified" || msg.includes("verify your email")) {
+          onError?.("email_not_verified");
         }
         throw err;
       }
     },
     enabled: !!fixtureId,
     staleTime: 0,
-    retry: false,
+    retry: 1,          // retry once — handles Render free-tier cold starts
+    retryDelay: 2500,  // 2.5s between retries
     // Invalidate fixtures list so enrichment badge updates immediately
     meta: {
       onSuccess: () => {

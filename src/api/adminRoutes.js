@@ -109,7 +109,7 @@ router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
     const offset = (page - 1) * limit;
 
     let countSql = `SELECT COUNT(*) as count FROM users`;
-    let querySql = `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users`;
+    let querySql = `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users`;
     const args = [];
 
     if (search) {
@@ -130,6 +130,7 @@ router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
       const access = computeAccessStatus(u);
       return {
         ...u,
+        email_verified: u.email_verified === 1 || u.email_verified === true,
         access_status: access.status,
         has_access: access.has_full_access,
         trial_active: access.trial_active,
@@ -203,9 +204,17 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
     const expiryISO = expiry.toISOString();
     const subscriptionCode = `SUB_${user.id}_${Date.now()}`;
 
+    const ref = `MANUAL_GRANT_${userId}_${Date.now()}`;
     await db.execute({
       sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
       args: [expiryISO, expiryISO, subscriptionCode, userId],
+    });
+
+    // Create a verified payment record so this shows in revenue stats
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
+            VALUES (?, ?, 3000, 'NGN', 'verified', 'manual_grant', ?)`,
+      args: [userId, ref, new Date().toISOString()],
     });
 
     return res.json({
@@ -615,9 +624,14 @@ router.post('/users/:id/verify-email', adminLimiter, requireAdmin, async (req, r
     const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
-    await db.execute({ sql: 'UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?', args: [userId] });
-    console.log('[Admin] Force-verified email for user', userId, user.email);
-    return res.json({ success: true, userId, email: user.email, was_verified: !!user.email_verified });
+    // Also reset trial so it starts now (not at signup) — prevents trial expiring during email gate
+    const freshTrialEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await db.execute({
+      sql: 'UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?',
+      args: [freshTrialEnd, userId],
+    });
+    console.log('[Admin] Force-verified email for user', userId, user.email, '— trial reset to', freshTrialEnd);
+    return res.json({ success: true, userId, email: user.email, was_verified: !!user.email_verified, trial_ends_at: freshTrialEnd });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

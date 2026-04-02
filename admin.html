@@ -547,8 +547,8 @@
       document.getElementById('statActive').textContent = data.users.active;
       document.getElementById('statTrial').textContent = data.users.trial;
       document.getElementById('statExpired').textContent = data.users.expired;
-      document.getElementById('statRevenue').textContent = `₦${(data.revenue.total / 100).toLocaleString()}`;
-      document.getElementById('statTodayRevenue').textContent = `₦${(data.today.revenue / 100).toLocaleString()}`;
+      document.getElementById('statRevenue').textContent = `₦${Number(data.revenue.total).toLocaleString()}`;
+      document.getElementById('statTodayRevenue').textContent = `₦${Number(data.today.revenue).toLocaleString()}`;
     } catch (e) {
       console.error('Stats failed:', e.message);
     }
@@ -587,11 +587,15 @@
           ? `Trial ends ${new Date(u.trial_ends_at).toLocaleDateString()}`
           : '—';
 
+      const emailVerifiedBadge = u.email_verified
+        ? `<span style="font-size:10px;background:#10e77420;color:#10e774;border:1px solid #10e77440;border-radius:6px;padding:1px 6px;">✓ Verified</span>`
+        : `<span style="font-size:10px;background:#f9731620;color:#fb923c;border:1px solid #f9731640;border-radius:6px;padding:1px 6px;">⚠ Unverified</span>`;
+
       return `
         <tr>
           <td>
             <div style="font-weight:600;color:#e2e8f0;">${u.email}</div>
-            <div style="font-size:11px;color:#64748b;margin-top:2px;">ID: ${u.id}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">ID: ${u.id} &nbsp;${emailVerifiedBadge}</div>
           </td>
           <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
           <td style="color:#94a3b8;font-size:12px;">${expiry}</td>
@@ -601,6 +605,7 @@
                 ? `<button class="btn-warn" onclick="revokeUser(${u.id}, '${u.email}')">Revoke Premium</button>`
                 : `<button class="btn-success" onclick="grantUser(${u.id}, '${u.email}')">Grant Premium</button>`
               }
+              ${!u.email_verified ? `<button class="btn-secondary" onclick="forceVerifyEmail(${u.id}, '${u.email}')">Verify Email</button>` : ''}
               <button class="btn-danger" onclick="deleteUser(${u.id}, '${u.email}')">Delete</button>
             </div>
           </td>
@@ -641,6 +646,15 @@
       showToast(`✅ Premium revoked from ${email}`, 'success');
       loadUsers();
       loadStats();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  async function forceVerifyEmail(id, email) {
+    if (!confirm(`Force-verify email for ${email}? This will also reset their 1-day trial.`)) return;
+    try {
+      await api(`/api/admin/users/${id}/verify-email`, { method: 'POST' });
+      showToast(`✅ Email verified for ${email}`, 'success');
+      loadUsers();
     } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
   }
 
@@ -739,7 +753,7 @@
         initialized: 'badge-expired',
       };
       const statusClass = statusColors[p.status] || 'badge-expired';
-      const amount = `₦${(p.amount / 100).toLocaleString()}`;
+      const amount = `₦${Number(p.amount).toLocaleString()}`;
       const date = p.paid_at
         ? new Date(p.paid_at).toLocaleDateString()
         : new Date(p.created_at).toLocaleDateString();

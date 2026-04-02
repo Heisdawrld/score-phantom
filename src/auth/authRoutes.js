@@ -329,11 +329,13 @@ router.get("/verify-email", async (req, res) => {
       return res.status(400).send(htmlPage(false, 'Link expired or invalid', 'This verification link has already been used or has expired. Log in to your account — your email may already be verified.'));
     }
 
+    // Reset trial so it starts NOW (not at signup time) — prevents trial expiring during email gate
+    const freshTrialEnd = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
     await db.execute({
-      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?`,
-      args: [user.id],
+      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
+      args: [freshTrialEnd, user.id],
     });
-    console.log('[VerifyEmail] ✓ User', user.id, 'email verified');
+    console.log('[VerifyEmail] ✓ User', user.id, 'email verified — trial reset to', freshTrialEnd);
     // Fetch user to generate login token so they're auto-logged in
     const freshUser = await db.execute({ sql: 'SELECT * FROM users WHERE id = ? LIMIT 1', args: [user.id] });
     const verifiedUser = freshUser.rows?.[0];

@@ -41,7 +41,10 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
         window.location.href = '/login';
       }
     }
-    throw new Error(errorData.error || errorData.message || 'An error occurred');
+    const apiErr: any = new Error(errorData.error || errorData.message || 'An error occurred');
+    // Preserve the structured code so callers can react to specific error types
+    if (errorData.code) apiErr.code = errorData.code;
+    throw apiErr;
   }
 
   return response.json();
