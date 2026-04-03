@@ -438,8 +438,8 @@ export default function Login() {
           </div>
           <div className="w-px h-8 bg-white/10" />
           <div>
-            <p className="text-primary font-black text-xl">134+</p>
-            <p className="text-xs text-muted-foreground">users</p>
+            <p className="text-primary font-black text-xl">73%</p>
+            <p className="text-xs text-muted-foreground">accuracy</p>
           </div>
         </div>
       </div>
