@@ -113,8 +113,8 @@ export default function AccaCalculator() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  // Paywall for expired users
-  if (!user || user.access_status === "expired") {
+  // Paywall for expired users AND free trial users
+  if (!user || user.access_status === "expired" || isTrial) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />

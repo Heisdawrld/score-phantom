@@ -87,7 +87,7 @@ export default function TopPicksToday() {
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   if (authLoading) return <div className="min-h-screen bg-background" />;
-  if (!isPremium) { setLocation("/"); return null; }
+  if (!isPremium) { setLocation("/paywall"); return null; }
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
