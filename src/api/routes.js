@@ -1074,6 +1074,56 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /value-bet-today — Best value edge pick of the day ──────────────────
+router.get("/value-bet-today", requireAuth, async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await db.execute({
+      sql: `SELECT p.fixture_id, p.home_team, p.away_team,
+                   p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+                   p.best_pick_implied_probability, p.best_pick_edge,
+                   f.tournament_name, f.match_date, f.enrichment_status
+            FROM predictions_v2 p
+            JOIN fixtures f ON f.id = p.fixture_id
+            WHERE f.match_date LIKE ?
+              AND p.best_pick_edge > 0
+              AND p.best_pick_probability > 0.55
+              AND f.enrichment_status IN ('deep', 'basic')
+            ORDER BY p.best_pick_edge DESC
+            LIMIT 1`,
+      args: [`%${today}%`],
+    });
+
+    const row = result.rows?.[0];
+    if (!row) {
+      return res.json({ found: false, access: buildAccessPayload(req.access) });
+    }
+
+    const prob = parseFloat(row.best_pick_probability || 0);
+    const impl = parseFloat(row.best_pick_implied_probability || 0);
+    const edge = parseFloat(row.best_pick_edge || 0);
+
+    return res.json({
+      found:               true,
+      fixtureId:           row.fixture_id,
+      homeTeam:            row.home_team,
+      awayTeam:            row.away_team,
+      market:              row.best_pick_market,
+      selection:           row.best_pick_selection,
+      probability:         parseFloat((prob * 100).toFixed(1)),
+      impliedProbability:  impl > 0 ? parseFloat((impl * 100).toFixed(1)) : null,
+      edge:                edge > 0 ? parseFloat((edge * 100).toFixed(1)) : null,
+      tournament:          row.tournament_name,
+      enrichmentStatus:    row.enrichment_status,
+      access:              buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error('[value-bet-today]', err.message);
+    return res.status(500).json({ error: 'Failed to fetch value bet' });
+  }
+});
+
 // ─── POST /subscribe-digest — Subscribe to daily email digests ─────────────────
 // Premium feature: daily top picks sent via email
 router.post("/subscribe-digest", requireAuth, async (req, res) => {
