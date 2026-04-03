@@ -336,6 +336,23 @@ router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /run-predictions — pre-generate predictions for all enriched fixtures ─
+router.post("/run-predictions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const limit = Number(req.body?.limit) || 100;
+    console.log(`[Admin] Manual prediction pre-generation triggered. Limit: ${limit}`);
+    const { autoBuildPredictions } = await import("../services/predictionRunner.js");
+    // Run in background, respond immediately
+    autoBuildPredictions({ limit }).catch(err =>
+      console.error("[Admin] run-predictions error:", err.message)
+    );
+    return res.json({ success: true, message: `Pre-generating predictions for up to ${limit} fixtures in background. Check server logs.` });
+  } catch (err) {
+    console.error("[Admin] run-predictions error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Backtesting routes ──────────────────────────────────────────────────────
 router.get("/backtest/stats", adminLimiter, requireAdmin, async (req, res) => {
   const stats = await getAccuracyStats();

@@ -315,11 +315,22 @@ app.listen(PORT, async () => {
   // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
   // This ensures all fixtures for the week get enriched on startup
   console.log('[AutoEnrich] Starting full startup enrichment pass...');
-  autoEnrich({ limit: 200 }).catch((err) => console.error("[AutoEnrich] startup error:", err.message));
+  const { autoBuildPredictions } = await import('./services/predictionRunner.js');
+  autoEnrich({ limit: 200 })
+    .then(() => {
+      console.log('[PredRunner] Enrichment done — pre-generating predictions...');
+      return autoBuildPredictions({ limit: 100 });
+    })
+    .catch((err) => console.error("[AutoEnrich/PredRunner] startup error:", err.message));
 
-  // Re-run enrichment every 4 hours to catch any newly added or failed fixtures
-  setInterval(() => {
-    autoEnrich().catch((err) => console.error("[AutoEnrich] scheduled error:", err.message));
+  // Re-run enrichment every 1 hour, then immediately pre-generate predictions
+  setInterval(async () => {
+    try {
+      await autoEnrich();
+      await autoBuildPredictions({ limit: 100 });
+    } catch (err) {
+      console.error("[AutoEnrich/PredRunner] scheduled error:", err.message);
+    }
   }, 60 * 60 * 1000); // every 1 hour
 
   // Re-seed fixtures daily at midnight Lagos time
