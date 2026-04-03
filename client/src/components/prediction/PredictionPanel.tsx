@@ -265,21 +265,35 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-b from-panel to-[#080b10] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.5)] max-h-[92dvh] flex flex-col"
+            transition={{ type: "spring", damping: 28, stiffness: 220 }}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-[#0c1018] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_80px_rgba(0,0,0,0.7)] max-h-[92dvh] flex flex-col"
           >
-            <div className="flex justify-center pt-4 pb-2">
-              <div className="w-16 h-1.5 rounded-full bg-white/20" />
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3.5 pb-1 shrink-0">
+              <div className="w-12 h-1 rounded-full bg-white/15" />
             </div>
 
-            <button
-              onClick={onClose}
-              className="absolute top-5 right-5 w-9 h-9 bg-white/8 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/12 transition-all active:scale-95"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {/* Sticky header — team names always visible while scrolling */}
+            <div className="shrink-0 px-5 pb-3 pt-1 border-b border-white/8 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                {fixture ? (
+                  <p className="font-bold text-sm text-white truncate">
+                    {fixture.homeTeam} <span className="text-white/30 font-normal">vs</span> {fixture.awayTeam}
+                  </p>
+                ) : (
+                  <div className="h-4 w-40 rounded bg-white/10 animate-pulse" />
+                )}
+                <p className="text-[10px] text-muted-foreground tracking-widest uppercase mt-0.5">ScorePhantom Analysis</p>
+              </div>
+              <button
+                onClick={onClose}
+                className="shrink-0 w-9 h-9 bg-white/8 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/15 transition-all active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-16 hide-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-24 hide-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
               {blockReason ? (() => {
                 const isExpiredBlock = blockReason === "expired";
                 return (
@@ -493,17 +507,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                   );
                 })()
               : data ? (
-                <div className="max-w-xl mx-auto mt-2 space-y-6">
-
-                  {/* Header */}
-                  <div className="text-center">
-                    <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-2">ScorePhantom Prediction</p>
-                    <h2 className="font-display text-3xl tracking-wide">
-                      {fixture?.homeTeam}{" "}
-                      <span className="text-muted-foreground font-sans text-xl mx-2">vs</span>{" "}
-                      {fixture?.awayTeam}
-                    </h2>
-                  </div>
+                <div className="max-w-xl mx-auto mt-4 space-y-5">
 
                   {/* Game Script */}
                   {gameScript && (
