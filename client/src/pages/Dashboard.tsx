@@ -599,6 +599,27 @@ export default function Dashboard() {
   const { toast } = useToast();
   const dateStripRef = useRef(null);
 
+  // Trial countdown timer
+  const [trialHoursRemaining, setTrialHoursRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    if (!user?.trial_ends_at) {
+      setTrialHoursRemaining(null);
+      return;
+    }
+    
+    const updateCountdown = () => {
+      const now = new Date();
+      const trialEnds = new Date(user.trial_ends_at);
+      const msRemaining = trialEnds.getTime() - now.getTime();
+      const hoursRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60)));
+      setTrialHoursRemaining(hoursRemaining);
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [user?.trial_ends_at]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('payment') === 'success') {
@@ -693,6 +714,43 @@ export default function Dashboard() {
               <p className="text-xs text-white/50">All predictions are blurred · Upgrade to unlock everything</p>
             </div>
             <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl shrink-0">Unlock All</span>
+          </div>
+        )}
+
+        {/* Trial countdown banner */}
+        {isTrial && trialHoursRemaining !== null && (
+          <div
+            className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all group ${
+              trialHoursRemaining <= 2
+                ? 'bg-gradient-to-r from-red-500/10 to-red-500/5 border-red-500/25 hover:border-red-500/40'
+                : 'bg-gradient-to-r from-amber-500/10 to-amber-500/5 border-amber-500/25 hover:border-amber-500/40'
+            }`}
+            onClick={() => setLocation("/paywall")}
+          >
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              trialHoursRemaining <= 2 ? 'bg-red-500/20' : 'bg-amber-500/20'
+            }`}>
+              <Zap className={`w-4 h-4 ${trialHoursRemaining <= 2 ? 'text-red-400' : 'text-amber-400'}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-bold tracking-wide leading-none mb-0.5 ${
+                trialHoursRemaining <= 2 ? 'text-red-400' : 'text-amber-400'
+              }`}>
+                {trialHoursRemaining === 0
+                  ? "Trial expires soon!"
+                  : `Trial expires in ${trialHoursRemaining} hour${trialHoursRemaining === 1 ? '' : 's'}`}
+              </p>
+              <p className="text-xs text-white/50">
+                {trialHoursRemaining <= 2
+                  ? "Lock in your access now before it's too late"
+                  : "Upgrade to premium for unlimited access"}
+              </p>
+            </div>
+            <span className={`text-[11px] font-black text-black px-3 py-1.5 rounded-xl shrink-0 group-hover:opacity-90 transition-opacity ${
+              trialHoursRemaining <= 2 ? 'bg-red-400' : 'bg-primary'
+            }`}>
+              {trialHoursRemaining <= 2 ? "Upgrade Now" : "Upgrade"}
+            </span>
           </div>
         )}
 
