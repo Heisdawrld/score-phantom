@@ -3,8 +3,6 @@ import { fetchApi, setAuthToken, removeAuthToken, UserSchema } from "@/lib/api";
 import {
   signInWithGoogle,
   signInWithApple,
-  signUpWithEmail,
-  signInWithEmail,
 } from "@/lib/firebase";
 import { z } from "zod";
 import { useLocation } from "wouter";
@@ -120,13 +118,10 @@ export function useEmailSignUp() {
 
   return useMutation({
     mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      const { idToken } = await signUpWithEmail(
-        credentials.email,
-        credentials.password
-      );
-      return fetchApi("/auth/email", {
+      // Call backend directly — no Firebase needed
+      return fetchApi("/auth/signup", {
         method: "POST",
-        body: JSON.stringify({ idToken, email: credentials.email }),
+        body: JSON.stringify(credentials),
       });
     },
     onSuccess: (data) => {
@@ -144,13 +139,10 @@ export function useEmailSignIn() {
 
   return useMutation({
     mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      const { idToken } = await signInWithEmail(
-        credentials.email,
-        credentials.password
-      );
-      return fetchApi("/auth/email", {
+      // Call backend directly — no Firebase needed
+      return fetchApi("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ idToken, email: credentials.email }),
+        body: JSON.stringify(credentials),
       });
     },
     onSuccess: (data) => {
