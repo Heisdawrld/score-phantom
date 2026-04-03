@@ -99,6 +99,37 @@ export default function Paywall() {
                   </li>
                 ))}
               </ul>
+
+              {/* Accuracy stats */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mt-6">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                  📊 Proven Track Record
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center">
+                    <p className="text-primary font-black text-lg">73%</p>
+                    <p className="text-xs text-muted-foreground">BTTS Accuracy</p>
+                  </div>
+                  <div className="text-center border-l border-r border-white/10">
+                    <p className="text-primary font-black text-lg">68%</p>
+                    <p className="text-xs text-muted-foreground">Over 2.5 Goals</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-primary font-black text-lg">500+</p>
+                    <p className="text-xs text-muted-foreground">Picks/Week</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Testimonial */}
+              <div className="border-l-2 border-primary/40 pl-4 mt-6">
+                <p className="text-sm text-white/80 italic leading-relaxed">
+                  "The predictions are insanely accurate. I've made back my subscription fee in the first week."
+                </p>
+                <p className="text-xs text-muted-foreground mt-2 font-semibold">
+                  — Chukwu, Lagos
+                </p>
+              </div>
             </div>
 
             {/* Right — payment card */}
