@@ -315,6 +315,144 @@ router.post("/google", authLimiter, async (req, res) => {
 });
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
+
+// ── Apple Sign-In ──────────────────────────────────────────────────────────────
+router.post("/apple", authLimiter, async (req, res) => {
+  try {
+    const { idToken } = req.body || {};
+    if (!idToken) return res.status(400).json({ error: "Firebase ID token required" });
+
+    // Verify the token with Firebase
+    let firebasePayload;
+    try {
+      firebasePayload = await verifyFirebaseToken(idToken);
+    } catch (err) {
+      console.error('[AppleAuth] Token verification failed:', err.message);
+      return res.status(401).json({ error: "Invalid Apple token. Please sign in again." });
+    }
+
+    const email = String(firebasePayload.email || "").trim().toLowerCase();
+    const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
+    if (!email) return res.status(400).json({ error: "No email address in Apple account" });
+
+    // Find existing user or create new one
+    let result = await db.execute({
+      sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
+      args: [email],
+    });
+    let user = result.rows?.[0];
+
+    if (!user) {
+      // Brand-new user — create with trial starting NOW
+      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      await db.execute({
+        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        args: [email, firebaseUid, trialEnds],
+      });
+      const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
+      user = created.rows?.[0];
+      console.log(`[AppleAuth] ✓ New user created: ${email} (uid=${firebaseUid})`);
+    } else {
+      // Existing user — stamp firebase_uid if not set, and mark email verified
+      await db.execute({
+        sql: "UPDATE users SET firebase_uid = COALESCE(NULLIF(firebase_uid,''), ?), email_verified = 1 WHERE id = ?",
+        args: [firebaseUid, user.id],
+      });
+      const updated = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [user.id] });
+      user = updated.rows?.[0];
+      console.log(`[AppleAuth] ✓ Existing user signed in: ${email} (id=${user.id})`);
+    }
+
+    if (!user) throw new Error("Failed to find or create user");
+
+    const token = signToken(user);
+    const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && email === ADMIN_EMAIL;
+
+    return res.json({
+      token,
+      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      has_access: access.has_full_access,
+      access_status: access.status,
+    });
+  } catch (err) {
+    console.error("[AppleAuth]", err.message);
+    return res.status(500).json({ error: "Authentication failed. Please try again." });
+  }
+});
+
+// ── Email Sign-In (Firebase) ────────────────────────────────────────────────────
+router.post("/email", authLimiter, async (req, res) => {
+  try {
+    const { idToken, email } = req.body || {};
+    if (!idToken || !email) {
+      return res.status(400).json({ error: "Firebase ID token and email required" });
+    }
+
+    // Verify the token with Firebase
+    let firebasePayload;
+    try {
+      firebasePayload = await verifyFirebaseToken(idToken);
+    } catch (err) {
+      console.error('[EmailAuth] Token verification failed:', err.message);
+      return res.status(401).json({ error: "Invalid credentials. Please try again." });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
+    
+    // Validate email is not disposable
+    const emailDomain = normalizedEmail.split("@")[1];
+    if (DISPOSABLE_DOMAINS.has(emailDomain)) {
+      return res.status(400).json({ error: "Disposable email addresses are not allowed." });
+    }
+
+    // Find existing user or create new one
+    let result = await db.execute({
+      sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
+      args: [normalizedEmail],
+    });
+    let user = result.rows?.[0];
+
+    if (!user) {
+      // Brand-new user — create with trial starting NOW
+      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      await db.execute({
+        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        args: [normalizedEmail, firebaseUid, trialEnds],
+      });
+      const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
+      user = created.rows?.[0];
+      console.log(`[EmailAuth] ✓ New user created: ${normalizedEmail} (uid=${firebaseUid})`);
+    } else {
+      // Existing user — stamp firebase_uid if not set, and mark email verified
+      await db.execute({
+        sql: "UPDATE users SET firebase_uid = COALESCE(NULLIF(firebase_uid,''), ?), email_verified = 1 WHERE id = ?",
+        args: [firebaseUid, user.id],
+      });
+      const updated = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [user.id] });
+      user = updated.rows?.[0];
+      console.log(`[EmailAuth] ✓ User signed in: ${normalizedEmail} (id=${user.id})`);
+    }
+
+    if (!user) throw new Error("Failed to find or create user");
+
+    const token = signToken(user);
+    const access = computeAccessStatus(user);
+    const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
+
+    return res.json({
+      token,
+      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      has_access: access.has_full_access,
+      access_status: access.status,
+    });
+  } catch (err) {
+    console.error("[EmailAuth]", err.message);
+    return res.status(500).json({ error: "Authentication failed. Please try again." });
+  }
+});
+
 router.post("/signup", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};

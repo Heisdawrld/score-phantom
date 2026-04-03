@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchApi, setAuthToken, removeAuthToken, UserSchema } from "@/lib/api";
-import { signInWithGoogle } from "@/lib/firebase";
+import {
+  signInWithGoogle,
+  signInWithApple,
+  signUpWithEmail,
+  signInWithEmail,
+} from "@/lib/firebase";
 import { z } from "zod";
 import { useLocation } from "wouter";
 
@@ -77,6 +82,75 @@ export function useGoogleSignIn() {
       return fetchApi("/auth/google", {
         method: "POST",
         body: JSON.stringify({ idToken }),
+      });
+    },
+    onSuccess: (data) => {
+      setAuthToken(data.token);
+      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
+      setLocation("/");
+    },
+  });
+}
+
+export function useAppleSignIn() {
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { idToken } = await signInWithApple();
+      return fetchApi("/auth/apple", {
+        method: "POST",
+        body: JSON.stringify({ idToken }),
+      });
+    },
+    onSuccess: (data) => {
+      setAuthToken(data.token);
+      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
+      setLocation("/");
+    },
+  });
+}
+
+export function useEmailSignUp() {
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  return useMutation({
+    mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
+      const { idToken } = await signUpWithEmail(
+        credentials.email,
+        credentials.password
+      );
+      return fetchApi("/auth/email", {
+        method: "POST",
+        body: JSON.stringify({ idToken, email: credentials.email }),
+      });
+    },
+    onSuccess: (data) => {
+      setAuthToken(data.token);
+      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
+      setLocation("/");
+    },
+  });
+}
+
+export function useEmailSignIn() {
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  return useMutation({
+    mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
+      const { idToken } = await signInWithEmail(
+        credentials.email,
+        credentials.password
+      );
+      return fetchApi("/auth/email", {
+        method: "POST",
+        body: JSON.stringify({ idToken, email: credentials.email }),
       });
     },
     onSuccess: (data) => {
