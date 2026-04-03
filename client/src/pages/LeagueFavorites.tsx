@@ -19,8 +19,9 @@ const POPULAR_LEAGUES = [
 
 export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (authLoading) return <div className="min-h-screen bg-background" />;
   if (!isPremium) { setLocation("/"); return null; }
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);

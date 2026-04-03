@@ -512,6 +512,22 @@ function LeagueGroup({
 
                 <div className="flex flex-col items-end gap-2">
                   <EnrichmentBadge status={fixture.enrichment_status} />
+                  {/* Prediction confidence badge — shown when a pick is available */}
+                  {fixture.best_pick_selection && fixture.best_pick_probability && (() => {
+                    const pct = parseFloat(fixture.best_pick_probability) * 100;
+                    const level = fixture.pick_confidence_level?.toUpperCase();
+                    const colorClass =
+                      level === "HIGH"   ? "bg-primary/15 text-primary border-primary/30" :
+                      level === "MEDIUM" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
+                                          "bg-orange-500/15 text-orange-400 border-orange-500/30";
+                    return (
+                      <div className={`flex items-center gap-1 border rounded-full px-2 py-0.5 ${colorClass}`}>
+                        <span className="text-[10px] font-bold">{pct.toFixed(0)}%</span>
+                        <span className="text-[10px] opacity-70">·</span>
+                        <span className="text-[10px] font-medium truncate max-w-[80px]">{fixture.best_pick_selection}</span>
+                      </div>
+                    );
+                  })()}
                   {(fixture.odds_home || fixture.odds_draw || fixture.odds_away) && (
                     <div className="flex items-center gap-1">
                       {fixture.odds_home && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_home).toFixed(2)}</span>}

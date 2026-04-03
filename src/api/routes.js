@@ -225,8 +225,12 @@ router.get("/fixtures", requireAuth, async (req, res) => {
        f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
        f.enriched, f.created_at, f.meta, f.enrichment_status, f.data_quality,
        f.country_flag, f.home_team_logo, f.away_team_logo,
-       f.odds_home, f.odds_draw, f.odds_away
- FROM fixtures f WHERE 1=1`;
+       f.odds_home, f.odds_draw, f.odds_away,
+       p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+       p.confidence_model AS pick_confidence_level
+ FROM fixtures f
+ LEFT JOIN predictions p ON p.fixture_id = f.id
+ WHERE 1=1`;
     const args = [];
 
     if (date) {

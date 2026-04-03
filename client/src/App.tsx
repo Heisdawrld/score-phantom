@@ -52,6 +52,7 @@ import AccaCalculator from "@/pages/AccaCalculator";
 import Landing from "@/pages/Landing";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -121,6 +122,7 @@ function App() {
           <Toaster />
           <UpdateBanner />
           <InstallPrompt />
+          <BottomNav />
           {/* VerifyEmailHandler removed — Google Auth */}
         </TooltipProvider>
       </QueryClientProvider>

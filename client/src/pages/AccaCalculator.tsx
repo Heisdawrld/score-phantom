@@ -26,8 +26,9 @@ interface PayoutData {
 
 export default function AccaCalculator() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (authLoading) return <div className="min-h-screen bg-background" />;
   if (!isPremium) { setLocation("/"); return null; }
   const [picks, setPicks] = useState<Pick[]>([
     { match: "Man City vs Liverpool", market: "Over 2.5", prediction: "Yes", odds: 1.68, confidence: 75 },

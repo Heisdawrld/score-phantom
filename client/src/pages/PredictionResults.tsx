@@ -20,8 +20,9 @@ interface Result {
 
 export default function PredictionResults() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (authLoading) return <div className="min-h-screen bg-background" />;
   if (!isPremium) { setLocation("/"); return null; }
   
   const { data, isLoading } = useQuery({
