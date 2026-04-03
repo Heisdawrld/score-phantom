@@ -250,7 +250,7 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         noSafePick ? null : (bestPick?.market    || null),
         noSafePick ? null : (bestPick?.pick       || null),
         noSafePick ? null : (bestPick?.probability != null ? bestPick.probability : null),
-        noSafePick ? null : (bestPick?.edgeScore    != null ? bestPick.edgeScore    : null),
+        noSafePick ? null : (bestPick?.compositeScore ?? bestPick?.edgeScore ?? bestPick?.score ?? null),
         noSafePick ? null : (bestPick?.modelConfidence || null),
         volStr,
         gameScript.script || null,

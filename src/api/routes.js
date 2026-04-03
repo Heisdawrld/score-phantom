@@ -982,7 +982,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
                  WHERE f.match_date LIKE ?
                    AND p.best_pick_selection IS NOT NULL
                    AND p.best_pick_probability >= 0.58
-                   AND p.best_pick_score >= 0.35
+                   AND (p.best_pick_score >= 0.35 OR (p.best_pick_score IS NULL AND p.best_pick_probability >= 0.68))
                    AND f.enrichment_status IN ('deep', 'basic')`;
     
     const args = [`%${today}%`];

@@ -1144,6 +1144,7 @@ function chooseRecommendation(rankedMarkets, features, context, gameScriptObj) {
     alternative_probability: alt?.raw_probability ?? null,
     alternative_confidence: alt?.confidence || null,
     no_clear_edge: false,
+    compositeScore: parseFloat((best.score || best.finalScore || 0).toFixed(4)),
   };
 }
 
