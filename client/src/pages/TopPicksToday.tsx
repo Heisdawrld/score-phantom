@@ -3,7 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles } from "lucide-react";
+import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Pick {
@@ -14,8 +14,12 @@ interface Pick {
   probability: number;
   score: number;
   confidence: number;
+  composite: number;
   tournament: string;
   time: string;
+  enrichment?: string;
+  dataQuality?: string;
+  factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
 }
 
 function formatMarket(key: string): string {
@@ -38,11 +42,25 @@ function formatMarket(key: string): string {
   return map[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function getQualityLabel(score: number): { label: string; color: string; glow: string } {
-  if (score >= 0.65) return { label: "Elite",   color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", glow: "shadow-[0_0_20px_rgba(16,231,116,0.15)]" };
-  if (score >= 0.52) return { label: "Strong",  color: "text-blue-400 bg-blue-500/15 border-blue-500/30",         glow: "shadow-[0_0_20px_rgba(59,130,246,0.12)]" };
-  if (score >= 0.42) return { label: "Good",    color: "text-yellow-400 bg-yellow-500/15 border-yellow-500/30",   glow: "" };
+function getQualityLabel(composite: number): { label: string; color: string; glow: string } {
+  // composite is 0-100
+  if (composite >= 65) return { label: "Elite",   color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", glow: "shadow-[0_0_20px_rgba(16,231,116,0.15)]" };
+  if (composite >= 52) return { label: "Strong",  color: "text-blue-400 bg-blue-500/15 border-blue-500/30",         glow: "shadow-[0_0_20px_rgba(59,130,246,0.12)]" };
+  if (composite >= 40) return { label: "Good",    color: "text-yellow-400 bg-yellow-500/15 border-yellow-500/30",   glow: "" };
   return               { label: "Fair",    color: "text-white/50 bg-white/5 border-white/15",               glow: "" };
+}
+
+function FactorBadge({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-medium",
+      active
+        ? "text-primary border-primary/30 bg-primary/10"
+        : "text-white/20 border-white/10 bg-white/3"
+    )}>
+      {icon}{label}
+    </span>
+  );
 }
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
@@ -98,7 +116,7 @@ export default function TopPicksToday() {
   const avgConf = picks.length > 0
     ? (picks.reduce((s, p) => s + p.confidence, 0) / picks.length).toFixed(0)
     : null;
-  const eliteCount = picks.filter(p => p.score >= 0.65).length;
+  const eliteCount = picks.filter(p => (p.composite ?? p.score * 100) >= 65).length;
 
   if (isLoading) {
     return (
@@ -155,7 +173,7 @@ export default function TopPicksToday() {
         {picks.length > 0 ? (
           <div className="space-y-3">
             {picks.map((pick, idx) => {
-              const quality = getQualityLabel(pick.score);
+              const quality = getQualityLabel(pick.composite ?? pick.score * 100);
               const isTop3 = idx < 3;
               const isTop = idx === 0;
 
@@ -204,9 +222,9 @@ export default function TopPicksToday() {
                           </div>
                         </div>
 
-                        {/* Confidence ring */}
+                        {/* Confidence ring — shows composite score */}
                         <div className="shrink-0">
-                          <ConfRing value={pick.confidence} />
+                          <ConfRing value={pick.composite ?? pick.confidence} />
                         </div>
                       </div>
 
@@ -227,21 +245,31 @@ export default function TopPicksToday() {
                         </div>
                       </div>
 
-                      {/* Score bar */}
+                      {/* Analysis factors */}
+                      {pick.factors && (
+                        <div className="mt-2 flex items-center gap-1 flex-wrap">
+                          <FactorBadge icon={<Activity className="w-2 h-2" />} label="Form" active={pick.factors.form} />
+                          <FactorBadge icon={<Users className="w-2 h-2" />} label="H2H" active={pick.factors.h2h} />
+                          <FactorBadge icon={<Zap className="w-2 h-2" />} label="xG" active={pick.factors.xg} />
+                          <FactorBadge icon={<Brain className="w-2 h-2" />} label="Tactical" active={pick.factors.tactical} />
+                        </div>
+                      )}
+
+                      {/* Composite score bar */}
                       <div className="mt-2.5 flex items-center gap-2">
                         <div className="flex-1 bg-white/6 rounded-full h-1 overflow-hidden">
                           <div
                             className={cn(
                               "h-full rounded-full transition-all",
-                              pick.score >= 0.65 ? "bg-primary" :
-                              pick.score >= 0.52 ? "bg-blue-500" :
+                              (pick.composite ?? 0) >= 65 ? "bg-primary" :
+                              (pick.composite ?? 0) >= 52 ? "bg-blue-500" :
                               "bg-yellow-500"
                             )}
-                            style={{ width: `${Math.min(pick.score * 100, 100)}%` }}
+                            style={{ width: `${Math.min(pick.composite ?? pick.score * 100, 100)}%` }}
                           />
                         </div>
                         <span className="text-[9px] text-white/25 shrink-0 font-mono">
-                          {pick.score.toFixed(3)} score
+                          {(pick.composite ?? pick.score * 100).toFixed(0)} pts
                         </span>
                       </div>
                     </div>

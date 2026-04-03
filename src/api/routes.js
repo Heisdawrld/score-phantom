@@ -970,59 +970,138 @@ router.get("/league-favorites", requireAuth, async (req, res) => {
 });
 
 // ─── GET /top-picks-today — Show best predictions for today ────────────────
-// Premium feature: gives users confidence that the AI actually finds good picks
+// Premium feature: composite-scored picks using form, H2H, xG, tactical fit & confidence
 router.get("/top-picks-today", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-    const limit = parseInt(req.query.limit || 10, 10);
+    const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today   = lagosDt.split(',')[0].trim();
+    // Also include yesterday (UTC shift) and tomorrow (late fixtures)
+    const d = new Date();
+    const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+
+    const limit        = Math.min(parseInt(req.query.limit || 20, 10), 50);
     const favoritesOnly = req.query.favorites === 'true';
 
-    let query = `SELECT p.fixture_id, p.home_team, p.away_team,
-                        p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                        p.best_pick_score, p.confidence_model,
-                        f.tournament_name, f.match_date, f.enrichment_status
-                 FROM predictions_v2 p
-                 JOIN fixtures f ON f.id = p.fixture_id
-                 WHERE f.match_date LIKE ?
-                   AND p.best_pick_selection IS NOT NULL
-                   AND p.best_pick_probability >= 0.57
-                   AND (p.best_pick_score >= 0.35 OR p.best_pick_score IS NULL)
-                   AND f.enrichment_status IN ('deep', 'basic')`;
-    
-    const args = [`%${today}%`];
+    // Build date filter — include yesterday, today, tomorrow to avoid timezone gaps
+    let dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
+    let args = [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`];
 
-    // Filter by favorite leagues if requested
+    // ── Step 1: Try to get picks from predictions_v2 ──────────────────────────
+    let pickQuery = `
+      SELECT p.fixture_id, p.home_team, p.away_team,
+             p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+             p.best_pick_score, p.confidence_model, p.prediction_json,
+             f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
+      FROM predictions_v2 p
+      JOIN fixtures f ON f.id = p.fixture_id
+      WHERE ${dateFilter}
+        AND p.best_pick_selection IS NOT NULL
+        AND p.best_pick_probability >= 0.44
+        AND f.enrichment_status IN ('deep', 'basic', 'limited')
+    `;
+    let pickArgs = [...args];
+
+    // Favorites filter
+    let favorites = [];
     if (favoritesOnly) {
       const userResult = await db.execute({
         sql: `SELECT league_favorites FROM users WHERE id = ? LIMIT 1`,
         args: [req.user.id],
       });
-      const user = userResult.rows?.[0];
-      const favorites = user?.league_favorites ? JSON.parse(user.league_favorites) : [];
-      
+      const userRow = userResult.rows?.[0];
+      favorites = userRow?.league_favorites ? JSON.parse(userRow.league_favorites) : [];
       if (favorites.length > 0) {
         const placeholders = favorites.map(() => '?').join(',');
-        query += ` AND f.tournament_name IN (${placeholders})`;
-        args.push(...favorites);
+        pickQuery += ` AND f.tournament_name IN (${placeholders})`;
+        pickArgs.push(...favorites);
       }
     }
 
-    query += ` ORDER BY COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC LIMIT ?`;
-    args.push(limit);
+    // Composite ORDER BY: score (0-1) × 0.5 + confidence (0-1) × 0.3 + probability × 0.2
+    pickQuery += `
+      ORDER BY (
+        COALESCE(CAST(p.best_pick_score AS REAL), 0) * 0.5 +
+        COALESCE(CAST(p.confidence_model AS REAL), 0) * 0.3 +
+        COALESCE(CAST(p.best_pick_probability AS REAL), 0) * 0.2
+      ) DESC
+      LIMIT ?
+    `;
+    pickArgs.push(limit);
 
-    const result = await db.execute({ sql: query, args });
+    let result = await db.execute({ sql: pickQuery, args: pickArgs });
+    let rows = result.rows || [];
 
-    const picks = (result.rows || []).map(row => ({
-      fixtureId: row.fixture_id,
-      match: `${row.home_team} vs ${row.away_team}`,
-      market: row.best_pick_market,
-      pick: row.best_pick_selection,
-      probability: parseFloat((parseFloat(row.best_pick_probability || 0) * 100).toFixed(1)),
-      score: parseFloat(row.best_pick_score || 0),
-      confidence: parseFloat((parseFloat(row.confidence_model || 0) * 100).toFixed(1)),
-      tournament: row.tournament_name,
-      time: row.match_date,
-    }));
+    // ── Step 2: No picks? Trigger on-demand generation for enriched fixtures ──
+    if (rows.length === 0) {
+      console.log('[TopPicks] No pre-generated picks — triggering on-demand generation...');
+      try {
+        const enrichedResult = await db.execute({
+          sql: `SELECT f.id FROM fixtures f
+                LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
+                WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
+                  AND f.enrichment_status IN ('deep', 'basic', 'limited')
+                  AND p.fixture_id IS NULL
+                ORDER BY f.match_date ASC
+                LIMIT 15`,
+          args,
+        });
+        const unpredicted = enrichedResult.rows || [];
+        if (unpredicted.length > 0) {
+          const { getOrBuildPrediction } = await import('../services/predictionCache.js');
+          for (const row of unpredicted) {
+            try { await getOrBuildPrediction(String(row.id)); } catch (_) {}
+          }
+          // Re-query after generation
+          result = await db.execute({ sql: pickQuery, args: pickArgs });
+          rows = result.rows || [];
+        }
+      } catch (genErr) {
+        console.error('[TopPicks] On-demand gen error:', genErr.message);
+      }
+    }
+
+    // ── Step 3: Map rows → picks with rich metadata ────────────────────────────
+    const picks = rows.map(row => {
+      // Extract extra factors from prediction_json if available
+      let factors = null;
+      try {
+        const pj = row.prediction_json ? JSON.parse(row.prediction_json) : null;
+        if (pj) {
+          factors = {
+            form:      pj.features?.home_form_points != null ? true : false,
+            h2h:       pj.features?.h2h_home_win_rate != null ? true : false,
+            xg:        pj.xg?.homeExpectedGoals != null ? true : false,
+            tactical:  pj.script?.style != null ? true : false,
+          };
+        }
+      } catch (_) {}
+
+      const prob   = parseFloat(row.best_pick_probability || 0);
+      const score  = parseFloat(row.best_pick_score || 0);
+      const confRaw = parseFloat(row.confidence_model || 0);
+      // confidence_model may be stored as fraction (0-1) or percentage
+      const conf = confRaw > 1 ? confRaw : confRaw * 100;
+
+      // Composite rank score (0–100 range for display)
+      const composite = (score * 0.5 + confRaw * 0.3 + prob * 0.2) * 100;
+
+      return {
+        fixtureId:   row.fixture_id,
+        match:       `${row.home_team} vs ${row.away_team}`,
+        market:      row.best_pick_market,
+        pick:        row.best_pick_selection,
+        probability: parseFloat((prob * 100).toFixed(1)),
+        score,
+        confidence:  parseFloat(conf.toFixed(1)),
+        composite:   parseFloat(composite.toFixed(1)),
+        tournament:  row.tournament_name,
+        time:        row.match_date,
+        enrichment:  row.enrichment_status,
+        dataQuality: row.data_quality,
+        factors,
+      };
+    });
 
     return res.json({
       date: today,
