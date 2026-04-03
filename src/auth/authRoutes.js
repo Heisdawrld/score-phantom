@@ -322,77 +322,6 @@ router.post("/google", authLimiter, async (req, res) => {
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 
-// ── Apple Sign-In ──────────────────────────────────────────────────────────────
-router.post("/apple", authLimiter, async (req, res) => {
-  try {
-    const { idToken } = req.body || {};
-    if (!idToken) return res.status(400).json({ error: "Firebase ID token required" });
-
-    // Verify the token with Firebase
-    let firebasePayload;
-    try {
-      firebasePayload = await verifyFirebaseToken(idToken);
-    } catch (err) {
-      console.error('[AppleAuth] Token verification failed:', err.message);
-      return res.status(401).json({ error: "Invalid Apple token. Please sign in again." });
-    }
-
-        const email = String(firebasePayload.email || "").trim().toLowerCase();
-    const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
-    if (!email) return res.status(400).json({ error: "No email address in Apple account" });
-
-    // SECURITY: Block disposable email domains
-    const appleEmailDomain = email.split("@")[1];
-    if (DISPOSABLE_DOMAINS.has(appleEmailDomain)) {
-      return res.status(400).json({ error: "Disposable email addresses are not allowed. Please use a permanent email address." });
-    }
-
-    // Find existing user or create new one
-    let result = await db.execute({
-      sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
-      args: [email],
-    });
-    let user = result.rows?.[0];
-
-    if (!user) {
-      // Brand-new user — create with trial starting NOW
-      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      await db.execute({
-        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
-        args: [email, firebaseUid, trialEnds],
-      });
-      const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
-      user = created.rows?.[0];
-      console.log(`[AppleAuth] ✓ New user created: ${email} (uid=${firebaseUid})`);
-    } else {
-      // Existing user — stamp firebase_uid if not set, and mark email verified
-      await db.execute({
-        sql: "UPDATE users SET firebase_uid = COALESCE(NULLIF(firebase_uid,''), ?), email_verified = 1 WHERE id = ?",
-        args: [firebaseUid, user.id],
-      });
-      const updated = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [user.id] });
-      user = updated.rows?.[0];
-      console.log(`[AppleAuth] ✓ Existing user signed in: ${email} (id=${user.id})`);
-    }
-
-    if (!user) throw new Error("Failed to find or create user");
-
-    const token = signToken(user);
-    const access = computeAccessStatus(user);
-    const isAdmin = ADMIN_EMAIL && email === ADMIN_EMAIL;
-
-    return res.json({
-      token,
-      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
-      has_access: access.has_full_access,
-      access_status: access.status,
-    });
-  } catch (err) {
-    console.error("[AppleAuth]", err.message);
-    return res.status(500).json({ error: "Authentication failed. Please try again." });
-  }
-});
-
 // ── Email Sign-In (Firebase) ────────────────────────────────────────────────────
 router.post("/email", authLimiter, async (req, res) => {
   try {
@@ -523,21 +452,19 @@ router.post("/signup", authLimiter, async (req, res) => {
       console.warn('[Signup] Verification email failed:', e.message)
     );
 
-    const token   = signToken(user);
-    const access  = computeAccessStatus(user);
-    const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
-    return res.json({
-      token,
-      user: { ...publicUser(user), email_verified: false, ...(isAdmin ? { is_admin: true } : {}) },
-      has_access:    access.has_full_access,
-      access_status: access.status,
+    // SECURITY: Do NOT return a token from signup.
+    // User must verify their email first via /verify-email, then login with /login
+    return res.status(201).json({
+      success: true,
+      message: "Account created successfully! Please check your email for a verification link.",
+      email: normalizedEmail,
+      next_step: "verify_email",
     });
   } catch (err) {
     console.error("[Signup]", err);
     return res.status(500).json({ error: "Signup failed" });
   }
 });
-
 
 // GET /api/auth/verify-email?token=xxx
 router.get("/verify-email", async (req, res) => {
@@ -1076,7 +1003,6 @@ router.delete("/admin/remove-user", adminLimiter, requireAdminSecret, async (req
     return res.status(500).json({ error: "Failed to remove user" });
   }
 });
-
 
 // POST /api/auth/resend-verification — re-send verification email for logged-in user
 router.post("/resend-verification", requireAuth, authLimiter, async (req, res) => {
