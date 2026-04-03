@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
 import { ChevronLeft, Plus, X, TrendingUp } from "lucide-react";
 
 interface Pick {
@@ -24,6 +26,9 @@ interface PayoutData {
 
 export default function AccaCalculator() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (!isPremium) { setLocation("/"); return null; }
   const [picks, setPicks] = useState<Pick[]>([
     { match: "Man City vs Liverpool", market: "Over 2.5", prediction: "Yes", odds: 1.68, confidence: 75 },
     { match: "Arsenal vs Chelsea", market: "BTTS", prediction: "Yes", odds: 1.85, confidence: 70 },

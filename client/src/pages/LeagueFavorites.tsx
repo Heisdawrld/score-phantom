@@ -3,6 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
 import { ChevronLeft, Star, Plus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,6 +19,9 @@ const POPULAR_LEAGUES = [
 
 export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (!isPremium) { setLocation("/"); return null; }
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");

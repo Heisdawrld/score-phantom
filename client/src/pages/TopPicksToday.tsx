@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
 import { ChevronLeft, TrendingUp, Zap, Target, Shield, Activity } from "lucide-react";
 
 interface Pick {
@@ -54,6 +56,9 @@ function getConfColor(conf: number) {
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (!isPremium) { setLocation("/"); return null; }
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],

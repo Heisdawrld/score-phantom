@@ -3,10 +3,15 @@ import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
 import { ChevronLeft } from "lucide-react";
 
 export default function TrackRecord() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (!isPremium) { setLocation("/"); return null; }
   
   const { data, isLoading, error } = useQuery({
     queryKey: ["track-record"],

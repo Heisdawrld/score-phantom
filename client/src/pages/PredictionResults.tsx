@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
 import { ChevronLeft, Check, X, Clock } from "lucide-react";
 
 interface Result {
@@ -18,6 +20,9 @@ interface Result {
 
 export default function PredictionResults() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  if (!isPremium) { setLocation("/"); return null; }
   
   const { data, isLoading } = useQuery({
     queryKey: ["prediction-results"],
