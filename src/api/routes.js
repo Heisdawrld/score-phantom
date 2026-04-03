@@ -1079,20 +1079,22 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
 // ─── GET /value-bet-today — Best value edge pick of the day ──────────────────
 router.get("/value-bet-today", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     const result = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                    p.best_pick_implied_probability, p.best_pick_edge,
+                   p.best_pick_score,
                    f.tournament_name, f.match_date, f.enrichment_status
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
-              AND p.best_pick_edge > 0
-              AND p.best_pick_probability > 0.55
+              AND p.best_pick_selection IS NOT NULL
+              AND p.best_pick_probability > 0.57
               AND f.enrichment_status IN ('deep', 'basic')
-            ORDER BY p.best_pick_edge DESC
+            ORDER BY COALESCE(p.best_pick_edge, 0) DESC,
+                     COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC
             LIMIT 1`,
       args: [`%${today}%`],
     });
