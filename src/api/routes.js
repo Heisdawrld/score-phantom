@@ -981,8 +981,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
                  JOIN fixtures f ON f.id = p.fixture_id
                  WHERE f.match_date LIKE ?
                    AND p.best_pick_selection IS NOT NULL
-                   AND p.best_pick_probability >= 0.58
-                   AND (p.best_pick_score >= 0.35 OR (p.best_pick_score IS NULL AND p.best_pick_probability >= 0.68))
+                   AND p.best_pick_probability >= 0.57
+                   AND (p.best_pick_score >= 0.35 OR p.best_pick_score IS NULL)
                    AND f.enrichment_status IN ('deep', 'basic')`;
     
     const args = [`%${today}%`];
@@ -1003,7 +1003,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       }
     }
 
-    query += ` ORDER BY p.best_pick_score DESC LIMIT ?`;
+    query += ` ORDER BY COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC LIMIT ?`;
     args.push(limit);
 
     const result = await db.execute({ sql: query, args });
