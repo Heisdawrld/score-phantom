@@ -1037,4 +1037,141 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
   }
 });
 
+
+// ─── GET /acca-payout — Calculate expected ACCA returns (odds) ─────────────────
+// Shows potential payout for a given stake on an ACCA
+router.get("/acca-payout", requireAuth, async (req, res) => {
+  try {
+    const { picks = '[]', stake = 1000 } = req.query;
+    const picksArray = typeof picks === 'string' ? JSON.parse(picks) : picks;
+    const stakeAmount = parseFloat(stake) || 1000;
+
+    if (!Array.isArray(picksArray) || picksArray.length === 0) {
+      return res.status(400).json({ error: "At least one pick required" });
+    }
+
+    // Calculate combined odds (multiplication of all odds)
+    const combinedOdds = picksArray.reduce((prod, pick) => {
+      const odds = parseFloat(pick.odds) || 1.5;
+      return prod * Math.max(1.01, Math.min(odds, 100)); // Clamp odds
+    }, 1);
+
+    const potentialReturn = parseFloat((stakeAmount * combinedOdds).toFixed(2));
+    const profit = parseFloat((potentialReturn - stakeAmount).toFixed(2));
+
+    return res.json({
+      picks: picksArray.length,
+      stake: stakeAmount,
+      combinedOdds: parseFloat(combinedOdds.toFixed(2)),
+      potentialReturn,
+      profit,
+      roi: parseFloat(((profit / stakeAmount) * 100).toFixed(1)),
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[AccaPayout]", err.message);
+    res.status(400).json({ error: "Invalid request", detail: err.message });
+  }
+});
+
+// ─── POST /subscribe-digest — Subscribe to daily email digests ─────────────────
+// Premium feature: daily top picks sent via email
+router.post("/subscribe-digest", requireAuth, async (req, res) => {
+  try {
+    const { enabled = true, frequency = 'daily' } = req.body;
+    const validFrequencies = ['daily', 'weekly', 'never'];
+    const freq = validFrequencies.includes(frequency) ? frequency : 'daily';
+
+    // Update user digest preference
+    await db.execute({
+      sql: `UPDATE users SET email_digest_enabled = ?, email_digest_frequency = ? WHERE id = ?`,
+      args: [enabled ? 1 : 0, freq, req.user.id],
+    });
+
+    return res.json({
+      ok: true,
+      enabled,
+      frequency: freq,
+      message: enabled ? `Subscribed to ${freq} digests` : 'Unsubscribed from digests',
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[Digest]", err.message);
+    res.status(500).json({ error: "Failed to update digest preferences" });
+  }
+});
+
+// ─── GET /digest-preferences — Get user's email digest settings ───────────────
+router.get("/digest-preferences", requireAuth, async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT email_digest_enabled, email_digest_frequency FROM users WHERE id = ? LIMIT 1`,
+      args: [req.user.id],
+    });
+    const user = result.rows?.[0];
+
+    return res.json({
+      enabled: user?.email_digest_enabled === 1,
+      frequency: user?.email_digest_frequency || 'daily',
+      access: buildAccessPayload(req.access),
+    });
+  } catch (err) {
+    console.error("[DigestPrefs]", err.message);
+    res.json({
+      enabled: false,
+      frequency: 'daily',
+      access: buildAccessPayload(req.access),
+    });
+  }
+});
+
+// ─── ANTI-ABUSE: Trial limit bypass prevention ────────────────────────────────
+// Middleware for preventing exploit of trial limits via rapid requests
+const TRIAL_LIMIT_STORE = new Map(); // { userId: { count, lastReset } }
+
+export function createTrialLimitGuard(trialDailyLimit = 5) {
+  return (req, res, next) => {
+    // Only check trial users on prediction routes
+    if (!req.user || !req.path.includes('/predict')) return next();
+
+    // Skip if premium
+    if (req.access?.subscription_active) return next();
+
+    // Skip if trial expired or no access
+    if (!req.access?.has_full_access) return next();
+
+    const userId = req.user.id;
+    const now = Date.now();
+    const reset = TRIAL_LIMIT_STORE.get(userId) || { count: 0, lastReset: now };
+
+    // Reset counter at midnight (UTC)
+    const lastMidnight = new Date(now).setUTCHours(0, 0, 0, 0);
+    if (reset.lastReset < lastMidnight) {
+      reset.count = 0;
+      reset.lastReset = now;
+    }
+
+    reset.count++;
+    TRIAL_LIMIT_STORE.set(userId, reset);
+
+    // Log every prediction for audit
+    console.log(`[TrialLimit] User ${userId}: ${reset.count}/${trialDailyLimit} predictions today`);
+
+    // Block if exceeded
+    if (reset.count > trialDailyLimit) {
+      console.warn(`[TrialLimit] BLOCKED: User ${userId} exceeded daily limit`);
+      return res.status(429).json({
+        error: "Daily prediction limit reached. Upgrade to premium for unlimited access.",
+        code: "trial_limit_exceeded",
+        used: reset.count,
+        limit: trialDailyLimit,
+        resetAt: new Date(lastMidnight + 24 * 60 * 60 * 1000).toISOString(),
+        access: buildAccessPayload(req.access),
+      });
+    }
+
+    next();
+  };
+}
+
 export default router;
