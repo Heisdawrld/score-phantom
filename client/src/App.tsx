@@ -49,6 +49,7 @@ import TopPicksToday from "@/pages/TopPicksToday";
 import PredictionResults from "@/pages/PredictionResults";
 import LeagueFavorites from "@/pages/LeagueFavorites";
 import AccaCalculator from "@/pages/AccaCalculator";
+import Landing from "@/pages/Landing";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
@@ -92,6 +93,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function Router() {
   return (
     <Switch>
+      <Route path="/home" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/signup" component={Signup} />

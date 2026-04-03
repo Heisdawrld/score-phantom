@@ -33,6 +33,35 @@ function formatPct(val: number | undefined | null): string {
   return `${n.toFixed(0)}%`;
 }
 
+
+function getFormResult(
+  match: { home: string; away: string; score: string | null },
+  teamName: string | undefined
+): 'W' | 'D' | 'L' | '?' {
+  if (!match.score || !teamName) return '?';
+  const parts = match.score.replace(/\s/g, '').split('-');
+  if (parts.length !== 2) return '?';
+  const g1 = parseInt(parts[0], 10);
+  const g2 = parseInt(parts[1], 10);
+  if (isNaN(g1) || isNaN(g2)) return '?';
+
+  const tLower = teamName.toLowerCase();
+  // Split team name into meaningful words (>= 3 chars) for fuzzy match
+  const tWords = tLower.split(/[\s-]+/).filter(w => w.length >= 3);
+  const mHome = (match.home || '').toLowerCase();
+  const mAway = (match.away || '').toLowerCase();
+
+  const isHome = mHome.includes(tLower.slice(0, 6)) || tWords.some(w => mHome.includes(w));
+  const isAway = mAway.includes(tLower.slice(0, 6)) || tWords.some(w => mAway.includes(w));
+
+  let gf: number, ga: number;
+  if (isHome) { gf = g1; ga = g2; }
+  else if (isAway) { gf = g2; ga = g1; }
+  else return '?';
+
+  return gf > ga ? 'W' : gf === ga ? 'D' : 'L';
+}
+
 function ConfBadge({ level }: { level: string }) {
   const map: Record<string, string> = {
     HIGH: "bg-primary/20 text-primary border-primary/30",
@@ -702,6 +731,47 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                       </div>
                     </div>
                   </div>
+
+
+                  {/* Pre-match Form */}
+                  {(data?.meta?.homeForm?.length > 0 || data?.meta?.awayForm?.length > 0) && (
+                    <div className="pt-2 border-t border-white/5">
+                      <h4 className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-3 ml-1">Recent Form (Last 6)</h4>
+                      <div className={cn("space-y-2.5", !isPremium && "blur-sm pointer-events-none select-none opacity-70")}>
+                        {[
+                          { label: fixture?.homeTeam, form: data?.meta?.homeForm ?? [] },
+                          { label: fixture?.awayTeam, form: data?.meta?.awayForm ?? [] },
+                        ].map(({ label, form }) => (
+                          <div key={label ?? 'team'} className="flex items-center gap-3">
+                            <p className="text-xs font-semibold w-24 truncate shrink-0 text-muted-foreground">{label}</p>
+                            <div className="flex gap-1">
+                              {(form as any[]).slice(0, 6).map((m: any, i: number) => {
+                                const res = getFormResult(m, label);
+                                return (
+                                  <span
+                                    key={i}
+                                    title={`${m.home} ${m.score} ${m.away}`}
+                                    className={cn(
+                                      "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border",
+                                      res === 'W' ? "bg-emerald-500/25 text-emerald-400 border-emerald-500/40" :
+                                      res === 'D' ? "bg-yellow-500/25 text-yellow-400 border-yellow-500/40" :
+                                      res === 'L' ? "bg-red-500/25 text-red-400 border-red-500/40" :
+                                                    "bg-white/10 text-muted-foreground border-white/10"
+                                    )}
+                                  >
+                                    {res}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {!isPremium && (
+                        <p className="text-[10px] text-muted-foreground text-center mt-2">🔒 Premium: full form history</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* AI Chat */}
                   <div className="pt-2 border-t border-white/5">

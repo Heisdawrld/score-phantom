@@ -268,6 +268,29 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
             </p>
           )}
 
+          {/* Combined odds + payout calculator */}
+          {data?.picks?.length > 0 && (() => {
+            const combinedOdds = data.picks.reduce(
+              (acc: number, p: any) => acc * (100 / Math.max(p.probability, 1)), 1
+            );
+            return (
+              <div className="flex gap-2">
+                <div className="flex-1 bg-white/5 rounded-xl p-2.5 border border-white/8 text-center">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Est. Odds</p>
+                  <p className="text-sm font-bold text-white">{combinedOdds.toFixed(2)}×</p>
+                </div>
+                <div className="flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">₦1k returns</p>
+                  <p className="text-sm font-bold text-primary">₦{Math.round(1000 * combinedOdds).toLocaleString()}</p>
+                </div>
+                <div className="flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center">
+                  <p className="text-[10px] text-muted-foreground mb-0.5">₦5k returns</p>
+                  <p className="text-sm font-bold text-primary">₦{Math.round(5000 * combinedOdds).toLocaleString()}</p>
+                </div>
+              </div>
+            );
+          })()}
+
           {data?.picks?.map((pick: any, i: number) => (
             <div
               key={pick.fixtureId ?? i}
@@ -306,6 +329,71 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
   );
 }
 
+
+
+// ── Value Bet of the Day Banner ───────────────────────────────────────────────
+function ValueBetBanner({ isPremium }: { isPremium: boolean }) {
+  const [, setLocation] = useLocation();
+
+  const { data } = useQuery({
+    queryKey: ["/api/value-bet-today"],
+    queryFn: () => fetchApi("/api/value-bet-today"),
+    enabled: isPremium,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  if (!isPremium) {
+    return (
+      <div
+        className="rounded-2xl border border-yellow-500/20 bg-gradient-to-r from-yellow-500/5 to-transparent p-4 flex items-center gap-4 cursor-pointer hover:bg-yellow-500/10 transition-all"
+        onClick={() => setLocation("/paywall")}
+      >
+        <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0">
+          <span className="text-lg">🔥</span>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-yellow-400 tracking-wide">Value Bet of the Day</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Upgrade to see today's highest edge pick</p>
+        </div>
+        <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+      </div>
+    );
+  }
+
+  if (!data?.found) return null;
+
+  const fmt = (m: string) => (m || '').replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase());
+
+  return (
+    <div className="rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/8 to-transparent p-4 space-y-2">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-base">🔥</span>
+        <p className="text-xs font-bold text-yellow-400 tracking-widest uppercase">Value Bet of the Day</p>
+        {data.enrichmentStatus === 'deep' && (
+          <span className="text-[9px] font-bold border border-primary/30 text-primary px-1.5 py-0.5 rounded-full ml-auto">DEEP DATA</span>
+        )}
+      </div>
+      <p className="text-sm font-semibold text-white">{data.homeTeam} vs {data.awayTeam}</p>
+      <p className="text-[11px] text-muted-foreground">{data.tournament}</p>
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <p className="text-xs text-muted-foreground">Pick</p>
+          <p className="text-sm font-bold text-white">{fmt(data.market)} — {data.selection}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">Model Prob</p>
+          <p className="text-sm font-bold text-primary">{data.probability?.toFixed(1)}%</p>
+        </div>
+        {data.edge !== null && (
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Edge</p>
+            <p className="text-sm font-bold text-yellow-400">+{data.edge?.toFixed(1)}%</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── FIFA code → flag emoji helper ─────────────────────────────────────────────────────────────
 function fifaToEmoji(fifaCode: string): string {
@@ -808,6 +896,9 @@ export default function Dashboard() {
 
         {/* Live Scores */}
         <LiveSection />
+
+        {/* Value Bet of the Day */}
+        <ValueBetBanner isPremium={isPremium} />
 
         {/* ACCA Section */}
         <AccaSection isPremium={!!isPremium} />
