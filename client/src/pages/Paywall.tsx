@@ -88,8 +88,12 @@ export default function Paywall() {
                 {[
                   "Unlimited daily match predictions",
                   "AI-powered bet explanations & chat",
-                  "ACCA — 5 best picks daily",
-                  "Advanced statistical modeling & xG",
+                  "ACCA Builder — Safe & Value daily picks",
+                  "Best Tips Today — multi-factor top picks",
+                  "Value Bet of the Day — highest edge picks",
+                  "League Favorites — personalized picks",
+                  "Track Record — backtesting & accuracy stats",
+                  "xG, form trends, H2H statistical analysis",
                 ].map((feature, i) => (
                   <li key={i} className="flex items-center gap-3">
                     <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">

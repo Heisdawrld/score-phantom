@@ -102,7 +102,7 @@ async function fetchFixturesByDate(date) {
  * Seed the database with fixtures for the next `days` days.
  * If `clearFirst` is true, existing fixture/historical data is wiped first.
  */
-export async function seedFixtures({ days = 7, clearFirst = false, log = console.log } = {}) {
+export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = false, log = console.log } = {}) {
   if (!KEY || !SECRET) {
     throw new Error('LIVESCORE_API_KEY and LIVESCORE_API_SECRET must be set');
   }
@@ -123,7 +123,7 @@ export async function seedFixtures({ days = 7, clearFirst = false, log = console
   const allFixtures = [];
   const now = new Date();
 
-  for (let i = 0; i <= days; i++) {
+  for (let i = startOffset; i <= startOffset + days; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();

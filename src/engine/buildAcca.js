@@ -281,9 +281,10 @@ export function buildAcca(rows, mode = 'safe') {
       moderateUsed++;
     }
 
-    // Diversity: max 2 Under picks per ACCA
+    // Diversity: max 1 Under per SAFE ACCA, max 2 per VALUE ACCA
     const isUnderPick = (pick.best_pick_market||'').toLowerCase().includes('under');
-    if (isUnderPick && underCount >= 2) continue;
+    const maxUnder = isSafeMode ? 1 : 2;
+    if (isUnderPick && underCount >= maxUnder) continue;
 
     selected.push(pick);
     if (isUnderPick) underCount++;

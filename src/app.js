@@ -107,22 +107,32 @@ async function autoSeed() {
       return;
     }
 
-    // Check for TODAY's fixtures specifically — not just any stale data
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-    const result = await db.execute({
-      sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
-      args: [`${today}%`],
-    });
-    const todayCount = Number(result.rows[0].count || 0);
+    // Check each of the next 7 days — seed any day that has 0 fixtures
+    const missingDays = [];
+    for (let i = 0; i <= 6; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      const r = await db.execute({
+        sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
+        args: [`${dateStr}%`],
+      });
+      const count = Number(r.rows[0]?.count || 0);
+      if (count === 0) missingDays.push({ i, dateStr });
+    }
 
-    if (todayCount > 0) {
-      console.log(`[AutoSeed] DB already has ${todayCount} fixtures for today (${today}), skipping.`);
+    if (missingDays.length === 0) {
+      console.log("[AutoSeed] All 7 days have fixtures — skipping.");
       return;
     }
 
-    console.log(`[AutoSeed] No fixtures for today — reseeding without clearing (safe startup fill)...`);
-    const result2 = await seedFixtures({ days: 7, clearFirst: false });
-    console.log(`[AutoSeed] Seeded ${result2.inserted} fixtures.`);
+    console.log(`[AutoSeed] Missing fixtures for ${missingDays.length} days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+
+    // Seed from the earliest missing day forward (without clearing existing data)
+    const fromDay = missingDays[0].i;
+    const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
+    const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
+    console.log(`[AutoSeed] Seeded ${result2.inserted} missing fixtures.`);
   } catch (err) {
     console.error("[AutoSeed] Failed:", err.message);
   }

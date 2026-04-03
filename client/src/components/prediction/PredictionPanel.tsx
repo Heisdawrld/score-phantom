@@ -454,7 +454,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                             <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
                               {isLimitHit
                                 ? "You've used your 2 free predictions today. Come back tomorrow or upgrade for unlimited access."
-                                : 'Subscribe to unlock full AI predictions, ACCA builder, value edge detection, and more.'}
+                                : 'Unlock unlimited predictions, ACCA builder, Best Tips Today, Value Bet of the Day, League Favorites, and full AI analysis.'}
                             </p>
                           </div>
                           <div className="space-y-2 w-full max-w-[260px]">
