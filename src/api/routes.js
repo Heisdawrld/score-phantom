@@ -105,7 +105,7 @@ async function requireAuth(req, res, next) {
 
 // ─── Daily prediction limit for trial users ──────────────────────────────────
 
-const TRIAL_DAILY_LIMIT = 2;
+const TRIAL_DAILY_LIMIT = 3; // 3 predictions per day during free trial
 
 async function ensureDailyCountTable() {
   try {

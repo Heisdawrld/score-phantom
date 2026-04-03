@@ -332,8 +332,35 @@ app.listen(PORT, async () => {
     setTimeout(async () => {
       console.log('[DailySeed] Midnight re-seed triggered');
       try {
-        await seedFixtures({ days: 7, clearFirst: true });
-        console.log('[DailySeed] Fixtures re-seeded');
+        // NEVER use clearFirst: true — it wipes all fixtures/predictions.
+        // Instead, seed only missing days (INSERT OR IGNORE keeps existing data safe).
+        const missingDays = [];
+        for (let i = 0; i <= 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() + i);
+          const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+          const r = await db.execute({
+            sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
+            args: [`${dateStr}%`],
+          });
+          const count = Number(r.rows[0]?.count || 0);
+          if (count === 0) missingDays.push({ i, dateStr });
+        }
+        if (missingDays.length > 0) {
+          console.log(`[DailySeed] Seeding ${missingDays.length} missing days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+          const fromDay = missingDays[0].i;
+          const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
+          const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
+          console.log(`[DailySeed] Seeded ${result2.inserted} fixtures.`);
+        } else {
+          console.log('[DailySeed] All days have fixtures — skipping seed.');
+        }
+        // Cleanup fixtures older than 3 days to keep DB tidy (but NEVER wipe predictions)
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 3);
+        const cutoffStr = cutoff.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+        await db.execute({ sql: "DELETE FROM fixtures WHERE match_date < ?", args: [`${cutoffStr}T00:00:00`] });
+        console.log(`[DailySeed] Cleaned up fixtures before ${cutoffStr}`);
         await autoEnrich();
       } catch (err) {
         console.error('[DailySeed] Failed:', err.message);

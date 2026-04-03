@@ -705,24 +705,32 @@ export default function Dashboard() {
 
   // Trial countdown timer
   const [trialHoursRemaining, setTrialHoursRemaining] = useState<number | null>(null);
+  const [trialTimeLabel, setTrialTimeLabel] = useState<string>("");
   useEffect(() => {
     if (!user?.trial_ends_at) {
       setTrialHoursRemaining(null);
+      setTrialTimeLabel("");
       return;
     }
     
     const updateCountdown = () => {
       const now = new Date();
-      const trialEnds = new Date(user.trial_ends_at);
+      const trialEnds = new Date((user as any).trial_ends_at);
       const msRemaining = trialEnds.getTime() - now.getTime();
-      const hoursRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60)));
-      setTrialHoursRemaining(hoursRemaining);
+      const totalHours = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60)));
+      setTrialHoursRemaining(totalHours);
+      // Format as "Xd Yh" or "Xh" when less than a day
+      const days = Math.floor(totalHours / 24);
+      const hours = totalHours % 24;
+      if (totalHours <= 0) setTrialTimeLabel("Expires soon");
+      else if (days > 0) setTrialTimeLabel(hours > 0 ? `${days}d ${hours}h left` : `${days}d left`);
+      else setTrialTimeLabel(`${hours}h left`);
     };
     
     updateCountdown();
-    const interval = setInterval(updateCountdown, 60000); // Update every minute
+    const interval = setInterval(updateCountdown, 60000);
     return () => clearInterval(interval);
-  }, [user?.trial_ends_at]);
+  }, [(user as any)?.trial_ends_at]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -861,12 +869,12 @@ export default function Dashboard() {
                 )}
                 {usageData && <span>·</span>}
                 {trialHoursRemaining !== null && (
-                  <span className={trialHoursRemaining <= 2 ? "text-red-300" : "text-white/60"}>
-                    {trialHoursRemaining <= 0 ? "Expires soon" : `${trialHoursRemaining}h left on trial`}
+                  <span className={trialHoursRemaining <= 24 ? "text-red-300" : "text-white/60"}>
+                    {trialTimeLabel || "Trial active"}
                   </span>
                 )}
                 {trialHoursRemaining !== null && <span>·</span>}
-                <span>No AI chat · No ACCA</span>
+                <span>3 predictions/day · upgrade for full access</span>
               </p>
             </div>
             <span className={`text-[11px] font-black text-black px-3 py-1.5 rounded-xl shrink-0 group-hover:opacity-90 transition-opacity ${

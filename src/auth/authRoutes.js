@@ -32,7 +32,7 @@ const FLW_ENCRYPTION  = process.env.FLUTTERWAVE_ENCRYPTION_KEY || "";
 
 const PLAN_AMOUNT_NGN  = 3000;       // ₦3,000 — always store in naira
 const PLAN_DURATION_DAYS = 30;
-const TRIAL_DURATION_DAYS = 1;
+const TRIAL_DURATION_DAYS = 3;       // 3-day free trial
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
