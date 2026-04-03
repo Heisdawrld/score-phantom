@@ -138,7 +138,7 @@ export default function Landing() {
               See live predictions →
             </button>
           </div>
-          <p className="text-xs text-white/25 mt-3">1-day free trial · No credit card required · Cancel anytime</p>
+          <p className="text-xs text-white/25 mt-3">3-day free trial · No credit card required · Cancel anytime</p>
         </motion.div>
 
         {/* Scroll indicator */}
@@ -374,7 +374,7 @@ export default function Landing() {
             >
               Start Free Trial <ArrowRight className="w-4 h-4" />
             </button>
-            <p className="text-[11px] text-white/30 text-center">1-day free trial included · No card required</p>
+            <p className="text-[11px] text-white/30 text-center">3-day free trial included · No card required</p>
           </div>
         </FadeIn>
       </section>
@@ -396,14 +396,14 @@ export default function Landing() {
             >
               Get Started Free <ChevronRight className="w-5 h-5" />
             </button>
-            <p className="text-xs text-white/25 mt-3">Free 1-day trial · Cancel anytime · No credit card</p>
+            <p className="text-xs text-white/25 mt-3">Free 3-day trial · Cancel anytime · No credit card</p>
           </div>
         </FadeIn>
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────── */}
       <footer className="border-t border-white/5 py-8 px-6 text-center">
-        <p className="text-xs text-white/20">© 2025 ScorePhantom · AI Football Predictions · Always bet responsibly</p>
+        <p className="text-xs text-white/20">© 2026 ScorePhantom · AI Football Predictions · Always bet responsibly</p>
       </footer>
     </div>
   );

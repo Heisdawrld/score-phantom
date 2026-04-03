@@ -170,7 +170,7 @@ export default function Login() {
               <div className="text-center">
                 <p className="text-white font-semibold text-lg">Get started</p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  1-day free trial · No credit card
+                  3-day free trial · No credit card
                 </p>
               </div>
 

@@ -392,8 +392,27 @@ router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const date = req.body?.date || new Date().toISOString().slice(0, 10);
     const { seedFixtures } = await import("../services/fixtureSeeder.js");
-    // Run in background
-    seedFixtures({ days: 7, clearFirst: true }).then(r => console.log("[Admin] Reseed complete:", r)).catch(e => console.error("[Admin] Reseed error:", e.message));
+    // Run in background — NEVER use clearFirst:true, it wipes predictions
+    // Instead: seed only the days that are missing fixtures (safe incremental)
+    const reseedSafe = async () => {
+      const missingDays = [];
+      for (let i = 0; i <= 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+        const r = await db.execute({ sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?", args: [`${dateStr}%`] });
+        const count = Number(r.rows[0]?.count || 0);
+        missingDays.push({ i, dateStr, count });
+      }
+      console.log(`[Admin/reseed] Day counts: ${missingDays.map(d => `${d.dateStr}:${d.count}`).join(', ')}`);
+      // Force-seed all 7 days (clear only future fixtures, keep predictions)
+      const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      await db.execute({ sql: "DELETE FROM fixtures WHERE match_date >= ?", args: [`${today}T00:00:00`] });
+      const result = await seedFixtures({ days: 7, startOffset: 0, clearFirst: false });
+      console.log("[Admin] Safe reseed complete:", result);
+      return result;
+    };
+    reseedSafe().catch(e => console.error("[Admin] Reseed error:", e.message));
     return res.json({ success: true, message: `Reseeding fixtures for ${date} in background...` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
