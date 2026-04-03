@@ -99,6 +99,7 @@ export default function Login() {
         }
       },
     });
+  };
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +128,7 @@ export default function Login() {
         }
       },
     });
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
