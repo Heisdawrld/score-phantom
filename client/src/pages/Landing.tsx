@@ -104,7 +104,7 @@ export default function Landing() {
             <span className="text-[#10e774]">Start winning.</span>
           </h1>
           <p className="text-white/55 text-lg mb-8 leading-relaxed max-w-xl mx-auto">
-            ScorePhantom's AI model analyses 20+ data points per fixture — form, xG, H2H, market odds — and surfaces only the picks with a real statistical edge.
+            ScorePhantom's model analyses 20+ data points per fixture — form, xG, H2H, market odds — and surfaces only the picks with a real statistical edge.
           </p>
 
           {/* Stats */}
@@ -160,7 +160,7 @@ export default function Landing() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             { step: "01", icon: <BarChart3 className="w-6 h-6 text-[#10e774]" />, title: "We pull match data", desc: "Live form, H2H history, league standings, xG, and bookmaker odds are ingested for every fixture." },
-            { step: "02", icon: <Zap className="w-6 h-6 text-yellow-400" />, title: "AI model scores each pick", desc: "A Poisson probability model + Groq AI ranks every available market and filters out anything below threshold." },
+            { step: "02", icon: <Zap className="w-6 h-6 text-yellow-400" />, title: "Model scores each pick", desc: "A Poisson probability model ranks every available market and filters out anything below threshold." },
             { step: "03", icon: <Target className="w-6 h-6 text-[#10e774]" />, title: "You get the edge", desc: "Only high-confidence, value-positive picks surface. Each one shows your edge % vs the bookmaker's implied probability." },
           ].map((s, i) => (
             <FadeIn key={s.step} delay={i * 0.12}>
@@ -235,7 +235,7 @@ export default function Landing() {
         </FadeIn>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
-            { icon: <Target className="w-5 h-5 text-[#10e774]" />,       title: "AI-Powered Predictions",  desc: "Poisson model + Groq AI analyses 20+ data points per fixture — form, H2H, xG, volatility, and more." },
+            { icon: <Target className="w-5 h-5 text-[#10e774]" />,       title: "Data-Driven Predictions",  desc: "ScorePhantom model analyses 20+ data points per fixture — form, H2H, xG, volatility, and more." },
             { icon: <Zap className="w-5 h-5 text-yellow-400" />,          title: "ACCA Builder",            desc: "Automatically builds 3–5 pick accumulators using correlation-filtering and risk control. No guesswork." },
             { icon: <TrendingUp className="w-5 h-5 text-blue-400" />,     title: "Value Edge Detection",    desc: "Compares model probability to bookmaker odds to surface bets where the market is mispricing an outcome." },
             { icon: <BarChart3 className="w-5 h-5 text-purple-400" />,    title: "Transparent Track Record",desc: "See historical accuracy by market type. We don't hide our losses — full history, win streaks and all." },
@@ -269,7 +269,7 @@ export default function Landing() {
               <div className="py-3 px-4 text-xs text-white/30 font-semibold">Other tipsters</div>
             </div>
             {[
-              ["Full AI model + xG data",    true,  false],
+              ["Full model + xG data",    true,  false],
               ["Transparent track record",   true,  false],
               ["Bookmaker odds comparison",  true,  false],
               ["Value edge detection",       true,  false],
@@ -352,11 +352,11 @@ export default function Landing() {
             <div className="space-y-2.5">
               {[
                 "Unlimited predictions every day",
-                "AI explanations for every pick",
+                "Model explanations for every pick",
                 "ACCA Builder (auto-generates daily slip)",
                 "Value bet detection with edge %",
                 "Live match scores",
-                "AI chat — ask about any fixture",
+                "PhantomChat — ask about any fixture",
                 "Full track record access",
               ].map(f => (
                 <div key={f} className="flex items-center gap-2.5">
@@ -403,7 +403,7 @@ export default function Landing() {
 
       {/* ── FOOTER ───────────────────────────────────────────── */}
       <footer className="border-t border-white/5 py-8 px-6 text-center">
-        <p className="text-xs text-white/20">© 2026 ScorePhantom · AI Football Predictions · Always bet responsibly</p>
+        <p className="text-xs text-white/20">© 2026 ScorePhantom · Data Football Predictions · Always bet responsibly</p>
       </footer>
     </div>
   );

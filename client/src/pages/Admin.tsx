@@ -447,7 +447,7 @@ export default function Admin() {
                 {[
                   { key: "ODDS_API_KEY", desc: "odds-api.io key", check: health?.checks?.odds_api === "ok" },
                   { key: "GMAIL_USER + GMAIL_APP_PASSWORD", desc: "Password reset emails", check: health?.checks?.email === "configured" },
-                  { key: "GROQ_API_KEY", desc: "AI explainer & chat", check: health?.checks?.groq === "configured" },
+                  { key: "GROQ_API_KEY", desc: "PhantomChat explainer", check: health?.checks?.groq === "configured" },
                   { key: "FLW_SECRET_KEY", desc: "Flutterwave payments", check: health?.checks?.flutterwave === "configured" },
                   { key: "ADMIN_EMAIL", desc: "Your admin access email", check: true },
                   { key: "JWT_SECRET", desc: "Auth token signing", check: true },

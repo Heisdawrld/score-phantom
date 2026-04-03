@@ -82,12 +82,12 @@ export default function Paywall() {
               <p className="text-lg text-muted-foreground leading-relaxed">
                 {user?.access_status === "trial"
                   ? "You're on a free trial. Subscribe now to keep access after your trial ends."
-                  : "Your free trial has ended. Subscribe now for full AI-driven match predictions."}
+                  : "Your free trial has ended. Subscribe now for full model-powered match predictions."}
               </p>
               <ul className="space-y-4 pt-4">
                 {[
                   "Unlimited daily match predictions",
-                  "AI-powered bet explanations & chat",
+                  "Model explanations & PhantomChat",
                   "ACCA Builder — Safe & Value daily picks",
                   "Best Tips Today — multi-factor top picks",
                   "Value Bet of the Day — highest edge picks",

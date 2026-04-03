@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
 import {
@@ -225,7 +226,7 @@ type Tab = "prediction" | "stats" | "ai";
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "prediction", label: "Prediction", icon: <Target className="w-3.5 h-3.5" /> },
   { id: "stats",      label: "Stats",      icon: <BarChart2 className="w-3.5 h-3.5" /> },
-  { id: "ai",         label: "AI Chat",    icon: <MessageSquare className="w-3.5 h-3.5" /> },
+  { id: "ai",         label: "PhantomChat",    icon: <MessageSquare className="w-3.5 h-3.5" /> },
 ];
 
 const SCRIPT_COLORS: Record<string, string> = {
@@ -255,6 +256,14 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const isExpired = user?.access_status === "expired";
   const blockReason: "expired" | "limit" | null = isExpired ? "expired" : limitReached ? "limit" : null;
   const { data, isLoading, error } = usePrediction(blockReason ? null : fixtureId, onError);
+
+  const queryClient = useQueryClient();
+  // Invalidate fixtures list when prediction loads so enrichment badges update immediately
+  useEffect(() => {
+    if (data) {
+      queryClient.invalidateQueries({ queryKey: ["/api/fixtures"] });
+    }
+  }, [data, queryClient]);
 
   if (!fixtureId) return null;
 
@@ -377,7 +386,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         ))}
                       </div>
                       <div className="bg-white/5 rounded-2xl p-4 border border-white/8">
-                        <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">AI Analysis</p>
+                        <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">Match Analysis</p>
                         <p className="text-xs text-white/60 leading-relaxed">Home side enters on a 4-match winning streak with xG of 2.1 per game. Away team has conceded in 7 of last 8...</p>
                       </div>
                     </div>
@@ -459,7 +468,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           ))}
                         </div>
                         <div className="bg-white/5 rounded-2xl p-4 border border-white/8">
-                          <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">AI Analysis</p>
+                          <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">Match Analysis</p>
                           <p className="text-xs text-white/60 leading-relaxed">Home side enters on a 4-match winning streak with xG of 2.1 per game. Away team has conceded in 7 of last 8...</p>
                         </div>
                       </div>
@@ -472,7 +481,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
                             {isLimitHit
                               ? "You've used your 3 free predictions today. Come back tomorrow or upgrade for unlimited access."
-                              : "Unlock unlimited predictions, ACCA builder, Top Picks, League Favorites, and full AI analysis."}
+                              : "Unlock unlimited predictions, ACCA builder, Top Picks, League Favorites, and full match analysis."}
                           </p>
                         </div>
                         <div className="space-y-2 w-full max-w-[260px]">
@@ -772,7 +781,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           <div className="bg-black/30 rounded-3xl p-5 border border-white/5">
                             <div className="flex items-center gap-2 mb-3">
                               <Sparkles className="w-4 h-4 text-accent-blue" />
-                              <h4 className="font-bold text-sm">AI Match Analysis</h4>
+                              <h4 className="font-bold text-sm">Match Analysis</h4>
                             </div>
                             <p className="text-muted-foreground leading-relaxed text-sm">{data.explanation}</p>
                           </div>
@@ -790,9 +799,9 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               <MessageSquare className="w-6 h-6 text-accent-blue" />
                             </div>
                             <div className="text-center">
-                              <p className="text-base font-black text-white mb-1.5">AI Chat — Premium Only</p>
+                              <p className="text-base font-black text-white mb-1.5">PhantomChat — Premium Only</p>
                               <p className="text-xs text-muted-foreground leading-relaxed max-w-[220px] mx-auto">
-                                Ask ScorePhantom AI anything about this match — tactics, injuries, form, value bets.
+                                Ask ScorePhantom anything about this match — tactics, injuries, form, value bets.
                               </p>
                             </div>
                             <button className="flex items-center gap-2 bg-primary text-black font-black px-5 py-3 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.25)]">

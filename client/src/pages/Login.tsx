@@ -157,7 +157,7 @@ export default function Login() {
               SCORE<span className="text-primary">PHANTOM</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              AI-powered football predictions
+              Data-driven football predictions
             </p>
           </div>
         </div>
@@ -429,7 +429,7 @@ export default function Login() {
           </div>
           <div className="w-px h-8 bg-white/10" />
           <div>
-            <p className="text-primary font-black text-xl">AI</p>
+            <p className="text-primary font-black text-xl">Model</p>
             <p className="text-xs text-muted-foreground">predictions</p>
           </div>
           <div className="w-px h-8 bg-white/10" />

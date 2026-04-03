@@ -64,7 +64,7 @@ export default function AccaCalculator() {
   const [slip, setSlip] = useState<SlipPick[]>([]);
   const [stake, setStake] = useState(1000);
 
-  // Fetch today's AI picks
+  // Fetch today's top picks
   const { data: picksData, isLoading: picksLoading } = useQuery({
     queryKey: ["/api/top-picks-today", 15],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
@@ -124,7 +124,7 @@ export default function AccaCalculator() {
               <Calculator className="w-8 h-8 text-primary" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">ACCA Calculator</h2>
-            <p className="text-white/50 text-sm mb-6">Build AI-powered accumulator bets with our top predictions.</p>
+            <p className="text-white/50 text-sm mb-6">Build data-powered accumulator bets with our top predictions.</p>
             <button onClick={() => setLocation("/paywall")}
               className="w-full px-6 py-3 bg-primary text-black font-bold rounded-xl hover:bg-primary/90 transition">
               Upgrade to Access — ₦3,000/mo
@@ -148,7 +148,7 @@ export default function AccaCalculator() {
               <Calculator className="w-6 h-6 text-primary" />
               ACCA Calculator
             </h1>
-            <p className="text-white/40 text-sm mt-1">Add AI picks to your slip — enter your bookmaker odds, see your return</p>
+            <p className="text-white/40 text-sm mt-1">Add top picks to your slip — enter your bookmaker odds, see your return</p>
           </div>
           {isTrial && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-400/10 border border-orange-400/20">
@@ -163,7 +163,7 @@ export default function AccaCalculator() {
           <div className="lg:col-span-3 space-y-3">
             <div className="flex items-center gap-2 mb-3">
               <Flame className="w-4 h-4 text-orange-400" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-widest">Today's AI Picks</h2>
+              <h2 className="text-sm font-bold text-white uppercase tracking-widest">Today's Top Picks</h2>
               {picksData?.topPicksCount > 0 && (
                 <span className="ml-auto text-xs text-white/40">{aiPicks.length} picks</span>
               )}
@@ -180,7 +180,7 @@ export default function AccaCalculator() {
             {!picksLoading && aiPicks.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 px-4 rounded-xl border border-white/8 bg-white/2">
                 <Target className="w-8 h-8 text-white/20 mb-3" />
-                <p className="text-white/40 text-sm text-center">No AI picks yet for today.</p>
+                <p className="text-white/40 text-sm text-center">No top picks yet for today.</p>
                 <p className="text-white/25 text-xs text-center mt-1">Predictions are generated as matches are enriched — check back soon.</p>
               </div>
             )}
@@ -321,7 +321,7 @@ export default function AccaCalculator() {
                 {slip.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-8 rounded-xl border border-dashed border-white/10">
                     <Calculator className="w-8 h-8 text-white/15 mb-2" />
-                    <p className="text-white/30 text-xs text-center">No picks added yet.<br/>Click "Add to Slip" on an AI pick.</p>
+                    <p className="text-white/30 text-xs text-center">No picks added yet.<br/>Click "Add to Slip" on a top pick.</p>
                   </div>
                 )}
               </div>
@@ -372,7 +372,7 @@ export default function AccaCalculator() {
                   </div>
                   <p className="text-[10px] text-white/20 text-center pt-1">
                     Enter your actual bookmaker odds above for accurate calculations.
-                    AI implied odds are shown by default.
+                    Model implied odds are shown by default.
                   </p>
                 </motion.div>
               )}
