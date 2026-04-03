@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import {
   useGoogleSignIn,
-  useAppleSignIn,
   useEmailSignIn,
   useEmailSignUp,
 } from "@/hooks/use-auth";
-import { Chrome, Apple, Mail, Eye, EyeOff } from "lucide-react";
+import { Chrome, Mail, Eye, EyeOff } from "lucide-react";
 import { z } from "zod";
 
 const LoginSchema = z.object({
@@ -40,31 +39,12 @@ export default function Login() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
-  const appleSignIn = useAppleSignIn();
   const emailSignIn = useEmailSignIn();
   const emailSignUp = useEmailSignUp();
 
   const handleGoogleClick = async () => {
     setGeneralError("");
     googleSignIn.mutate(undefined, {
-      onError: (err: any) => {
-        const msg = err?.message || "Sign in failed";
-        if (msg.includes("popup-closed") || msg.includes("cancelled")) {
-          setGeneralError("Sign-in cancelled. Try again.");
-        } else if (msg.includes("popup-blocked")) {
-          setGeneralError("Popup blocked. Allow popups for this site.");
-        } else if (msg.includes("Disposable email")) {
-          setGeneralError("Please use a permanent email address, not a temporary one.");
-        } else {
-          setGeneralError(msg);
-        }
-      },
-    });
-  };
-
-  const handleAppleClick = async () => {
-    setGeneralError("");
-    appleSignIn.mutate(undefined, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("popup-closed") || msg.includes("cancelled")) {
@@ -119,7 +99,6 @@ export default function Login() {
         }
       },
     });
-  };
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +127,6 @@ export default function Login() {
         }
       },
     });
-  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -209,19 +187,6 @@ export default function Login() {
                   {googleSignIn.isPending ? "Signing in…" : "Continue with Google"}
                 </button>
 
-                {/* Apple button */}
-                <button
-                  onClick={handleAppleClick}
-                  disabled={appleSignIn.isPending}
-                  className="w-full flex items-center justify-center gap-3 bg-black text-white font-semibold text-[15px] py-3.5 px-6 rounded-2xl hover:bg-gray-900 active:scale-[0.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
-                >
-                  {appleSignIn.isPending ? (
-                    <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  ) : (
-                    <Apple size={20} />
-                  )}
-                  {appleSignIn.isPending ? "Signing in…" : "Continue with Apple"}
-                </button>
 
                 {/* Email button */}
                 <button

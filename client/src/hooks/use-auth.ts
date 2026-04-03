@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchApi, setAuthToken, removeAuthToken, UserSchema } from "@/lib/api";
 import {
   signInWithGoogle,
-  signInWithApple,
 } from "@/lib/firebase";
 import { z } from "zod";
 import { useLocation } from "wouter";
@@ -91,26 +90,6 @@ export function useGoogleSignIn() {
   });
 }
 
-export function useAppleSignIn() {
-  const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
-
-  return useMutation({
-    mutationFn: async () => {
-      const { idToken } = await signInWithApple();
-      return fetchApi("/auth/apple", {
-        method: "POST",
-        body: JSON.stringify({ idToken }),
-      });
-    },
-    onSuccess: (data) => {
-      setAuthToken(data.token);
-      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation("/");
-    },
-  });
-}
 
 export function useEmailSignUp() {
   const queryClient = useQueryClient();

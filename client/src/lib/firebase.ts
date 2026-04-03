@@ -2,7 +2,6 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  OAuthProvider,
   signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -29,22 +28,8 @@ const googleProvider = new GoogleAuthProvider();
 // Always prompt account picker so switching accounts is easy
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-const appleProvider = new OAuthProvider("apple.com");
-// Sign in with Apple specific customizations
-appleProvider.addScope("email");
-appleProvider.addScope("name");
-appleProvider.setCustomParameters({
-  locale: "en",
-});
-
 export async function signInWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
-  const idToken = await result.user.getIdToken();
-  return { idToken, firebaseUser: result.user };
-}
-
-export async function signInWithApple() {
-  const result = await signInWithPopup(auth, appleProvider);
   const idToken = await result.user.getIdToken();
   return { idToken, firebaseUser: result.user };
 }
