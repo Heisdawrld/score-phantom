@@ -44,6 +44,11 @@ import Dashboard from "@/pages/Dashboard";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
+import TrackRecord from "@/pages/TrackRecord";
+import TopPicksToday from "@/pages/TopPicksToday";
+import PredictionResults from "@/pages/PredictionResults";
+import LeagueFavorites from "@/pages/LeagueFavorites";
+import AccaCalculator from "@/pages/AccaCalculator";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
@@ -92,6 +97,11 @@ function Router() {
       <Route path="/signup" component={Signup} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
+      <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
+      <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
+      <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
+      <Route path="/league-favorites" component={() => <ProtectedRoute component={LeagueFavorites} />} />
+      <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route component={() => <ProtectedRoute component={Dashboard} />} />
     </Switch>

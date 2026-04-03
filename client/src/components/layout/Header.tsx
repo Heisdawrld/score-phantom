@@ -141,6 +141,36 @@ export function Header() {
                     )}
                   </div>
 
+                  {/* Premium Features Menu */}
+                  <div className="px-2 py-2 border-b border-white/8 space-y-1">
+                    <p className="px-2 py-1 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Features</p>
+                    <Link href="/track-record" onClick={() => setOpen(false)}>
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
+                        📊 Track Record
+                      </div>
+                    </Link>
+                    <Link href="/top-picks" onClick={() => setOpen(false)}>
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
+                        🎯 Top Picks Today
+                      </div>
+                    </Link>
+                    <Link href="/results" onClick={() => setOpen(false)}>
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
+                        📈 Prediction Results
+                      </div>
+                    </Link>
+                    <Link href="/acca-calculator" onClick={() => setOpen(false)}>
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
+                        💰 ACCA Calculator
+                      </div>
+                    </Link>
+                    <Link href="/league-favorites" onClick={() => setOpen(false)}>
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
+                        ⭐ League Favorites
+                      </div>
+                    </Link>
+                  </div>
+
                   {/* Upgrade CTA for non-premium */}
                   {user.access_status !== "active" && (
                     <div className="px-4 py-2.5 border-b border-white/8">
