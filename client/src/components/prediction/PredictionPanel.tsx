@@ -329,17 +329,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           <p className="text-xl font-bold text-white">23%</p>
                         </div>
                       </div>
-                      <div className="bg-white/5 rounded-2xl p-4 border border-white/8 space-y-2">
-                        <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Backup Picks</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-white">BTTS — Yes</span>
-                          <span className="text-sm font-bold text-primary">71%</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-white">Home Win (DNB)</span>
-                          <span className="text-sm font-bold text-blue-400">68%</span>
-                        </div>
-                      </div>
+
                       <div className="bg-white/5 rounded-2xl p-4 border border-white/8">
                         <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">AI Analysis</p>
                         <p className="text-xs text-white/60 leading-relaxed">Home side enters on a 4-match winning streak with xG of 2.1 per game. Away team has conceded in 7 of last 8...</p>
@@ -444,18 +434,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               <p className="text-xl font-bold text-white">23%</p>
                             </div>
                           </div>
-                          {/* BTTS + backup picks */}
-                          <div className="bg-white/5 rounded-2xl p-4 border border-white/8 space-y-2">
-                            <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Backup Picks</p>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-white">BTTS — Yes</span>
-                              <span className="text-sm font-bold text-primary">71%</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-white">Home Win (DNB)</span>
-                              <span className="text-sm font-bold text-blue-400">68%</span>
-                            </div>
-                          </div>
+
                           {/* AI explanation preview */}
                           <div className="bg-white/5 rounded-2xl p-4 border border-white/8">
                             <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase mb-2">AI Analysis</p>
@@ -598,45 +577,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                     </div>
                   )}
 
-                  {/* Backup Picks */}
-                  {backups.length > 0 && (
-                    <div className="relative">
-                      <p className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-3 ml-1">Backup Angles</p>
-                      <div className={cn("space-y-3", !isPremium && "pointer-events-none")}>
-                        {backups.map((b: any, i: number) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              "bg-white/5 border border-white/8 rounded-2xl p-4 flex items-center justify-between gap-4",
-                              !isPremium && i > 0 && "blur-sm select-none"
-                            )}
-                          >
-                            <div>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{formatMarket(b.market)}</p>
-                              <p className="font-semibold text-sm">{b.pick}</p>
-                              {b.reasons?.[0] && <p className="text-xs text-muted-foreground mt-1">{b.reasons[0]}</p>}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="font-display text-2xl text-white">{b.probability_pct}%</p>
-                              <ConfBadge level={b.modelConfidence} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {/* FOMO overlay for trial users */}
-                      {!isPremium && backups.length > 1 && (
-                        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#080b10] to-transparent flex flex-col items-center justify-end pb-3 pointer-events-auto">
-                          <p className="text-xs text-muted-foreground mb-2">🔒 {backups.length - 1} more angle{backups.length > 2 ? "s" : ""} hidden</p>
-                          <button
-                            onClick={() => setLocation("/paywall")}
-                            className="text-xs font-bold text-primary border border-primary/40 rounded-full px-4 py-1.5 hover:bg-primary/10 transition-colors"
-                          >
-                            Upgrade to Unlock
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+
 
                   {/* AI Analysis */}
                   {data.explanation && (
