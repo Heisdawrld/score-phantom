@@ -229,7 +229,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
        p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
        p.confidence_model AS pick_confidence_level
  FROM fixtures f
- LEFT JOIN predictions p ON p.fixture_id = f.id
+ LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
  WHERE 1=1`;
     const args = [];
 
