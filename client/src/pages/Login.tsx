@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useGoogleSignIn,
   useAppleSignIn,
@@ -26,8 +26,20 @@ export default function Login() {
   });
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [generalError, setGeneralError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const googleSignIn = useGoogleSignIn();
+  
+  // Check if email was just verified
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verified") === "success") {
+      setSuccessMsg("Email verified! 🎉 Now sign in with your email and password to access ScorePhantom.");
+      setAuthMode("email-signin");
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
   const appleSignIn = useAppleSignIn();
   const emailSignIn = useEmailSignIn();
   const emailSignUp = useEmailSignUp();
@@ -41,6 +53,8 @@ export default function Login() {
           setGeneralError("Sign-in cancelled. Try again.");
         } else if (msg.includes("popup-blocked")) {
           setGeneralError("Popup blocked. Allow popups for this site.");
+        } else if (msg.includes("Disposable email")) {
+          setGeneralError("Please use a permanent email address, not a temporary one.");
         } else {
           setGeneralError(msg);
         }
@@ -57,6 +71,8 @@ export default function Login() {
           setGeneralError("Sign-in cancelled. Try again.");
         } else if (msg.includes("popup-blocked")) {
           setGeneralError("Popup blocked. Allow popups for this site.");
+        } else if (msg.includes("Disposable email")) {
+          setGeneralError("Please use a permanent email address, not a temporary one.");
         } else {
           setGeneralError(msg);
         }
@@ -90,12 +106,14 @@ export default function Login() {
     emailSignIn.mutate(formData, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
-        if (msg.includes("auth/user-not-found")) {
-          setGeneralError("No account found with this email.");
-        } else if (msg.includes("auth/wrong-password")) {
-          setGeneralError("Incorrect password.");
+        if (msg.includes("email_not_verified")) {
+          setGeneralError("Please verify your email first. Check your inbox for a verification link. No email? Try signing up again.");
+        } else if (msg.includes("Invalid credentials")) {
+          setGeneralError("Incorrect email or password.");
         } else if (msg.includes("auth/too-many-requests")) {
           setGeneralError("Too many failed attempts. Try again later.");
+        } else if (msg.includes("disposable")) {
+          setGeneralError("Disposable emails not allowed. Use a real email.");
         } else {
           setGeneralError(msg);
         }
@@ -109,15 +127,22 @@ export default function Login() {
     if (!validateForm()) return;
 
     emailSignUp.mutate(formData, {
+      onSuccess: () => {
+        setGeneralError("");
+        setFormData({ email: "", password: "" });
+        // Show success message
+        const successMsg = "Account created! Check your email for a verification link. Click it to verify and start using ScorePhantom.";
+        alert(successMsg);
+      },
       onError: (err: any) => {
         const msg = err?.message || "Sign up failed";
-        if (msg.includes("auth/email-already-in-use")) {
+        if (msg.includes("already registered")) {
           setGeneralError("Email already registered. Sign in instead.");
           setAuthMode("email-signin");
-        } else if (msg.includes("auth/weak-password")) {
-          setGeneralError("Password too weak. Use 6+ characters.");
+        } else if (msg.includes("Password must be")) {
+          setGeneralError("Password must be at least 6 characters.");
         } else if (msg.includes("disposable")) {
-          setGeneralError("Disposable emails not allowed. Use a real email.");
+          setGeneralError("Disposable emails not allowed. Use a real email address.");
         } else {
           setGeneralError(msg);
         }
@@ -207,6 +232,10 @@ export default function Login() {
                   Sign in with Email
                 </button>
               </div>
+
+              {successMsg && (
+                <p className="text-sm text-green-400 text-center font-semibold">{successMsg}</p>
+              )}
 
               {generalError && (
                 <p className="text-sm text-red-400 text-center">{generalError}</p>

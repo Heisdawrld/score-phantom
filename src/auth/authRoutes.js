@@ -264,9 +264,15 @@ router.post("/google", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid Google token. Please sign in again." });
     }
 
-    const email = String(firebasePayload.email || "").trim().toLowerCase();
+        const email = String(firebasePayload.email || "").trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
     if (!email) return res.status(400).json({ error: "No email address in Google account" });
+
+    // SECURITY: Block disposable email domains
+    const googleEmailDomain = email.split("@")[1];
+    if (DISPOSABLE_DOMAINS.has(googleEmailDomain)) {
+      return res.status(400).json({ error: "Disposable email addresses are not allowed. Please use a permanent email address." });
+    }
 
     // Find existing user or create new one
     let result = await db.execute({
@@ -331,9 +337,15 @@ router.post("/apple", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid Apple token. Please sign in again." });
     }
 
-    const email = String(firebasePayload.email || "").trim().toLowerCase();
+        const email = String(firebasePayload.email || "").trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
     if (!email) return res.status(400).json({ error: "No email address in Apple account" });
+
+    // SECURITY: Block disposable email domains
+    const appleEmailDomain = email.split("@")[1];
+    if (DISPOSABLE_DOMAINS.has(appleEmailDomain)) {
+      return res.status(400).json({ error: "Disposable email addresses are not allowed. Please use a permanent email address." });
+    }
 
     // Find existing user or create new one
     let result = await db.execute({
@@ -612,8 +624,16 @@ router.post("/login", authLimiter, async (req, res) => {
       sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
       args: [normalizedEmail],
     });
-    const user = result.rows?.[0];
+        const user = result.rows?.[0];
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
+
+    // SECURITY: Require email verification
+    if (!user.email_verified) {
+      return res.status(403).json({ 
+        error: "Please verify your email first. Check your inbox for a verification link.",
+        code: "email_not_verified"
+      });
+    }
 
     const storedHash = user.password_hash || user.password;
     if (!storedHash)
