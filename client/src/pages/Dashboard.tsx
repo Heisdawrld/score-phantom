@@ -806,90 +806,58 @@ export default function Dashboard() {
         )}
 
         {/* Trial countdown banner */}
-        {isTrial && trialHoursRemaining !== null && (
+        {/* Unified free trial banner — one card only */}
+        {isTrial && (
           <div
             className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all group ${
-              trialHoursRemaining <= 2
+              isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2)
                 ? 'bg-gradient-to-r from-red-500/10 to-red-500/5 border-red-500/25 hover:border-red-500/40'
-                : 'bg-gradient-to-r from-amber-500/10 to-amber-500/5 border-amber-500/25 hover:border-amber-500/40'
+                : 'bg-gradient-to-r from-primary/10 to-primary/5 border-primary/25 hover:border-primary/40'
             }`}
             onClick={() => setLocation("/paywall")}
           >
             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-              trialHoursRemaining <= 2 ? 'bg-red-500/20' : 'bg-amber-500/20'
+              isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2)
+                ? 'bg-red-500/20' : 'bg-primary/20'
             }`}>
-              <Zap className={`w-4 h-4 ${trialHoursRemaining <= 2 ? 'text-red-400' : 'text-amber-400'}`} />
+              {isDailyLimitHit
+                ? <Zap className="w-4 h-4 text-red-400" />
+                : <Crown className="w-4 h-4 text-primary" />}
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-bold tracking-wide leading-none mb-0.5 ${
-                trialHoursRemaining <= 2 ? 'text-red-400' : 'text-amber-400'
+                isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2)
+                  ? 'text-red-400' : 'text-primary'
               }`}>
-                {trialHoursRemaining === 0
-                  ? "Trial expires soon!"
-                  : `Trial expires in ${trialHoursRemaining} hour${trialHoursRemaining === 1 ? '' : 's'}`}
+                {isDailyLimitHit
+                  ? "Predictions used up for today"
+                  : "Free Trial Active"}
               </p>
-              <p className="text-xs text-white/50">
-                {trialHoursRemaining <= 2
-                  ? "Lock in your access now before it's too late"
-                  : "Upgrade to premium for unlimited access"}
+              <p className="text-xs text-white/55 flex flex-wrap gap-x-1.5">
+                {usageData && (
+                  <span className={
+                    usageData.remaining === 0 ? "text-red-400 font-semibold" :
+                    usageData.remaining <= 1 ? "text-orange-400 font-semibold" :
+                    "text-white/80 font-semibold"
+                  }>
+                    {usageData.remaining}/{usageData.limit} predictions left
+                  </span>
+                )}
+                {usageData && <span>·</span>}
+                {trialHoursRemaining !== null && (
+                  <span className={trialHoursRemaining <= 2 ? "text-red-300" : "text-white/60"}>
+                    {trialHoursRemaining <= 0 ? "Expires soon" : `${trialHoursRemaining}h left on trial`}
+                  </span>
+                )}
+                {trialHoursRemaining !== null && <span>·</span>}
+                <span>No AI chat · No ACCA</span>
               </p>
             </div>
             <span className={`text-[11px] font-black text-black px-3 py-1.5 rounded-xl shrink-0 group-hover:opacity-90 transition-opacity ${
-              trialHoursRemaining <= 2 ? 'bg-red-400' : 'bg-primary'
+              isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2)
+                ? 'bg-red-400' : 'bg-primary'
             }`}>
-              {trialHoursRemaining <= 2 ? "Upgrade Now" : "Upgrade"}
-            </span>
-          </div>
-        )}
-
-        {/* Trial subscribe banner */}
-        {isTrial && (
-          <div
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/25 cursor-pointer hover:border-primary/40 transition-all group"
-            onClick={() => setLocation("/paywall")}
-          >
-            <Crown className="w-5 h-5 text-primary shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-primary tracking-wide leading-none mb-0.5">Free Trial Active</p>
-              {usageData ? (
-                <p className="text-xs text-white/60">
-                  <span className={usageData.remaining === 0 ? "text-red-400 font-bold" : usageData.remaining <= 1 ? "text-orange-400 font-bold" : "text-white/80 font-semibold"}>
-                    {usageData.remaining}/{usageData.limit} predictions left today
-                  </span>
-                  {" · "}No AI chat · No ACCA builder
-                </p>
-              ) : (
-                <p className="text-xs text-white/60">
-                  <span className="text-white/80 font-semibold">2 predictions/day</span>
-                  {" · "}No AI chat · No ACCA builder
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl group-hover:opacity-90 transition-opacity">
-                Upgrade
-              </span>
-            </div>
-          </div>
-        )}
-
-
-        {/* Email verification gate removed — Google Auth */}
-        {/* Daily limit hit banner */}
-        {isDailyLimitHit && !isExpired && (
-          <div
-            className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-orange-500/15 to-orange-500/5 border border-orange-500/30 cursor-pointer hover:border-orange-500/50 transition-all"
-            onClick={() => setLocation("/paywall")}
-          >
-            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
-              <AlertCircle className="w-4 h-4 text-orange-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-orange-400 leading-none mb-0.5">2/2 predictions used today</p>
-              <p className="text-xs text-white/50">Upgrade for unlimited · Resets at midnight</p>
-            </div>
-            <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl shrink-0">
-              Unlock All
+              {isDailyLimitHit ? "Unlock All" : "Upgrade"}
             </span>
           </div>
         )}
