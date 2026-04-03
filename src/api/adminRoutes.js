@@ -676,4 +676,20 @@ router.post('/users/:id/verify-email', adminLimiter, requireAdmin, async (req, r
   }
 });
 
+// POST /api/admin/check-results — manually run result checker for a date
+router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { date, backfill_days } = req.body;
+    const { checkResults, backfillResults } = await import('../services/resultChecker.js');
+    if (backfill_days && parseInt(backfill_days, 10) > 0) {
+      const results = await backfillResults(parseInt(backfill_days, 10));
+      return res.json({ success: true, mode: 'backfill', results });
+    }
+    const result = await checkResults(date || null);
+    return res.json({ success: true, mode: 'single', result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

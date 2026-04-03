@@ -12,6 +12,7 @@ import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import { seedFixtures } from "./services/fixtureSeeder.js";
+import { checkResults } from "./services/resultChecker.js";
 
 dotenv.config();
 
@@ -371,6 +372,29 @@ app.listen(PORT, async () => {
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');
   }
   scheduleNextMidnightSeed();
+
+  // ── Daily result checker: runs at 2 AM Lagos time to evaluate yesterday's picks ──
+  function scheduleNextResultCheck() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const next2AM = new Date(lagosNow);
+    next2AM.setDate(next2AM.getDate() + (lagosNow.getHours() >= 2 ? 1 : 0));
+    next2AM.setHours(2, 15, 0, 0); // 2:15 AM Lagos — after midnight seed completes
+    const ms = next2AM - lagosNow;
+    setTimeout(async () => {
+      console.log('[ResultChecker] Daily check triggered');
+      try {
+        const r = await checkResults(); // defaults to yesterday
+        console.log(`[ResultChecker] Checked ${r.checked} predictions — W:${r.outcomes?.wins} L:${r.outcomes?.losses} V:${r.outcomes?.voids}`);
+      } catch (err) {
+        console.error('[ResultChecker] Failed:', err.message);
+      }
+      scheduleNextResultCheck();
+    }, ms);
+    const hrs = Math.round(ms / 3600000);
+    console.log(`[ResultChecker] Next check in ~${hrs}h`);
+  }
+  scheduleNextResultCheck();
 
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing

@@ -1,230 +1,387 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { format } from "date-fns";
+import {
+  Plus, X, Calculator, Flame, Crown, TrendingUp,
+  Clock, Target, ChevronRight, Trash2, Info
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
-import { ChevronLeft, Plus, X, TrendingUp } from "lucide-react";
-
-interface Pick {
+interface AIPick {
+  fixtureId: string;
   match: string;
   market: string;
-  prediction: string;
+  pick: string;
+  probability: number;
+  score: number;
+  confidence: number;
+  tournament: string;
+  time: string;
+}
+
+interface SlipPick {
+  fixtureId: string;
+  match: string;
+  market: string;
+  pick: string;
   odds: number;
   confidence: number;
 }
 
-interface PayoutData {
-  picks: number;
-  stake: number;
-  combinedOdds: number;
-  potentialReturn: number;
-  profit: number;
-  roi: number;
+function confidenceColor(c: number) {
+  if (c >= 75) return "text-primary";
+  if (c >= 60) return "text-yellow-400";
+  return "text-orange-400";
+}
+
+function impliedOdds(probability: number) {
+  // probability is 0-100
+  if (probability <= 0) return 1.5;
+  return parseFloat((100 / probability).toFixed(2));
+}
+
+function formatKickoff(dateStr: string) {
+  try {
+    return format(new Date(dateStr), "HH:mm");
+  } catch {
+    return "";
+  }
 }
 
 export default function AccaCalculator() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
+
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  if (authLoading) return <div className="min-h-screen bg-background" />;
-  if (!isPremium) { setLocation("/"); return null; }
-  const [picks, setPicks] = useState<Pick[]>([
-    { match: "Man City vs Liverpool", market: "Over 2.5", prediction: "Yes", odds: 1.68, confidence: 75 },
-    { match: "Arsenal vs Chelsea", market: "BTTS", prediction: "Yes", odds: 1.85, confidence: 70 },
-  ]);
+  const isTrial = user?.access_status === "trial";
+
+  const [slip, setSlip] = useState<SlipPick[]>([]);
   const [stake, setStake] = useState(1000);
-  const [newPick, setNewPick] = useState({ match: "", market: "", prediction: "", odds: 1.5 });
-  const [payout, setPayout] = useState<PayoutData | null>(null);
 
-  // Calculate payout when picks or stake change
-  useEffect(() => {
-    const calculatePayout = async () => {
-      if (picks.length === 0) return;
-      
-      try {
-        const data = await fetchApi(
-          `/api/acca-payout?picks=${encodeURIComponent(JSON.stringify(picks))}&stake=${stake}`
-        );
-        setPayout(data);
-      } catch (err) {
-        console.error("Failed to calculate payout:", err);
-      }
+  // Fetch today's AI picks
+  const { data: picksData, isLoading: picksLoading } = useQuery({
+    queryKey: ["/api/top-picks-today", 15],
+    queryFn: () => fetchApi("/top-picks-today?limit=15"),
+    enabled: !!user,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const aiPicks: AIPick[] = picksData?.picks || [];
+
+  // Calculate slip totals locally
+  const { combinedOdds, potentialReturn, profit, roi } = useMemo(() => {
+    if (slip.length === 0) return { combinedOdds: 0, potentialReturn: 0, profit: 0, roi: 0 };
+    const combined = slip.reduce((prod, p) => prod * Math.max(1.01, p.odds), 1);
+    const ret = parseFloat((stake * combined).toFixed(2));
+    const pft = parseFloat((ret - stake).toFixed(2));
+    return {
+      combinedOdds: parseFloat(combined.toFixed(2)),
+      potentialReturn: ret,
+      profit: pft,
+      roi: parseFloat(((pft / stake) * 100).toFixed(1)),
     };
+  }, [slip, stake]);
 
-    calculatePayout();
-  }, [picks, stake]);
+  function addToSlip(pick: AIPick) {
+    if (slip.find(s => s.fixtureId === pick.fixtureId)) return; // already added
+    if (isTrial && slip.length >= 2) return; // trial limit
+    setSlip(prev => [...prev, {
+      fixtureId: pick.fixtureId,
+      match: pick.match,
+      market: pick.market,
+      pick: pick.pick,
+      odds: impliedOdds(pick.probability),
+      confidence: pick.confidence,
+    }]);
+  }
 
-  const addPick = () => {
-    if (newPick.match && newPick.odds > 0) {
-      setPicks([...picks, newPick]);
-      setNewPick({ match: "", market: "", prediction: "", odds: 1.5 });
-    }
-  };
+  function removeFromSlip(fixtureId: string) {
+    setSlip(prev => prev.filter(s => s.fixtureId !== fixtureId));
+  }
 
-  const removePick = (idx: number) => {
-    setPicks(picks.filter((_, i) => i !== idx));
-  };
+  function updateOdds(fixtureId: string, odds: number) {
+    setSlip(prev => prev.map(s => s.fixtureId === fixtureId ? { ...s, odds } : s));
+  }
+
+  const inSlip = (id: string) => slip.some(s => s.fixtureId === id);
+
+  if (authLoading) return <div className="min-h-screen bg-background" />;
+
+  // Paywall for expired users
+  if (!user || user.access_status === "expired") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
+              <Calculator className="w-8 h-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">ACCA Calculator</h2>
+            <p className="text-white/50 text-sm mb-6">Build AI-powered accumulator bets with our top predictions.</p>
+            <button onClick={() => setLocation("/paywall")}
+              className="w-full px-6 py-3 bg-primary text-black font-bold rounded-xl hover:bg-primary/90 transition">
+              Upgrade to Access — ₦3,000/mo
+            </button>
+          </div>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-32 md:pb-8">
       <Header />
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center gap-3 mb-8">
-          <button
-            onClick={() => setLocation("/")}
-            className="p-2 hover:bg-white/5 rounded-lg transition"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-3xl font-bold">💰 ACCA Calculator</h1>
+
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        {/* Page header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Calculator className="w-6 h-6 text-primary" />
+              ACCA Calculator
+            </h1>
+            <p className="text-white/40 text-sm mt-1">Add AI picks to your slip — enter your bookmaker odds, see your return</p>
+          </div>
+          {isTrial && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-400/10 border border-orange-400/20">
+              <Crown className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-xs text-orange-400 font-semibold">Trial: max 2 picks</span>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Side: Picks Editor */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-              <h2 className="text-lg font-semibold mb-4">Your Picks</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* LEFT: AI Picks */}
+          <div className="lg:col-span-3 space-y-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <h2 className="text-sm font-bold text-white uppercase tracking-widest">Today's AI Picks</h2>
+              {picksData?.topPicksCount > 0 && (
+                <span className="ml-auto text-xs text-white/40">{aiPicks.length} picks</span>
+              )}
+            </div>
 
-              {/* Picks List */}
-              <div className="space-y-3 mb-4">
-                {picks.map((pick, idx) => (
-                  <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="text-white font-semibold text-sm">{pick.match}</p>
-                      <p className="text-white/60 text-xs">{pick.market} - {pick.prediction}</p>
-                    </div>
-                    <div className="text-right mr-3">
-                      <p className="text-primary font-bold">{pick.odds.toFixed(2)}</p>
-                      <p className="text-white/60 text-xs">{pick.confidence}% confidence</p>
-                    </div>
-                    <button
-                      onClick={() => removePick(idx)}
-                      className="p-2 hover:bg-red-500/20 rounded transition"
-                    >
-                      <X className="w-4 h-4 text-red-400" />
-                    </button>
-                  </div>
+            {picksLoading && (
+              <div className="space-y-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="h-20 rounded-xl bg-white/5 border border-white/8 animate-pulse" />
                 ))}
               </div>
+            )}
 
-              {/* Add Pick Form */}
-              <div className="border-t border-white/10 pt-4">
-                <p className="text-white/60 text-xs mb-3">Add a new pick</p>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    placeholder="Match (e.g. Man City vs Liverpool)"
-                    value={newPick.match}
-                    onChange={(e) => setNewPick({ ...newPick, match: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-white/40 text-sm focus:outline-none focus:border-primary"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="Market"
-                      value={newPick.market}
-                      onChange={(e) => setNewPick({ ...newPick, market: e.target.value })}
-                      className="bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-white/40 text-sm focus:outline-none focus:border-primary"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Prediction"
-                      value={newPick.prediction}
-                      onChange={(e) => setNewPick({ ...newPick, prediction: e.target.value })}
-                      className="bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-white/40 text-sm focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <input
-                    type="number"
-                    placeholder="Odds (e.g. 1.85)"
-                    step="0.01"
-                    min="1"
-                    value={newPick.odds}
-                    onChange={(e) => setNewPick({ ...newPick, odds: parseFloat(e.target.value) || 1.5 })}
-                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-white/40 text-sm focus:outline-none focus:border-primary"
-                  />
-                  <button
-                    onClick={addPick}
-                    className="w-full bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary font-semibold py-2 rounded transition text-sm flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Pick
-                  </button>
-                </div>
+            {!picksLoading && aiPicks.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-xl border border-white/8 bg-white/2">
+                <Target className="w-8 h-8 text-white/20 mb-3" />
+                <p className="text-white/40 text-sm text-center">No AI picks yet for today.</p>
+                <p className="text-white/25 text-xs text-center mt-1">Predictions are generated as matches are enriched — check back soon.</p>
               </div>
-            </div>
+            )}
+
+            {!picksLoading && aiPicks.map(pick => {
+              const added = inSlip(pick.fixtureId);
+              const trialLimitReached = isTrial && slip.length >= 2 && !added;
+              return (
+                <motion.div
+                  key={pick.fixtureId}
+                  layout
+                  className={cn(
+                    "rounded-xl border p-4 transition-all",
+                    added
+                      ? "bg-primary/5 border-primary/30"
+                      : "bg-white/3 border-white/8 hover:border-white/15"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider truncate">{pick.tournament}</span>
+                        <span className="text-[10px] text-white/30">·</span>
+                        <Clock className="w-3 h-3 text-white/30 shrink-0" />
+                        <span className="text-[10px] text-white/30">{formatKickoff(pick.time)}</span>
+                      </div>
+                      <p className="text-sm font-semibold text-white truncate">{pick.match}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-white/60">{pick.market}</span>
+                        <span className="text-xs text-white/30">→</span>
+                        <span className="text-xs font-bold text-primary">{pick.pick}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className={cn("text-sm font-bold", confidenceColor(pick.confidence))}>
+                        {pick.probability.toFixed(0)}%
+                      </span>
+                      <span className="text-[10px] text-white/30">implied {impliedOdds(pick.probability)}x</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-1 w-16 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.min(pick.probability, 100)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-white/30">confidence</span>
+                    </div>
+
+                    {added ? (
+                      <button
+                        onClick={() => removeFromSlip(pick.fixtureId)}
+                        className="flex items-center gap-1.5 text-xs text-primary font-semibold hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-3 h-3" /> Added ✓
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => addToSlip(pick)}
+                        disabled={trialLimitReached}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                          trialLimitReached
+                            ? "opacity-40 cursor-not-allowed bg-white/5 text-white/30"
+                            : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                        )}
+                      >
+                        <Plus className="w-3 h-3" />
+                        {trialLimitReached ? "Upgrade" : "Add to Slip"}
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            {isTrial && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-400/5 border border-orange-400/15">
+                <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-orange-400/80">
+                  Trial accounts can add up to 2 picks per ACCA.{" "}
+                  <button onClick={() => setLocation("/paywall")} className="text-orange-400 font-bold underline">Upgrade for unlimited</button>.
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Right Side: Payout Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-primary/10 border border-primary/30 rounded-lg p-6 sticky top-6">
-              <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Payout Summary
-              </h2>
-
-              {payout && (
-                <div className="space-y-4">
-                  {/* Combined Odds */}
-                  <div>
-                    <p className="text-primary/60 text-xs mb-1">Combined Odds</p>
-                    <p className="text-3xl font-bold text-primary">{payout.combinedOdds.toFixed(2)}</p>
-                  </div>
-
-                  <div className="bg-black/20 rounded p-3 space-y-2">
-                    {/* Stake */}
-                    <div className="flex justify-between items-center">
-                      <p className="text-white/60 text-sm">Stake</p>
-                      <p className="text-white font-semibold">₦{payout.stake.toLocaleString()}</p>
-                    </div>
-
-                    {/* Potential Return */}
-                    <div className="flex justify-between items-center border-t border-white/10 pt-2">
-                      <p className="text-white/60 text-sm">Potential Return</p>
-                      <p className="text-emerald-400 font-bold">₦{payout.potentialReturn.toLocaleString()}</p>
-                    </div>
-
-                    {/* Profit */}
-                    <div className="flex justify-between items-center">
-                      <p className="text-white/60 text-sm">Profit</p>
-                      <p className="text-emerald-400 font-bold">₦{payout.profit.toLocaleString()}</p>
-                    </div>
-
-                    {/* ROI */}
-                    <div className="flex justify-between items-center border-t border-white/10 pt-2">
-                      <p className="text-white/60 text-sm">ROI</p>
-                      <p className={`font-bold ${payout.roi >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {payout.roi >= 0 ? '+' : ''}{payout.roi.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Stake Input */}
-                  <div>
-                    <p className="text-primary/60 text-xs mb-2">Adjust Stake</p>
-                    <input
-                      type="number"
-                      value={stake}
-                      onChange={(e) => setStake(parseInt(e.target.value) || 1000)}
-                      className="w-full bg-white/5 border border-primary/30 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-primary"
-                    />
-                  </div>
-
-                  <button className="w-full bg-primary hover:bg-primary/80 text-black font-bold py-3 rounded-lg transition">
-                    Place Bet
+          {/* RIGHT: Slip */}
+          <div className="lg:col-span-2">
+            <div className="sticky top-24 space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-bold text-white uppercase tracking-widest">My ACCA Slip</h2>
+                {slip.length > 0 && (
+                  <button onClick={() => setSlip([])} className="ml-auto text-xs text-red-400/70 hover:text-red-400 flex items-center gap-1 transition">
+                    <Trash2 className="w-3 h-3" /> Clear
                   </button>
-                </div>
-              )}
+                )}
+              </div>
 
-              {!payout && picks.length > 0 && (
-                <p className="text-white/60 text-sm text-center">Loading...</p>
+              {/* Slip picks */}
+              <div className="space-y-2">
+                <AnimatePresence>
+                  {slip.map((pick) => (
+                    <motion.div
+                      key={pick.fixtureId}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="bg-white/5 border border-white/10 rounded-xl p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{pick.match}</p>
+                          <p className="text-[10px] text-white/40">{pick.market} → <span className="text-primary font-bold">{pick.pick}</span></p>
+                        </div>
+                        <button onClick={() => removeFromSlip(pick.fixtureId)}
+                          className="p-1 hover:bg-red-500/20 rounded transition shrink-0">
+                          <X className="w-3.5 h-3.5 text-red-400" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/40">Odds:</span>
+                        <input
+                          type="number"
+                          min="1.01"
+                          step="0.01"
+                          value={pick.odds}
+                          onChange={e => updateOdds(pick.fixtureId, parseFloat(e.target.value) || 1.5)}
+                          className="w-20 px-2 py-1 text-xs font-bold text-primary bg-primary/10 border border-primary/20 rounded-lg outline-none focus:border-primary/50"
+                        />
+                        <span className="text-[10px] text-white/20 flex-1 text-right">bookmaker odds</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {slip.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 rounded-xl border border-dashed border-white/10">
+                    <Calculator className="w-8 h-8 text-white/15 mb-2" />
+                    <p className="text-white/30 text-xs text-center">No picks added yet.<br/>Click "Add to Slip" on an AI pick.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Stake */}
+              <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+                <label className="text-xs text-white/40 block mb-2">Stake (₦)</label>
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  value={stake}
+                  onChange={e => setStake(parseFloat(e.target.value) || 1000)}
+                  className="w-full px-3 py-2 text-sm font-bold text-white bg-white/5 border border-white/10 rounded-lg outline-none focus:border-primary/40 transition"
+                />
+              </div>
+
+              {/* Payout summary */}
+              {slip.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4 space-y-3"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-white/60">Picks</span>
+                    <span className="text-sm font-bold text-white">{slip.length}-fold ACCA</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-white/60">Combined Odds</span>
+                    <span className="text-lg font-bold text-primary">{combinedOdds}x</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-white/60">Stake</span>
+                    <span className="text-sm text-white">₦{stake.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-primary/20 pt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-white/60">Potential Return</span>
+                      <span className="text-xl font-bold text-primary">₦{potentialReturn.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-white/40">Profit</span>
+                      <span className={cn("text-sm font-semibold", profit >= 0 ? "text-primary/80" : "text-red-400")}>
+                        {profit >= 0 ? "+" : ""}₦{profit.toLocaleString()} ({roi > 0 ? "+" : ""}{roi}% ROI)
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-white/20 text-center pt-1">
+                    Enter your actual bookmaker odds above for accurate calculations.
+                    AI implied odds are shown by default.
+                  </p>
+                </motion.div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      <BottomNav />
     </div>
   );
 }

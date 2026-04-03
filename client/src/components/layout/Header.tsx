@@ -1,8 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
-import { Zap, Crown, LogOut, User, Copy, Check, ChevronDown, LayoutDashboard, ShieldCheck } from "lucide-react";
+import {
+  Zap, Crown, LogOut, User, Copy, Check, ChevronDown,
+  LayoutDashboard, ShieldCheck, Flame, Calculator, Trophy, BarChart2, Star
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const DESKTOP_NAV = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/top-picks", label: "Top Picks", icon: Flame },
+  { href: "/acca-calculator", label: "ACCA", icon: Calculator },
+  { href: "/track-record", label: "Record", icon: Trophy },
+  { href: "/results", label: "Results", icon: BarChart2 },
+];
 
 function PlanBadge({ status }: { status: string }) {
   if (status === "active")
@@ -53,27 +64,41 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href="/" className="flex items-center gap-3 group shrink-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-panel-light to-panel border border-primary/20 flex items-center justify-center shadow-[0_0_15px_rgba(16,231,116,0.15)] group-hover:shadow-[0_0_20px_rgba(16,231,116,0.25)] transition-all">
             <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-6 h-6 object-contain" />
           </div>
           <span className="font-display text-2xl tracking-wider text-white">SCORE<span className="text-primary">PHANTOM</span></span>
         </Link>
 
-        {/* Nav links + right side */}
-        <div className="flex items-center gap-4">
-          {/* Dashboard nav link — visible when not on / */}
-          {!isLoading && user && location !== "/" && (
-            <Link href="/">
-              <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors">
-                <LayoutDashboard className="w-4 h-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </button>
-            </Link>
-          )}
+        {/* Desktop Nav — hidden on mobile, shown md+ */}
+        {!isLoading && user && (
+          <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
+            {DESKTOP_NAV.map(({ href, label, icon: Icon }) => {
+              const isActive = href === "/" ? location === "/" : location.startsWith(href);
+              return (
+                <Link key={href} href={href}>
+                  <button
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      isActive
+                        ? "text-primary bg-primary/10 border border-primary/20"
+                        : "text-white/50 hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
+        {/* Right side — avatar dropdown */}
+        <div className="flex items-center gap-3 shrink-0">
           {!isLoading && user && (
             <div ref={ref} className="relative">
               {/* Avatar button */}
@@ -105,12 +130,8 @@ export function Header() {
                     </div>
                   </div>
 
-                  {/* User details */}
+                  {/* Plan details */}
                   <div className="px-4 py-3 space-y-2.5 border-b border-white/8">
-                    <div className="flex items-center gap-2">
-                      <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-muted-foreground flex-1 truncate">{user.email}</span>
-                    </div>
                     <div className="flex items-center gap-2">
                       {user.access_status === "active" ? (
                         <Crown className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -119,14 +140,15 @@ export function Header() {
                       )}
                       <span className="text-xs text-white font-medium">
                         {user.access_status === "active"
-                          ? "Premium Plan"
+                          ? "Premium Plan — Full Access"
                           : user.access_status === "trial"
-                          ? "Free Trial (2 predictions/day)"
+                          ? "Free Trial (3 predictions/day)"
                           : "Plan Expired"}
                       </span>
                     </div>
                     {user.id && (
                       <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="text-xs text-muted-foreground font-mono flex-1">
                           ID: #{String(user.id).padStart(5, "0")}
                         </span>
@@ -141,32 +163,12 @@ export function Header() {
                     )}
                   </div>
 
-                  {/* Premium Features Menu */}
-                  <div className="px-2 py-2 border-b border-white/8 space-y-1">
-                    <p className="px-2 py-1 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Features</p>
-                    <Link href="/track-record" onClick={() => setOpen(false)}>
-                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
-                        📊 Track Record
-                      </div>
-                    </Link>
-                    <Link href="/top-picks" onClick={() => setOpen(false)}>
-                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
-                        🎯 Top Picks Today
-                      </div>
-                    </Link>
-                    <Link href="/results" onClick={() => setOpen(false)}>
-                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
-                        📈 Prediction Results
-                      </div>
-                    </Link>
-                    <Link href="/acca-calculator" onClick={() => setOpen(false)}>
-                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
-                        💰 ACCA Calculator
-                      </div>
-                    </Link>
+                  {/* League Favorites — not in main nav */}
+                  <div className="px-2 py-2 border-b border-white/8">
                     <Link href="/league-favorites" onClick={() => setOpen(false)}>
-                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer text-sm text-white/70 hover:text-white">
-                        ⭐ League Favorites
+                      <div className="px-3 py-2 rounded-lg hover:bg-white/5 transition-all cursor-pointer flex items-center gap-2">
+                        <Star className="w-3.5 h-3.5 text-yellow-400" />
+                        <span className="text-sm text-white/70 hover:text-white">League Favorites</span>
                       </div>
                     </Link>
                   </div>
@@ -177,14 +179,13 @@ export function Header() {
                       <Link href="/paywall" onClick={() => setOpen(false)}>
                         <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-all cursor-pointer">
                           <Crown className="w-3.5 h-3.5 text-primary shrink-0" />
-                          <span className="text-xs font-bold text-primary">Upgrade to Premium</span>
+                          <span className="text-xs font-bold text-primary">Upgrade to Premium — ₦3,000/mo</span>
                         </div>
                       </Link>
                     </div>
                   )}
 
-
-                  {/* Admin link — only shown if admin email matches */}
+                  {/* Admin link */}
                   {user.email?.toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase() && (
                     <div className="px-4 py-2.5 border-b border-white/8">
                       <Link href="/admin" onClick={() => setOpen(false)}>
