@@ -70,7 +70,15 @@ app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
 });
 
-// Legacy admin page removed
+// Legacy admin page
+app.get("/admin", (req, res) => {
+  const adminHtmlPath = path.join(__dirname, "..", "admin.html");
+  if (fs.existsSync(adminHtmlPath)) {
+    res.sendFile(adminHtmlPath);
+  } else {
+    res.status(404).json({ error: "Admin page not found" });
+  }
+});
 
 // SPA fallback — serve index.html for all non-API routes
 app.get("*", (req, res) => {
