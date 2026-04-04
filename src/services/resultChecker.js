@@ -79,9 +79,27 @@ function evaluatePrediction(market, selection, homeScore, awayScore) {
 
   // ── Double Chance ───────────────────────────────────────────────────────
   if (mkt.includes('double chance')) {
+    if (sel.includes('home') || sel.includes('1')) {
+      // "Home or Draw" — win if home wins OR draw
+      return homeScore >= awayScore ? 'win' : 'loss';
+    }
+    if (sel.includes('away') || sel.includes('2')) {
+      // "Away or Draw" — win if away wins OR draw
+      return awayScore >= homeScore ? 'win' : 'loss';
+    }
     if (sel.includes('or draw')) {
-      // "Team or Draw" — win if that team wins OR draw
-      return homeScore >= awayScore ? 'win' : 'loss'; // rough proxy
+      // Fallback: if we can't tell which team, treat as home DC
+      return homeScore >= awayScore ? 'win' : 'loss';
+    }
+  }
+
+  // ── Draw No Bet ─────────────────────────────────────────────────────────
+  if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
+    if (sel.includes('home') || sel.includes('1')) {
+      return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    }
+    if (sel.includes('away') || sel.includes('2')) {
+      return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
     }
   }
 

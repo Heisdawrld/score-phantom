@@ -41,6 +41,12 @@ async function runSchema() {
       match_url TEXT,
       enriched INTEGER DEFAULT 0,
       meta TEXT,
+      country_flag TEXT DEFAULT '',
+      home_team_logo TEXT DEFAULT '',
+      away_team_logo TEXT DEFAULT '',
+      odds_home REAL,
+      odds_draw REAL,
+      odds_away REAL,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS historical_matches (
