@@ -20,7 +20,7 @@ if (!JWT_SECRET) {
 }
 
 const ADMIN_EMAIL     = (process.env.ADMIN_EMAIL     || "").trim().toLowerCase();
-const ADMIN_SECRET    = process.env.ADMIN_SECRET     || "";
+const ADMIN_SECRET    = process.env.ADMIN_SECRET || "";
 const APP_URL         = process.env.APP_URL          || "";
 const FLW_SECRET      = process.env.FLUTTERWAVE_SECRET_KEY || "";
 const FLW_PUBLIC      = process.env.FLUTTERWAVE_PUBLIC_KEY  || "";
@@ -194,24 +194,25 @@ async function activatePremium(userId, flwChargeId, reference) {
   const expiry          = new Date();
   expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
   const expiryISO       = expiry.toISOString();
-  const subscriptionCode = `SUB_${userId}_${Date.now()}`;
+  const subscriptionCode = `SUB_${crypto.randomBytes(16).toString('hex')}`;
+  const now             = new Date().toISOString();
 
-  await db.execute({
-    sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
-    args: [expiryISO, expiryISO, subscriptionCode, userId],
-  });
-
-  // Ensure a payment record exists (handles manual admin upgrades)
-  await db.execute({
-    sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
-          VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
-    args: [userId, reference, PLAN_AMOUNT_NGN, new Date().toISOString()],
-  });
-
-  await db.execute({
-    sql: `UPDATE payments SET status = 'verified', flw_transaction_id = ?, paid_at = ? WHERE reference = ?`,
-    args: [String(flwChargeId || ""), new Date().toISOString(), reference],
-  });
+  // Use batch transaction to ensure all writes succeed or fail together
+  await db.batch([
+    {
+      sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
+      args: [expiryISO, expiryISO, subscriptionCode, userId],
+    },
+    {
+      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
+            VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
+      args: [userId, reference, PLAN_AMOUNT_NGN, now],
+    },
+    {
+      sql: `UPDATE payments SET status = 'verified', flw_transaction_id = ?, paid_at = ? WHERE reference = ?`,
+      args: [String(flwChargeId || ""), now, reference],
+    },
+  ], "write");
 
   return { expiryISO, subscriptionCode };
 }
@@ -788,7 +789,7 @@ router.get("/payment/callback", async (req, res) => {
 
     if (
       txData?.status !== 'successful' ||
-      Number(txData?.amount) < PLAN_AMOUNT_NGN ||
+      Number(txData?.amount) !== PLAN_AMOUNT_NGN ||
       txData?.currency !== 'NGN' ||
       txData?.tx_ref !== String(tx_ref)
     ) {
@@ -828,12 +829,12 @@ router.get("/payment/callback", async (req, res) => {
 // Flutterwave V3 webhook — fires when payment completes (backup to callback)
 router.post("/webhook/flutterwave", async (req, res) => {
   try {
-    res.sendStatus(200);
-
     if (!verifyWebhookSignature(req)) {
-      console.warn('[FLW Webhook] Invalid signature — ignoring');
-      return;
+      console.warn('[FLW Webhook] Invalid signature — rejecting');
+      return res.sendStatus(401);
     }
+
+    res.sendStatus(200);
 
     const event = req.body;
     if (event.event !== 'charge.completed') return;
@@ -849,7 +850,7 @@ router.post("/webhook/flutterwave", async (req, res) => {
       console.log('[FLW Webhook] status=' + status + ' — skipping');
       return;
     }
-    if (currency !== 'NGN' || amount < PLAN_AMOUNT_NGN) {
+    if (currency !== 'NGN' || amount !== PLAN_AMOUNT_NGN) {
       console.warn('[FLW Webhook] Amount/currency mismatch:', amount, currency);
       return;
     }
@@ -864,7 +865,7 @@ router.post("/webhook/flutterwave", async (req, res) => {
 
     // Double-verify
     const verified = await verifyTransaction(txId);
-    if (verified?.status !== 'successful' || Number(verified?.amount) < PLAN_AMOUNT_NGN) {
+    if (verified?.status !== 'successful' || Number(verified?.amount) !== PLAN_AMOUNT_NGN) {
       console.warn('[FLW Webhook] Re-verification failed for tx:', txId); return;
     }
 
@@ -1059,7 +1060,6 @@ router.post("/admin-login", adminLimiter, async (req, res) => {
 
     return res.json({
       token,
-      adminSecret: ADMIN_SECRET,
       user: { ...publicUser(user), is_admin: true },
     });
   } catch (err) {

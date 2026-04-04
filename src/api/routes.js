@@ -122,7 +122,7 @@ async function ensureDailyCountTable() {
 ensureDailyCountTable();
 
 async function getTodayCount(userId) {
-  const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
   try {
     const r = await db.execute({
       sql: `SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
@@ -139,6 +139,15 @@ async function incrementDailyCount(userId, today) {
     await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
             ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`,
+      args: [userId, today],
+    });
+  } catch {}
+}
+
+async function decrementDailyCount(userId, today) {
+  try {
+    await db.execute({
+      sql: `UPDATE trial_daily_counts SET count = MAX(count - 1, 0) WHERE user_id = ? AND date = ?`,
       args: [userId, today],
     });
   } catch {}
@@ -205,7 +214,7 @@ router.get("/live", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("[Live]", err.message);
-    res.status(500).json({ error: "Failed to fetch live matches", detail: err.message });
+    res.status(500).json({ error: "Failed to fetch live matches", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -310,7 +319,7 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch fixture", detail: err.message });
+    res.status(500).json({ error: "Failed to fetch fixture", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -338,6 +347,8 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
           access: buildAccessPayload(req.access),
         });
       }
+      // Increment BEFORE running prediction to prevent race conditions
+      await incrementDailyCount(req.user.id, trialToday);
     }
 
     // Gate: require email verification for predictions
@@ -352,15 +363,14 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const result = await getOrBuildPrediction(fixtureId);
     if (!result) {
+      // Roll back the count if prediction fails for trial users
+      if (trialToday) {
+        await decrementDailyCount(req.user.id, trialToday);
+      }
       return res.status(404).json({ error: "Fixture not found" });
     }
 
     const { prediction, odds, meta } = result;
-
-    // Increment trial count only after successful prediction
-    if (!req.access.subscription_active && req.access.has_full_access && trialToday) {
-      await incrementDailyCount(req.user.id, trialToday);
-    }
 
     const response = {
       ...prediction,
@@ -372,7 +382,7 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
     res.json(response);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Prediction failed", detail: err.message });
+    res.status(500).json({ error: "Prediction failed", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -402,12 +412,18 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
       }
       trialToday = today;
       predictionsRemaining = Math.max(0, TRIAL_DAILY_LIMIT - count - 1);
+      // Increment BEFORE running prediction to prevent race conditions
+      await incrementDailyCount(req.user.id, trialToday);
     }
 
     const fixtureId = req.params.fixtureId;
 
     const result = await getOrBuildPrediction(fixtureId);
     if (!result) {
+      // Roll back the count if prediction fails for trial users
+      if (trialToday) {
+        await decrementDailyCount(req.user.id, trialToday);
+      }
       return res.status(404).json({ error: "Fixture not found" });
     }
 
@@ -424,11 +440,6 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
       console.warn('[Explain] Groq unavailable, returning prediction without explanation:', groqErr.message);
     }
 
-    // Increment trial count only after successfully reaching this point
-    if (trialToday) {
-      await incrementDailyCount(req.user.id, trialToday);
-    }
-
     res.set("Cache-Control", "no-store");
     res.json({
       ...fullPayload,
@@ -438,7 +449,7 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Prediction failed", detail: err.message });
+    res.status(500).json({ error: "Prediction failed", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -476,7 +487,7 @@ router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) =
     });
   } catch (err) {
     console.error("[Chat] Failed:", err.message);
-    res.status(500).json({ error: "Chat failed", detail: err.message });
+    res.status(500).json({ error: "Chat failed", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -542,7 +553,7 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
       console.error("[Refresh] Seeder failed:", seedErr.message);
     }
 
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const result = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name FROM fixtures WHERE match_date LIKE ? AND enriched = 1 LIMIT 50`,
       args: [`%${today}%`],
@@ -572,7 +583,7 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
     });
   } catch (err) {
     console.error("[Refresh]", err.message);
-    res.status(500).json({ error: "Refresh failed", detail: err.message });
+    res.status(500).json({ error: "Refresh failed", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -590,7 +601,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     });
   }
   try {
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const mode  = req.query.mode === 'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
@@ -674,7 +685,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     });
   } catch (err) {
     console.error("[ACCA]", err.message);
-    res.status(500).json({ error: "ACCA failed", detail: err.message });
+    res.status(500).json({ error: "ACCA failed", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
@@ -1120,7 +1131,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[TopPicks]", err.message);
     return res.json({
-      date: new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim(),
+      date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }),
       topPicksCount: 0,
       picks: [],
       message: "No predictions available yet for today.",
@@ -1162,14 +1173,14 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("[AccaPayout]", err.message);
-    res.status(400).json({ error: "Invalid request", detail: err.message });
+    res.status(400).json({ error: "Invalid request", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
   }
 });
 
 // ─── GET /value-bet-today — Best value edge pick of the day ──────────────────
 router.get("/value-bet-today", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
     const result = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,

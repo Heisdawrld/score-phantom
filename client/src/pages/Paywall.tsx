@@ -39,7 +39,16 @@ export default function Paywall() {
     initPayment.mutate(undefined, {
       onSuccess: (data: any) => {
         if (data?.link) {
-          window.location.href = data.link;
+          try {
+            const url = new URL(data.link);
+            if (!url.hostname.endsWith('flutterwave.com')) {
+              setError("Invalid payment link. Please try again.");
+              return;
+            }
+            window.location.href = data.link;
+          } catch {
+            setError("Invalid payment link. Please try again.");
+          }
         } else {
           setError("Payment link not returned. Please try again.");
         }

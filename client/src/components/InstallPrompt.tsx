@@ -58,29 +58,32 @@ export function InstallPrompt() {
     }
 
     // Android/Chrome: capture beforeinstallprompt
+    let delayTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      
-      const t = setTimeout(() => {
-        // Check again right before showing, in case it was dismissed recently
+
+      delayTimer = setTimeout(() => {
         if (!wasDismissedRecently()) {
           setShow(true);
         }
       }, SHOW_DELAY_MS);
-      
-      return () => clearTimeout(t);
+    };
+
+    const handleAppInstalled = () => {
+      setInstalled(true);
+      setShow(false);
     };
 
     window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Listen for successful install
-    window.addEventListener('appinstalled', () => {
-      setInstalled(true);
-      setShow(false);
-    });
-
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      if (delayTimer) clearTimeout(delayTimer);
+    };
   }, []);
 
   const handleInstall = async () => {

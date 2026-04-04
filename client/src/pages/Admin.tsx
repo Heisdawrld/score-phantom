@@ -20,11 +20,11 @@ interface AdminUser { id: number; email: string; status: string; trial_ends_at: 
 interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
 
 // ── Session helpers ───────────────────────────────────────────────────────────
-function saveSession(s: AdminSession) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function saveSession(s: AdminSession) { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
 function loadSession(): AdminSession | null {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || ""); } catch { return null; }
+  try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || ""); } catch { return null; }
 }
-function clearSession() { localStorage.removeItem(STORAGE_KEY); }
+function clearSession() { sessionStorage.removeItem(STORAGE_KEY); }
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 async function adminFetch(path: string, session: AdminSession, opts: RequestInit = {}) {
@@ -46,13 +46,14 @@ async function adminFetch(path: string, session: AdminSession, opts: RequestInit
 function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [adminSecret, setAdminSecret] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) return setError("Email and password required.");
+    if (!email.trim() || !password || !adminSecret.trim()) return setError("All fields are required.");
     setLoading(true); setError("");
     try {
       const res = await fetch(`${API}/api/auth/admin-login`, {
@@ -62,8 +63,8 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
-      if (!data.token || !data.adminSecret) throw new Error("Invalid server response");
-      const session: AdminSession = { token: data.token, adminSecret: data.adminSecret, email: email.trim().toLowerCase() };
+      if (!data.token) throw new Error("Invalid server response");
+      const session: AdminSession = { token: data.token, adminSecret: adminSecret.trim(), email: email.trim().toLowerCase() };
       saveSession(session);
       onLogin(session);
     } catch (err: any) {
@@ -111,6 +112,11 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
                   {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Admin Secret</label>
+              <input type="password" value={adminSecret} onChange={e => setAdminSecret(e.target.value)} placeholder="••••••••" required
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all" />
             </div>
             <button type="submit" disabled={loading}
               className="w-full bg-[#10e774] text-black font-bold text-sm py-3.5 rounded-xl hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2">
@@ -243,8 +249,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         flash(true, `✓ User ${email} deleted`);
         setConfirmDelete(null);
       } else {
-        const method = action === "grant" ? "POST" : "POST";
-        const opts: RequestInit = { method };
+        const opts: RequestInit = { method: "POST" };
         if (action === "grant") opts.body = JSON.stringify({ days: 30 });
         await call(`/api/admin/users/${userId}/${action}`, opts);
         const label = action === "grant" ? "Premium granted (30 days)" : action === "revoke" ? "Premium revoked" : "Email verified";

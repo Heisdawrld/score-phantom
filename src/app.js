@@ -105,7 +105,7 @@ async function autoSeed() {
     for (let i = 0; i <= 6; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
-      const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
       const r = await db.execute({
         sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
         args: [`${dateStr}%`],
@@ -137,7 +137,7 @@ const ENRICH_DELAY_MS = 2500; // increased to avoid rate limiting
 
 async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
-    const today = dateFilter || new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const today = dateFilter || new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
     // Count pending unenriched fixtures for today + next 6 days
     const pending = await db.execute({
@@ -342,7 +342,7 @@ app.listen(PORT, async () => {
         for (let i = 0; i <= 7; i++) {
           const d = new Date();
           d.setDate(d.getDate() + i);
-          const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+          const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
           const r = await db.execute({
             sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
             args: [`${dateStr}%`],
@@ -362,7 +362,7 @@ app.listen(PORT, async () => {
         // Cleanup fixtures older than 3 days to keep DB tidy (but NEVER wipe predictions)
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 3);
-        const cutoffStr = cutoff.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+        const cutoffStr = cutoff.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
         await db.execute({ sql: "DELETE FROM fixtures WHERE match_date < ?", args: [`${cutoffStr}T00:00:00`] });
         console.log(`[DailySeed] Cleaned up fixtures before ${cutoffStr}`);
         await autoEnrich();
