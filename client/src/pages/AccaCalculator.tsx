@@ -218,7 +218,7 @@ export default function AccaCalculator() {
                       <span className={cn("text-sm font-bold", confidenceColor(pick.confidence))}>
                         {pick.probability.toFixed(0)}%
                       </span>
-                      <span className="text-[10px] text-white/30">implied {impliedOdds(pick.probability)}x</span>
+                      <span className="text-[10px] text-white/30">model odds {impliedOdds(pick.probability)}x</span>
                     </div>
                   </div>
 
@@ -372,7 +372,7 @@ export default function AccaCalculator() {
                   </div>
                   <p className="text-[10px] text-white/20 text-center pt-1">
                     Enter your actual bookmaker odds above for accurate calculations.
-                    Model implied odds are shown by default.
+                    Model predicted odds are shown by default.
                   </p>
                 </motion.div>
               )}

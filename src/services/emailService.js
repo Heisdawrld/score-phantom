@@ -75,7 +75,7 @@ export async function sendVerificationEmail(toEmail, verifyToken) {
         <h2 style="color:${BRAND};font-size:22px;margin-bottom:8px">Verify your email</h2>
         <p style="color:rgba(255,255,255,0.7);font-size:15px;line-height:1.6;margin-bottom:24px">
           Welcome to ScorePhantom! Click below to verify your email and start your
-          <strong style="color:#fff"> 1-day free trial</strong>.
+          <strong style="color:#fff"> 3-day free trial</strong>.
         </p>
         <a href="${verifyLink}" style="display:inline-block;background:${BRAND};color:#000;font-weight:700;font-size:15px;padding:14px 32px;border-radius:12px;text-decoration:none;margin-bottom:24px">Verify Email &amp; Start Trial</a>
         <p style="color:rgba(255,255,255,0.4);font-size:12px">Link expires in 24 hours. Didn&apos;t sign up? Ignore this.</p>

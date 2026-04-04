@@ -50,6 +50,8 @@ import PredictionResults from "@/pages/PredictionResults";
 import LeagueFavorites from "@/pages/LeagueFavorites";
 import AccaCalculator from "@/pages/AccaCalculator";
 import Landing from "@/pages/Landing";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -98,6 +100,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/signup" component={Signup} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />

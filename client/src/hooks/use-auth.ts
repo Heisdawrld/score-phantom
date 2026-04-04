@@ -52,7 +52,6 @@ export function useLogin() {
 }
 
 export function useSignup() {
-  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
   return useMutation({
@@ -62,11 +61,10 @@ export function useSignup() {
         body: JSON.stringify(credentials),
       });
     },
-    onSuccess: (data) => {
-      setAuthToken(data.token);
-      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation("/");
+    onSuccess: () => {
+      // Do not set token or redirect to home.
+      // The user must verify their email first.
+      // The UI should handle showing a "Check your email" message.
     },
   });
 }

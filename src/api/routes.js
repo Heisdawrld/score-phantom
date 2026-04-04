@@ -604,7 +604,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
               AND p.best_pick_selection IS NOT NULL
-              AND f.enrichment_status IN ('deep', 'basic', 'limited')
+              AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
             ORDER BY p.best_pick_probability DESC
             LIMIT 50`,
       args: [`%${today}%`],
@@ -654,7 +654,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
               JOIN fixtures f ON f.id = p.fixture_id
               WHERE f.match_date LIKE ?
                 AND p.best_pick_selection IS NOT NULL
-                AND f.enrichment_status IN ('deep', 'basic', 'limited')
+                AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
               ORDER BY p.best_pick_probability DESC
               LIMIT 50`,
         args: [`%${today}%`],
@@ -904,6 +904,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
       wins: outcomes.filter(o => o.isWin).length,
       losses: outcomes.filter(o => o.outcome === 'loss' || o.outcome === 'wrong').length,
       pending: outcomes.filter(o => o.outcome === 'pending').length,
+      voids: outcomes.filter(o => o.outcome === 'void').length,
     };
 
     return res.json({
@@ -915,7 +916,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[PredictionResults]", err.message);
     return res.json({
-      summary: { total: 0, wins: 0, losses: 0, pending: 0 },
+      summary: { total: 0, wins: 0, losses: 0, pending: 0, voids: 0 },
       period: "Last 7 days",
       results: [],
       message: "No prediction results yet.",
@@ -999,7 +1000,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       WHERE ${dateFilter}
         AND p.best_pick_selection IS NOT NULL
         AND p.best_pick_probability >= 0.44
-        AND f.enrichment_status IN ('deep', 'basic', 'limited')
+        AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
     `;
     let pickArgs = [...args];
 
@@ -1048,7 +1049,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           sql: `SELECT f.id FROM fixtures f
                 LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
                 WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
-                  AND f.enrichment_status IN ('deep', 'basic', 'limited')
+                  AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
                   AND p.fixture_id IS NULL
                 ORDER BY f.match_date ASC
                 LIMIT 15`,

@@ -42,7 +42,7 @@ function parseScore(raw) {
  * Evaluate a prediction market/selection against actual score.
  * Returns 'win', 'loss', or 'void'
  */
-function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
+export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
   const total = homeScore + awayScore;
   const sel = (selection || '').toLowerCase().trim();
@@ -157,12 +157,12 @@ export async function checkResults(dateStr) {
   let apiCallsMade = 0;
   while (true) {
     try {
-      const data = await lsGet('/fixtures/matches.json', { date, page });
-      const apiFixtures = data.data?.fixtures || [];
+      const data = await lsGet('/scores/history.json', { from: date, to: date, page });
+      const apiFixtures = data.data?.match || [];
       if (!apiFixtures.length) break;
 
       for (const f of apiFixtures) {
-        const id = String(f.id || f.match_id || '');
+        const id = String(f.fixture_id || f.id || f.match_id || '');
         const score = parseScore(f.ft_score || f.score);
         if (id && score) scoreMap[id] = score;
       }

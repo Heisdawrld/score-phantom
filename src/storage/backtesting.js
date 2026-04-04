@@ -1,4 +1,5 @@
 import db from '../config/database.js';
+import { evaluatePrediction as sharedEvaluatePrediction } from '../services/resultChecker.js';
 
 /**
  * Backtesting System
@@ -42,53 +43,19 @@ export async function initBacktestingTable() {
 /**
  * Evaluate a single prediction against actual match score.
  */
-export function evaluatePrediction(market, selection, homeScore, awayScore) {
-  const h = parseInt(homeScore) || 0;
-  const a = parseInt(awayScore) || 0;
-  const total = h + a;
-  const mk = (market || '').toLowerCase();
-  const sel = (selection || '').toLowerCase();
-
-  if (mk === 'over_under' || sel.includes('over') || sel.includes('under')) {
-    const isOver = sel.includes('over');
-    const lineMatch = sel.match(/([0-9.]+)/);
-    const line = lineMatch ? parseFloat(lineMatch[1]) : 2.5;
-    return isOver ? (total > line ? 'win' : 'loss') : (total < line ? 'win' : 'loss');
-  }
-  if (mk === 'match_result' || sel.includes('home win') || sel.includes('away win') || sel.includes('draw')) {
-    if (sel.includes('home win') || mk === 'home_win') return h > a ? 'win' : 'loss';
-    if (sel.includes('away win') || mk === 'away_win') return a > h ? 'win' : 'loss';
-    if (sel.includes('draw') || mk === 'draw') return h === a ? 'win' : 'loss';
-  }
-  if (mk === 'btts' || sel.includes('both teams to score')) {
-    const btts = h > 0 && a > 0;
-    return sel.includes('yes') ? (btts ? 'win' : 'loss') : (!btts ? 'win' : 'loss');
-  }
-  if (mk.includes('home_win')) return h > a ? 'win' : 'loss';
-  if (mk.includes('away_win')) return a > h ? 'win' : 'loss';
-  if (mk.includes('over_15') || sel.includes('over 1.5')) return total > 1.5 ? 'win' : 'loss';
-  if (mk.includes('under_15') || sel.includes('under 1.5')) return total < 1.5 ? 'win' : 'loss';
-  if (mk.includes('over_25') || sel.includes('over 2.5')) return total > 2.5 ? 'win' : 'loss';
-  if (mk.includes('under_25') || sel.includes('under 2.5')) return total < 2.5 ? 'win' : 'loss';
-  if (mk.includes('over_35') || sel.includes('over 3.5')) return total > 3.5 ? 'win' : 'loss';
-  if (mk.includes('under_35') || sel.includes('under 3.5')) return total < 3.5 ? 'win' : 'loss';
-  if (mk.includes('btts_yes')) return (h > 0 && a > 0) ? 'win' : 'loss';
-  if (mk.includes('btts_no')) return (h === 0 || a === 0) ? 'win' : 'loss';
-  if (mk.includes('double_chance_home')) return h >= a ? 'win' : 'loss';
-  if (mk.includes('double_chance_away')) return a >= h ? 'win' : 'loss';
-  if (mk.includes('dnb_home')) return h > a ? 'win' : (h === a ? 'void' : 'loss');
-  if (mk.includes('dnb_away')) return a > h ? 'win' : (h === a ? 'void' : 'loss');
-  return 'void'; // can't evaluate
+export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
+  return sharedEvaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName);
 }
 
 /**
  * Store an evaluated outcome.
  */
-export async function saveOutcome(fixtureId, prediction, homeScore, awayScore) {
+export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, homeTeamName, awayTeamName) {
   const outcome = evaluatePrediction(
     prediction.best_pick_market,
     prediction.best_pick_selection,
-    homeScore, awayScore
+    homeScore, awayScore,
+    homeTeamName, awayTeamName
   );
   try {
     await db.execute({

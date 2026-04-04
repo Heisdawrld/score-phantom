@@ -61,8 +61,14 @@ export function InstallPrompt() {
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      const t = setTimeout(() => setShow(true), SHOW_DELAY_MS);
-      // Clean up timer if component unmounts
+      
+      const t = setTimeout(() => {
+        // Check again right before showing, in case it was dismissed recently
+        if (!wasDismissedRecently()) {
+          setShow(true);
+        }
+      }, SHOW_DELAY_MS);
+      
       return () => clearTimeout(t);
     };
 

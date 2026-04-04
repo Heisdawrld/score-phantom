@@ -5,14 +5,10 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
 
+import disposableDomains from 'disposable-email-domains';
+
 // SECURITY: Common disposable email domains
-const DISPOSABLE_DOMAINS = new Set([
-  'tempmail.com', 'temp-mail.org', '10minutemail.com', 'throwaway.email',
-  'mailinator.com', 'yopmail.com', 'trashmail.com', 'fakeinbox.com',
-  'maildrop.cc', 'mintemail.com', 'sneakemail.com', 'spam4.me',
-  'mytrashmail.com', 'temp-mail.io', 'dispostable.com', '33mail.com',
-  'mailnesia.com', 'maildisposable.com', 'tempmail.info', 'fake-mail.com'
-]);
+const DISPOSABLE_DOMAINS = new Set(disposableDomains);
 
 const router = express.Router();
 
@@ -75,7 +71,7 @@ export async function initUsersTable() {
     ["premium_expires_at",        "ALTER TABLE users ADD COLUMN premium_expires_at TEXT"],
     ["subscription_expires_at",   "ALTER TABLE users ADD COLUMN subscription_expires_at TEXT"],
     ["subscription_code",         "ALTER TABLE users ADD COLUMN subscription_code TEXT"],
-    ["email_verified",             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"],
+    ["email_verified",             "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0"],
     ["firebase_uid",               "ALTER TABLE users ADD COLUMN firebase_uid TEXT"],
     ["email_verification_token",   "ALTER TABLE users ADD COLUMN email_verification_token TEXT"],
     ["reset_token",               "ALTER TABLE users ADD COLUMN reset_token TEXT"],
@@ -221,32 +217,22 @@ async function activatePremium(userId, flwChargeId, reference) {
 }
 
 // ── Firebase token verification (no firebase-admin needed) ───────────────────
-async function verifyFirebaseToken(idToken) {
-  const FIREBASE_PROJECT_ID = 'scorephantom-app';
+import admin from 'firebase-admin';
 
-  // Fetch Google's current RSA signing certificates
-  const certsRes = await fetch(
-    'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
-    { headers: { 'Cache-Control': 'no-cache' } }
-  );
-  if (!certsRes.ok) throw new Error('Failed to fetch Google signing certificates');
-  const certs = await certsRes.json();
-
-  // Decode JWT header to find which key was used
-  const parts = idToken.split('.');
-  if (parts.length !== 3) throw new Error('Invalid ID token format');
-  const header = JSON.parse(Buffer.from(parts[0], 'base64').toString('utf8'));
-  const cert = certs[header.kid];
-  if (!cert) throw new Error(`Unknown signing key: ${header.kid}`);
-
-  // Verify signature, audience, and issuer
-  const payload = jwt.verify(idToken, cert, {
-    algorithms: ['RS256'],
-    audience: FIREBASE_PROJECT_ID,
-    issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+// Initialize Firebase Admin if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: 'scorephantom-app',
   });
+}
 
-  return payload;
+async function verifyFirebaseToken(idToken) {
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    return decodedToken;
+  } catch (error) {
+    throw new Error(`Firebase token verification failed: ${error.message}`);
+  }
 }
 
 // ── POST /api/auth/google ─────────────────────────────────────────────────────
