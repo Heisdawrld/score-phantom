@@ -180,7 +180,11 @@ export default function Admin() {
               {health.status === "healthy" ? "ALL SYSTEMS OK" : "DEGRADED"}
             </span>
           )}
-          <button onClick={() => setLocation("/")} className="text-xs text-muted-foreground hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5">← Dashboard</button>
+          <button onClick={() => {
+            localStorage.removeItem("sp_token");
+            sessionStorage.removeItem("sp_token");
+            window.location.href = "/login";
+          }} className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">Sign Out</button>
         </div>
       </div>
 
