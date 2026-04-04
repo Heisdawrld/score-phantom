@@ -42,11 +42,17 @@ function parseScore(raw) {
  * Evaluate a prediction market/selection against actual score.
  * Returns 'win', 'loss', or 'void'
  */
-function evaluatePrediction(market, selection, homeScore, awayScore) {
+function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
   const total = homeScore + awayScore;
   const sel = (selection || '').toLowerCase().trim();
   const mkt = (market || '').toLowerCase().trim();
+  const homeName = (homeTeamName || '').toLowerCase().trim();
+  const awayName = (awayTeamName || '').toLowerCase().trim();
+
+  // Helper: check if selection refers to the home or away team by name
+  const isHomePick = homeName && sel.includes(homeName);
+  const isAwayPick = awayName && sel.includes(awayName);
 
   // ── Over/Under markets ──────────────────────────────────────────────────
   if (mkt === 'over/under' || mkt.includes('over') || mkt.includes('under')) {
@@ -72,19 +78,19 @@ function evaluatePrediction(market, selection, homeScore, awayScore) {
 
   // ── Match Result / 1X2 ─────────────────────────────────────────────────
   if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result')) {
-    if (sel === '1' || sel.includes('home win')) return homeScore > awayScore ? 'win' : 'loss';
-    if (sel === '2' || sel.includes('away win')) return awayScore > homeScore ? 'win' : 'loss';
+    if (sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
+    if (sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
     if (sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
   }
 
   // ── Double Chance ───────────────────────────────────────────────────────
   if (mkt.includes('double chance')) {
-    if (sel.includes('home') || sel.includes('1')) {
-      // "Home or Draw" — win if home wins OR draw
+    if (sel.includes('home') || sel.includes('1') || isHomePick) {
+      // "Home or Draw" / "TeamName or Draw" — win if home wins OR draw
       return homeScore >= awayScore ? 'win' : 'loss';
     }
-    if (sel.includes('away') || sel.includes('2')) {
-      // "Away or Draw" — win if away wins OR draw
+    if (sel.includes('away') || sel.includes('2') || isAwayPick) {
+      // "Away or Draw" / "TeamName or Draw" — win if away wins OR draw
       return awayScore >= homeScore ? 'win' : 'loss';
     }
     if (sel.includes('or draw')) {
@@ -95,10 +101,10 @@ function evaluatePrediction(market, selection, homeScore, awayScore) {
 
   // ── Draw No Bet ─────────────────────────────────────────────────────────
   if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
-    if (sel.includes('home') || sel.includes('1')) {
+    if (sel.includes('home') || sel.includes('1') || isHomePick) {
       return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
     }
-    if (sel.includes('away') || sel.includes('2')) {
+    if (sel.includes('away') || sel.includes('2') || isAwayPick) {
       return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
     }
   }
@@ -190,7 +196,7 @@ export async function checkResults(dateStr) {
 
     const score = scoreMap[fid];
     const outcome = score
-      ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away)
+      ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name)
       : 'void'; // no score available yet
 
     try {

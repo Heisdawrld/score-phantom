@@ -896,13 +896,13 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
       actual: row.full_score,
       outcome: row.outcome || 'pending', // 'win', 'loss', 'void'
       confidence: parseFloat(row.predicted_probability || 0),
-      isWin: row.outcome === 'win',
+      isWin: row.outcome === 'win' || row.outcome === 'correct',
     }));
 
     const summary = {
       total: outcomes.length,
       wins: outcomes.filter(o => o.isWin).length,
-      losses: outcomes.filter(o => o.outcome === 'loss').length,
+      losses: outcomes.filter(o => o.outcome === 'loss' || o.outcome === 'wrong').length,
       pending: outcomes.filter(o => o.outcome === 'pending').length,
     };
 
@@ -1085,8 +1085,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       const prob   = parseFloat(row.best_pick_probability || 0);
       const score  = parseFloat(row.best_pick_score || 0);
       // confidence_model is text: 'HIGH','MEDIUM','LOW','LEAN' — map to numeric
-      const confMap = { HIGH: 90, MEDIUM: 65, LOW: 35, LEAN: 15 };
-      const conf = confMap[(row.confidence_model || '').toUpperCase()] || 50;
+      const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
+      const conf = confMap[(row.confidence_model || '').toUpperCase()] || 30;
 
       // Composite rank score (0–100 range for display)
       const composite = (score * 0.5 + (conf / 100) * 0.3 + prob * 0.2) * 100;

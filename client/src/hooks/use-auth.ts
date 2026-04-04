@@ -108,16 +108,36 @@ export function useEmailSignIn() {
 
   return useMutation({
     mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      // 1. Sign in via Firebase (checks emailVerified, throws if not)
-      const { idToken, firebaseUser } = await signInWithEmail(
-        credentials.email,
-        credentials.password
-      );
-      // 2. Exchange Firebase ID token for our own JWT
-      return fetchApi("/auth/email", {
-        method: "POST",
-        body: JSON.stringify({ idToken, email: firebaseUser.email }),
-      });
+      // Try Firebase first, fall back to direct backend login.
+      // Users created via /auth/signup have bcrypt credentials in the DB
+      // but no Firebase account, so Firebase will reject them.
+      try {
+        const { idToken, firebaseUser } = await signInWithEmail(
+          credentials.email,
+          credentials.password
+        );
+        // Exchange Firebase ID token for our own JWT
+        return await fetchApi("/auth/email", {
+          method: "POST",
+          body: JSON.stringify({ idToken, email: firebaseUser.email }),
+        });
+      } catch (firebaseErr: any) {
+        const msg = (firebaseErr?.message || "").toLowerCase();
+        // Only fall back for credential/user-not-found errors — not for
+        // email_not_verified, too-many-requests, or network issues.
+        const isCredentialError =
+          msg.includes("auth/invalid-credential") ||
+          msg.includes("auth/invalid-login-credentials") ||
+          msg.includes("auth/wrong-password") ||
+          msg.includes("auth/user-not-found");
+        if (!isCredentialError) throw firebaseErr;
+
+        // Fall back to direct backend login (bcrypt-based)
+        return await fetchApi("/auth/login", {
+          method: "POST",
+          body: JSON.stringify(credentials),
+        });
+      }
     },
     onSuccess: (data) => {
       setAuthToken(data.token);
