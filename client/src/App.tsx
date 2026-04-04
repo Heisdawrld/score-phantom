@@ -103,7 +103,7 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
-      <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
+      <Route path="/admin" component={Admin} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />

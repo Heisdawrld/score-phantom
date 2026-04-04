@@ -93,11 +93,15 @@ export default function Admin() {
   const [payTotal, setPayTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "payments" | "system">("overview");
+  
+  // Admin Login State
+  const [adminToken, setAdminToken] = useState(useAdminToken());
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
 
   const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").toLowerCase();
   const isAdmin = user?.email?.toLowerCase() === adminEmail || true; // server enforces auth
-
-  useEffect(() => { if (!isLoading && !user) setLocation("/login"); }, [user, isLoading]);
 
   const ok = (msg: string) => toast({ title: "✅ Done", description: msg });
   const err = (msg: string) => toast({ title: "❌ Error", description: msg, variant: "destructive" });
@@ -133,9 +137,32 @@ export default function Admin() {
     } catch (e: any) { err(e.message); }
   };
 
-  useEffect(() => { loadOverview(); }, []);
-  useEffect(() => { if (activeTab === "users") loadUsers(); }, [activeTab, userPage]);
-  useEffect(() => { if (activeTab === "payments") loadPayments(); }, [activeTab, payPage]);
+  useEffect(() => { if (adminToken) loadOverview(); }, [adminToken]);
+  useEffect(() => { if (adminToken && activeTab === "users") loadUsers(); }, [adminToken, activeTab, userPage]);
+  useEffect(() => { if (adminToken && activeTab === "payments") loadPayments(); }, [adminToken, activeTab, payPage]);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Login failed");
+      if (!data.user?.is_admin) throw new Error("Not an admin account");
+
+      localStorage.setItem("sp_token", data.token);
+      setAdminToken(data.token);
+      ok("Admin login successful");
+    } catch (err: any) {
+      err(err.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const accessBadge = (u: any) => {
     if (u.subscription_active || u.access_status === "premium") return <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">PREMIUM</span>;
@@ -150,6 +177,55 @@ export default function Admin() {
   };
 
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><RefreshCw className="animate-spin text-primary w-6 h-6" /></div>;
+
+  if (!adminToken) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-[400px]">
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+              👁️
+            </div>
+            <h1 className="font-display text-2xl font-bold text-white tracking-widest">SCOREPHANTOM</h1>
+            <p className="text-sm text-muted-foreground mt-1">Admin Control Panel</p>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-7">
+            <form onSubmit={handleAdminLogin}>
+              <div className="mb-4">
+                <label className="block text-[11px] font-bold tracking-widest uppercase text-muted-foreground mb-1.5">Email</label>
+                <input 
+                  type="email" 
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="admin@example.com" 
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
+                  required
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-[11px] font-bold tracking-widest uppercase text-muted-foreground mb-1.5">Password</label>
+                <input 
+                  type="password" 
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••" 
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
+                  required
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={loginLoading}
+                className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {loginLoading ? "Signing in..." : "Sign In to Admin"}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
     { id: "overview", label: "Overview" },
