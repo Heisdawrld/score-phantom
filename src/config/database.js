@@ -41,6 +41,12 @@ async function runSchema() {
       match_url TEXT,
       enriched INTEGER DEFAULT 0,
       meta TEXT,
+      country_flag TEXT DEFAULT '',
+      home_team_logo TEXT DEFAULT '',
+      away_team_logo TEXT DEFAULT '',
+      odds_home REAL,
+      odds_draw REAL,
+      odds_away REAL,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS historical_matches (
@@ -97,6 +103,22 @@ async function runSchema() {
   const hasDataQuality = tableInfo.rows.some((col) => col.name === "data_quality");
   if (!hasDataQuality) {
     await db.execute(`ALTER TABLE fixtures ADD COLUMN data_quality TEXT DEFAULT 'unknown'`);
+  }
+
+  // Backfill columns added for country flags, team logos, and odds
+  const colMigrations = [
+    ["country_flag",    "ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''"],
+    ["home_team_logo",  "ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''"],
+    ["away_team_logo",  "ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''"],
+    ["odds_home",       "ALTER TABLE fixtures ADD COLUMN odds_home REAL"],
+    ["odds_draw",       "ALTER TABLE fixtures ADD COLUMN odds_draw REAL"],
+    ["odds_away",       "ALTER TABLE fixtures ADD COLUMN odds_away REAL"],
+  ];
+  for (const [col, sql] of colMigrations) {
+    const exists = tableInfo.rows.some((c) => c.name === col);
+    if (!exists) {
+      try { await db.execute(sql); } catch (_) {}
+    }
   }
 }
 

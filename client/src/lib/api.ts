@@ -70,14 +70,31 @@ export type User = z.infer<typeof UserSchema>;
 
 export const FixtureSchema = z.object({
   id: z.string(),
+  home_team_id: z.string().optional().nullable(),
+  away_team_id: z.string().optional().nullable(),
   home_team_name: z.string(),
   away_team_name: z.string(),
+  tournament_id: z.string().optional().nullable(),
   tournament_name: z.string().optional().nullable(),
   category_name: z.string().optional().nullable(),
   match_date: z.string(),
+  match_url: z.string().optional().nullable(),
   enriched: z.number().or(z.boolean()),
   enrichment_status: z.string().optional().nullable(),
   data_quality: z.string().optional().nullable(),
+  country_flag: z.string().optional().nullable(),
+  home_team_logo: z.string().optional().nullable(),
+  away_team_logo: z.string().optional().nullable(),
+  odds_home: z.number().optional().nullable(),
+  odds_draw: z.number().optional().nullable(),
+  odds_away: z.number().optional().nullable(),
+  // Joined from predictions_v2
+  best_pick_market: z.string().optional().nullable(),
+  best_pick_selection: z.string().optional().nullable(),
+  best_pick_probability: z.number().or(z.string()).optional().nullable(),
+  pick_confidence_level: z.string().optional().nullable(),
+  meta: z.string().optional().nullable(),
+  created_at: z.string().optional().nullable(),
 });
 
 export type Fixture = z.infer<typeof FixtureSchema>;

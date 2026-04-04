@@ -81,6 +81,8 @@ export async function initUsersTable() {
     ["reset_token",               "ALTER TABLE users ADD COLUMN reset_token TEXT"],
     ["reset_token_expires_at",    "ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT"],
     ["league_favorites",          "ALTER TABLE users ADD COLUMN league_favorites TEXT"],
+    ["email_digest_enabled",      "ALTER TABLE users ADD COLUMN email_digest_enabled INTEGER DEFAULT 0"],
+    ["email_digest_frequency",    "ALTER TABLE users ADD COLUMN email_digest_frequency TEXT DEFAULT 'daily'"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 

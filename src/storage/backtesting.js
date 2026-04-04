@@ -25,7 +25,7 @@ export async function initBacktestingTable() {
         away_score INTEGER,
         full_score TEXT,
         -- Outcome
-        outcome TEXT CHECK(outcome IN ('correct', 'wrong', 'void')),
+        outcome TEXT CHECK(outcome IN ('correct', 'wrong', 'void', 'win', 'loss')),
         evaluated_at TEXT DEFAULT (datetime('now')),
         created_at TEXT DEFAULT (datetime('now'))
       )
@@ -53,31 +53,31 @@ export function evaluatePrediction(market, selection, homeScore, awayScore) {
     const isOver = sel.includes('over');
     const lineMatch = sel.match(/([0-9.]+)/);
     const line = lineMatch ? parseFloat(lineMatch[1]) : 2.5;
-    return isOver ? (total > line ? 'correct' : 'wrong') : (total < line ? 'correct' : 'wrong');
+    return isOver ? (total > line ? 'win' : 'loss') : (total < line ? 'win' : 'loss');
   }
   if (mk === 'match_result' || sel.includes('home win') || sel.includes('away win') || sel.includes('draw')) {
-    if (sel.includes('home win') || mk === 'home_win') return h > a ? 'correct' : 'wrong';
-    if (sel.includes('away win') || mk === 'away_win') return a > h ? 'correct' : 'wrong';
-    if (sel.includes('draw') || mk === 'draw') return h === a ? 'correct' : 'wrong';
+    if (sel.includes('home win') || mk === 'home_win') return h > a ? 'win' : 'loss';
+    if (sel.includes('away win') || mk === 'away_win') return a > h ? 'win' : 'loss';
+    if (sel.includes('draw') || mk === 'draw') return h === a ? 'win' : 'loss';
   }
   if (mk === 'btts' || sel.includes('both teams to score')) {
     const btts = h > 0 && a > 0;
-    return sel.includes('yes') ? (btts ? 'correct' : 'wrong') : (!btts ? 'correct' : 'wrong');
+    return sel.includes('yes') ? (btts ? 'win' : 'loss') : (!btts ? 'win' : 'loss');
   }
-  if (mk.includes('home_win')) return h > a ? 'correct' : 'wrong';
-  if (mk.includes('away_win')) return a > h ? 'correct' : 'wrong';
-  if (mk.includes('over_15') || sel.includes('over 1.5')) return total > 1.5 ? 'correct' : 'wrong';
-  if (mk.includes('under_15') || sel.includes('under 1.5')) return total < 1.5 ? 'correct' : 'wrong';
-  if (mk.includes('over_25') || sel.includes('over 2.5')) return total > 2.5 ? 'correct' : 'wrong';
-  if (mk.includes('under_25') || sel.includes('under 2.5')) return total < 2.5 ? 'correct' : 'wrong';
-  if (mk.includes('over_35') || sel.includes('over 3.5')) return total > 3.5 ? 'correct' : 'wrong';
-  if (mk.includes('under_35') || sel.includes('under 3.5')) return total < 3.5 ? 'correct' : 'wrong';
-  if (mk.includes('btts_yes')) return (h > 0 && a > 0) ? 'correct' : 'wrong';
-  if (mk.includes('btts_no')) return (h === 0 || a === 0) ? 'correct' : 'wrong';
-  if (mk.includes('double_chance_home')) return h >= a ? 'correct' : 'wrong';
-  if (mk.includes('double_chance_away')) return a >= h ? 'correct' : 'wrong';
-  if (mk.includes('dnb_home')) return h > a ? 'correct' : (h === a ? 'void' : 'wrong');
-  if (mk.includes('dnb_away')) return a > h ? 'correct' : (h === a ? 'void' : 'wrong');
+  if (mk.includes('home_win')) return h > a ? 'win' : 'loss';
+  if (mk.includes('away_win')) return a > h ? 'win' : 'loss';
+  if (mk.includes('over_15') || sel.includes('over 1.5')) return total > 1.5 ? 'win' : 'loss';
+  if (mk.includes('under_15') || sel.includes('under 1.5')) return total < 1.5 ? 'win' : 'loss';
+  if (mk.includes('over_25') || sel.includes('over 2.5')) return total > 2.5 ? 'win' : 'loss';
+  if (mk.includes('under_25') || sel.includes('under 2.5')) return total < 2.5 ? 'win' : 'loss';
+  if (mk.includes('over_35') || sel.includes('over 3.5')) return total > 3.5 ? 'win' : 'loss';
+  if (mk.includes('under_35') || sel.includes('under 3.5')) return total < 3.5 ? 'win' : 'loss';
+  if (mk.includes('btts_yes')) return (h > 0 && a > 0) ? 'win' : 'loss';
+  if (mk.includes('btts_no')) return (h === 0 || a === 0) ? 'win' : 'loss';
+  if (mk.includes('double_chance_home')) return h >= a ? 'win' : 'loss';
+  if (mk.includes('double_chance_away')) return a >= h ? 'win' : 'loss';
+  if (mk.includes('dnb_home')) return h > a ? 'win' : (h === a ? 'void' : 'loss');
+  if (mk.includes('dnb_away')) return a > h ? 'win' : (h === a ? 'void' : 'loss');
   return 'void'; // can't evaluate
 }
 
@@ -129,25 +129,25 @@ export async function getAccuracyStats() {
       db.execute(`
         SELECT
           COUNT(*) as total,
-          SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
-          SUM(CASE WHEN outcome='wrong' THEN 1 ELSE 0 END) as wrong,
-          ROUND(100.0 * SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) / NULLIF(COUNT(*) - SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END), 0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome != 'void'
+          SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
+          SUM(CASE WHEN outcome IN ('wrong','loss') THEN 1 ELSE 0 END) as wrong,
+          ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*) - SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END), 0), 1) as win_rate
+        FROM prediction_outcomes WHERE outcome NOT IN ('void')
       `),
       db.execute(`
         SELECT predicted_market,
           COUNT(*) as total,
-          SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
-          ROUND(100.0 * SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome != 'void'
+          SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
+          ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
+        FROM prediction_outcomes WHERE outcome NOT IN ('void')
         GROUP BY predicted_market ORDER BY total DESC
       `),
       db.execute(`
         SELECT model_confidence,
           COUNT(*) as total,
-          SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) as correct,
-          ROUND(100.0 * SUM(CASE WHEN outcome='correct' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome != 'void'
+          SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
+          ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
+        FROM prediction_outcomes WHERE outcome NOT IN ('void')
         GROUP BY model_confidence ORDER BY win_rate DESC
       `),
       db.execute(`

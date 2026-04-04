@@ -798,20 +798,20 @@ router.get("/track-record", requireAuth, async (req, res) => {
     // Query backtesting outcomes (must exist in schema)
     const outcomes = await db.execute({
       sql: `SELECT 
-              market_type,
+              predicted_market,
               COUNT(*) as total_picks,
-              SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
-              SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
+              SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+              SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
               SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
             FROM prediction_outcomes
             WHERE DATE(created_at) >= ?
-            GROUP BY market_type
+            GROUP BY predicted_market
             ORDER BY total_picks DESC`,
       args: [startISO],
     });
 
     const marketStats = (outcomes.rows || []).map(row => ({
-      market: row.market_type,
+      market: row.predicted_market,
       totalPicks: Number(row.total_picks || 0),
       wins: Number(row.wins || 0),
       losses: Number(row.losses || 0),
@@ -878,8 +878,8 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
     const results = await db.execute({
       sql: `SELECT 
               fixture_id, home_team, away_team, match_date,
-              market_type, prediction, actual_result, outcome,
-              prediction_confidence, created_at
+              predicted_market, predicted_selection, full_score, outcome,
+              predicted_probability, created_at
             FROM prediction_outcomes
             WHERE DATE(created_at) >= ?
             ORDER BY created_at DESC
@@ -891,11 +891,11 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
       fixtureId: row.fixture_id,
       match: `${row.home_team} vs ${row.away_team}`,
       date: row.match_date,
-      market: row.market_type,
-      predicted: row.prediction,
-      actual: row.actual_result,
+      market: row.predicted_market,
+      predicted: row.predicted_selection,
+      actual: row.full_score,
       outcome: row.outcome || 'pending', // 'win', 'loss', 'void'
-      confidence: parseFloat(row.prediction_confidence || 0),
+      confidence: parseFloat(row.predicted_probability || 0),
       isWin: row.outcome === 'win',
     }));
 
@@ -991,7 +991,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     let pickQuery = `
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-             p.best_pick_score, p.confidence_model, p.prediction_json,
+             p.best_pick_score, p.confidence_model, p.confidence_volatility,
+             p.explanation_json, p.backup_picks_json,
              f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
       FROM predictions_v2 p
       JOIN fixtures f ON f.id = p.fixture_id
@@ -1018,11 +1019,18 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       }
     }
 
-    // Composite ORDER BY: score (0-1) × 0.5 + confidence (0-1) × 0.3 + probability × 0.2
+    // Composite ORDER BY: score × 0.5 + confidence_weight × 0.3 + probability × 0.2
+    // confidence_model is text ('HIGH','MEDIUM','LOW','LEAN') — map to numeric weights in SQL
     pickQuery += `
       ORDER BY (
         COALESCE(CAST(p.best_pick_score AS REAL), 0) * 0.5 +
-        COALESCE(CAST(p.confidence_model AS REAL), 0) * 0.3 +
+        (CASE p.confidence_model
+          WHEN 'HIGH' THEN 0.9
+          WHEN 'MEDIUM' THEN 0.6
+          WHEN 'LOW' THEN 0.3
+          WHEN 'LEAN' THEN 0.15
+          ELSE 0.3
+        END) * 0.3 +
         COALESCE(CAST(p.best_pick_probability AS REAL), 0) * 0.2
       ) DESC
       LIMIT ?
@@ -1063,28 +1071,25 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
 
     // ── Step 3: Map rows → picks with rich metadata ────────────────────────────
     const picks = rows.map(row => {
-      // Extract extra factors from prediction_json if available
+      // Derive factor availability from actual prediction data
       let factors = null;
       try {
-        const pj = row.prediction_json ? JSON.parse(row.prediction_json) : null;
-        if (pj) {
-          factors = {
-            form:      pj.features?.home_form_points != null ? true : false,
-            h2h:       pj.features?.h2h_home_win_rate != null ? true : false,
-            xg:        pj.xg?.homeExpectedGoals != null ? true : false,
-            tactical:  pj.script?.style != null ? true : false,
-          };
-        }
+        factors = {
+          form:      true, // always computed by engine
+          h2h:       true, // always computed by engine
+          xg:        row.best_pick_probability != null,
+          tactical:  row.confidence_volatility != null,
+        };
       } catch (_) {}
 
       const prob   = parseFloat(row.best_pick_probability || 0);
       const score  = parseFloat(row.best_pick_score || 0);
-      const confRaw = parseFloat(row.confidence_model || 0);
-      // confidence_model may be stored as fraction (0-1) or percentage
-      const conf = confRaw > 1 ? confRaw : confRaw * 100;
+      // confidence_model is text: 'HIGH','MEDIUM','LOW','LEAN' — map to numeric
+      const confMap = { HIGH: 90, MEDIUM: 65, LOW: 35, LEAN: 15 };
+      const conf = confMap[(row.confidence_model || '').toUpperCase()] || 50;
 
       // Composite rank score (0–100 range for display)
-      const composite = (score * 0.5 + confRaw * 0.3 + prob * 0.2) * 100;
+      const composite = (score * 0.5 + (conf / 100) * 0.3 + prob * 0.2) * 100;
 
       return {
         fixtureId:   row.fixture_id,
