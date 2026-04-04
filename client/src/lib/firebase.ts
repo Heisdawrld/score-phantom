@@ -69,14 +69,17 @@ export async function signUpWithEmail(email: string, password: string) {
 export async function signInWithEmail(email: string, password: string) {
   const result = await signInWithEmailAndPassword(auth, email, password);
 
-  // Reload to get the latest emailVerified status from Firebase
+  // Reload to get the latest emailVerified status from Firebase.
+  // IMPORTANT: reload() mutates auth.currentUser in-place — the original
+  // result.user reference does NOT update. Always read from auth.currentUser after.
   await reload(result.user);
+  const freshUser = auth.currentUser;
 
-  if (!result.user.emailVerified) {
+  if (!freshUser || !freshUser.emailVerified) {
     await signOut(auth);
     throw new Error("email_not_verified");
   }
 
-  const idToken = await result.user.getIdToken(true);
-  return { idToken, firebaseUser: result.user };
+  const idToken = await freshUser.getIdToken(true);
+  return { idToken, firebaseUser: freshUser };
 }
