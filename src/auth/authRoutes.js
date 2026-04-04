@@ -339,6 +339,14 @@ router.post("/email", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials. Please try again." });
     }
 
+    // SECURITY: Enforce email verification — Firebase must confirm the email is verified
+    if (!firebasePayload.email_verified) {
+      return res.status(403).json({
+        error: "Please verify your email first.",
+        code: "email_not_verified",
+      });
+    }
+
     const normalizedEmail = String(email).trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
     

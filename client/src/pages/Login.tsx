@@ -87,11 +87,17 @@ export default function Login() {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("email_not_verified")) {
-          setGeneralError("Please verify your email first. Check your inbox for a verification link. No email? Try signing up again.");
-        } else if (msg.includes("Invalid credentials")) {
+          setGeneralError("Your email is not verified yet. Check your inbox and spam folder, then come back and sign in.");
+        } else if (
+          msg.includes("auth/invalid-credential") ||
+          msg.includes("auth/invalid-login-credentials") ||
+          msg.includes("auth/wrong-password") ||
+          msg.includes("auth/user-not-found") ||
+          msg.includes("Invalid credentials")
+        ) {
           setGeneralError("Incorrect email or password.");
-        } else if (msg.includes("auth/too-many-requests")) {
-          setGeneralError("Too many failed attempts. Try again later.");
+        } else if (msg.includes("auth/too-many-requests") || msg.includes("too-many-requests")) {
+          setGeneralError("Too many failed attempts. Please try again later.");
         } else if (msg.includes("disposable")) {
           setGeneralError("Disposable emails not allowed. Use a real email.");
         } else {
@@ -110,17 +116,18 @@ export default function Login() {
       onSuccess: () => {
         setGeneralError("");
         setFormData({ email: "", password: "" });
-        // Show success message
-        const successMsg = "Account created! Check your email for a verification link. Click it to verify and start using ScorePhantom.";
-        alert(successMsg);
+        setSuccessMsg("Account created! We sent a verification email to you. Verify your email, then come back and sign in.");
+        setAuthMode("email-signin");
       },
       onError: (err: any) => {
         const msg = err?.message || "Sign up failed";
-        if (msg.includes("already registered")) {
-          setGeneralError("Email already registered. Sign in instead.");
+        if (msg.includes("email-already-in-use") || msg.includes("already-in-use") || msg.includes("already registered")) {
+          setGeneralError("An account with this email already exists. Sign in instead.");
           setAuthMode("email-signin");
-        } else if (msg.includes("Password must be")) {
+        } else if (msg.includes("weak-password") || msg.includes("Password must be")) {
           setGeneralError("Password must be at least 6 characters.");
+        } else if (msg.includes("invalid-email")) {
+          setGeneralError("Please enter a valid email address.");
         } else if (msg.includes("disposable")) {
           setGeneralError("Disposable emails not allowed. Use a real email address.");
         } else {

@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchApi, setAuthToken, removeAuthToken, UserSchema } from "@/lib/api";
 import {
   signInWithGoogle,
+  signInWithEmail,
+  signUpWithEmail,
 } from "@/lib/firebase";
 import { z } from "zod";
 import { useLocation } from "wouter";
@@ -92,22 +94,10 @@ export function useGoogleSignIn() {
 
 
 export function useEmailSignUp() {
-  const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
-
   return useMutation({
     mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      // Call backend directly — no Firebase needed
-      return fetchApi("/auth/signup", {
-        method: "POST",
-        body: JSON.stringify(credentials),
-      });
-    },
-    onSuccess: (data) => {
-      setAuthToken(data.token);
-      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation("/");
+      // Create Firebase account + send verification email — no backend call yet
+      return signUpWithEmail(credentials.email, credentials.password);
     },
   });
 }
@@ -118,10 +108,15 @@ export function useEmailSignIn() {
 
   return useMutation({
     mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      // Call backend directly — no Firebase needed
-      return fetchApi("/auth/login", {
+      // 1. Sign in via Firebase (checks emailVerified, throws if not)
+      const { idToken, firebaseUser } = await signInWithEmail(
+        credentials.email,
+        credentials.password
+      );
+      // 2. Exchange Firebase ID token for our own JWT
+      return fetchApi("/auth/email", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ idToken, email: firebaseUser.email }),
       });
     },
     onSuccess: (data) => {
