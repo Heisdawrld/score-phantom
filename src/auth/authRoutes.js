@@ -216,14 +216,33 @@ async function activatePremium(userId, flwChargeId, reference) {
   return { expiryISO, subscriptionCode };
 }
 
-// ── Firebase token verification (no firebase-admin needed) ───────────────────
+// ── Firebase Admin SDK initialization ────────────────────────────────────────
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: 'scorephantom-app',
-  });
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+  if (serviceAccountJson) {
+    try {
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id || 'scorephantom-app',
+      });
+      console.log('[Firebase Admin] ✓ Initialized with service account credentials');
+    } catch (err) {
+      console.error('[Firebase Admin] ✗ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', err.message);
+      console.error('[Firebase Admin] Make sure the env var is valid JSON (not base64, not escaped).');
+      process.exit(1);
+    }
+  } else {
+    // Fallback for local dev only — will NOT work on Render (no ADC available)
+    console.warn('[Firebase Admin] ⚠️  FIREBASE_SERVICE_ACCOUNT_JSON not set.');
+    console.warn('[Firebase Admin]    Google/Email sign-in will FAIL in production.');
+    console.warn('[Firebase Admin]    Get your service account from Firebase Console →');
+    console.warn('[Firebase Admin]    Project Settings → Service Accounts → Generate New Private Key');
+    admin.initializeApp({ projectId: 'scorephantom-app' });
+  }
 }
 
 async function verifyFirebaseToken(idToken) {
