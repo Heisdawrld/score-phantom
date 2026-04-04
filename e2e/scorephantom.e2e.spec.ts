@@ -1,7 +1,11 @@
 ﻿import { test, expect, Page } from '@playwright/test';
 
-const email = process.env.E2E_LOGIN_EMAIL || 'Adieledavid007@gmail.com';
-const password = process.env.E2E_LOGIN_PASSWORD || 'Dawrld1*';
+const email = process.env.E2E_LOGIN_EMAIL;
+const password = process.env.E2E_LOGIN_PASSWORD;
+
+if (!email || !password) {
+  throw new Error('Missing E2E_LOGIN_EMAIL or E2E_LOGIN_PASSWORD');
+}
 
 function byButtonOrLink(page: Page, name: RegExp) {
   return page.getByRole('button', { name }).or(page.getByRole('link', { name }));
@@ -86,3 +90,5 @@ test('scorephantom full journey', async ({ page }) => {
   await byButtonOrLink(page, /Sign Out/i).click();
   await expect(page).toHaveURL(/\/login/i);
 });
+
+
