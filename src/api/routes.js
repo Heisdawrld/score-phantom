@@ -1058,9 +1058,10 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         const unpredicted = enrichedResult.rows || [];
         if (unpredicted.length > 0) {
           const { getOrBuildPrediction } = await import('../services/predictionCache.js');
-          for (const row of unpredicted) {
-            try { await getOrBuildPrediction(String(row.id)); } catch (_) {}
-          }
+          // Run predictions in parallel to speed up the response
+          await Promise.allSettled(
+            unpredicted.map(row => getOrBuildPrediction(String(row.id)))
+          );
           // Re-query after generation
           result = await db.execute({ sql: pickQuery, args: pickArgs });
           rows = result.rows || [];
