@@ -229,6 +229,10 @@ export default function Login() {
                 <p className="text-white font-semibold text-lg">Sign in</p>
               </div>
 
+              {successMsg && (
+                <p className="text-sm text-green-400 text-center font-semibold bg-green-400/10 border border-green-400/20 rounded-xl px-4 py-3">{successMsg}</p>
+              )}
+
               <form
                 onSubmit={handleEmailSignIn}
                 className="w-full flex flex-col gap-4"
