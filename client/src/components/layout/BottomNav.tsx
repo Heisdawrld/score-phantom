@@ -17,8 +17,8 @@ export function BottomNav() {
 
   // Only show for authenticated users, hide on auth pages
   if (!user) return null;
-  const hiddenPaths = ["/login", "/signup", "/home", "/reset-password"];
-  if (hiddenPaths.some((p) => location === p)) return null;
+  const hiddenPaths = ["/login", "/signup", "/home", "/reset-password", "/admin"];
+  if (hiddenPaths.some((p) => location === p || location.startsWith("/admin"))) return null;
 
   return (
     <>
