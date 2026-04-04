@@ -5,7 +5,7 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
 
-import disposableDomains from 'disposable-email-domains';
+import disposableDomains from 'disposable-email-domains' with { type: "json" };
 
 // SECURITY: Common disposable email domains
 const DISPOSABLE_DOMAINS = new Set(disposableDomains);
