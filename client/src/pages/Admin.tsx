@@ -164,6 +164,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [userSearch, setUserSearch] = useState("");
   const [upgradeEmail, setUpgradeEmail] = useState("");
   const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [userActionLoading, setUserActionLoading] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
 
   const call = useCallback((path: string, opts?: RequestInit) => adminFetch(path, session, opts), [session]);
 
@@ -224,6 +226,27 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       if (tab === "users") loadUsers();
     } catch (e: any) { flash(false, e.message); }
     finally { setUpgradeLoading(false); }
+  };
+
+  const userAction = async (userId: number, action: "grant" | "revoke" | "verify-email" | "delete", email: string) => {
+    setUserActionLoading(userId);
+    try {
+      if (action === "delete") {
+        await call(`/api/admin/users/${userId}`, { method: "DELETE" });
+        flash(true, `✓ User ${email} deleted`);
+        setConfirmDelete(null);
+      } else {
+        const method = action === "grant" ? "POST" : "POST";
+        const opts: RequestInit = { method };
+        if (action === "grant") opts.body = JSON.stringify({ days: 30 });
+        await call(`/api/admin/users/${userId}/${action}`, opts);
+        const label = action === "grant" ? "Premium granted (30 days)" : action === "revoke" ? "Premium revoked" : "Email verified";
+        flash(true, `✓ ${email}: ${label}`);
+      }
+      loadUsers();
+      loadOverview();
+    } catch (e: any) { flash(false, e.message); }
+    finally { setUserActionLoading(null); }
   };
 
   const tabs = [
@@ -332,26 +355,80 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-white/[0.06]">
-                    {["ID", "Email", "Status", "Trial Ends", "Premium Expires", "Payments"].map(h => (
+                    {["ID", "Email", "Status", "Trial Ends", "Premium Expires", "Payments", "Actions"].map(h => (
                       <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
-                    {users.map(u => (
-                      <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 text-gray-500 text-xs">{u.id}</td>
-                        <td className="px-4 py-3 text-white text-xs font-medium">{u.email}</td>
-                        <td className="px-4 py-3"><StatusBadge status={u.access?.status || u.status} /></td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{u.trial_ends_at ? new Date(u.trial_ends_at).toLocaleDateString() : "—"}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString() : "—"}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{u.payments?.length ?? 0}</td>
-                      </tr>
-                    ))}
+                    {users.map(u => {
+                      const isLoading = userActionLoading === u.id;
+                      const st = u.access?.status || u.status;
+                      return (
+                        <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.id}</td>
+                          <td className="px-4 py-3 text-white text-xs font-medium">{u.email}</td>
+                          <td className="px-4 py-3"><StatusBadge status={st} /></td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.trial_ends_at ? new Date(u.trial_ends_at).toLocaleDateString() : "—"}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString() : "—"}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">{u.payments?.length ?? 0}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Grant 30-day Premium */}
+                              <button disabled={isLoading} onClick={() => userAction(u.id, "grant", u.email)}
+                                title="Grant 30-day Premium"
+                                className="bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-primary/20 transition-all disabled:opacity-40 whitespace-nowrap">
+                                {isLoading ? <Loader2 size={10} className="animate-spin inline" /> : "👑 Grant"}
+                              </button>
+                              {/* Revoke Premium */}
+                              {st === "active" && (
+                                <button disabled={isLoading} onClick={() => userAction(u.id, "revoke", u.email)}
+                                  title="Revoke Premium"
+                                  className="bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-orange-500/20 transition-all disabled:opacity-40 whitespace-nowrap">
+                                  Revoke
+                                </button>
+                              )}
+                              {/* Verify Email */}
+                              <button disabled={isLoading} onClick={() => userAction(u.id, "verify-email", u.email)}
+                                title="Manually verify email"
+                                className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-blue-500/20 transition-all disabled:opacity-40 whitespace-nowrap">
+                                ✓ Verify
+                              </button>
+                              {/* Delete */}
+                              <button disabled={isLoading} onClick={() => setConfirmDelete(u)}
+                                title="Delete user"
+                                className="bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-500/20 transition-all disabled:opacity-40">
+                                🗑
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {!loading && users.length === 0 && (
-                      <tr><td colSpan={6} className="text-center py-8 text-gray-600 text-sm">No users found.</td></tr>
+                      <tr><td colSpan={7} className="text-center py-8 text-gray-600 text-sm">No users found.</td></tr>
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── DELETE CONFIRMATION MODAL ── */}
+        {confirmDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="bg-[#0f172a] border border-red-500/20 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+              <h3 className="text-white font-bold text-base mb-2">Delete User?</h3>
+              <p className="text-gray-400 text-sm mb-5">This will permanently delete <span className="text-white font-semibold">{confirmDelete.email}</span> and all their data. This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDelete(null)}
+                  className="flex-1 bg-white/5 border border-white/10 text-gray-400 text-sm font-bold py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                  Cancel
+                </button>
+                <button onClick={() => userAction(confirmDelete.id, "delete", confirmDelete.email)}
+                  className="flex-1 bg-red-500/20 border border-red-500/30 text-red-400 text-sm font-bold py-2.5 rounded-xl hover:bg-red-500/30 transition-all">
+                  {userActionLoading === confirmDelete.id ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Delete"}
+                </button>
               </div>
             </div>
           </div>

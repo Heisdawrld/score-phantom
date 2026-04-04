@@ -76,23 +76,37 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       else expiredCount++;
     }
 
+    const totalUsers   = Number(totalResult.rows[0].count || 0);
+    const totalRev     = Number(totalRevenue.rows[0].total || 0);
+    const todayPay     = Number(paymentsToday.rows[0].count || 0);
+    const todayRev     = Number(paymentsToday.rows[0].total || 0);
+
     return res.json({
+      // Nested structure (used by admin.html)
       users: {
-        total: Number(totalResult.rows[0].count || 0),
+        total: totalUsers,
         active: activeCount,
         trial: trialCount,
         expired: expiredCount,
       },
       revenue: {
         currency: 'NGN',
-        total: Number(totalRevenue.rows[0].total || 0),
+        total: totalRev,
         total_payments: Number(totalRevenue.rows[0].count || 0),
         pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {
-        payments: Number(paymentsToday.rows[0].count || 0),
-        revenue: Number(paymentsToday.rows[0].total || 0),
+        payments: todayPay,
+        revenue: todayRev,
       },
+      // Flat structure (used by Admin.tsx React component)
+      total_users:   totalUsers,
+      premium_users: activeCount,
+      trial_users:   trialCount,
+      expired_users: expiredCount,
+      revenue_total: totalRev,
+      revenue_today: todayRev,
+      payments_today: todayPay,
     });
   } catch (err) {
     console.error("Admin Stats Error:", err);
@@ -238,13 +252,14 @@ router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, r
     const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.email_verified === 1) return res.json({ success: true, message: 'Already verified' });
+    // Reset trial to now so it starts fresh from verification (not signup)
+    const freshTrialEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await db.execute({
-      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL WHERE id = ?`,
-      args: [userId],
+      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
+      args: [freshTrialEnd, userId],
     });
-    console.log('[Admin] Manually verified email for user', userId, user.email);
-    return res.json({ success: true, message: `Email verified for ${user.email}` });
+    console.log('[Admin] Manually verified email for user', userId, user.email, '— trial reset to', freshTrialEnd);
+    return res.json({ success: true, message: `Email verified for ${user.email}`, trial_ends_at: freshTrialEnd });
   } catch (err) {
     console.error('[Admin/verify-email]', err);
     return res.status(500).json({ error: 'Failed to verify email' });
@@ -672,26 +687,7 @@ router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res
 });
 
 
-// POST /api/admin/users/:id/verify-email — manually verify a user's email
-router.post('/users/:id/verify-email', adminLimiter, requireAdmin, async (req, res) => {
-  try {
-    const userId = parseInt(req.params.id, 10);
-    if (!userId) return res.status(400).json({ error: 'Invalid user id' });
-    const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
-    const user = result.rows?.[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    // Also reset trial so it starts now (not at signup) — prevents trial expiring during email gate
-    const freshTrialEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    await db.execute({
-      sql: 'UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?',
-      args: [freshTrialEnd, userId],
-    });
-    console.log('[Admin] Force-verified email for user', userId, user.email, '— trial reset to', freshTrialEnd);
-    return res.json({ success: true, userId, email: user.email, was_verified: !!user.email_verified, trial_ends_at: freshTrialEnd });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+// (duplicate verify-email route removed — first definition at line ~249 is used)
 
 // POST /api/admin/check-results — manually run result checker for a date
 router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
