@@ -800,8 +800,8 @@ router.get("/track-record", requireAuth, async (req, res) => {
       sql: `SELECT 
               predicted_market,
               COUNT(*) as total_picks,
-              SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
-              SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
+              SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+              SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
               SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
             FROM prediction_outcomes
             WHERE DATE(created_at) >= ?
@@ -1071,14 +1071,12 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
 
     // ── Step 3: Map rows → picks with rich metadata ────────────────────────────
     const picks = rows.map(row => {
-      // Extract extra factors from explanation_json and backup_picks_json
+      // Derive factor availability from actual prediction data
       let factors = null;
       try {
-        const hasExplanation = row.explanation_json && row.explanation_json !== '[]';
-        const hasBackups = row.backup_picks_json && row.backup_picks_json !== '[]';
         factors = {
-          form:      true, // always computed
-          h2h:       true, // always computed
+          form:      true, // always computed by engine
+          h2h:       true, // always computed by engine
           xg:        row.best_pick_probability != null,
           tactical:  row.confidence_volatility != null,
         };
