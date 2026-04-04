@@ -7,7 +7,7 @@
  * No ProtectedRoute, no shared auth state.
  */
 import { useState, useEffect, useCallback } from "react";
-import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield } from "lucide-react";
+import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus } from "lucide-react";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = "";
@@ -18,6 +18,8 @@ interface AdminSession { token: string; adminSecret: string; email: string; }
 interface AdminStats { total_users: number; premium_users: number; trial_users: number; expired_users: number; revenue_total: number; payments_today: number; revenue_today: number; fixtures_total: number; }
 interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; }
 interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
+interface Partner { id: number; email: string; own_referral_code: string; total_referred_paid: number; total_commission: number; pending_commission: number; settled_commission: number; }
+interface Commission { id: number; referrer_user_id: number; referred_user_id: number; referred_email: string; gross_amount: number; commission_rate: number; commission_amount: number; status: string; created_at: string; settled_at: string | null; }
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 function saveSession(s: AdminSession) { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
@@ -161,7 +163,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
-  const [tab, setTab] = useState<"overview" | "users" | "payments" | "system">("overview");
+  const [tab, setTab] = useState<"overview" | "users" | "payments" | "partners" | "system">("overview");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
@@ -176,6 +178,10 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [userActionLoading, setUserActionLoading] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
+  const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [settleLoading, setSettleLoading] = useState(false);
 
   const call = useCallback((path: string, opts?: RequestInit) => adminFetch(path, session, opts), [session]);
 
@@ -217,9 +223,36 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     } catch { } finally { setLoading(false); }
   }, [call]);
 
+  const loadPartners = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await call("/api/admin/partners");
+      setPartners(r.partners || []);
+    } catch { } finally { setLoading(false); }
+  }, [call]);
+
+  const loadCommissions = useCallback(async (partnerId: number) => {
+    try {
+      const r = await call(`/api/admin/partners/${partnerId}/commissions`);
+      setCommissions(r.commissions || []);
+    } catch { setCommissions([]); }
+  }, [call]);
+
+  const settlePartner = async (partnerId: number) => {
+    setSettleLoading(true);
+    try {
+      await call(`/api/admin/partners/${partnerId}/settle`, { method: "POST" });
+      flash(true, "Commissions settled!");
+      loadPartners();
+      loadCommissions(partnerId);
+    } catch (e: any) { flash(false, e.message); }
+    finally { setSettleLoading(false); }
+  };
+
   useEffect(() => { loadOverview(); }, [loadOverview]);
   useEffect(() => { if (tab === "users") loadUsers(); }, [tab, loadUsers]);
   useEffect(() => { if (tab === "payments") loadPayments(); }, [tab, loadPayments]);
+  useEffect(() => { if (tab === "partners") loadPartners(); }, [tab, loadPartners]);
 
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { flash(false, e.message); }
@@ -262,10 +295,11 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   };
 
   const tabs = [
-    { id: "overview", label: "Overview", icon: BarChart3 },
-    { id: "users",    label: "Users",    icon: Users },
-    { id: "payments", label: "Payments", icon: CreditCard },
-    { id: "system",   label: "System",   icon: Settings },
+    { id: "overview",  label: "Overview",  icon: BarChart3 },
+    { id: "users",     label: "Users",     icon: Users },
+    { id: "payments",  label: "Payments",  icon: CreditCard },
+    { id: "partners",  label: "Partners",  icon: UserPlus },
+    { id: "system",    label: "System",    icon: Settings },
   ] as const;
 
   return (
@@ -512,6 +546,106 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── PARTNERS ── */}
+        {tab === "partners" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white">Partner Referrals</h2>
+              <button onClick={loadPartners} disabled={loading} className="flex items-center gap-2 text-xs text-gray-400 hover:text-white px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/[0.06]">
+                <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
+
+            {partners.length === 0 && !loading && (
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-8 text-center">
+                <p className="text-gray-500 text-sm">No partner referrals yet.</p>
+                <p className="text-gray-600 text-xs mt-1">Partners appear here when their referred users make a verified payment.</p>
+              </div>
+            )}
+
+            {partners.length > 0 && (
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        {["Partner", "Code", "Paid Referrals", "Total Commission", "Pending", "Settled", "Actions"].map(h => (
+                          <th key={h} className="text-left px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {partners.map(p => (
+                        <tr key={p.id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                          <td className="px-4 py-3 text-xs text-white">{p.email}</td>
+                          <td className="px-4 py-3"><span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">{p.own_referral_code}</span></td>
+                          <td className="px-4 py-3 text-xs text-gray-300">{p.total_referred_paid}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-white">₦{Number(p.total_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-yellow-400">₦{Number(p.pending_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-emerald-400">₦{Number(p.settled_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 flex gap-2">
+                            <button onClick={() => { setSelectedPartner(p); loadCommissions(p.id); }}
+                              className="text-xs text-primary hover:underline">View</button>
+                            {Number(p.pending_commission) > 0 && (
+                              <button onClick={() => settlePartner(p.id)} disabled={settleLoading}
+                                className="text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50">
+                                {settleLoading ? "…" : "Settle"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Commission detail drawer */}
+            {selectedPartner && (
+              <div className="bg-[#0f172a] border border-primary/20 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{selectedPartner.email}</h3>
+                    <p className="text-xs text-gray-500">Code: {selectedPartner.own_referral_code} · {selectedPartner.total_referred_paid} paid referral(s)</p>
+                  </div>
+                  <button onClick={() => { setSelectedPartner(null); setCommissions([]); }}
+                    className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">Close</button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        {["Referred User", "Payment", "Commission", "Status", "Date"].map(h => (
+                          <th key={h} className="text-left px-3 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commissions.map(c => (
+                        <tr key={c.id} className="border-b border-white/[0.04]">
+                          <td className="px-3 py-2 text-xs text-gray-300">{c.referred_email || `#${c.referred_user_id}`}</td>
+                          <td className="px-3 py-2 text-xs text-white">₦{Number(c.gross_amount).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-xs font-bold text-primary">₦{Number(c.commission_amount).toLocaleString()}</td>
+                          <td className="px-3 py-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.status === 'settled' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-yellow-500/15 text-yellow-400'}`}>
+                              {c.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500">{c.created_at ? new Date(c.created_at).toLocaleDateString() : "—"}</td>
+                        </tr>
+                      ))}
+                      {commissions.length === 0 && (
+                        <tr><td colSpan={5} className="px-3 py-4 text-xs text-gray-600 text-center">No commissions found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

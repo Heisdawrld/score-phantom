@@ -76,13 +76,15 @@ export function useGoogleSignIn() {
   return useMutation({
     mutationFn: async () => {
       const { idToken } = await signInWithGoogle();
+      const referralCode = localStorage.getItem("sp_referral_code") || undefined;
       return fetchApi("/auth/google", {
         method: "POST",
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ idToken, referralCode }),
       });
     },
     onSuccess: (data) => {
       setAuthToken(data.token);
+      localStorage.removeItem("sp_referral_code");
       const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
       queryClient.setQueryData(["/api/auth/me"], user);
       setLocation("/");
@@ -114,10 +116,11 @@ export function useEmailSignIn() {
           credentials.email,
           credentials.password
         );
+        const referralCode = localStorage.getItem("sp_referral_code") || undefined;
         // Exchange Firebase ID token for our own JWT
         return await fetchApi("/auth/email", {
           method: "POST",
-          body: JSON.stringify({ idToken, email: firebaseUser.email }),
+          body: JSON.stringify({ idToken, email: firebaseUser.email, referralCode }),
         });
       } catch (firebaseErr: any) {
         const msg = (firebaseErr?.message || "").toLowerCase();
@@ -139,6 +142,7 @@ export function useEmailSignIn() {
     },
     onSuccess: (data) => {
       setAuthToken(data.token);
+      localStorage.removeItem("sp_referral_code");
       const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
       queryClient.setQueryData(["/api/auth/me"], user);
       setLocation("/");

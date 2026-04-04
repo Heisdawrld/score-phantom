@@ -79,6 +79,9 @@ export async function initUsersTable() {
     ["league_favorites",          "ALTER TABLE users ADD COLUMN league_favorites TEXT"],
     ["email_digest_enabled",      "ALTER TABLE users ADD COLUMN email_digest_enabled INTEGER DEFAULT 0"],
     ["email_digest_frequency",    "ALTER TABLE users ADD COLUMN email_digest_frequency TEXT DEFAULT 'daily'"],
+    ["own_referral_code",         "ALTER TABLE users ADD COLUMN own_referral_code TEXT"],
+    ["referred_by_user_id",       "ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER"],
+    ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
@@ -102,6 +105,30 @@ export async function initUsersTable() {
     ["flw_transaction_id", "ALTER TABLE payments ADD COLUMN flw_transaction_id TEXT"],
   ];
   for (const [col, sql] of paymentCols) await ensureColumn("payments", col, sql);
+
+  // ── Partner commissions table ──────────────────────────────────────────────
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS partner_commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referrer_user_id INTEGER NOT NULL,
+      referred_user_id INTEGER NOT NULL UNIQUE,
+      gross_amount INTEGER NOT NULL,
+      commission_rate REAL NOT NULL DEFAULT 0.25,
+      commission_amount INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      settled_at TEXT
+    )
+  `);
+
+  // Backfill own_referral_code for any users that don't have one yet
+  const usersWithoutCode = await db.execute(
+    `SELECT id FROM users WHERE own_referral_code IS NULL OR own_referral_code = ''`
+  );
+  for (const row of (usersWithoutCode.rows || [])) {
+    const code = `SP${String(row.id).padStart(4, '0')}`;
+    await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [code, row.id] });
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -217,6 +244,38 @@ async function activatePremium(userId, flwChargeId, reference) {
   return { expiryISO, subscriptionCode };
 }
 
+// ── Referral commission on first verified payment ────────────────────────────
+async function createReferralCommission(userId, grossAmount) {
+  try {
+    // Check if user was referred
+    const userResult = await db.execute({
+      sql: `SELECT referred_by_user_id FROM users WHERE id = ? AND referred_by_user_id IS NOT NULL LIMIT 1`,
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return; // not a referred user
+
+    // Check no existing commission for this referred user (first payment only)
+    const existing = await db.execute({
+      sql: `SELECT id FROM partner_commissions WHERE referred_user_id = ? LIMIT 1`,
+      args: [userId],
+    });
+    if ((existing.rows || []).length > 0) return; // already credited
+
+    const commissionRate = 0.25;
+    const commissionAmount = Math.round(grossAmount * commissionRate);
+
+    await db.execute({
+      sql: `INSERT INTO partner_commissions (referrer_user_id, referred_user_id, gross_amount, commission_rate, commission_amount, status)
+            VALUES (?, ?, ?, ?, ?, 'pending')`,
+      args: [user.referred_by_user_id, userId, grossAmount, commissionRate, commissionAmount],
+    });
+    console.log(`[Commission] ✓ ₦${commissionAmount} commission created for referrer ${user.referred_by_user_id} (referred user ${userId})`);
+  } catch (err) {
+    console.error('[Commission] Error creating commission:', err.message);
+  }
+}
+
 // ── Firebase Admin SDK initialization ────────────────────────────────────────
 import admin from 'firebase-admin';
 
@@ -255,12 +314,35 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
+// ── Referral helper ──────────────────────────────────────────────────────────
+async function attachReferral(newUserId, referralCode) {
+  if (!referralCode) return;
+  const code = String(referralCode).trim();
+  if (!code) return;
+  try {
+    const referrerResult = await db.execute({
+      sql: `SELECT id, own_referral_code FROM users WHERE own_referral_code = ? LIMIT 1`,
+      args: [code],
+    });
+    const referrer = referrerResult.rows?.[0];
+    if (!referrer) { console.log(`[Referral] Code "${code}" not found — skipping`); return; }
+    if (Number(referrer.id) === Number(newUserId)) { console.log(`[Referral] Self-referral blocked`); return; }
+    await db.execute({
+      sql: `UPDATE users SET referred_by_user_id = ?, referred_by_code = ? WHERE id = ? AND referred_by_user_id IS NULL`,
+      args: [referrer.id, code, newUserId],
+    });
+    console.log(`[Referral] ✓ User ${newUserId} referred by user ${referrer.id} (code=${code})`);
+  } catch (err) {
+    console.error('[Referral] Error attaching referral:', err.message);
+  }
+}
+
 // ── POST /api/auth/google ─────────────────────────────────────────────────────
 // Accepts a Firebase ID token, verifies it, returns our own JWT.
 // Creates new users automatically; matches existing users by email.
 router.post("/google", authLimiter, async (req, res) => {
   try {
-    const { idToken } = req.body || {};
+    const { idToken, referralCode } = req.body || {};
     if (!idToken) return res.status(400).json({ error: "Firebase ID token required" });
 
     // Verify the token with Google's public keys
@@ -298,6 +380,20 @@ router.post("/google", authLimiter, async (req, res) => {
       });
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
       user = created.rows?.[0];
+
+      // Generate own_referral_code for this new user
+      if (user) {
+        const ownCode = `SP${String(user.id).padStart(4, '0')}`;
+        await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [ownCode, user.id] });
+      }
+
+      // Resolve referral — attach referrer if valid, not self
+      if (user && referralCode) {
+        await attachReferral(user.id, referralCode);
+      }
+
+      const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
+      user = refreshed.rows?.[0];
       console.log(`[GoogleAuth] ✓ New user created: ${email} (uid=${firebaseUid})`);
     } else {
       // Existing user — stamp firebase_uid if not set, and mark email verified
@@ -333,7 +429,7 @@ router.post("/google", authLimiter, async (req, res) => {
 // ── Email Sign-In (Firebase) ────────────────────────────────────────────────────
 router.post("/email", authLimiter, async (req, res) => {
   try {
-    const { idToken, email } = req.body || {};
+    const { idToken, email, referralCode } = req.body || {};
     if (!idToken || !email) {
       return res.status(400).json({ error: "Firebase ID token and email required" });
     }
@@ -380,6 +476,20 @@ router.post("/email", authLimiter, async (req, res) => {
       });
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
       user = created.rows?.[0];
+
+      // Generate own_referral_code for this new user
+      if (user) {
+        const ownCode = `SP${String(user.id).padStart(4, '0')}`;
+        await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [ownCode, user.id] });
+      }
+
+      // Resolve referral — attach referrer if valid, not self
+      if (user && referralCode) {
+        await attachReferral(user.id, referralCode);
+      }
+
+      const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
+      user = refreshed.rows?.[0];
       console.log(`[EmailAuth] ✓ New user created: ${normalizedEmail} (uid=${firebaseUid})`);
     } else {
       // Existing user — stamp firebase_uid if not set, and mark email verified
@@ -817,6 +927,9 @@ router.get("/payment/callback", async (req, res) => {
     await activatePremium(payment.user_id, String(transaction_id), String(tx_ref));
     console.log('[FLW Callback] ✓ Premium activated — user=' + payment.user_id + ' tx=' + transaction_id);
 
+    // Create referral commission if applicable (first verified payment only)
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN);
+
     return res.redirect(`${appUrl}/?payment=success`);
   } catch (err) {
     console.error('[FLW Callback Error]', err.message);
@@ -871,6 +984,9 @@ router.post("/webhook/flutterwave", async (req, res) => {
 
     await activatePremium(payment.user_id, String(txId), String(txRef));
     console.log('[FLW Webhook] ✓ Premium activated — user=' + payment.user_id);
+
+    // Create referral commission if applicable (first verified payment only)
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN);
   } catch (err) {
     console.error('[FLW Webhook Error]', err.message);
   }

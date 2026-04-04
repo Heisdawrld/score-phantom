@@ -705,4 +705,68 @@ router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
   }
 });
 
+// ── Partner / Referral endpoints ─────────────────────────────────────────────
+
+// GET /api/admin/partners — list all partners (users who have referred at least one paid user)
+router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.execute(`
+      SELECT
+        u.id,
+        u.email,
+        u.own_referral_code,
+        COUNT(pc.id) as total_referred_paid,
+        COALESCE(SUM(pc.commission_amount), 0) as total_commission,
+        COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END), 0) as pending_commission,
+        COALESCE(SUM(CASE WHEN pc.status = 'settled' THEN pc.commission_amount ELSE 0 END), 0) as settled_commission
+      FROM users u
+      INNER JOIN partner_commissions pc ON pc.referrer_user_id = u.id
+      GROUP BY u.id
+      ORDER BY total_commission DESC
+    `);
+    return res.json({ partners: result.rows || [] });
+  } catch (err) {
+    console.error("[Admin/partners]", err);
+    return res.status(500).json({ error: "Failed to load partners" });
+  }
+});
+
+// GET /api/admin/partners/:id/commissions — list commission rows for a partner
+router.get("/partners/:id/commissions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const partnerId = req.params.id;
+    const result = await db.execute({
+      sql: `
+        SELECT pc.*, u.email as referred_email
+        FROM partner_commissions pc
+        LEFT JOIN users u ON u.id = pc.referred_user_id
+        WHERE pc.referrer_user_id = ?
+        ORDER BY pc.created_at DESC
+      `,
+      args: [partnerId],
+    });
+    return res.json({ commissions: result.rows || [] });
+  } catch (err) {
+    console.error("[Admin/partner-commissions]", err);
+    return res.status(500).json({ error: "Failed to load commissions" });
+  }
+});
+
+// POST /api/admin/partners/:id/settle — mark all pending commissions as settled
+router.post("/partners/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const partnerId = req.params.id;
+    const now = new Date().toISOString();
+    const result = await db.execute({
+      sql: `UPDATE partner_commissions SET status = 'settled', settled_at = ? WHERE referrer_user_id = ? AND status = 'pending'`,
+      args: [now, partnerId],
+    });
+    console.log(`[Admin] Settled commissions for partner ${partnerId}`);
+    return res.json({ success: true, settled_count: result.rowsAffected || 0, settled_at: now });
+  } catch (err) {
+    console.error("[Admin/settle]", err);
+    return res.status(500).json({ error: "Failed to settle commissions" });
+  }
+});
+
 export default router;

@@ -115,12 +115,25 @@ function Router() {
   );
 }
 
+// Capture ?ref= param from URL and persist in localStorage for referral tracking
+function ReferralCapture() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref && ref.trim()) {
+      localStorage.setItem("sp_referral_code", ref.trim());
+    }
+  }, []);
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <ReferralCapture />
             <Router />
           </WouterRouter>
           <Toaster />
