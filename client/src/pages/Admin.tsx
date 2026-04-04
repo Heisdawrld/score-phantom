@@ -162,6 +162,10 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [loading, setLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [userSearch, setUserSearch] = useState("");
+  const [userPage, setUserPage] = useState(1);
+  const [userTotalPages, setUserTotalPages] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const USER_PAGE_SIZE = 20;
   const [upgradeEmail, setUpgradeEmail] = useState("");
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [userActionLoading, setUserActionLoading] = useState<number | null>(null);
@@ -187,14 +191,17 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     } finally { setLoading(false); }
   }, [call]);
 
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (page = userPage) => {
     setLoading(true);
     try {
       const search = userSearch ? `&search=${encodeURIComponent(userSearch)}` : "";
-      const r = await call(`/api/admin/users?limit=50${search}`);
+      const r = await call(`/api/admin/users?limit=${USER_PAGE_SIZE}&page=${page}${search}`);
       setUsers(r.users || []);
+      setUserTotal(r.total || 0);
+      setUserTotalPages(r.pages || 1);
+      setUserPage(page);
     } finally { setLoading(false); }
-  }, [call, userSearch]);
+  }, [call, userSearch, userPage]);
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -342,11 +349,13 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         {tab === "users" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-lg font-black text-white">Users <span className="text-gray-500 font-normal text-sm">({users.length})</span></h2>
+              <h2 className="text-lg font-black text-white">Users <span className="text-gray-500 font-normal text-sm">({userTotal} total)</span></h2>
               <div className="flex gap-2">
-                <input value={userSearch} onChange={e => setUserSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && loadUsers()} placeholder="Search email…"
+                <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { setUserPage(1); loadUsers(1); } }}
+                  placeholder="Search email…"
                   className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/50 w-48" />
-                <button onClick={loadUsers} disabled={loading} className="bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2 rounded-xl hover:bg-primary/20 transition-all disabled:opacity-50">
+                <button onClick={() => { setUserPage(1); loadUsers(1); }} disabled={loading} className="bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2 rounded-xl hover:bg-primary/20 transition-all disabled:opacity-50">
                   {loading ? <Loader2 size={13} className="animate-spin" /> : "Search"}
                 </button>
               </div>
@@ -411,6 +420,40 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 </table>
               </div>
             </div>
+
+            {/* Pagination */}
+            {userTotalPages > 1 && (
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs text-gray-500">
+                  Page {userPage} of {userTotalPages} · showing {users.length} of {userTotal} users
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={userPage <= 1 || loading}
+                    onClick={() => loadUsers(userPage - 1)}
+                    className="bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2 rounded-xl hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                    ← Prev
+                  </button>
+                  {/* Page number chips */}
+                  {Array.from({ length: Math.min(userTotalPages, 7) }, (_, i) => {
+                    const pg = userPage <= 4 ? i + 1 : userPage + i - 3;
+                    if (pg < 1 || pg > userTotalPages) return null;
+                    return (
+                      <button key={pg} onClick={() => loadUsers(pg)} disabled={loading}
+                        className={`text-xs font-bold w-8 h-8 rounded-xl transition-all ${pg === userPage ? "bg-primary/20 border border-primary/30 text-primary" : "bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10"}`}>
+                        {pg}
+                      </button>
+                    );
+                  })}
+                  <button
+                    disabled={userPage >= userTotalPages || loading}
+                    onClick={() => loadUsers(userPage + 1)}
+                    className="bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2 rounded-xl hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
