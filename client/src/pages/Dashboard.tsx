@@ -522,15 +522,15 @@ function LeagueGroup({
                       level === "HIGH"   ? "bg-primary/15 text-primary border-primary/30" :
                       level === "MEDIUM" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
                                           "bg-orange-500/15 text-orange-400 border-orange-500/30";
-                    return (
+                    return isPremium ? (
                       <div className={`flex items-center gap-1 border rounded-full px-2 py-0.5 ${colorClass}`}>
                         <span className="text-[10px] font-bold">{pct.toFixed(0)}%</span>
                         <span className="text-[10px] opacity-70">·</span>
                         <span className="text-[10px] font-medium truncate max-w-[80px]">
-                          {isPremium ? fixture.best_pick_selection : <span className="blur-sm select-none">Hidden</span>}
+                          {fixture.best_pick_selection}
                         </span>
                       </div>
-                    );
+                    ) : null;
                   })()}
                   {(fixture.odds_home || fixture.odds_draw || fixture.odds_away) && (
                     <div className="flex items-center gap-1">
