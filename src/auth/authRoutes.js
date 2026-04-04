@@ -608,7 +608,8 @@ router.get("/me", requireAuth, async (req, res) => {
 });
 
 // ── Password Reset ────────────────────────────────────────────────────────────
-// Step 1: Request reset (sends token — in production wire to email service)
+// Step 1: Store a reset token for legacy bcrypt users.
+// Email delivery is handled client-side via Firebase SDK (sendPasswordResetEmail).
 router.post("/password/reset-request", authLimiter, async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -620,7 +621,7 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
       args: [normalizedEmail],
     });
     // Always return success to avoid user enumeration
-    if (!result.rows?.[0]) return res.json({ success: true, message: "If that email exists, a reset link has been sent." });
+    if (!result.rows?.[0]) return res.json({ success: true, message: "If that email exists, a reset link has been sent.", firebase: true });
 
     const userId     = result.rows[0].id;
     const resetToken = crypto.randomBytes(32).toString("hex");
@@ -631,20 +632,9 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
       args: [resetToken, expiresAt, userId],
     });
 
-    // Send reset email via Resend
-    const emailResult = await sendPasswordResetEmail(normalizedEmail, resetToken);
-
-    if (!emailResult.success) {
-      console.error('[PasswordReset] Email send failed:', emailResult.reason);
-      const response = { error: "Email service not configured. Please contact support." };
-      // Only include reset link in non-production environments
-      if (process.env.NODE_ENV !== 'production') {
-        response._dev_link = `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/reset-password?token=${resetToken}`;
-      }
-      return res.status(503).json(response);
-    }
-
-    return res.json({ success: true, message: "Reset link sent to your email." });
+    // Email is sent client-side via Firebase SDK — no backend email service needed.
+    console.log(`[PasswordReset] Reset token stored for user ${userId}. Firebase handles the email.`);
+    return res.json({ success: true, message: "Use Firebase to send the reset email.", firebase: true });
   } catch (err) {
     console.error("[PasswordReset]", err);
     return res.status(500).json({ error: "Reset request failed" });
@@ -1007,17 +997,55 @@ router.post("/resend-verification", requireAuth, authLimiter, async (req, res) =
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.email_verified === 1) return res.json({ success: true, message: 'Email already verified' });
-
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    await db.execute({ sql: 'UPDATE users SET email_verification_token = ? WHERE id = ?', args: [verifyToken, user.id] });
-    const result2 = await sendVerificationEmail(user.email, verifyToken);
-    if (!result2.success && result2.reason === 'no_smtp_config') {
-      return res.status(503).json({ error: 'Email service not configured. Contact support.' });
-    }
-    return res.json({ success: true, message: 'Verification email sent' });
+    // Email verification is handled client-side via Firebase SDK.
+    // This endpoint simply acknowledges the request — the client calls
+    // sendEmailVerification(firebaseUser) directly after receiving this response.
+    return res.json({ success: true, message: 'Use Firebase to resend verification email.', firebase: true });
   } catch (err) {
     console.error('[ResendVerification]', err);
     return res.status(500).json({ error: 'Failed to resend verification email' });
+  }
+});
+
+// ── POST /api/auth/admin-login ─────────────────────────────────────────────
+// Standalone admin login — verifies email === ADMIN_EMAIL + bcrypt password.
+// Returns JWT + adminSecret so the admin panel can call protected admin routes.
+// Rate-limited. Never reveals whether the admin account exists.
+router.post("/admin-login", adminLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Silent fail if ADMIN_EMAIL is not configured to avoid enumeration
+    if (!ADMIN_EMAIL) return res.status(401).json({ error: "Invalid credentials" });
+    if (normalizedEmail !== ADMIN_EMAIL) return res.status(401).json({ error: "Invalid credentials" });
+
+    const result = await db.execute({
+      sql: "SELECT * FROM users WHERE email = ? LIMIT 1",
+      args: [normalizedEmail],
+    });
+    const user = result.rows?.[0];
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+    const storedHash = user.password_hash || user.password;
+    if (!storedHash) return res.status(401).json({ error: "Invalid credentials" });
+
+    const ok = await bcrypt.compare(String(password), String(storedHash));
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
+    const token = signToken(user);
+    console.log(`[AdminLogin] ✓ Admin signed in: ${normalizedEmail}`);
+
+    return res.json({
+      token,
+      adminSecret: ADMIN_SECRET,
+      user: { ...publicUser(user), is_admin: true },
+    });
+  } catch (err) {
+    console.error("[AdminLogin]", err.message);
+    return res.status(500).json({ error: "Login failed" });
   }
 });
 

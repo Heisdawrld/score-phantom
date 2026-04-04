@@ -1,560 +1,480 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
-import { useToast } from "@/hooks/use-toast";
-import {
-  Activity, Users, DollarSign, Zap, RefreshCw, Trash2, Database,
-  ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Search, Crown,
-  UserX, Gift, Server, Wifi, WifiOff, ChevronLeft, ChevronRight, Eye
-} from "lucide-react";
+/**
+ * Admin.tsx — Standalone Admin Panel
+ *
+ * Completely independent from the main app auth system.
+ * Has its own email + password login that calls /api/auth/admin-login.
+ * The server verifies the credentials match ADMIN_EMAIL + ADMIN_SECRET.
+ * No ProtectedRoute, no shared auth state.
+ */
+import { useState, useEffect, useCallback } from "react";
+import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield } from "lucide-react";
 
+// ── Config ────────────────────────────────────────────────────────────────────
 const API = "";
+const STORAGE_KEY = "sp_admin_session";
 
-function useAdminToken() {
-  return localStorage.getItem("sp_token") || sessionStorage.getItem("sp_token") || "";
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface AdminSession { token: string; adminSecret: string; email: string; }
+interface AdminStats { total_users: number; premium_users: number; trial_users: number; expired_users: number; revenue_total: number; payments_today: number; revenue_today: number; fixtures_total: number; }
+interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; }
+interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
+
+// ── Session helpers ───────────────────────────────────────────────────────────
+function saveSession(s: AdminSession) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function loadSession(): AdminSession | null {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || ""); } catch { return null; }
 }
+function clearSession() { localStorage.removeItem(STORAGE_KEY); }
 
-function authHeaders() {
-  const t = localStorage.getItem("sp_token") || sessionStorage.getItem("sp_token") || "";
-  return { "Content-Type": "application/json", Authorization: `Bearer ${t}` };
-}
-
-async function adminGet(path: string) {
-  const r = await fetch(`${API}/api/admin${path}`, { headers: authHeaders() });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-async function adminPost(path: string, body?: any) {
-  const r = await fetch(`${API}/api/admin${path}`, {
-    method: "POST", headers: authHeaders(), body: body ? JSON.stringify(body) : undefined,
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function adminFetch(path: string, session: AdminSession, opts: RequestInit = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+      "x-admin-secret": session.adminSecret,
+      ...(opts.headers || {}),
+    },
   });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
 }
 
-async function adminDelete(path: string) {
-  const r = await fetch(`${API}/api/admin${path}`, { method: "DELETE", headers: authHeaders() });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
+// ── Login Screen ──────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-function StatusDot({ status }: { status: string }) {
-  if (status === "ok" || status.includes("configured")) return <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />;
-  if (status === "degraded" || status.includes("error")) return <span className="inline-block w-2 h-2 rounded-full bg-red-400" />;
-  return <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" />;
-}
-
-function StatCard({ label, value, sub, color = "text-white" }: any) {
-  return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">{label}</p>
-      <p className={`text-2xl font-black ${color}`}>{value ?? "—"}</p>
-      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
-function ActionBtn({ label, icon: Icon, onClick, loading, variant = "default", confirm }: any) {
-  const [busy, setBusy] = useState(false);
-  const handle = async () => {
-    if (confirm && !window.confirm(confirm)) return;
-    setBusy(true);
-    try { await onClick(); } finally { setBusy(false); }
-  };
-  const base = "flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50";
-  const styles: any = {
-    default: "bg-white/10 hover:bg-white/15 text-white border border-white/10",
-    green: "bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30",
-    red: "bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/20",
-    orange: "bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 border border-orange-500/20",
-  };
-  return (
-    <button className={`${base} ${styles[variant]}`} onClick={handle} disabled={busy || loading}>
-      {(busy || loading) ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
-      {label}
-    </button>
-  );
-}
-
-export default function Admin() {
-  const { data: user, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const [stats, setStats] = useState<any>(null);
-  const [health, setHealth] = useState<any>(null);
-  const [fixtureStats, setFixtureStats] = useState<any>(null);
-  const [users, setUsers] = useState<any[]>([]);
-  const [userTotal, setUserTotal] = useState(0);
-  const [userPage, setUserPage] = useState(1);
-  const [userSearch, setUserSearch] = useState("");
-  const [payments, setPayments] = useState<any[]>([]);
-  const [payPage, setPayPage] = useState(1);
-  const [payTotal, setPayTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "payments" | "system">("overview");
-  
-  // Admin Login State
-  const [adminToken, setAdminToken] = useState(useAdminToken());
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "").toLowerCase();
-  const isAdmin = user?.email?.toLowerCase() === adminEmail || true; // server enforces auth
-
-  const ok = (msg: string) => toast({ title: "✅ Done", description: msg });
-  const err = (msg: string) => toast({ title: "❌ Error", description: msg, variant: "destructive" });
-
-  const run = async (fn: () => Promise<any>, successMsg?: string) => {
-    try { const r = await fn(); ok(successMsg || r.message || "Done"); return r; }
-    catch (e: any) { err(e.message); }
-  };
-
-  const loadOverview = async () => {
-    setLoading(true);
-    try {
-      const [s, h, f] = await Promise.all([
-        adminGet("/stats"),
-        adminGet("/system-health"),
-        adminGet("/fixture-stats"),
-      ]);
-      setStats(s); setHealth(h); setFixtureStats(f);
-    } catch (e: any) { err(e.message); } finally { setLoading(false); }
-  };
-
-  const loadUsers = async (page = userPage, search = userSearch) => {
-    try {
-      const r = await adminGet(`/users?page=${page}&limit=20&search=${encodeURIComponent(search)}`);
-      setUsers(r.users || []); setUserTotal(r.total || 0);
-    } catch (e: any) { err(e.message); }
-  };
-
-  const loadPayments = async (page = payPage) => {
-    try {
-      const r = await adminGet(`/payments?page=${page}&limit=20`);
-      setPayments(r.payments || []); setPayTotal(r.total || 0);
-    } catch (e: any) { err(e.message); }
-  };
-
-  useEffect(() => { if (adminToken) loadOverview(); }, [adminToken]);
-  useEffect(() => { if (adminToken && activeTab === "users") loadUsers(); }, [adminToken, activeTab, userPage]);
-  useEffect(() => { if (adminToken && activeTab === "payments") loadPayments(); }, [adminToken, activeTab, payPage]);
-
-  const handleAdminLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginLoading(true);
+    if (!email.trim() || !password) return setError("Email and password required.");
+    setLoading(true); setError("");
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${API}/api/auth/admin-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
-      if (!data.user?.is_admin) throw new Error("Not an admin account");
-
-      localStorage.setItem("sp_token", data.token);
-      setAdminToken(data.token);
-      ok("Admin login successful");
+      if (!data.token || !data.adminSecret) throw new Error("Invalid server response");
+      const session: AdminSession = { token: data.token, adminSecret: data.adminSecret, email: email.trim().toLowerCase() };
+      saveSession(session);
+      onLogin(session);
     } catch (err: any) {
-      err(err.message);
-    } finally {
-      setLoginLoading(false);
-    }
+      setError(err.message || "Login failed. Check your credentials.");
+    } finally { setLoading(false); }
   };
-
-  const accessBadge = (u: any) => {
-    if (u.subscription_active || u.access_status === "premium") return <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">PREMIUM</span>;
-    if (u.trial_active || u.access_status === "trial") return <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">TRIAL</span>;
-    return <span className="text-[10px] bg-white/10 text-muted-foreground px-2 py-0.5 rounded-full font-bold">EXPIRED</span>;
-  };
-
-  const payBadge = (status: string) => {
-    if (status === "verified") return <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">VERIFIED</span>;
-    if (status === "pending_verification") return <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-bold">PENDING</span>;
-    return <span className="text-[10px] bg-white/10 text-muted-foreground px-2 py-0.5 rounded-full font-bold">{status.toUpperCase()}</span>;
-  };
-
-  if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><RefreshCw className="animate-spin text-primary w-6 h-6" /></div>;
-
-  if (!adminToken) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-[400px]">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
-              👁️
-            </div>
-            <h1 className="font-display text-2xl font-bold text-white tracking-widest">SCOREPHANTOM</h1>
-            <p className="text-sm text-muted-foreground mt-1">Admin Control Panel</p>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-7">
-            <form onSubmit={handleAdminLogin}>
-              <div className="mb-4">
-                <label className="block text-[11px] font-bold tracking-widest uppercase text-muted-foreground mb-1.5">Email</label>
-                <input 
-                  type="email" 
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="admin@example.com" 
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
-                  required
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-[11px] font-bold tracking-widest uppercase text-muted-foreground mb-1.5">Password</label>
-                <input 
-                  type="password" 
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••" 
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
-                  required
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={loginLoading}
-                className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {loginLoading ? "Signing in..." : "Sign In to Admin"}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "users", label: "Users" },
-    { id: "payments", label: "Payments" },
-    { id: "system", label: "System" },
-  ];
 
   return (
-    <div className="min-h-screen bg-background text-white">
-      {/* Header */}
-      <div className="border-b border-white/8 px-4 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#080b10] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+            <Shield className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-black tracking-widest text-white">
+            SCORE<span style={{ color: "#10e774" }}>PHANTOM</span>
+          </h1>
+          <p className="text-xs text-gray-500 mt-1 tracking-wider">ADMIN PANEL</p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-8 shadow-2xl">
+          <h2 className="text-white font-bold text-lg mb-1">Admin Sign In</h2>
+          <p className="text-gray-500 text-sm mb-6">Enter your admin credentials to continue.</p>
+
+          {error && (
+            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5 text-sm text-red-400">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />{error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@example.com" required
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Password</label>
+              <div className="relative">
+                <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all" />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1">
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full bg-[#10e774] text-black font-bold text-sm py-3.5 rounded-xl hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2">
+              {loading ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />Signing in…</span> : "Sign In to Admin"}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center text-xs text-gray-600 mt-4">
+          Restricted access · Admin credentials only
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Status Badge ──────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, string> = {
+    premium: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    trial:   "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    expired: "bg-red-500/20 text-red-400 border-red-500/30",
+    active:  "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${cfg[status] || "bg-white/5 text-gray-400 border-white/10"}`}>
+      {status}
+    </span>
+  );
+}
+
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{label}</p>
+      <p className={`text-2xl font-black ${color || "text-white"}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-600 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
+  const [tab, setTab] = useState<"overview" | "users" | "payments" | "system">("overview");
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [payments, setPayments] = useState<AdminPayment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionMsg, setActionMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [userSearch, setUserSearch] = useState("");
+  const [upgradeEmail, setUpgradeEmail] = useState("");
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+
+  const call = useCallback((path: string, opts?: RequestInit) => adminFetch(path, session, opts), [session]);
+
+  const flash = (ok: boolean, text: string) => {
+    setActionMsg({ ok, text });
+    setTimeout(() => setActionMsg(null), 4000);
+  };
+
+  const loadOverview = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [s, h] = await Promise.allSettled([
+        call("/api/admin/stats"),
+        call("/api/admin/system-health"),
+      ]);
+      if (s.status === "fulfilled") setStats(s.value);
+    } catch (e: any) {
+      flash(false, e.message);
+    } finally { setLoading(false); }
+  }, [call]);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const search = userSearch ? `&search=${encodeURIComponent(userSearch)}` : "";
+      const r = await call(`/api/admin/users?limit=50${search}`);
+      setUsers(r.users || []);
+    } finally { setLoading(false); }
+  }, [call, userSearch]);
+
+  const loadPayments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await call("/api/admin/payments?limit=50");
+      setPayments(r.payments || []);
+    } catch { } finally { setLoading(false); }
+  }, [call]);
+
+  useEffect(() => { loadOverview(); }, [loadOverview]);
+  useEffect(() => { if (tab === "users") loadUsers(); }, [tab, loadUsers]);
+  useEffect(() => { if (tab === "payments") loadPayments(); }, [tab, loadPayments]);
+
+  const run = async (fn: () => Promise<any>, msg: string) => {
+    try { await fn(); flash(true, msg); } catch (e: any) { flash(false, e.message); }
+  };
+
+  const handleUpgrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!upgradeEmail.trim()) return;
+    setUpgradeLoading(true);
+    try {
+      await call("/api/auth/admin/upgrade-by-email", {
+        method: "POST",
+        body: JSON.stringify({ email: upgradeEmail.trim().toLowerCase(), days: 30 }),
+      });
+      flash(true, `✓ ${upgradeEmail} upgraded to premium (30 days)`);
+      setUpgradeEmail("");
+      if (tab === "users") loadUsers();
+    } catch (e: any) { flash(false, e.message); }
+    finally { setUpgradeLoading(false); }
+  };
+
+  const tabs = [
+    { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "users",    label: "Users",    icon: Users },
+    { id: "payments", label: "Payments", icon: CreditCard },
+    { id: "system",   label: "System",   icon: Settings },
+  ] as const;
+
+  return (
+    <div className="min-h-screen bg-[#080b10] text-white">
+      {/* Top bar */}
+      <div className="border-b border-white/[0.06] bg-[#0a0e16] px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary/20 rounded-xl flex items-center justify-center">
-            <ShieldCheck className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Shield className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <h1 className="font-black text-sm tracking-widest uppercase">Admin Panel</h1>
-            <p className="text-[10px] text-muted-foreground">ScorePhantom Control Room</p>
+            <p className="text-sm font-black tracking-widest">SCORE<span style={{ color: "#10e774" }}>PHANTOM</span></p>
+            <p className="text-[10px] text-gray-500">Admin Panel · {session.email}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {health && (
-            <span className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
-              health.status === "healthy" ? "bg-primary/10 text-primary border-primary/20" : "bg-red-500/10 text-red-400 border-red-500/20"
-            }`}>
-              <StatusDot status={health.status} />
-              {health.status === "healthy" ? "ALL SYSTEMS OK" : "DEGRADED"}
-            </span>
-          )}
-          <button onClick={() => {
-            localStorage.removeItem("sp_token");
-            sessionStorage.removeItem("sp_token");
-            window.location.href = "/login";
-          }} className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">Sign Out</button>
+        <button onClick={onLogout} className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-400 transition-colors px-3 py-2 rounded-lg hover:bg-red-500/10 border border-transparent hover:border-red-500/20">
+          <LogOut size={14} /> Sign Out
+        </button>
+      </div>
+
+      {/* Flash message */}
+      {actionMsg && (
+        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl border ${actionMsg.ok ? "bg-emerald-900/90 border-emerald-500/30 text-emerald-300" : "bg-red-900/90 border-red-500/30 text-red-300"}`}>
+          {actionMsg.ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          {actionMsg.text}
         </div>
-      </div>
+      )}
 
-      {/* Tabs */}
-      <div className="border-b border-white/8 px-4 flex gap-1 overflow-x-auto">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id as any)}
-            className={`px-4 py-3 text-xs font-bold tracking-wide uppercase whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-white"
-            }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6">
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 mb-8 overflow-x-auto">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-1 justify-center ${tab === id ? "bg-primary/15 text-primary border border-primary/20" : "text-gray-500 hover:text-white hover:bg-white/5"}`}>
+              <Icon size={15} />{label}
+            </button>
+          ))}
+        </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-
-        {/* OVERVIEW TAB */}
-        {activeTab === "overview" && (
-          <>
-            {/* Stats */}
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Users & Revenue</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatCard label="Total Users" value={stats?.users?.total} />
-                <StatCard label="Premium" value={stats?.users?.active} color="text-primary" />
-                <StatCard label="On Trial" value={stats?.users?.trial} color="text-blue-400" />
-                <StatCard label="Expired" value={stats?.users?.expired} color="text-red-400" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <StatCard label="Total Revenue" value={stats ? `₦${Number(stats.revenue?.total || 0).toLocaleString()}` : null} color="text-primary" />
-              <StatCard label="Today's Revenue" value={stats ? `₦${Number(stats.today?.revenue || 0).toLocaleString()}` : null} />
-              <StatCard label="Pending Payments" value={stats?.revenue?.pending_verification} color={stats?.revenue?.pending_verification > 0 ? "text-yellow-400" : "text-white"} />
-            </div>
-
-            {/* Fixtures */}
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Today's Fixtures</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <StatCard label="Total Fixtures" value={fixtureStats?.fixtures?.total} />
-                <StatCard label="Enriched" value={fixtureStats?.fixtures?.enriched} color="text-primary" />
-                <StatCard label="With Odds" value={fixtureStats?.fixtures?.withOdds} color="text-blue-400" />
-              </div>
-            </div>
-
-            {/* Cache */}
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Cache Status</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <StatCard label="Predictions Cached" value={fixtureStats?.cache?.predictions} />
-                <StatCard label="League Slug Cache" value={fixtureStats?.cache?.leagueSlugs} />
-                <StatCard label="Fixture Odds Cached" value={fixtureStats?.cache?.fixtureOdds} />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Actions</h2>
-              <div className="bg-white/3 border border-white/8 rounded-2xl p-4 space-y-4">
-
-                {/* Enrichment */}
-                <div>
-                  <p className="text-xs font-bold text-white mb-1">Fixture Enrichment</p>
-                  <p className="text-[11px] text-muted-foreground mb-3">Pull form, H2H, standings data for today's unenriched fixtures</p>
-                  <div className="flex flex-wrap gap-2">
-                    <ActionBtn label="Run Enrichment (50)" icon={Zap} variant="green"
-                      onClick={() => run(() => adminPost("/run-enrichment", { limit: 50 }), "Enrichment started")}
-                    />
-                    <ActionBtn label="Run All (200)" icon={Zap} variant="green"
-                      onClick={() => run(() => adminPost("/run-enrichment", { limit: 200 }), "Full enrichment started")}
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-white/8" />
-
-                {/* Seeding */}
-                <div>
-                  <p className="text-xs font-bold text-white mb-1">Fixture Seeding</p>
-                  <p className="text-[11px] text-muted-foreground mb-3">Re-pull today's fixtures from LiveScore API (does not delete existing)</p>
-                  <ActionBtn label="Reseed Today's Fixtures" icon={RefreshCw}
-                    onClick={() => run(() => adminPost("/reseed"), "Reseeding in background...")}
-                  />
-                </div>
-
-                <div className="border-t border-white/8" />
-
-                {/* Odds Cache */}
-                <div>
-                  <p className="text-xs font-bold text-white mb-1">Odds Cache</p>
-                  <p className="text-[11px] text-muted-foreground mb-3">Clear stale odds data so new league mappings take effect</p>
-                  <div className="flex flex-wrap gap-2">
-                    <ActionBtn label="Clear League Slug Cache" icon={Trash2} variant="orange"
-                      confirm="Clear league slug cache? Fresh odds will be fetched on next prediction."
-                      onClick={() => run(() => adminPost("/clear-odds-cache"), "League slug cache cleared")}
-                    />
-                    <ActionBtn label="Clear All Fixture Odds" icon={Trash2} variant="orange"
-                      confirm="Clear all fixture odds? Every match will re-fetch odds on next load."
-                      onClick={() => run(() => adminPost("/clear-fixture-odds"), "Fixture odds cleared")}
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-white/8" />
-
-                {/* Prediction Cache */}
-                <div>
-                  <p className="text-xs font-bold text-white mb-1">Prediction Cache</p>
-                  <p className="text-[11px] text-muted-foreground mb-3">Force engine to re-run fresh predictions for all matches (use after accuracy upgrades)</p>
-                  <ActionBtn label="Clear Prediction Cache" icon={Trash2} variant="red"
-                    confirm="⚠️ This clears ALL cached predictions. Users will see fresh engine results on next click. Continue?"
-                    onClick={() => run(() => adminPost("/clear-prediction-cache"), "Prediction cache cleared — engine will re-run fresh")}
-                  />
-                </div>
-
-                <div className="border-t border-white/8" />
-
-                {/* Refresh */}
-                <div>
-                  <p className="text-xs font-bold text-white mb-1">Refresh Stats</p>
-                  <ActionBtn label="Refresh All Stats" icon={RefreshCw}
-                    onClick={() => { loadOverview(); ok("Stats refreshed"); }}
-                  />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* USERS TAB */}
-        {activeTab === "users" && (
-          <>
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                  placeholder="Search by email..."
-                  value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { setUserPage(1); loadUsers(1, userSearch); } }}
-                />
-              </div>
-              <button onClick={() => { setUserPage(1); loadUsers(1, userSearch); }}
-                className="bg-primary/20 text-primary border border-primary/30 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/30">
-                Search
+        {/* ── OVERVIEW ── */}
+        {tab === "overview" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white">Platform Overview</h2>
+              <button onClick={loadOverview} disabled={loading} className="flex items-center gap-2 text-xs text-gray-400 hover:text-white px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/[0.06]">
+                <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">{userTotal} total users</p>
-            <div className="space-y-2">
-              {users.map(u => (
-                <div key={u.id} className="bg-white/3 border border-white/8 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-semibold truncate">{u.email}</p>
-                      {accessBadge(u)}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      ID: {u.id} ·
-                      {u.premium_expires_at ? ` Expires: ${new Date(u.premium_expires_at).toLocaleDateString()}` : " No expiry"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {/* Manual email verification for stuck users */}
-                    {!u.email_verified && (
-                      <ActionBtn label="Verify Email" icon={CheckCircle2} variant="green"
-                        confirm={`Manually verify email for ${u.email}?`}
-                        onClick={() => run(() => adminPost(`/users/${u.id}/verify-email`), `Email verified for ${u.email}`)}
-                      />
+            {loading && !stats ? (
+              <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-primary" /></div>
+            ) : stats ? (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <StatCard label="Total Users" value={stats.total_users ?? "—"} />
+                  <StatCard label="Premium" value={stats.premium_users ?? "—"} color="text-primary" />
+                  <StatCard label="On Trial" value={stats.trial_users ?? "—"} color="text-blue-400" />
+                  <StatCard label="Expired" value={stats.expired_users ?? "—"} color="text-red-400" />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <StatCard label="Total Revenue" value={stats.revenue_total ? `₦${Number(stats.revenue_total).toLocaleString()}` : "₦0"} color="text-primary" />
+                  <StatCard label="Today's Revenue" value={stats.revenue_today ? `₦${Number(stats.revenue_today).toLocaleString()}` : "₦0"} />
+                  <StatCard label="Payments Today" value={stats.payments_today ?? 0} />
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-500 text-sm">No stats available. Check server logs.</div>
+            )}
+
+            {/* Quick Upgrade */}
+            <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><Crown size={15} className="text-primary" /> Quick Upgrade User</h3>
+              <p className="text-xs text-gray-500 mb-4">Manually grant 30-day premium access to a user by email.</p>
+              <form onSubmit={handleUpgrade} className="flex gap-3">
+                <input value={upgradeEmail} onChange={e => setUpgradeEmail(e.target.value)} placeholder="user@example.com" type="email"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/50 transition-all" />
+                <button type="submit" disabled={upgradeLoading}
+                  className="bg-primary/20 border border-primary/30 text-primary font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-primary/30 transition-all disabled:opacity-50 whitespace-nowrap">
+                  {upgradeLoading ? <Loader2 size={15} className="animate-spin" /> : "Upgrade →"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── USERS ── */}
+        {tab === "users" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-lg font-black text-white">Users <span className="text-gray-500 font-normal text-sm">({users.length})</span></h2>
+              <div className="flex gap-2">
+                <input value={userSearch} onChange={e => setUserSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && loadUsers()} placeholder="Search email…"
+                  className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/50 w-48" />
+                <button onClick={loadUsers} disabled={loading} className="bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2 rounded-xl hover:bg-primary/20 transition-all disabled:opacity-50">
+                  {loading ? <Loader2 size={13} className="animate-spin" /> : "Search"}
+                </button>
+              </div>
+            </div>
+            <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-white/[0.06]">
+                    {["ID", "Email", "Status", "Trial Ends", "Premium Expires", "Payments"].map(h => (
+                      <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {users.map(u => (
+                      <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.id}</td>
+                        <td className="px-4 py-3 text-white text-xs font-medium">{u.email}</td>
+                        <td className="px-4 py-3"><StatusBadge status={u.access?.status || u.status} /></td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.trial_ends_at ? new Date(u.trial_ends_at).toLocaleDateString() : "—"}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString() : "—"}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{u.payments?.length ?? 0}</td>
+                      </tr>
+                    ))}
+                    {!loading && users.length === 0 && (
+                      <tr><td colSpan={6} className="text-center py-8 text-gray-600 text-sm">No users found.</td></tr>
                     )}
-                    <ActionBtn label="Grant 30d" icon={Gift} variant="green"
-                      onClick={() => run(() => adminPost(`/users/${u.id}/grant`, { days: 30 }), `Premium granted to ${u.email}`)}
-                    />
-                    <ActionBtn label="Revoke" icon={UserX} variant="orange"
-                      confirm={`Revoke premium for ${u.email}?`}
-                      onClick={() => run(() => adminPost(`/users/${u.id}/revoke`), `Premium revoked from ${u.email}`)}
-                    />
-                    <ActionBtn label="Delete" icon={Trash2} variant="red"
-                      confirm={`⚠️ Permanently delete user ${u.email} and all their data?`}
-                      onClick={async () => { await run(() => adminDelete(`/users/${u.id}`), `${u.email} deleted`); loadUsers(); }}
-                    />
-                  </div>
-                </div>
-              ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            {/* Pagination */}
-            <div className="flex items-center justify-between">
-              <button disabled={userPage <= 1} onClick={() => setUserPage(p => p - 1)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-white disabled:opacity-30">
-                <ChevronLeft className="w-4 h-4" /> Prev
-              </button>
-              <p className="text-xs text-muted-foreground">Page {userPage} of {Math.ceil(userTotal / 20) || 1}</p>
-              <button disabled={userPage >= Math.ceil(userTotal / 20)} onClick={() => setUserPage(p => p + 1)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-white disabled:opacity-30">
-                Next <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </>
+          </div>
         )}
 
-        {/* PAYMENTS TAB */}
-        {activeTab === "payments" && (
-          <>
-            <p className="text-xs text-muted-foreground">{payTotal} total payments</p>
-            <div className="space-y-2">
-              {payments.map(p => (
-                <div key={p.id} className="bg-white/3 border border-white/8 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-sm font-semibold truncate">{p.user_email || `User #${p.user_id}`}</p>
-                      {payBadge(p.status)}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      ₦{Number(p.amount || 0).toLocaleString()} · Ref: {p.reference} · {p.paid_at ? new Date(p.paid_at).toLocaleString() : new Date(p.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  {p.status === "pending_verification" && (
-                    <ActionBtn label="Verify & Activate" icon={CheckCircle2} variant="green"
-                      onClick={() => run(() => adminPost(`/verify-payment/${p.reference}`), `Payment verified — ${p.user_email} upgraded`)}
-                    />
-                  )}
-                </div>
-              ))}
+        {/* ── PAYMENTS ── */}
+        {tab === "payments" && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-black text-white">Payments <span className="text-gray-500 font-normal text-sm">({payments.length})</span></h2>
+            <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-white/[0.06]">
+                    {["ID", "User ID", "Reference", "Amount", "Status", "Paid At"].map(h => (
+                      <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {payments.map((p: any) => (
+                      <tr key={p.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-gray-500 text-xs">{p.id}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{p.user_id}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs font-mono">{p.reference}</td>
+                        <td className="px-4 py-3 text-white text-xs font-semibold">₦{Number(p.amount || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{p.paid_at ? new Date(p.paid_at).toLocaleString() : "—"}</td>
+                      </tr>
+                    ))}
+                    {!loading && payments.length === 0 && (
+                      <tr><td colSpan={6} className="text-center py-8 text-gray-600 text-sm">No payments found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <button disabled={payPage <= 1} onClick={() => setPayPage(p => p - 1)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-white disabled:opacity-30">
-                <ChevronLeft className="w-4 h-4" /> Prev
-              </button>
-              <p className="text-xs text-muted-foreground">Page {payPage} of {Math.ceil(payTotal / 20) || 1}</p>
-              <button disabled={payPage >= Math.ceil(payTotal / 20)} onClick={() => setPayPage(p => p + 1)}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-white disabled:opacity-30">
-                Next <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </>
+          </div>
         )}
 
-        {/* SYSTEM TAB */}
-        {activeTab === "system" && (
-          <>
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Integration Health</h2>
-              <div className="bg-white/3 border border-white/8 rounded-2xl p-4 space-y-3">
-                {health?.checks && Object.entries(health.checks).map(([key, val]: any) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <StatusDot status={val} />
-                      <p className="text-sm font-semibold capitalize">{key.replace(/_/g, " ")}</p>
-                    </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      val === "ok" || val.includes("configured") ? "bg-primary/15 text-primary" :
-                      val.includes("error") ? "bg-red-500/15 text-red-400" : "bg-yellow-500/15 text-yellow-400"
-                    }`}>{String(val).toUpperCase()}</span>
-                  </div>
-                ))}
+        {/* ── SYSTEM ── */}
+        {tab === "system" && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-black text-white">System Controls</h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {/* Enrichment */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Fixture Enrichment</h3>
+                <p className="text-xs text-gray-500">Enrich fixtures with form, H2H, and odds data from LiveScore API.</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => run(() => call("/api/admin/run-enrichment", { method: "POST", body: JSON.stringify({ limit: 50 }) }), "Enrichment started (50 fixtures)")}
+                    className="w-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">
+                    Enrich 50 Fixtures
+                  </button>
+                  <button onClick={() => run(() => call("/api/admin/run-enrichment", { method: "POST", body: JSON.stringify({ limit: 200 }) }), "Full enrichment started (200 fixtures)")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    Full Enrichment (200)
+                  </button>
+                </div>
+              </div>
+
+              {/* Fixtures */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Fixture Seeding</h3>
+                <p className="text-xs text-gray-500">Re-seed fixtures from LiveScore API for the next 7 days.</p>
+                <button onClick={() => run(() => call("/api/admin/reseed", { method: "POST" }), "Reseeding started in background…")}
+                  className="w-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">
+                  Re-Seed Fixtures
+                </button>
+              </div>
+
+              {/* Prediction Cache */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Prediction Cache</h3>
+                <p className="text-xs text-gray-500">Clear cached predictions so the engine rebuilds fresh picks.</p>
+                <button onClick={() => run(() => call("/api/admin/clear-prediction-cache", { method: "POST" }), "Prediction cache cleared — engine will re-run fresh")}
+                  className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
+                  Clear Prediction Cache
+                </button>
+              </div>
+
+              {/* Odds Cache */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Odds Cache</h3>
+                <p className="text-xs text-gray-500">Clear league slug and fixture odds caches.</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => run(() => call("/api/admin/clear-odds-cache", { method: "POST" }), "League slug cache cleared")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    Clear League Cache
+                  </button>
+                  <button onClick={() => run(() => call("/api/admin/clear-fixture-odds", { method: "POST" }), "Fixture odds cleared")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    Clear Fixture Odds
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div>
-              <h2 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Env Variables Checklist</h2>
-              <div className="bg-white/3 border border-white/8 rounded-2xl p-4 space-y-2 text-xs">
-                {[
-                  { key: "ODDS_API_KEY", desc: "odds-api.io key", check: health?.checks?.odds_api === "ok" },
-                  { key: "GMAIL_USER + GMAIL_APP_PASSWORD", desc: "Password reset emails", check: health?.checks?.email === "configured" },
-                  { key: "GROQ_API_KEY", desc: "PhantomChat explainer", check: health?.checks?.groq === "configured" },
-                  { key: "FLW_SECRET_KEY", desc: "Flutterwave payments", check: health?.checks?.flutterwave === "configured" },
-                  { key: "ADMIN_EMAIL", desc: "Your admin access email", check: true },
-                  { key: "JWT_SECRET", desc: "Auth token signing", check: true },
-                  { key: "TURSO_URL + TURSO_TOKEN", desc: "Database", check: health?.checks?.database === "ok" },
-                  { key: "LIVESCORE_KEY + LIVESCORE_SECRET", desc: "Fixture data", check: health?.checks?.livescore === "ok" },
-                ].map(item => (
-                  <div key={item.key} className="flex items-start gap-2">
-                    {item.check
-                      ? <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                      : <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />}
-                    <div>
-                      <p className="font-mono font-bold text-white">{item.key}</p>
-                      <p className="text-muted-foreground">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {/* Manual upgrade section */}
+            <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><Crown size={15} className="text-primary" /> Manual Premium Upgrade</h3>
+              <p className="text-xs text-gray-500 mb-4">Grant 30-day premium access by email address.</p>
+              <form onSubmit={handleUpgrade} className="flex gap-3">
+                <input value={upgradeEmail} onChange={e => setUpgradeEmail(e.target.value)} placeholder="user@example.com" type="email"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/50 transition-all" />
+                <button type="submit" disabled={upgradeLoading}
+                  className="bg-primary/20 border border-primary/30 text-primary font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-primary/30 transition-all disabled:opacity-50 whitespace-nowrap">
+                  {upgradeLoading ? <Loader2 size={15} className="animate-spin" /> : "Upgrade →"}
+                </button>
+              </form>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <ActionBtn label="Refresh Health" icon={RefreshCw}
-                onClick={() => adminGet("/system-health").then(setHealth).then(() => ok("Health refreshed"))}
-              />
-            </div>
-          </>
+          </div>
         )}
       </div>
     </div>
   );
+}
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+export default function Admin() {
+  const [session, setSession] = useState<AdminSession | null>(() => loadSession());
+
+  const handleLogin = (s: AdminSession) => setSession(s);
+  const handleLogout = () => { clearSession(); setSession(null); };
+
+  if (!session) return <LoginScreen onLogin={handleLogin} />;
+  return <AdminDashboard session={session} onLogout={handleLogout} />;
 }

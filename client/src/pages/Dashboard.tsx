@@ -13,8 +13,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
@@ -697,8 +698,22 @@ function _unused_EmailVerifyGate_stub({ email, token }: { email: string; token: 
 }
 
 export default function Dashboard() {
-  const { data: user, isLoading: authLoading } = useAuth();
+  const { data: user, isLoading: authLoading, refetch: refetchAuth } = useAuth();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const queryClient = useQueryClient();
+
+  // ── Payment success: refresh auth so premium status shows immediately ────
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.get("payment") === "success") {
+      // Force-invalidate the auth query so the user's new premium status loads
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      refetchAuth();
+      // Clean the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [search]);
 
   const dates = useMemo(() => {
     return Array.from({ length: 7 }).map((_, i) => addDays(new Date(), i));

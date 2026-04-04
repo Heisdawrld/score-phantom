@@ -6,6 +6,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  sendPasswordResetEmail,
   setPersistence,
   browserLocalPersistence,
   reload,
@@ -76,10 +77,40 @@ export async function signInWithEmail(email: string, password: string) {
   const freshUser = auth.currentUser;
 
   if (!freshUser || !freshUser.emailVerified) {
-    await signOut(auth);
+    // Keep user signed in so we can resend verification from the Login page.
+    // We throw the error but do NOT sign out — the Login component will use
+    // auth.currentUser to call resendVerificationForCurrentUser() if needed.
     throw new Error("email_not_verified");
   }
 
   const idToken = await freshUser.getIdToken(true);
   return { idToken, firebaseUser: freshUser };
+}
+
+/**
+ * Send a password reset email via Firebase.
+ * Works for any Firebase account (Google or email signup).
+ * Does not require the user to be signed in.
+ */
+export async function resetPassword(email: string) {
+  await sendPasswordResetEmail(auth, email, {
+    url: `${window.location.origin}/login`,
+    handleCodeInApp: false,
+  });
+}
+
+/**
+ * Resend the verification email for the currently signed-in Firebase user.
+ * Called when sign-in fails with "email_not_verified" — the user is still
+ * signed into Firebase at that point (we don't sign them out on that error).
+ */
+export async function resendVerificationForCurrentUser() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in to Firebase. Please enter your password and try again.");
+  await sendEmailVerification(user, {
+    url: `${window.location.origin}/login?verified=success`,
+    handleCodeInApp: false,
+  });
+  // Sign out after sending so they must verify before next sign-in
+  await signOut(auth);
 }
