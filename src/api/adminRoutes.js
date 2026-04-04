@@ -123,7 +123,7 @@ router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
     const offset = (page - 1) * limit;
 
     let countSql = `SELECT COUNT(*) as count FROM users`;
-    let querySql = `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users`;
+    let querySql = `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code, referred_by_code FROM users`;
     const args = [];
 
     if (search) {
@@ -702,6 +702,76 @@ router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
     return res.json({ success: true, mode: 'single', result });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /users/:id/referral-code — generate or set referral code for a user ─
+router.post("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const customCode = (req.body?.code || "").trim();
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email, own_referral_code FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Determine the code to use
+    let code;
+    if (customCode) {
+      // Validate custom code: 3-20 chars, alphanumeric + underscore + hyphen
+      if (!/^[A-Za-z0-9_-]{3,20}$/.test(customCode)) {
+        return res.status(400).json({ error: "Code must be 3-20 characters, letters/numbers/underscore/hyphen only." });
+      }
+      code = customCode.toUpperCase();
+    } else {
+      // Auto-generate: use email prefix + random suffix
+      const prefix = String(user.email).split("@")[0].replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase();
+      const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      code = `${prefix}_${suffix}`;
+    }
+
+    // Check uniqueness
+    const existing = await db.execute({
+      sql: "SELECT id FROM users WHERE own_referral_code = ? AND id != ? LIMIT 1",
+      args: [code, userId],
+    });
+    if ((existing.rows || []).length > 0) {
+      return res.status(409).json({ error: `Code "${code}" is already taken. Try a different one.` });
+    }
+
+    await db.execute({
+      sql: "UPDATE users SET own_referral_code = ? WHERE id = ?",
+      args: [code, userId],
+    });
+
+    console.log(`[Admin] Referral code "${code}" assigned to user ${userId} (${user.email})`);
+    return res.json({
+      success: true,
+      user_id: Number(userId),
+      email: user.email,
+      referral_code: code,
+      referral_link: `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/?ref=${code}`,
+    });
+  } catch (err) {
+    console.error("[Admin/referral-code]", err);
+    return res.status(500).json({ error: "Failed to generate referral code" });
+  }
+});
+
+// ── DELETE /users/:id/referral-code — remove referral code from a user ───────
+router.delete("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    await db.execute({
+      sql: "UPDATE users SET own_referral_code = NULL WHERE id = ?",
+      args: [userId],
+    });
+    return res.json({ success: true, message: "Referral code removed" });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to remove referral code" });
   }
 });
 

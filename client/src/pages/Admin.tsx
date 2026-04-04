@@ -7,7 +7,7 @@
  * No ProtectedRoute, no shared auth state.
  */
 import { useState, useEffect, useCallback } from "react";
-import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus } from "lucide-react";
+import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X } from "lucide-react";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = "";
@@ -16,7 +16,7 @@ const STORAGE_KEY = "sp_admin_session";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AdminSession { token: string; adminSecret: string; email: string; }
 interface AdminStats { total_users: number; premium_users: number; trial_users: number; expired_users: number; revenue_total: number; payments_today: number; revenue_today: number; fixtures_total: number; }
-interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; }
+interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; own_referral_code?: string | null; referred_by_code?: string | null; }
 interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
 interface Partner { id: number; email: string; own_referral_code: string; total_referred_paid: number; total_commission: number; pending_commission: number; settled_commission: number; }
 interface Commission { id: number; referrer_user_id: number; referred_user_id: number; referred_email: string; gross_amount: number; commission_rate: number; commission_amount: number; status: string; created_at: string; settled_at: string | null; }
@@ -182,6 +182,10 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [settleLoading, setSettleLoading] = useState(false);
+  const [refCodeModal, setRefCodeModal] = useState<AdminUser | null>(null);
+  const [refCodeInput, setRefCodeInput] = useState("");
+  const [refCodeLoading, setRefCodeLoading] = useState(false);
+  const [refCodeResult, setRefCodeResult] = useState<{ code: string; link: string } | null>(null);
 
   const call = useCallback((path: string, opts?: RequestInit) => adminFetch(path, session, opts), [session]);
 
@@ -247,6 +251,29 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       loadCommissions(partnerId);
     } catch (e: any) { flash(false, e.message); }
     finally { setSettleLoading(false); }
+  };
+
+  const generateRefCode = async (userId: number, customCode: string) => {
+    setRefCodeLoading(true);
+    setRefCodeResult(null);
+    try {
+      const r = await call(`/api/admin/users/${userId}/referral-code`, {
+        method: "POST",
+        body: JSON.stringify({ code: customCode }),
+      });
+      setRefCodeResult({ code: r.referral_code, link: r.referral_link });
+      flash(true, `Referral code "${r.referral_code}" generated!`);
+      loadUsers();
+    } catch (e: any) { flash(false, e.message); }
+    finally { setRefCodeLoading(false); }
+  };
+
+  const removeRefCode = async (userId: number) => {
+    try {
+      await call(`/api/admin/users/${userId}/referral-code`, { method: "DELETE" });
+      flash(true, "Referral code removed");
+      loadUsers();
+    } catch (e: any) { flash(false, e.message); }
   };
 
   useEffect(() => { loadOverview(); }, [loadOverview]);
@@ -403,7 +430,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-white/[0.06]">
-                    {["ID", "Email", "Status", "Trial Ends", "Premium Expires", "Payments", "Actions"].map(h => (
+                    {["ID", "Email", "Status", "Referral Code", "Premium Expires", "Referred By", "Actions"].map(h => (
                       <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
                     ))}
                   </tr></thead>
@@ -416,16 +443,34 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                           <td className="px-4 py-3 text-gray-500 text-xs">{u.id}</td>
                           <td className="px-4 py-3 text-white text-xs font-medium">{u.email}</td>
                           <td className="px-4 py-3"><StatusBadge status={st} /></td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{u.trial_ends_at ? new Date(u.trial_ends_at).toLocaleDateString() : "—"}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {u.own_referral_code ? (
+                              <span className="font-mono bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] font-bold">{u.own_referral_code}</span>
+                            ) : (
+                              <span className="text-gray-600">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-gray-500 text-xs">{u.premium_expires_at ? new Date(u.premium_expires_at).toLocaleDateString() : "—"}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{u.payments?.length ?? 0}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {u.referred_by_code ? (
+                              <span className="font-mono bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded text-[10px]">{u.referred_by_code}</span>
+                            ) : (
+                              <span className="text-gray-600">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Generate Referral Code */}
+                              <button disabled={isLoading} onClick={() => { setRefCodeModal(u); setRefCodeInput(""); setRefCodeResult(null); }}
+                                title={u.own_referral_code ? "Change referral code" : "Generate referral code"}
+                                className="bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-purple-500/20 transition-all disabled:opacity-40 whitespace-nowrap">
+                                <Link2 size={10} className="inline mr-0.5" /> {u.own_referral_code ? "Code" : "Gen Code"}
+                              </button>
                               {/* Grant 30-day Premium */}
                               <button disabled={isLoading} onClick={() => userAction(u.id, "grant", u.email)}
                                 title="Grant 30-day Premium"
                                 className="bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-primary/20 transition-all disabled:opacity-40 whitespace-nowrap">
-                                {isLoading ? <Loader2 size={10} className="animate-spin inline" /> : "👑 Grant"}
+                                {isLoading ? <Loader2 size={10} className="animate-spin inline" /> : "Grant"}
                               </button>
                               {/* Revoke Premium */}
                               {st === "active" && (
@@ -435,12 +480,6 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                                   Revoke
                                 </button>
                               )}
-                              {/* Verify Email */}
-                              <button disabled={isLoading} onClick={() => userAction(u.id, "verify-email", u.email)}
-                                title="Manually verify email"
-                                className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-blue-500/20 transition-all disabled:opacity-40 whitespace-nowrap">
-                                ✓ Verify
-                              </button>
                               {/* Delete */}
                               <button disabled={isLoading} onClick={() => setConfirmDelete(u)}
                                 title="Delete user"
@@ -493,6 +532,67 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── REFERRAL CODE MODAL ── */}
+        {refCodeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="bg-[#0f172a] border border-purple-500/20 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold text-base flex items-center gap-2"><Link2 size={16} className="text-purple-400" /> Referral Code</h3>
+                <button onClick={() => setRefCodeModal(null)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+              </div>
+              <p className="text-gray-400 text-sm mb-1">{refCodeModal.email}</p>
+              {refCodeModal.own_referral_code && (
+                <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Current Code</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-purple-300 font-bold text-sm">{refCodeModal.own_referral_code}</span>
+                    <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/?ref=${refCodeModal.own_referral_code}`)}
+                      title="Copy referral link"
+                      className="text-gray-500 hover:text-purple-300 transition-colors"><Copy size={13} /></button>
+                    <button onClick={() => { removeRefCode(refCodeModal.id); setRefCodeModal(null); }}
+                      title="Remove code"
+                      className="text-gray-500 hover:text-red-400 transition-colors ml-auto text-[10px]">Remove</button>
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-1 break-all">{window.location.origin}/?ref={refCodeModal.own_referral_code}</p>
+                </div>
+              )}
+
+              {refCodeResult ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-4 mb-4 space-y-2">
+                  <p className="text-emerald-400 font-bold text-sm flex items-center gap-2"><CheckCircle2 size={14} /> Code Generated</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-white font-bold">{refCodeResult.code}</span>
+                    <button onClick={() => navigator.clipboard.writeText(refCodeResult.link)}
+                      className="bg-white/10 text-gray-300 text-[10px] px-2 py-1 rounded hover:bg-white/20 flex items-center gap-1"><Copy size={10} /> Copy Link</button>
+                  </div>
+                  <p className="text-[10px] text-gray-500 break-all">{refCodeResult.link}</p>
+                </div>
+              ) : (
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Custom Code (optional)</label>
+                    <input value={refCodeInput} onChange={e => setRefCodeInput(e.target.value)}
+                      placeholder="e.g. MAZI, KING, DAVID..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/50 transition-all font-mono" />
+                    <p className="text-[10px] text-gray-600 mt-1">3-20 characters. Letters, numbers, underscore, hyphen. Leave blank to auto-generate.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => generateRefCode(refCodeModal.id, refCodeInput.trim())} disabled={refCodeLoading}
+                      className="flex-1 bg-purple-500/20 border border-purple-500/30 text-purple-300 font-bold text-sm py-2.5 rounded-xl hover:bg-purple-500/30 transition-all disabled:opacity-50">
+                      {refCodeLoading ? <Loader2 size={15} className="animate-spin mx-auto" /> : refCodeInput.trim() ? `Set "${refCodeInput.trim().toUpperCase()}"` : "Auto-Generate"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => setRefCodeModal(null)}
+                className="w-full bg-white/5 border border-white/10 text-gray-400 text-sm font-bold py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                Close
+              </button>
+            </div>
           </div>
         )}
 

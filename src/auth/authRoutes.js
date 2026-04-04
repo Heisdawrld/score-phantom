@@ -121,14 +121,6 @@ export async function initUsersTable() {
     )
   `);
 
-  // Backfill own_referral_code for any users that don't have one yet
-  const usersWithoutCode = await db.execute(
-    `SELECT id FROM users WHERE own_referral_code IS NULL OR own_referral_code = ''`
-  );
-  for (const row of (usersWithoutCode.rows || [])) {
-    const code = `SP${String(row.id).padStart(4, '0')}`;
-    await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [code, row.id] });
-  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -381,19 +373,12 @@ router.post("/google", authLimiter, async (req, res) => {
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
       user = created.rows?.[0];
 
-      // Generate own_referral_code for this new user
-      if (user) {
-        const ownCode = `SP${String(user.id).padStart(4, '0')}`;
-        await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [ownCode, user.id] });
-      }
-
       // Resolve referral — attach referrer if valid, not self
       if (user && referralCode) {
         await attachReferral(user.id, referralCode);
+        const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
+        user = refreshed.rows?.[0];
       }
-
-      const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
-      user = refreshed.rows?.[0];
       console.log(`[GoogleAuth] ✓ New user created: ${email} (uid=${firebaseUid})`);
     } else {
       // Existing user — stamp firebase_uid if not set, and mark email verified
@@ -477,19 +462,12 @@ router.post("/email", authLimiter, async (req, res) => {
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
       user = created.rows?.[0];
 
-      // Generate own_referral_code for this new user
-      if (user) {
-        const ownCode = `SP${String(user.id).padStart(4, '0')}`;
-        await db.execute({ sql: `UPDATE users SET own_referral_code = ? WHERE id = ?`, args: [ownCode, user.id] });
-      }
-
       // Resolve referral — attach referrer if valid, not self
       if (user && referralCode) {
         await attachReferral(user.id, referralCode);
+        const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
+        user = refreshed.rows?.[0];
       }
-
-      const refreshed = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
-      user = refreshed.rows?.[0];
       console.log(`[EmailAuth] ✓ New user created: ${normalizedEmail} (uid=${firebaseUid})`);
     } else {
       // Existing user — stamp firebase_uid if not set, and mark email verified
