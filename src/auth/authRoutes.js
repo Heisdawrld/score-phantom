@@ -112,6 +112,7 @@ export async function initUsersTable() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       referrer_user_id INTEGER NOT NULL,
       referred_user_id INTEGER NOT NULL UNIQUE,
+      payment_id INTEGER,
       gross_amount INTEGER NOT NULL,
       commission_rate REAL NOT NULL DEFAULT 0.25,
       commission_amount INTEGER NOT NULL,
@@ -120,6 +121,12 @@ export async function initUsersTable() {
       settled_at TEXT
     )
   `);
+
+  // Migrate: add payment_id if missing
+  await ensureColumn("partner_commissions", "payment_id", "ALTER TABLE partner_commissions ADD COLUMN payment_id INTEGER");
+
+  // Partners table - named accounts with per-partner commission rates
+  await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_payout_at TEXT)");
 
 }
 
@@ -237,7 +244,7 @@ async function activatePremium(userId, flwChargeId, reference) {
 }
 
 // ── Referral commission on first verified payment ────────────────────────────
-async function createReferralCommission(userId, grossAmount) {
+async function createReferralCommission(userId, grossAmount, paymentId) {
   try {
     // Check if user was referred
     const userResult = await db.execute({
@@ -254,13 +261,18 @@ async function createReferralCommission(userId, grossAmount) {
     });
     if ((existing.rows || []).length > 0) return; // already credited
 
-    const commissionRate = 0.25;
+    // Look up per-partner commission rate (falls back to 25% default)
+    const partnerRateRes = await db.execute({
+      sql: "SELECT commission_rate FROM partners WHERE user_id = ? LIMIT 1",
+      args: [user.referred_by_user_id],
+    });
+    const commissionRate = partnerRateRes.rows?.[0]?.commission_rate ?? 0.25;
     const commissionAmount = Math.round(grossAmount * commissionRate);
 
     await db.execute({
-      sql: `INSERT INTO partner_commissions (referrer_user_id, referred_user_id, gross_amount, commission_rate, commission_amount, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')`,
-      args: [user.referred_by_user_id, userId, grossAmount, commissionRate, commissionAmount],
+      sql: `INSERT INTO partner_commissions (referrer_user_id, referred_user_id, payment_id, gross_amount, commission_rate, commission_amount, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+      args: [user.referred_by_user_id, userId, paymentId || null, grossAmount, commissionRate, commissionAmount],
     });
     console.log(`[Commission] ✓ ₦${commissionAmount} commission created for referrer ${user.referred_by_user_id} (referred user ${userId})`);
   } catch (err) {
@@ -906,7 +918,8 @@ router.get("/payment/callback", async (req, res) => {
     console.log('[FLW Callback] ✓ Premium activated — user=' + payment.user_id + ' tx=' + transaction_id);
 
     // Create referral commission if applicable (first verified payment only)
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN);
+    const _pmtId1 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(tx_ref)] });
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId1.rows?.[0]?.id || null);
 
     return res.redirect(`${appUrl}/?payment=success`);
   } catch (err) {
@@ -964,7 +977,8 @@ router.post("/webhook/flutterwave", async (req, res) => {
     console.log('[FLW Webhook] ✓ Premium activated — user=' + payment.user_id);
 
     // Create referral commission if applicable (first verified payment only)
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN);
+    const _pmtId2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(txRef||"")] });
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId2.rows?.[0]?.id || null);
   } catch (err) {
     console.error('[FLW Webhook Error]', err.message);
   }

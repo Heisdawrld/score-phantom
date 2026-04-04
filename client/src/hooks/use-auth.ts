@@ -74,9 +74,9 @@ export function useGoogleSignIn() {
   const [, setLocation] = useLocation();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (referralCodeOverride?: string) => {
       const { idToken } = await signInWithGoogle();
-      const referralCode = localStorage.getItem("sp_referral_code") || undefined;
+      const referralCode = referralCodeOverride || localStorage.getItem("sp_referral_code") || undefined;
       return fetchApi("/auth/google", {
         method: "POST",
         body: JSON.stringify({ idToken, referralCode }),
@@ -107,16 +107,16 @@ export function useEmailSignIn() {
   const [, setLocation] = useLocation();
 
   return useMutation({
-    mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
+    mutationFn: async ({ email, password, referralCode: referralCodeOverride }: z.infer<typeof LoginSchema> & { referralCode?: string }) => {
       // Try Firebase first, fall back to direct backend login.
       // Users created via /auth/signup have bcrypt credentials in the DB
       // but no Firebase account, so Firebase will reject them.
       try {
         const { idToken, firebaseUser } = await signInWithEmail(
-          credentials.email,
-          credentials.password
+          email,
+          password
         );
-        const referralCode = localStorage.getItem("sp_referral_code") || undefined;
+        const referralCode = referralCodeOverride || localStorage.getItem("sp_referral_code") || undefined;
         // Exchange Firebase ID token for our own JWT
         return await fetchApi("/auth/email", {
           method: "POST",
@@ -124,19 +124,15 @@ export function useEmailSignIn() {
         });
       } catch (firebaseErr: any) {
         const msg = (firebaseErr?.message || "").toLowerCase();
-        // Only fall back for credential/user-not-found errors — not for
-        // email_not_verified, too-many-requests, or network issues.
         const isCredentialError =
           msg.includes("auth/invalid-credential") ||
           msg.includes("auth/invalid-login-credentials") ||
           msg.includes("auth/wrong-password") ||
           msg.includes("auth/user-not-found");
         if (!isCredentialError) throw firebaseErr;
-
-        // Fall back to direct backend login (bcrypt-based)
         return await fetchApi("/auth/login", {
           method: "POST",
-          body: JSON.stringify(credentials),
+          body: JSON.stringify({ email, password }),
         });
       }
     },

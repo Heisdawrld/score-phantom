@@ -92,6 +92,7 @@ export default function Login() {
   // Forgot-password state
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState(() => localStorage.getItem("sp_referral_code") || "");
 
   const googleSignIn = useGoogleSignIn();
   const emailSignIn = useEmailSignIn();
@@ -103,6 +104,17 @@ export default function Login() {
       setSuccessMsg("Email verified! 🎉 Now sign in to access ScorePhantom.");
       setAuthMode("email-signin");
       window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    // Capture referral code from URL ?ref=CODE
+    const refCode = params.get("ref");
+    if (refCode) {
+      const code = refCode.trim().toUpperCase();
+      localStorage.setItem("sp_referral_code", code);
+      setReferralCode(code);
+      // Remove ref param from URL without reload
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("ref");
+      window.history.replaceState({}, document.title, clean.toString());
     }
   }, []);
 
@@ -116,7 +128,8 @@ export default function Login() {
 
   const handleGoogleClick = () => {
     setGeneralError("");
-    googleSignIn.mutate(undefined, {
+    if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
+    googleSignIn.mutate(referralCode || undefined, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("popup-closed") || msg.includes("cancelled")) setGeneralError("Sign-in cancelled. Try again.");
@@ -147,7 +160,8 @@ export default function Login() {
     setGeneralError("");
     setShowUnverifiedActions(false);
     if (!validateForm()) return;
-    emailSignIn.mutate(formData, {
+    if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
+    emailSignIn.mutate({ ...formData, referralCode: referralCode || undefined }, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("email_not_verified")) {
@@ -336,6 +350,16 @@ export default function Login() {
                         <KeyRound size={11} /> Forgot password?
                       </button>
                     </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
+                      <input
+                        type="text"
+                        value={referralCode}
+                        onChange={e => { const v = e.target.value.toUpperCase(); setReferralCode(v); if (v) localStorage.setItem("sp_referral_code", v); else localStorage.removeItem("sp_referral_code"); }}
+                        placeholder="e.g. MAZI"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/40 font-mono tracking-widest transition-all"
+                      />
+                    </div>
 
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={emailSignIn.isPending}
                       className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
@@ -373,6 +397,16 @@ export default function Login() {
                     <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
                     <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData({ ...formData, password: v }); setErrors({ ...errors, password: undefined }); }} error={errors.password} />
                     <PasswordInput label="Confirm Password" value={confirmPassword} onChange={(v) => { setConfirmPassword(v); setConfirmPasswordError(""); }} error={confirmPasswordError} />
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
+                      <input
+                        type="text"
+                        value={referralCode}
+                        onChange={e => { const v = e.target.value.toUpperCase(); setReferralCode(v); if (v) localStorage.setItem("sp_referral_code", v); else localStorage.removeItem("sp_referral_code"); }}
+                        placeholder="e.g. MAZI"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/40 font-mono tracking-widest transition-all"
+                      />
+                    </div>
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={emailSignUp.isPending}
                       className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
                       {emailSignUp.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Creating account…</span> : "Create account"}
