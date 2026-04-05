@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
@@ -107,7 +108,7 @@ export default function TopPicksToday() {
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
-  const [selectedFixtureId, setSelectedFixtureId] = useState(null);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
