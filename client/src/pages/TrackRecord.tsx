@@ -9,12 +9,15 @@ import { cn } from "@/lib/utils";
 export default function TrackRecord() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
-  if (authLoading) return <div className="min-h-screen bg-background" />;
 
+  // Hooks must be before any conditional return
   const { data, isLoading } = useQuery({
     queryKey: ["track-record"],
     queryFn: () => fetchApi("/track-record?days=30"),
+    enabled: !authLoading,
   });
+
+  if (authLoading) return <div className="min-h-screen bg-background" />;
 
   if (isLoading) {
     return (
@@ -38,6 +41,7 @@ export default function TrackRecord() {
   const circ = 2 * Math.PI * radius;
   const ringColor = winPct >= 60 ? "#10e774" : winPct >= 45 ? "#3b82f6" : "#f59e0b";
 
+  const settled = stats.wins + stats.losses;
   const topMarkets = [...byMarket]
     .filter(m => m.totalPicks >= 1)
     .sort((a, b) => b.winRate - a.winRate)
@@ -92,6 +96,7 @@ export default function TrackRecord() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-black" style={{ color: ringColor }}>{winPct.toFixed(1)}%</span>
                   <span className="text-[10px] text-white/40 uppercase tracking-wide">Win Rate</span>
+                  <span className="text-[9px] text-white/25">(settled only)</span>
                 </div>
               </div>
 
@@ -128,7 +133,7 @@ export default function TrackRecord() {
                       className="bg-emerald-500 h-full flex items-center justify-center text-[9px] font-bold text-black transition-all"
                       style={{ width: `${(stats.wins / stats.totalPicks) * 100}%` }}
                     >
-                      {((stats.wins / stats.totalPicks) * 100).toFixed(0)}%
+                      {settled > 0 ? ((stats.wins / settled) * 100).toFixed(0) : 0}%
                     </div>
                   )}
                   {stats.losses > 0 && (
@@ -136,7 +141,7 @@ export default function TrackRecord() {
                       className="bg-red-500 h-full flex items-center justify-center text-[9px] font-bold text-white transition-all"
                       style={{ width: `${(stats.losses / stats.totalPicks) * 100}%` }}
                     >
-                      {((stats.losses / stats.totalPicks) * 100).toFixed(0)}%
+                      {settled > 0 ? ((stats.losses / settled) * 100).toFixed(0) : 0}%
                     </div>
                   )}
                   {(stats.voids ?? 0) > 0 && (

@@ -842,7 +842,7 @@ router.get("/track-record", requireAuth, async (req, res) => {
       wins: Number(row.wins || 0),
       losses: Number(row.losses || 0),
       voids: Number(row.voids || 0),
-      winRate: row.total_picks > 0 ? parseFloat(((Number(row.wins || 0) / Number(row.total_picks || 0)) * 100).toFixed(1)) : 0,
+      winRate: (Number(row.wins||0)+Number(row.losses||0)) > 0 ? parseFloat(((Number(row.wins||0)/(Number(row.wins||0)+Number(row.losses||0)))*100).toFixed(1)) : 0,
     }));
 
     // Overall stats
@@ -853,8 +853,9 @@ router.get("/track-record", requireAuth, async (req, res) => {
       voids: acc.voids + stat.voids,
     }), { totalPicks: 0, wins: 0, losses: 0, voids: 0 });
 
-    const overallWinRate = totalRow.totalPicks > 0
-      ? parseFloat(((totalRow.wins / totalRow.totalPicks) * 100).toFixed(1))
+    const settled = totalRow.wins + totalRow.losses;
+    const overallWinRate = settled > 0
+      ? parseFloat(((totalRow.wins / settled) * 100).toFixed(1))
       : 0;
 
     return res.json({
