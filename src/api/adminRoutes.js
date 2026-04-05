@@ -921,4 +921,17 @@ router.post("/partners/:id/settle-selected", adminLimiter, requireAdmin, async (
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
+// Clear prediction outcomes (reset track record)
+router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { before } = req.body;
+    if (before) {
+      await db.execute({ sql: 'DELETE FROM prediction_outcomes WHERE DATE(created_at) < ?', args: [before] });
+    } else {
+      await db.execute({ sql: 'DELETE FROM prediction_outcomes', args: [] });
+    }
+    const r = await db.execute({ sql: 'SELECT COUNT(*) as c FROM prediction_outcomes', args: [] });
+    res.json({ ok: true, remaining: Number(r.rows[0].c) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 export default router;

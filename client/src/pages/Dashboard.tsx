@@ -7,8 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ChevronRight, ChevronDown, ChevronUp, Search, Trophy,
-  Crown, Zap, Lock, AlertCircle, Radio
+  ChevronRight, ChevronDown, ChevronUp, Search, Trophy, BellRing,
+  Crown, Zap, Lock, AlertCircle
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,22 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion } from "framer-motion";
+
+function toWAT(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return ''; }
+}
+
+function TeamLogo({ src, name }: { src?: string | null; name: string }) {
+  const [err, setErr] = useState(false);
+  if (src && !err) {
+    return <img src={src} alt={name} onError={() => setErr(true)} className='w-7 h-7 rounded-full object-contain bg-white/5 border border-white/10 shrink-0' loading='lazy' />;
+  }
+  return <div className='w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-[10px] font-bold text-primary'>{name.slice(0,2).toUpperCase()}</div>;
+}
 
 // ── Hero Edge Card
 function HeroEdgeCard({ pick, onView }: { pick: any; onView: () => void }) {
@@ -167,253 +183,76 @@ function getTournamentLabel(tournamentName: string, tournamentId: string | numbe
   return tournamentName;
 }
 
-// Live Scores Section
-function LiveSection() {
-  const [open, setOpen] = useState(false);
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/live"],
-    queryFn: () => fetchApi("/live"),
-    enabled: open,
-    refetchInterval: 60000,
-    staleTime: 30000,
-  });
-  const matches = (data as any)?.matches || [];
-  return (
-    <div className="rounded-2xl border border-white/10 bg-panel/40 overflow-hidden">
-      <button className="w-full flex items-center gap-3 p-4 hover:bg-white/5 transition-all" onClick={() => setOpen((o) => !o)}>
-        <div className="relative w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
-          <Radio className="w-4 h-4 text-red-400" />
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-sm font-bold tracking-wide">Live Scores</p>
-          <p className="text-xs text-muted-foreground">Matches happening right now</p>
-        </div>
-        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </button>
-      {open && (
-        <div className="px-4 pb-4 space-y-2">
-          {isLoading && <div className="flex justify-center py-6"><div className="w-6 h-6 rounded-full border-2 border-red-500/20 border-t-red-400 animate-spin" /></div>}
-          {!isLoading && matches.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No live matches right now.</p>}
-          {matches.map((m: any) => (
-            <div key={m.match_id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/8 gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-bold text-red-400">{m.minute ? m.minute + "'" : "LIVE"}</span>
-                  <span className="text-[10px] text-muted-foreground truncate">{m.competition_name}</span>
-                </div>
-                <p className="text-sm font-semibold truncate">{m.home_team_name}</p>
-                <p className="text-sm font-semibold truncate">{m.away_team_name}</p>
-              </div>
-              <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 min-w-[52px] text-center">
-                <p className="font-display text-lg font-bold">{m.score || "0 - 0"}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── ACCA Banner (premium only) ────────────────────────────────────────────────
 function AccaSection({ isPremium }: { isPremium: boolean }) {
   const [, setLocation] = useLocation();
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"safe" | "value">("safe");
-
+  const [open, setOpen] = useState(true);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["/api/acca", mode],
-    queryFn: () => fetchApi(`/acca?mode=${mode}`),
+    queryKey: ['/api/acca'],
+    queryFn: () => fetchApi('/acca'),
     enabled: isPremium && open,
-    staleTime: 10 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
   });
-
-  const riskColors: Record<string, string> = {
-    SAFE:       "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    MODERATE:   "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    AGGRESSIVE: "bg-red-500/20 text-red-400 border-red-500/30",
-    LOW:        "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    MEDIUM:     "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    HIGH:       "bg-red-500/20 text-red-400 border-red-500/30",
-  };
-
   if (!isPremium) {
     return (
-      <div
-        className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-4 flex items-center gap-4 cursor-pointer hover:bg-primary/10 transition-all"
-        onClick={() => setLocation("/paywall")}
-      >
-        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-          <Crown className="w-5 h-5 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-bold text-primary tracking-wide">ACCA Builder</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Upgrade to Premium to unlock your daily accumulator</p>
-        </div>
-        <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+      <div className='rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-4 flex items-center gap-4 cursor-pointer hover:bg-primary/8 transition-all' onClick={() => setLocation('/paywall')}>
+        <div className='w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0'><Crown className='w-5 h-5 text-primary' /></div>
+        <div className='flex-1'><p className='text-sm font-bold text-primary'>Daily ACCA Builder</p><p className='text-xs text-muted-foreground mt-0.5'>5-pick daily accumulator with real odds — Premium only</p></div>
+        <Lock className='w-4 h-4 text-muted-foreground shrink-0' />
       </div>
     );
   }
-
+  const picks = data?.picks || [];
+  const combinedOdds = picks.reduce((acc: number, p: any) => {
+    const realOdds = p.pickOdds || p.oddsHome || p.oddsAway || (100 / Math.max(p.probability, 1));
+    return acc * parseFloat(realOdds);
+  }, 1);
   return (
-    <div className="rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/8 to-transparent overflow-hidden">
-      {/* Header */}
-      <button
-        className="w-full flex items-center gap-3 p-4 hover:bg-primary/5 transition-all"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-          <Zap className="w-4 h-4 text-primary" />
+    <div className='rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/8 via-primary/3 to-transparent overflow-hidden'>
+      <button className='w-full flex items-center gap-3 px-4 py-3.5 hover:bg-primary/5 transition-all' onClick={() => setOpen(o => !o)}>
+        <div className='w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0'><Zap className='w-4 h-4 text-primary' /></div>
+        <div className='flex-1 text-left'>
+          <p className='text-sm font-black text-primary tracking-wide'>Daily ACCA</p>
+          <p className='text-xs text-muted-foreground'>5-pick auto-generated accumulator</p>
         </div>
-        <div className="flex-1 text-left">
-          <p className="text-sm font-bold text-primary tracking-wide">ACCA Builder</p>
-          <p className="text-xs text-muted-foreground">Low-correlation, controlled-risk combinations</p>
-        </div>
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-primary shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-primary shrink-0" />
-        )}
+        {picks.length > 0 && <span className='text-xs font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full'>{combinedOdds.toFixed(2)}x</span>}
+        {open ? <ChevronUp className='w-4 h-4 text-primary shrink-0' /> : <ChevronDown className='w-4 h-4 text-primary shrink-0' />}
       </button>
-
       {open && (
-        <div className="px-4 pb-4 space-y-3">
-          {/* Mode toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setMode("safe")}
-              className={cn(
-                "flex-1 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all border",
-                mode === "safe"
-                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                  : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/8"
-              )}
-            >
-              ✅ SAFE ACCA
-            </button>
-            <button
-              onClick={() => setMode("value")}
-              className={cn(
-                "flex-1 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all border",
-                mode === "value"
-                  ? "bg-orange-500/20 text-orange-400 border-orange-500/40"
-                  : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/8"
-              )}
-            >
-              ⚡ VALUE ACCA
-            </button>
-          </div>
-
-          {/* Mode description */}
-          <p className="text-[10px] text-muted-foreground">
-            {mode === "safe"
-              ? "3 picks · all ≥75% · low volatility · stable markets only"
-              : "4–5 picks · ≥70% · allows 1 moderate risk pick · higher odds"}
-          </p>
-
-          {isLoading &&
-            Array.from({ length: mode === "safe" ? 3 : 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-xl" />
-            ))}
-
-          {error && (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              Could not load ACCA picks right now.
-            </p>
-          )}
-
-          {/* Combined confidence header */}
-          {data?.picks?.length > 0 && (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-primary/10 border border-primary/20">
-              <div>
-                <p className="text-xs font-bold text-primary">
-                  {data.accaType ?? (mode === "safe" ? "SAFE ACCA" : "VALUE ACCA")}
-                </p>
-                <p className="text-[10px] text-muted-foreground">{data.totalMatches} matches</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Combined</p>
-                <p className="text-sm font-bold text-primary">{data.combinedConfidence?.toFixed(1)}%</p>
-              </div>
-              {data.riskLevel && (
-                <span className={cn(
-                  "text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full",
-                  riskColors[data.riskLevel] ?? "bg-white/10 text-muted-foreground border-white/10"
-                )}>
-                  {data.riskLevel} RISK
-                </span>
-              )}
+        <div className='px-4 pb-4 space-y-3'>
+          {isLoading && <div className='flex justify-center py-6'><div className='w-6 h-6 rounded-full border-2 border-primary/20 border-t-primary animate-spin' /></div>}
+          {error && <p className='text-xs text-muted-foreground text-center py-4'>Could not load ACCA picks right now.</p>}
+          {!isLoading && !error && picks.length === 0 && <p className='text-xs text-muted-foreground text-center py-4'>{data?.message || 'Building today ACCA — check back soon.'}</p>}
+          {picks.length > 0 && (
+            <div className='flex gap-2'>
+              <div className='flex-1 bg-white/5 rounded-xl p-2.5 border border-white/8 text-center'><p className='text-[10px] text-muted-foreground mb-0.5'>Combined Odds</p><p className='text-sm font-black text-white'>{combinedOdds.toFixed(2)}x</p></div>
+              <div className='flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center'><p className='text-[10px] text-muted-foreground mb-0.5'>NGN1k returns</p><p className='text-sm font-black text-primary'>NGN{Math.round(1000 * combinedOdds).toLocaleString()}</p></div>
+              <div className='flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center'><p className='text-[10px] text-muted-foreground mb-0.5'>NGN5k returns</p><p className='text-sm font-black text-primary'>NGN{Math.round(5000 * combinedOdds).toLocaleString()}</p></div>
             </div>
           )}
-
-          {(!data?.picks || data.picks.length === 0) && !isLoading && !error && (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              {data?.message ?? "No picks available yet. Check back later today."}
-            </p>
-          )}
-
-          {/* Combined odds + payout calculator */}
-          {data?.picks?.length > 0 && (() => {
-            const combinedOdds = data.picks.reduce(
-              (acc: number, p: any) => acc * (100 / Math.max(p.probability, 1)), 1
-            );
+          {picks.map((pick: any, i: number) => {
+            const realOdds = pick.pickOdds || pick.oddsHome || pick.oddsAway;
+            const oddsFmt = realOdds ? parseFloat(realOdds).toFixed(2) : (100/Math.max(pick.probability,1)).toFixed(2);
             return (
-              <div className="flex gap-2">
-                <div className="flex-1 bg-white/5 rounded-xl p-2.5 border border-white/8 text-center">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Est. Odds</p>
-                  <p className="text-sm font-bold text-white">{combinedOdds.toFixed(2)}×</p>
+              <div key={pick.fixtureId || i} className='flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/8'>
+                <span className='text-xs font-black text-muted-foreground w-5 shrink-0 pt-0.5'>#{i+1}</span>
+                <div className='flex-1 min-w-0'>
+                  <p className='text-sm font-semibold truncate'>{pick.homeTeam} <span className='text-muted-foreground text-xs'>vs</span> {pick.awayTeam}</p>
+                  <p className='text-xs text-muted-foreground truncate'>{pick.tournament}</p>
+                  <p className='text-xs font-bold text-white mt-0.5'>{(pick.market||'').replace(/_/g,' ')} — {pick.selection}</p>
                 </div>
-                <div className="flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">₦1k returns</p>
-                  <p className="text-sm font-bold text-primary">₦{Math.round(1000 * combinedOdds).toLocaleString()}</p>
-                </div>
-                <div className="flex-1 bg-primary/8 rounded-xl p-2.5 border border-primary/15 text-center">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">₦5k returns</p>
-                  <p className="text-sm font-bold text-primary">₦{Math.round(5000 * combinedOdds).toLocaleString()}</p>
+                <div className='text-right shrink-0 space-y-1'>
+                  <p className='text-sm font-black text-primary'>{pick.probability?.toFixed(0)}%</p>
+                  <p className='text-xs font-bold text-white/60 bg-white/8 px-2 py-0.5 rounded border border-white/10'>{oddsFmt}</p>
                 </div>
               </div>
             );
-          })()}
-
-          {data?.picks?.map((pick: any, i: number) => (
-            <div
-              key={pick.fixtureId ?? i}
-              className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/8"
-            >
-              <span className="text-xs font-bold text-muted-foreground w-5 shrink-0 pt-0.5">#{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">
-                  {pick.homeTeam} <span className="text-muted-foreground text-xs">vs</span> {pick.awayTeam}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{pick.tournament}</p>
-                <p className="text-xs font-bold text-white mt-0.5">{pick.selection || pick.market}</p>
-              </div>
-              <div className="text-right shrink-0 space-y-1">
-                <p className="text-sm font-bold text-primary">{pick.probability?.toFixed(1)}%</p>
-                {pick.riskLevel && (
-                  <span className={cn(
-                    "text-[10px] font-bold tracking-widest uppercase border px-1.5 py-0.5 rounded-full block",
-                    riskColors[pick.riskLevel] ?? "bg-white/10 text-muted-foreground border-white/10"
-                  )}>
-                    {pick.riskLevel}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {data?.picks?.length > 0 && (
-            <p className="text-[10px] text-muted-foreground text-center pt-1">
-              Picks sourced from enriched fixtures only · Always gamble responsibly
-            </p>
-          )}
+          })}
+          {picks.length > 0 && <p className='text-[10px] text-muted-foreground text-center'>Odds shown are market odds · Always gamble responsibly</p>}
         </div>
       )}
     </div>
   );
 }
-
 
 
 // ── Value Bet of the Day Banner ───────────────────────────────────────────────
@@ -537,94 +376,100 @@ function fifaToEmoji(fifaCode: string): string {
   return FIFA_EMOJI[code] || '⚽';
 }
 
-// ── Collapsible League Group ───────────────────────────────────────────────────
 function LeagueGroup({
-  tournament,
-  fixtures,
-  onSelectFixture,
-  defaultOpen,
-  isPremium,
+  tournament, fixtures, onSelectFixture, defaultOpen, isPremium
 }: {
-  tournament: string;
-  fixtures: any[];
-  onSelectFixture: (id: string) => void;
-  defaultOpen: boolean;
-  isPremium: boolean;
+  tournament: string; fixtures: any[]; onSelectFixture: (id: string) => void; defaultOpen: boolean; isPremium: boolean;
 }) {
-  const countryFlag = fixtures[0]?.country_flag ? fifaToEmoji(fixtures[0].country_flag) : '⚽';
+  const countryFlag = fixtures[0]?.country_flag ? fifaToEmoji(fixtures[0].country_flag) : '';
   const [open, setOpen] = useState(defaultOpen);
-
+  const [notified, setNotified] = useState<Record<string,boolean>>({});
+  async function toggleNotify(e: React.MouseEvent, fixtureId: string) {
+    e.stopPropagation();
+    const isOn = notified[fixtureId];
+    try {
+      const { fetchApi } = await import('@/lib/api');
+      if (isOn) { await fetchApi('/notify-match/' + fixtureId, { method: 'DELETE' }); }
+      else { await fetchApi('/notify-match/' + fixtureId, { method: 'POST' }); }
+      setNotified(prev => ({ ...prev, [fixtureId]: !isOn }));
+    } catch(_) {}
+  }
   return (
-    <div className="space-y-2">
-      <button
-        className="w-full flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-white/5 transition-all"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <div className="w-1 h-4 bg-primary rounded-full shrink-0" />
-        <h3 className="text-sm font-bold tracking-wide text-white/90 flex-1 text-left">
-          <span className="mr-1.5" aria-hidden="true">{countryFlag}</span>{tournament}
-        </h3>
-        <span className="text-xs text-muted-foreground">{fixtures.length}</span>
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-        )}
+    <div className='space-y-1.5'>
+      <button className='w-full flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-all' onClick={() => setOpen(o => !o)}>
+        <span className='text-base leading-none mr-0.5'>{countryFlag}</span>
+        <div className='w-0.5 h-3.5 bg-primary/60 rounded-full shrink-0' />
+        <h3 className='text-[11px] font-black tracking-widest text-white/70 flex-1 text-left uppercase'>{tournament}</h3>
+        <span className='text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded-full'>{fixtures.length}</span>
+        {open ? <ChevronUp className='w-3 h-3 text-muted-foreground' /> : <ChevronDown className='w-3 h-3 text-muted-foreground' />}
       </button>
-
       {open && (
-        <div className="space-y-2">
+        <div className='space-y-2'>
           {fixtures.map((fixture: any) => {
-            let time = "";
-            try { time = format(new Date(fixture.match_date), "HH:mm"); } catch {}
+            const timeStr = toWAT(fixture.match_date);
+            const isLive = ['LIVE','HT','1H','2H','ET','PEN'].includes(fixture.match_status || '');
+            const isFinished = ['FT','AET','Pen'].includes(fixture.match_status || '');
+            const hasScore = fixture.home_score != null && fixture.away_score != null;
+            const pct = fixture.best_pick_probability ? parseFloat(fixture.best_pick_probability) * 100 : 0;
+            const lvl = (fixture.pick_confidence_level || '').toUpperCase();
+            const isNotified = notified[fixture.id] || false;
             return (
-              <button
-                key={fixture.id}
-                onClick={() => onSelectFixture(fixture.id)}
-                className="w-full flex items-center justify-between p-4 rounded-2xl bg-panel/40 border border-white/5 hover:bg-white/5 hover:border-primary/15 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,231,116,0.07)] active:scale-[0.98] transition-all duration-200 text-left group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="text-xs font-bold text-muted-foreground w-12 text-center shrink-0">{time}</div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      <span className="font-semibold text-sm">{fixture.home_team_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
-                      <span className="font-semibold text-sm">{fixture.away_team_name}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-2">
-                  <EnrichmentBadge status={fixture.enrichment_status} />
-                  {/* Prediction confidence badge — shown when a pick is available */}
-                  {fixture.best_pick_selection && fixture.best_pick_probability && (() => {
-                    const pct = parseFloat(fixture.best_pick_probability) * 100;
-                    const level = fixture.pick_confidence_level?.toUpperCase();
-                    const colorClass =
-                      level === "HIGH"   ? "bg-primary/15 text-primary border-primary/30" :
-                      level === "MEDIUM" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
-                                          "bg-orange-500/15 text-orange-400 border-orange-500/30";
-                    return isPremium ? (
-                      <div className={`flex items-center gap-1 border rounded-full px-2 py-0.5 ${colorClass}`}>
-                        <span className="text-[10px] font-bold">{pct.toFixed(0)}%</span>
-                        <span className="text-[10px] opacity-70">·</span>
-                        <span className="text-[10px] font-medium truncate max-w-[80px]">
-                          {fixture.best_pick_selection}
+              <button key={fixture.id} onClick={() => onSelectFixture(fixture.id)}
+                className='w-full text-left rounded-2xl border transition-all duration-200 group hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]'
+                style={{ borderColor: isLive ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.06)', background: isLive ? 'rgba(239,68,68,0.04)' : 'rgba(255,255,255,0.025)' }}>
+                <div className='p-3.5 flex items-start gap-3'>
+                  <div className='flex flex-col items-center justify-start min-w-[48px] shrink-0 mt-0.5 gap-1'>
+                    {isLive ? (
+                      <div className='flex flex-col items-center gap-0.5'>
+                        <span className='flex items-center gap-1'>
+                          <span className='w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse' />
+                          <span className='text-[9px] font-black text-red-400 uppercase tracking-widest'>LIVE</span>
                         </span>
+                        {fixture.live_minute && <span className='text-[9px] text-red-400/70'>{fixture.live_minute}&apos;</span>}
                       </div>
-                    ) : null;
-                  })()}
-                  {(fixture.odds_home || fixture.odds_draw || fixture.odds_away) && (
-                    <div className="flex items-center gap-1">
-                      {fixture.odds_home && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_home).toFixed(2)}</span>}
-                      {fixture.odds_draw && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_draw).toFixed(2)}</span>}
-                      {fixture.odds_away && <span className="text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{Number(fixture.odds_away).toFixed(2)}</span>}
+                    ) : isFinished ? (
+                      <span className='text-[9px] font-bold text-white/25 uppercase tracking-wide'>FT</span>
+                    ) : (
+                      <span className='text-[11px] font-bold text-muted-foreground'>{timeStr}</span>
+                    )}
+                    {(isLive || isFinished) && hasScore && (
+                      <div className='flex flex-col items-center bg-black/30 rounded-lg px-1.5 py-1 border border-white/10 mt-0.5'>
+                        <span className='text-base font-black tabular-nums leading-none' style={{ color: isLive ? '#ef4444' : '#ffffff' }}>{fixture.home_score}</span>
+                        <span className='text-[7px] text-white/20'>vs</span>
+                        <span className='text-base font-black tabular-nums leading-none' style={{ color: isLive ? '#ef4444' : '#ffffff' }}>{fixture.away_score}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className='flex-1 min-w-0 space-y-2'>
+                    <div className='flex items-center gap-2'>
+                      <TeamLogo src={fixture.home_team_logo} name={fixture.home_team_name} />
+                      <span className='font-semibold text-sm text-white truncate'>{fixture.home_team_name}</span>
                     </div>
-                  )}
-                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <div className='flex items-center gap-2'>
+                      <TeamLogo src={fixture.away_team_logo} name={fixture.away_team_name} />
+                      <span className='font-semibold text-sm text-white truncate'>{fixture.away_team_name}</span>
+                    </div>
+                    {fixture.best_pick_selection && pct > 0 && !isLive && isPremium && (
+                      <div className={'inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ' + (lvl === 'HIGH' ? 'bg-primary/10 text-primary border-primary/20' : lvl === 'MEDIUM' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20')}>
+                        {pct.toFixed(0)}% &middot; {fixture.best_pick_selection}
+                      </div>
+                    )}
+                  </div>
+                  <div className='flex flex-col items-end gap-1.5 shrink-0'>
+                    {isLive && (
+                      <button onClick={(e) => toggleNotify(e, fixture.id)} className={'p-1.5 rounded-lg border transition-all ' + (isNotified ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60 hover:bg-white/8')}>
+                        <BellRing className='w-3.5 h-3.5' />
+                      </button>
+                    )}
+                    {(fixture.odds_home || fixture.odds_away) && !isLive && !isFinished && (
+                      <div className='flex flex-col gap-0.5'>
+                        {fixture.odds_home && <span className='text-[9px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded text-right'>H {Number(fixture.odds_home).toFixed(2)}</span>}
+                        {fixture.odds_draw && <span className='text-[9px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded text-right'>D {Number(fixture.odds_draw).toFixed(2)}</span>}
+                        {fixture.odds_away && <span className='text-[9px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded text-right'>A {Number(fixture.odds_away).toFixed(2)}</span>}
+                      </div>
+                    )}
+                    <ChevronRight className='w-4 h-4 text-white/20 group-hover:text-primary transition-colors mt-auto' />
+                  </div>
                 </div>
               </button>
             );
@@ -634,6 +479,7 @@ function LeagueGroup({
     </div>
   );
 }
+
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
@@ -1003,14 +849,12 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
         {/* Quick Actions */}
         <QuickActions onTopPicks={() => setLocation("/top-picks")} onAcca={() => setLocation("/acca-calculator")} />
 
-        {/* Live Scores */}
-        <LiveSection />
+
 
         {/* Value Bet of the Day */}
         <ValueBetBanner isPremium={isPremium} />
 
-        {/* ACCA Section */}
-        <AccaSection isPremium={!!isPremium} />
+
 
         {/* Date Strip */}
         <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 snap-x">

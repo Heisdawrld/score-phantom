@@ -940,6 +940,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
                 <h3 className="text-sm font-bold text-white">Prediction Cache</h3>
                 <p className="text-xs text-gray-500">Clear cached predictions so the engine rebuilds fresh picks.</p>
+                <button onClick={() => { if(confirm("Clear ALL prediction_outcomes? This resets track record.")) run(() => call("/api/admin/clear-track-record", { method: "POST" }), "Track record cleared"); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-red-400 border border-red-500/20">🗑️ Clear Track Record (reset outcomes)</button>
                 <button onClick={() => run(() => call("/api/admin/clear-prediction-cache", { method: "POST" }), "Prediction cache cleared — engine will re-run fresh")}
                   className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
                   Clear Prediction Cache

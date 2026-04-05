@@ -21,11 +21,27 @@ function broadcast(data) {
   }
 }
 
+
+async function notifyMatchSubscribers(fixtureId, homeTeam, awayTeam, homeScore, awayScore, minute) {
+  try {
+    const r = await db.execute({ sql: 'SELECT DISTINCT ms.user_id, pt.token FROM match_subscriptions ms LEFT JOIN push_tokens pt ON pt.user_id=ms.user_id WHERE ms.fixture_id=?', args: [fixtureId] });
+    const rows = r.rows || [];
+    if (!rows.length) return;
+    const tokens = rows.map(r => r.token).filter(Boolean);
+    const title = homeTeam + ' ' + homeScore + ' - ' + awayScore + ' ' + awayTeam;
+    const body = (minute ? minute + "'"+' — ' : '') + 'Score update';
+    if (tokens.length > 0) {
+      const { sendPush } = await import('./pushService.js');
+      await sendPush({ title, body, data: { type: 'live_score', url: '/', fixture_id: fixtureId }, tokens });
+    }
+  } catch(e) { console.warn('[WS] notifyMatchSubscribers error:', e.message); }
+}
 async function handleScoreUpdate(msg) {
   try {
     const fixtureId = String(msg.fixture_id || '');
     if (!fixtureId) return;
     await db.execute({ sql: 'UPDATE fixtures SET home_score = ?, away_score = ?, match_status = ?, live_minute = ? WHERE id = ?', args: [msg.home_score, msg.away_score, msg.status || 'LIVE', msg.minute || null, fixtureId] });
+    if (msg.home_score !== null && msg.away_score !== null) notifyMatchSubscribers(fixtureId, '', '', msg.home_score, msg.away_score, msg.minute).catch(()=>{});
     broadcast({ type: 'score_update', fixture_id: fixtureId, home_score: msg.home_score, away_score: msg.away_score, status: msg.status, minute: msg.minute });
     if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
       setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score).catch(() => {}), 5000);

@@ -634,15 +634,13 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
   }
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const mode  = req.query.mode === 'value' ? 'value' : 'safe';
+    'value' ? 'value' : 'safe';'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
     const pool = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model, p.confidence_volatility,
-                   p.script_primary, p.no_safe_pick,
-                   f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
+                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             WHERE f.match_date LIKE ?
@@ -707,7 +705,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
 
     // Build ACCA using the intelligent builder
     const { buildAcca } = await import('../engine/buildAcca.js');
-    const acca = buildAcca(rows, mode);
+    const acca = buildAcca(rows, 'value');
 
     return res.json({
       ...acca,
@@ -1363,6 +1361,28 @@ export function createTrialLimitGuard(trialDailyLimit = 5) {
 }
 
 
+// --- MATCH SUBSCRIPTIONS (notify me about this match) ---
+router.post('/notify-match/:id', requireAuth, async (req, res) => {
+  try {
+    const fixtureId = req.params.id;
+    await db.execute({ sql: 'INSERT OR IGNORE INTO match_subscriptions (user_id,fixture_id) VALUES (?,?)', args: [req.user.id, fixtureId] });
+    res.json({ ok: true, subscribed: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.delete('/notify-match/:id', requireAuth, async (req, res) => {
+  try {
+    await db.execute({ sql: 'DELETE FROM match_subscriptions WHERE user_id=? AND fixture_id=?', args: [req.user.id, req.params.id] });
+    res.json({ ok: true, subscribed: false });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.get('/notify-match/:id', requireAuth, async (req, res) => {
+  try {
+    const r = await db.execute({ sql: 'SELECT id FROM match_subscriptions WHERE user_id=? AND fixture_id=?', args: [req.user.id, req.params.id] });
+    res.json({ subscribed: (r.rows||[]).length > 0 });
+  } catch(e) { res.json({ subscribed: false }); }
+});
 // --- PUSH TOKEN REGISTRATION ---
 router.post('/push-token', requireAuth, async (req, res) => {
   try {

@@ -4,14 +4,14 @@ import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import {
   Zap, Crown, LogOut, User, Copy, Check, ChevronDown,
-  LayoutDashboard, ShieldCheck, Flame, Calculator, Trophy, BarChart2, Star
+  LayoutDashboard, ShieldCheck, Flame, Trophy, BarChart2, Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DESKTOP_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/top-picks", label: "Top Picks", icon: Flame },
-  { href: "/acca-calculator", label: "ACCA", icon: Calculator },
+  { href: "/acca-calculator", label: "Daily ACCA", icon: Zap },
   { href: "/track-record", label: "Record", icon: Trophy },
   { href: "/results", label: "Results", icon: BarChart2 },
 ];

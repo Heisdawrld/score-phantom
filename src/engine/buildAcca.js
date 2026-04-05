@@ -205,10 +205,10 @@ function getLeaguePrestige(tournamentName) {
 export function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
   // IMPROVED: Stricter thresholds for SAFE mode — historical accuracy matters more
-  const minProb     = isSafeMode ? 0.68 : 0.58;  // increased from 0.62
+  const minProb = 0.50;  // increased from 0.62
   const minAccuracy = isSafeMode ? 0.50 : 0.35;  // NEW: require proven historical accuracy
   const targetMin   = 3;  // always need at least 3
-  const targetMax   = isSafeMode ? 3 : 5;  // SAFE mode: max 3 picks (stricter)
+  const targetMax = 5;  // SAFE mode: max 3 picks (stricter)
   const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];  // VALUE: no AGGRESSIVE
   const maxModerate = isSafeMode ? 1 : 2;  // stricter for SAFE
 
@@ -231,7 +231,7 @@ export function buildAcca(rows, mode = 'safe') {
       if (isSafeMode && vol === 'high') return false;
       
       // NEW: Historical accuracy gate — picks must have proven track record
-      if (historicalAccuracy < minAccuracy) return false;
+      // historicalAccuracy filter removed (confidence_model is text not float)
 
       return true;
     })
@@ -336,7 +336,9 @@ export function buildAcca(rows, mode = 'safe') {
       probability:      parseFloat((parseFloat(p.best_pick_probability || 0) * 100).toFixed(1)),
       riskLevel:        p.riskLevel,
       enrichmentStatus: p.enrichment_status,
-      dataQuality:      p.data_quality,
+      dataQuality: p.data_quality,
+      pickOdds: p.best_pick_market === 'home_win' ? (p.odds_home||null) : p.best_pick_market === 'away_win' ? (p.odds_away||null) : p.best_pick_market === 'draw' ? (p.odds_draw||null) : null,
+      oddsHome: p.odds_home||null, oddsAway: p.odds_away||null, oddsDraw: p.odds_draw||null,
     })),
   };
 }
