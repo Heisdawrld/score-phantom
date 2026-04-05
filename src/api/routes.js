@@ -1,3 +1,4 @@
+import { getBudgetStatus } from '../services/requestBudget.js';
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import db from "../config/database.js";
@@ -5,7 +6,7 @@ import { requirePremiumAccess, computeAccessStatus } from "../auth/authRoutes.js
 import { adaptResponseFormat } from "./responseAdapter.js";
 import { explainPrediction, chatAboutMatch } from "../services/groqExplainer.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
-import { fetchLiveMatches } from "../services/livescore.js";
+import { addSseClient, getLiveStatus } from '../services/wsLiveScores.js';
 import {
   getOrBuildPrediction,
   ensureFixtureData,
@@ -204,10 +205,14 @@ router.get("/health", (req, res) => {
   res.json({ status: "ok", service: "ScorePhantom API" });
 });
 
+// ─── GET /budget — API request budget status (admin only) ──────────────────
+router.get("/budget", requireAdmin, (req, res) => {
+  res.json({ budget: getBudgetStatus() });
+});
 // ─── GET /live — live matches (auth required) ────────────────────────────────
 router.get("/live", requireAuth, async (req, res) => {
   try {
-    const matches = await fetchLiveMatches();
+    const liveRes = await db.execute({ sql: "SELECT id, home_team_name, away_team_name, tournament_name, match_date, home_score, away_score, match_status, live_minute FROM fixtures WHERE match_status IN (\"LIVE\",\"HT\") ORDER BY match_date ASC", args: [] }); const matches = liveRes.rows || [];
     res.json({
       total: matches.length,
       matches,
@@ -219,6 +224,18 @@ router.get("/live", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /live-stream — SSE push for real-time score updates ────────────────
+router.get("/live-stream", requireAuth, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write("data: {"type":"connected"}\n\n");
+  addSseClient(res);
+  const heartbeat = setInterval(() => res.write(":heartbeat\n\n"), 20000);
+  req.on("close", () => clearInterval(heartbeat));
+});
 // ─── GET /access — lightweight access check ──────────────────────────────────
 router.get("/access", requireAuth, (req, res) => {
   res.json({

@@ -20,7 +20,7 @@ import {
   fetchMatchLineups,
   fetchMatchStats,
   fetchMatchEvents,
-} from '../services/livescore.js';
+} from '../services/sportapi.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

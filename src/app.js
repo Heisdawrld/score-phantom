@@ -11,7 +11,9 @@ import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
-import { seedFixtures } from "./services/fixtureSeeder.js";
+import { seedFixtures } from './services/fixtureSeeder.js';
+import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
+import { getBudgetStatus } from './services/requestBudget.js';
 import { checkResults } from "./services/resultChecker.js";
 
 dotenv.config();
@@ -95,8 +97,8 @@ app.get("*", (req, res) => {
 
 async function autoSeed() {
   try {
-    if (!process.env.LIVESCORE_API_KEY || !process.env.LIVESCORE_API_SECRET) {
-      console.warn("[AutoSeed] No LiveScore keys — skipping seed.");
+    if (!process.env.SPORTAPI_KEY) {
+      console.warn("[AutoSeed] No SPORTAPI_KEY set — skipping seed.");
       return;
     }
 
@@ -285,6 +287,8 @@ app.use(errorHandler);
 
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
+  startLiveScoreWatcher();
+  console.log("[WS] Live score WebSocket watcher started");
   await initUsersTable();
   await initPredictionsTable();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));

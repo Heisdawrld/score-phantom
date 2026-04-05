@@ -114,6 +114,10 @@ async function runSchema() {
     ["odds_draw",       "ALTER TABLE fixtures ADD COLUMN odds_draw REAL"],
     ["odds_away",       "ALTER TABLE fixtures ADD COLUMN odds_away REAL"],
   ];
+    ["home_score",      "ALTER TABLE fixtures ADD COLUMN home_score INTEGER"],
+    ["away_score",      "ALTER TABLE fixtures ADD COLUMN away_score INTEGER"],
+    ["match_status",    "ALTER TABLE fixtures ADD COLUMN match_status TEXT DEFAULT 'NS'"],
+    ["live_minute",     "ALTER TABLE fixtures ADD COLUMN live_minute TEXT"],
   for (const [col, sql] of colMigrations) {
     const exists = tableInfo.rows.some((c) => c.name === col);
     if (!exists) {

@@ -1,47 +1,7 @@
-/**
- * resultChecker.js
- * Fetches real match scores from LiveScore API for a given date,
- * evaluates stored predictions, and writes outcomes to prediction_outcomes.
- * 
- * Run daily after midnight (e.g. 2 AM Lagos) so yesterday's results are complete.
- */
-import axios from 'axios';
+// resultChecker.js - Checks match results using SportAPI fixture date endpoint
 import db from '../config/database.js';
+import { fetchFixturesByDate } from './sportapi.js';
 
-const BASE = 'https://livescore-api.com/api-client';
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function lsGet(path, params = {}) {
-  await sleep(500);
-  const KEY = process.env.LIVESCORE_API_KEY;
-  const SECRET = process.env.LIVESCORE_API_SECRET;
-  if (!KEY || !SECRET) throw new Error('Missing LiveScore API credentials');
-  const res = await axios.get(`${BASE}${path}`, {
-    params: { key: KEY, secret: SECRET, ...params },
-    timeout: 15000,
-  });
-  return res.data;
-}
-
-/**
- * Parse "2 - 1" or "2-1" → { home: 2, away: 1 } or null
- */
-function parseScore(raw) {
-  if (!raw) return null;
-  const clean = String(raw).replace(/\s/g, '');
-  const parts = clean.split('-');
-  if (parts.length !== 2) return null;
-  const home = parseInt(parts[0], 10);
-  const away = parseInt(parts[1], 10);
-  if (isNaN(home) || isNaN(away)) return null;
-  return { home, away };
-}
-
-/**
- * Evaluate a prediction market/selection against actual score.
- * Returns 'win', 'loss', or 'void'
- */
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
   const total = homeScore + awayScore;
@@ -49,207 +9,107 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
   const mkt = (market || '').toLowerCase().trim();
   const homeName = (homeTeamName || '').toLowerCase().trim();
   const awayName = (awayTeamName || '').toLowerCase().trim();
-
-  // Helper: check if selection refers to the home or away team by name
   const isHomePick = homeName && sel.includes(homeName);
   const isAwayPick = awayName && sel.includes(awayName);
-
-  // ── Over/Under markets ──────────────────────────────────────────────────
-  if (mkt === 'over/under' || mkt.includes('over') || mkt.includes('under')) {
-    // Selection like "Over 2.5 Goals", "Under 1.5 Goals", "Over 1.5 Goals"
-    const overMatch = sel.match(/over\s+(\d+\.?\d*)/i);
-    const underMatch = sel.match(/under\s+(\d+\.?\d*)/i);
-    if (overMatch) {
-      const line = parseFloat(overMatch[1]);
-      return total > line ? 'win' : 'loss';
-    }
-    if (underMatch) {
-      const line = parseFloat(underMatch[1]);
-      return total < line ? 'win' : 'loss';
-    }
+  if (mkt.includes('over') || mkt.includes('under')) {
+    const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return total > parseFloat(om[1]) ? 'win' : 'loss';
+    const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return total < parseFloat(um[1]) ? 'win' : 'loss';
   }
-
-  // ── Both Teams to Score ─────────────────────────────────────────────────
   if (mkt.includes('both teams') || mkt === 'btts') {
     const btts = homeScore > 0 && awayScore > 0;
     if (sel.includes('not to score') || sel === 'no') return btts ? 'loss' : 'win';
     return btts ? 'win' : 'loss';
   }
-
-  // ── Match Result / 1X2 ─────────────────────────────────────────────────
   if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result')) {
     if (sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
     if (sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
     if (sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
   }
-
-  // ── Double Chance ───────────────────────────────────────────────────────
   if (mkt.includes('double chance')) {
-    if (sel.includes('home') || sel.includes('1') || isHomePick) {
-      // "Home or Draw" / "TeamName or Draw" — win if home wins OR draw
-      return homeScore >= awayScore ? 'win' : 'loss';
-    }
-    if (sel.includes('away') || sel.includes('2') || isAwayPick) {
-      // "Away or Draw" / "TeamName or Draw" — win if away wins OR draw
-      return awayScore >= homeScore ? 'win' : 'loss';
-    }
-    if (sel.includes('or draw')) {
-      // Fallback: if we can't tell which team, treat as home DC
-      return homeScore >= awayScore ? 'win' : 'loss';
-    }
+    if (sel.includes('home') || sel.includes('1') || isHomePick) return homeScore >= awayScore ? 'win' : 'loss';
+    if (sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore >= homeScore ? 'win' : 'loss';
+    return homeScore >= awayScore ? 'win' : 'loss';
   }
-
-  // ── Draw No Bet ─────────────────────────────────────────────────────────
   if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
-    if (sel.includes('home') || sel.includes('1') || isHomePick) {
-      return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
-    }
-    if (sel.includes('away') || sel.includes('2') || isAwayPick) {
-      return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
-    }
+    if (sel.includes('home') || sel.includes('1') || isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    if (sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
   }
-
-  // ── Home/Away Team Goals (individual team Over/Under) ───────────────────
   if (mkt.includes('home team goals') || mkt.includes('away team goals')) {
     const goals = mkt.includes('home') ? homeScore : awayScore;
-    const overMatch = sel.match(/over\s+(\d+\.?\d*)/i);
-    const underMatch = sel.match(/under\s+(\d+\.?\d*)/i);
-    if (overMatch) return goals > parseFloat(overMatch[1]) ? 'win' : 'loss';
-    if (underMatch) return goals < parseFloat(underMatch[1]) ? 'win' : 'loss';
+    const om2 = sel.match(/over\s+(\d+\.?\d*)/i); if (om2) return goals > parseFloat(om2[1]) ? 'win' : 'loss';
+    const um2 = sel.match(/under\s+(\d+\.?\d*)/i); if (um2) return goals < parseFloat(um2[1]) ? 'win' : 'loss';
   }
-
-  // Unknown market — can't evaluate
   return 'void';
 }
 
-/**
- * Fetch yesterday's scores from LiveScore API and populate prediction_outcomes.
- * Returns { checked, outcomes: { wins, losses, voids, skipped } }
- */
 export async function checkResults(dateStr) {
-  const date = dateStr || (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-  })();
-
-  console.log(`[ResultChecker] Checking results for ${date}...`);
-
-  // 1. Get all fixtures for this date that have predictions
-  const fixtureRes = await db.execute({
-    sql: `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name, f.tournament_name, f.match_date,
-                 p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model
-          FROM fixtures f
-          JOIN predictions_v2 p ON p.fixture_id = f.id
-          WHERE f.match_date LIKE ?
-            AND p.best_pick_selection IS NOT NULL`,
-    args: [`%${date}%`],
-  });
-
-  const fixtures = fixtureRes.rows || [];
-  console.log(`[ResultChecker] Found ${fixtures.length} predictions to check for ${date}`);
-
-  if (fixtures.length === 0) return { checked: 0, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
-
-  const scoreMap = {}; const nameMap = {};
-  // 2a. PRIMARY: Pull scores from our own historical_matches table (populated during enrichment)
-  // This avoids LiveScore API issues and uses data we already have
-  const dbScoreRes = await db.execute({ sql: "SELECT DISTINCT home_team, away_team, home_goals, away_goals FROM historical_matches WHERE date LIKE ? AND home_goals IS NOT NULL AND away_goals IS NOT NULL", args: ["%" + date + "%"] });
-  for (const r of dbScoreRes.rows || []) {
-    const _h = (r.home_team || "").toLowerCase().trim();
-    const _a = (r.away_team || "").toLowerCase().trim();
-    if (_h && _a) { const _s = { home: Number(r.home_goals), away: Number(r.away_goals) }; nameMap[_h + ":" + _a] = _s; nameMap[_h.split(" ")[0] + ":" + _a.split(" ")[0]] = _s; }
+  const date = dateStr || (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }); })();
+  console.log('[ResultChecker] Checking results for', date);
+  let apiFailed = false;
+  let apiFixtures = [];
+  try {
+    apiFixtures = await fetchFixturesByDate(date);
+    console.log('[ResultChecker] SportAPI returned', apiFixtures.length, 'fixtures for', date);
+  } catch (err) {
+    apiFailed = true;
+    console.warn('[ResultChecker] API fetch failed, using DB scores only:', err.message);
   }
-  console.log("[ResultChecker] DB historical_matches gave " + Object.keys(nameMap).length + " scores for " + date);
-  // 2. Fetch actual scores from LiveScore API — paginate through all matches
-  let page = 1;
-  let apiCallsMade = 0;
-  while (true) {
-    try {
-      const data = await lsGet('/scores/history.json', { from: date, to: date, page });
-      const rawD = data.data; const apiFixtures = Array.isArray(rawD) ? rawD : (rawD?.match || rawD?.fixtures || rawD?.history || rawD?.results || rawD?.matches || []); console.log("[ResultChecker] API page " + page + ": " + apiFixtures.length + " matches (keys: " + Object.keys(rawD || {}).join(",") + ")");
-      if (!apiFixtures.length) break;
-
-      for (const f of apiFixtures) {
-        const id = String(f.fixture_id || f.id || f.match_id || '');
-        const score = parseScore(f.ft_score || f.score);
-        if (id && score) scoreMap[id] = score; const _hn = (f.home_name || "").toLowerCase().trim(); const _an = (f.away_name || "").toLowerCase().trim(); if (_hn && _an && score) { nameMap[_hn + ":" + _an] = score; nameMap[_hn.split(" ")[0] + ":" + _an.split(" ")[0]] = score; }
-      }
-      apiCallsMade++;
-      if (!rawD?.next_page) break; // no more pages (next_page is a URL string when more pages exist)
-      page++;
-      if (page > 20) break; // safety
-    } catch (err) {
-      console.error(`[ResultChecker] API error page ${page}:`, err.message);
-      break;
+  const scoreMap = {};
+  const nameMap = {};
+  for (const f of apiFixtures) {
+    if ((f.match_status === 'FT' || f.match_status === 'AET' || f.match_status === 'Pen') && f.home_score != null) {
+      const s = { home: Number(f.home_score), away: Number(f.away_score) };
+      scoreMap[f.match_id] = s;
+      const hk = (f.home_team_name || '').toLowerCase().trim();
+      const ak = (f.away_team_name || '').toLowerCase().trim();
+      if (hk && ak) { nameMap[hk + ':' + ak] = s; nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s; }
     }
   }
-
-  console.log("[ResultChecker] Scores: " + Object.keys(scoreMap).length + " by ID, " + Object.keys(nameMap).length + " by name (" + apiCallsMade + " API calls)");
-  // 2c. FALLBACK: if no scores found yet, try /fixtures/matches.json for past dates
-  // This endpoint is confirmed working with our API key
-  if (Object.keys(nameMap).length === 0) {
-    try {
-      const _fd = await lsGet("/fixtures/matches.json", { date }); const _fl = (_fd.data?.fixtures || []); console.log("[ResultChecker] Fixtures fallback: " + _fl.length + " fixtures for " + date);
-      for (const _f of _fl) { const _s = parseScore(_f.ft_score || _f.score); if (!_s) continue; const _h = (_f.home_name || "").toLowerCase().trim(); const _a = (_f.away_name || "").toLowerCase().trim(); const _id = String(_f.id || ""); if (_id) scoreMap[_id] = _s; if (_h && _a) { nameMap[_h + ":" + _a] = _s; nameMap[_h.split(" ")[0] + ":" + _a.split(" ")[0]] = _s; } }
-    } catch (_fe) { console.warn("[ResultChecker] Fixtures fallback failed:", _fe.message); }
-  }
-
-  // 2d. BEST FALLBACK: Use /teams/matches.json (confirmed working) to fetch each team's recent results
-  // This is guaranteed to return April 3-4 scores since enrichment uses this same endpoint
-  if (Object.keys(nameMap).length < 5) {
-    const { fetchTeamForm } = await import("./livescore.js");
-    const teamIdsSeen = new Set();
-    for (const fx of fixtures) {
-      const tid = String(fx.home_team_id || ""); if (!tid || teamIdsSeen.has(tid)) continue; teamIdsSeen.add(tid);
-      try {
-        const form = await fetchTeamForm(tid, 15);
-        for (const m of form) { const _s = m.score ? (()=>{ const p=m.score.split("-"); return p.length===2?{home:parseInt(p[0]),away:parseInt(p[1])}:null; })() : null; if (!_s) continue; const _h=(m.home||"").toLowerCase().trim(); const _a=(m.away||"").toLowerCase().trim(); if (_h&&_a){ nameMap[_h+":"+_a]=_s; nameMap[_h.split(" ")[0]+":"+_a.split(" ")[0]]=_s; } }
-        await new Promise(r=>setTimeout(r,500));
-      } catch(_e){ console.warn("[ResultChecker] Team form failed for",tid,_e.message); }
+  const dbScores = await db.execute({ sql: 'SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ("FT","AET","Pen") AND home_score IS NOT NULL', args: ['%' + date + '%'] });
+  for (const f of dbScores.rows || []) {
+    if (!scoreMap[f.id]) {
+      const s = { home: Number(f.home_score), away: Number(f.away_score) };
+      scoreMap[String(f.id)] = s;
+      const hk = (f.home_team_name || '').toLowerCase().trim();
+      const ak = (f.away_team_name || '').toLowerCase().trim();
+      if (hk && ak) { nameMap[hk + ':' + ak] = s; }
     }
-    console.log("[ResultChecker] After team form fetch: nameMap has",Object.keys(nameMap).length,"scores");
   }
-  // 3. Check which fixtures already have outcomes (avoid duplicates)
-  const existingRes = await db.execute({
-    sql: `SELECT fixture_id, outcome FROM prediction_outcomes WHERE match_date LIKE ?`,
-    args: [`%${date}%`],
-  });
-  const existingOutcomes = {}; for (const _er of existingRes.rows || []) { existingOutcomes[String(_er.fixture_id)] = _er.outcome; }
-
-  // 4. Evaluate each prediction — INSERT OR REPLACE when score found, skip voids
+  console.log('[ResultChecker] Score map: ' + Object.keys(scoreMap).length + ' by ID, ' + Object.keys(nameMap).length + ' by name');
+  const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
+  const fixtures = predRes.rows || [];
+  console.log('[ResultChecker] Found', fixtures.length, 'predictions to check for', date);
+  if (!fixtures.length) return { checked: 0, date, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
+  const existing = await db.execute({ sql: 'SELECT fixture_id, outcome FROM prediction_outcomes WHERE match_date LIKE ?', args: ['%' + date + '%'] });
+  const existingMap = {};
+  for (const r of existing.rows || []) existingMap[String(r.fixture_id)] = r.outcome;
   const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0, updated: 0 };
   for (const fix of fixtures) {
     const fid = String(fix.id);
-    const existingOutcome = existingOutcomes[fid];
-    if (existingOutcome === "win" || existingOutcome === "loss") { outcomes.skipped++; continue; }
-    const _hk = (fix.home_team_name||"").toLowerCase().trim();
-    const _ak = (fix.away_team_name||"").toLowerCase().trim();
-    const score = scoreMap[fid] || nameMap[_hk+":"+_ak] || nameMap[_hk.split(" ")[0]+":"+_ak.split(" ")[0]] || null;
-    if (!score) { if (!existingOutcome) { try { await db.execute({sql:"INSERT OR IGNORE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",args:[fid,fix.home_team_name,fix.away_team_name,fix.match_date,fix.tournament_name,fix.best_pick_market,fix.best_pick_selection,parseFloat(fix.best_pick_probability||0),fix.confidence_model||"",null,null,null,"void"]}); outcomes.voids++; } catch(e){} } else { outcomes.skipped++; } continue; }
-    const outcome = evaluatePrediction(fix.best_pick_market,fix.best_pick_selection,score.home,score.away,fix.home_team_name,fix.away_team_name);
+    const prev = existingMap[fid];
+    if (prev === 'win' || prev === 'loss') { outcomes.skipped++; continue; }
+    const hk = (fix.home_team_name || '').toLowerCase().trim();
+    const ak = (fix.away_team_name || '').toLowerCase().trim();
+    const score = scoreMap[fid] || nameMap[hk + ':' + ak] || nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] || null;
+    const outcome = score ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name) : 'void';
     try {
-      await db.execute({sql:"INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",args:[fid,fix.home_team_name,fix.away_team_name,fix.match_date,fix.tournament_name,fix.best_pick_market,fix.best_pick_selection,parseFloat(fix.best_pick_probability||0),fix.confidence_model||"",score.home,score.away,score.home+"-"+score.away,outcome]});
-      if (existingOutcome === "void") outcomes.updated++; else outcomes[outcome==="win"?"wins":outcome==="loss"?"losses":"voids"]++;
-    } catch(e){ console.error("[RC] DB error for "+fid+":",e.message); }
+      await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"),datetime("now"))', args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score ? score.home : null, score ? score.away : null, score ? score.home + '-' + score.away : null, outcome] });
+      if (prev === 'void') outcomes.updated++;
+      else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;
+    } catch (e) { console.error('[ResultChecker] DB error for', fid, ':', e.message); }
   }
-
-  console.log(`[ResultChecker] Done for ${date}:`, outcomes);
+  console.log('[ResultChecker] Done for ' + date + ':', outcomes);
   return { checked: fixtures.length, date, outcomes };
 }
 
-/**
- * Run result checking for a date range (used for backfilling).
- */
 export async function backfillResults(daysBack = 7) {
   const results = [];
   for (let i = 1; i <= daysBack; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const r = await checkResults(dateStr);
     results.push(r);
-    await sleep(2000); // rate limit
+    await new Promise(r2 => setTimeout(r2, 1500));
   }
   return results;
 }
