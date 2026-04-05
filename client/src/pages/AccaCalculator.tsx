@@ -6,8 +6,8 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import {
-  Plus, X, Calculator, Flame, Crown, TrendingUp,
-  Clock, Target, ChevronRight, Trash2, Info
+  Plus, X, Calculator, Flame, TrendingUp,
+  Clock, Target, ChevronRight, Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -58,8 +58,7 @@ export default function AccaCalculator() {
   const { data: user, isLoading: authLoading } = useAuth();
 
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  const isTrial = user?.access_status === "trial";
-
+  
   const [slip, setSlip] = useState<SlipPick[]>([]);
   const [stake, setStake] = useState(1000);
 
@@ -89,7 +88,6 @@ export default function AccaCalculator() {
 
   function addToSlip(pick: AIPick) {
     if (slip.find(s => s.fixtureId === pick.fixtureId)) return; // already added
-    if (isTrial && slip.length >= 2) return; // trial limit
     setSlip(prev => [...prev, {
       fixtureId: pick.fixtureId,
       match: pick.match,
@@ -112,8 +110,8 @@ export default function AccaCalculator() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  // Paywall for expired users AND free trial users
-  if (!user || user.access_status === "expired") {
+  // Paywall for expired users AND trial users — ACCA is premium only
+  if (!user || user.access_status === "expired" || user.access_status === "trial") {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
@@ -148,12 +146,7 @@ export default function AccaCalculator() {
             </h1>
             <p className="text-white/40 text-sm mt-1">Add top picks to your slip — enter your bookmaker odds, see your return</p>
           </div>
-          {isTrial && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-400/10 border border-orange-400/20">
-              <Crown className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-xs text-orange-400 font-semibold">Trial: max 2 picks</span>
-            </div>
-          )}
+          
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -185,7 +178,6 @@ export default function AccaCalculator() {
 
             {!picksLoading && aiPicks.map(pick => {
               const added = inSlip(pick.fixtureId);
-              const trialLimitReached = isTrial && slip.length >= 2 && !added;
               return (
                 <motion.div
                   key={pick.fixtureId}
@@ -238,16 +230,9 @@ export default function AccaCalculator() {
                     ) : (
                       <button
                         onClick={() => addToSlip(pick)}
-                        disabled={trialLimitReached && false} onClick={trialLimitReached ? () => setLocation("/paywall") : undefined}
-                        className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                          trialLimitReached
-                            ? "bg-orange-500/15 text-orange-400 border border-orange-500/25 hover:bg-orange-500/25 cursor-pointer"
-                            : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
-                        )}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
                       >
-                        <Plus className="w-3 h-3" />
-                        {trialLimitReached ? "Upgrade" : "Add to Slip"}
+                        <Plus className="w-3 h-3" /> Add to Slip
                       </button>
                     )}
                   </div>
@@ -255,15 +240,6 @@ export default function AccaCalculator() {
               );
             })}
 
-            {isTrial && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-400/5 border border-orange-400/15">
-                <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-orange-400/80">
-                  Trial accounts can add up to 2 picks per ACCA.{" "}
-                  <button onClick={() => setLocation("/paywall")} className="text-orange-400 font-bold underline">Upgrade for unlimited</button>.
-                </p>
-              </div>
-            )}
           </div>
 
           {/* RIGHT: Slip */}
