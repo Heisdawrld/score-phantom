@@ -1,0 +1,13 @@
+import { fetchFixturesByDate, fetchStandings, fetchH2H } from '../services/sportapi.js';
+import dotenv from 'dotenv'; dotenv.config();
+console.log('=== Fixtures ===');
+const fixes = await fetchFixturesByDate('2026-04-05');
+console.log('Count:', fixes.length);
+console.log('First:', JSON.stringify(fixes[0], null, 2));
+console.log('=== Standings ===');
+const standings = await fetchStandings(fixes[0]?.tournament_id || '83');
+console.log('Teams in standings:', standings.length);
+console.log('First standing:', JSON.stringify(standings[0], null, 2));
+console.log('=== H2H ===');
+const h2h = await fetchH2H(fixes[0]?.home_team_id, fixes[0]?.away_team_id);
+console.log('H2H results:', h2h.h2h.length, JSON.stringify(h2h, null, 2));

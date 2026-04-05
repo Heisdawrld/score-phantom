@@ -53,7 +53,7 @@ function connect() {
   if (!key) { console.warn('[WS] SPORTAPI_KEY not set, skipping live score WebSocket'); return; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   console.log('[WS] Connecting to SportAPI live scores...');
-  ws = new WebSocket('wss://sportapi.ai/ws?key=' + key);
+  ws = new WebSocket('wss://sportapi.ai/ws', { headers: { 'X-Api-Key': key } });
   ws.on('open', () => {
     isConnected = true;
     console.log('[WS] Connected - subscribing to all live fixtures');

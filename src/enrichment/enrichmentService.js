@@ -15,6 +15,7 @@
 
 import {
   fetchH2H,
+  extractFormFromStandings,
   fetchTeamForm,
   fetchStandings,
   fetchMatchLineups,
@@ -258,32 +259,56 @@ export async function fetchAndStoreEnrichment(fixture) {
   }
   console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
 
-  // ── Step 1: Core data (SEQUENTIAL — avoids 503 rate limiting) ──────────────
-  // Promise.all fired 4 parallel calls per fixture causing rate limit 503s.
-  const homeFormRaw = await fetchTeamForm(fixture.home_team_id, 15).catch((e) => {
-    console.warn('[enrichmentService] Home form failed:', e.message); return [];
+  // Step 1: Standings first (1 req) — gives form for both teams FREE + H2H (1 req)
+  const standings = await fetchStandings(fixture.tournament_id).catch((e) => {
+    console.warn("[enrichmentService] Standings failed:", e.message); return [];
   });
-  await sleep(400);
-  const awayFormRaw = await fetchTeamForm(fixture.away_team_id, 15).catch((e) => {
-    console.warn('[enrichmentService] Away form failed:', e.message); return [];
-  });
-  await sleep(400);
+  await sleep(300);
   const h2hData = await fetchH2H(fixture.home_team_id, fixture.away_team_id).catch((e) => {
-    console.warn('[enrichmentService] H2H failed:', e.message);
+    console.warn("[enrichmentService] H2H failed:", e.message);
     return { h2h: [], homeForm: [], awayForm: [] };
   });
-  await sleep(400);
-  const standings = await fetchStandings(fixture.tournament_id).catch((e) => {
-    console.warn('[enrichmentService] Standings failed:', e.message); return [];
-  });
+  await sleep(300);
+  // Extract form from standings (zero extra budget cost)
+  let homeFormRaw = extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name);
+  let awayFormRaw = extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name);
+  // Fallback: call team endpoint only if standings gave no form (e.g. non-league competitions)
+  if (homeFormRaw.length < 2) {
+    homeFormRaw = await fetchTeamForm(fixture.home_team_id, 10).catch(() => []);
+    await sleep(300);
+  }
+  if (awayFormRaw.length < 2) {
+    awayFormRaw = await fetchTeamForm(fixture.away_team_id, 10).catch(() => []);
+    await sleep(300);
+  }
+  // Step 2: Merge form (prefer richer source)
+  const homeFormMerged = homeFormRaw.length > h2hData.homeForm.length ? homeFormRaw : h2hData.homeForm;
+  const awayFormMerged = awayFormRaw.length > h2hData.awayForm.length ? awayFormRaw : h2hData.awayForm;
 
-  // ── Step 2: Merge form (prefer the richer source) ─────────────────────────
-  const homeFormMerged = homeFormRaw.length > h2hData.homeForm.length
-    ? homeFormRaw
-    : h2hData.homeForm;
-  const awayFormMerged = awayFormRaw.length > h2hData.awayForm.length
-    ? awayFormRaw
-    : h2hData.awayForm;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 15);
   const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 15);

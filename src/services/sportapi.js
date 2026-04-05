@@ -1,13 +1,9 @@
-// sportapi.js - SportAPI.ai client (replaces livescore.js)
+// sportapi.js - SportAPI.ai client v2 (correct auth + field names)
 import axios from 'axios';
 import { hasBudget, consumeBudget } from './requestBudget.js';
 const BASE = 'https://sportapi.ai/api';
 const getKey = () => process.env.SPORTAPI_KEY;
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// League ID cache: name -> id (populated on first call to getAllLeagues)
-const leagueIdCache = new Map();
-let leagueCacheLoaded = false;
 
 async function get(path, retries = 2) {
   if (!hasBudget()) { console.warn('[SportAPI] Budget exhausted, skipping:', path); throw new Error('API_BUDGET_EXHAUSTED'); }
@@ -15,8 +11,11 @@ async function get(path, retries = 2) {
   if (!key) throw new Error('SPORTAPI_KEY not set in environment');
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      await sleep(250 + Math.random() * 100);
-      const res = await axios.get(BASE + path, { params: { key }, timeout: 15000 });
+      await sleep(200 + Math.random() * 100);
+      const res = await axios.get(BASE + path, {
+        headers: { 'X-Api-Key': key },
+        timeout: 15000,
+      });
       consumeBudget(1);
       return res.data;
     } catch (err) {
@@ -27,178 +26,153 @@ async function get(path, retries = 2) {
   }
 }
 
-// Extract team ID from fixture object (handles multiple field naming conventions)
-function extractTeamId(fixture, side) {
-  const f = fixture || {};
-  if (side === 'home') return String(f.home_team_id || f.home_id || f.home?.id || '');
-  return String(f.away_team_id || f.away_id || f.away?.id || '');
-}
-
-// Normalise a raw fixture object from the date endpoint
+// Normalise a raw fixture from /api/fixtures/date/{date}
+// Real fields confirmed: id, home_id, away_id, home_team, away_team, league_id, league_name, league_geo, league_zone, date, datetime, status, minute, home_score, away_score, home_short, away_short, home_logo, away_logo
 function normaliseFixture(f) {
-  const homeId = extractTeamId(f, 'home');
-  const awayId = extractTeamId(f, 'away');
-  const leagueId = String(f.league_id || f.league?.id || f.competition_id || '0');
-  const leagueName = f.league_name || f.league?.name || f.competition_name || '';
-  const country = f.country || f.league?.country || f.competition?.country || '';
-  const dateStr = f.date || '';
-  const timeStr = f.time || f.kick_off || '00:00:00';
+  const dateStr = f.date || (f.datetime || '').split(' ')[0];
+  const timeStr = f.datetime ? f.datetime.split(' ')[1] : '00:00:00';
   return {
-    match_id: String(f.id),
-    home_team_id: homeId || String(f.id) + '_h',
-    home_team_name: f.home_team || f.home?.name || '',
-    away_team_id: awayId || String(f.id) + '_a',
-    away_team_name: f.away_team || f.away?.name || '',
-    tournament_id: leagueId,
-    tournament_name: leagueName,
-    category_name: country,
-    match_date: dateStr ? dateStr + 'T' + timeStr : null,
-    match_url: String(f.id),
-    match_status: f.status || 'NS',
-    home_score: f.home_score != null ? Number(f.home_score) : null,
-    away_score: f.away_score != null ? Number(f.away_score) : null,
+    match_id:       String(f.id),
+    home_team_id:   String(f.home_id),
+    home_team_name: f.home_team || '',
+    away_team_id:   String(f.away_id),
+    away_team_name: f.away_team || '',
+    tournament_id:  String(f.league_id || '0'),
+    tournament_name: f.league_name || '',
+    category_name:  f.league_zone || f.league_geo || '',
+    match_date:     dateStr ? dateStr + 'T' + timeStr : null,
+    match_url:      String(f.id),
+    match_status:   f.status || 'NS',
+    home_score:     f.home_score != null ? Number(f.home_score) : null,
+    away_score:     f.away_score != null ? Number(f.away_score) : null,
+    home_team_logo: f.home_logo || '',
+    away_team_logo: f.away_logo || '',
   };
 }
 
-// GET /api/fixtures/date/{date} - all fixtures for a date
+// GET /api/fixtures/date/{date} -> response.data (array)
 export async function fetchFixturesByDate(date) {
   try {
-    const data = await get('/fixtures/date/' + date);
-    if (!data.success && !data.fixtures) { console.warn('[SportAPI] No fixtures for', date); return []; }
-    return (data.fixtures || []).map(normaliseFixture);
+    const res = await get('/fixtures/date/' + date);
+    const arr = Array.isArray(res.data) ? res.data : [];
+    console.log('[SportAPI] fetchFixturesByDate ' + date + ': ' + arr.length + ' fixtures');
+    return arr.map(normaliseFixture);
   } catch (err) {
-    console.error('[SportAPI] fetchFixturesByDate failed for', date, ':', err.message);
+    console.error('[SportAPI] fetchFixturesByDate failed for ' + date + ':', err.message);
     return [];
+  }
+}
+
+// GET /api/fixtures/h2h/{team1}/{team2} -> response.data (array of fixtures)
+export async function fetchH2H(team1Id, team2Id) {
+  if (!team1Id || !team2Id) return { h2h: [], homeForm: [], awayForm: [], summary: {} };
+  try {
+    const res = await get('/fixtures/h2h/' + team1Id + '/' + team2Id);
+    const arr = Array.isArray(res.data) ? res.data : [];
+    const h2h = arr.map(f => ({
+      match_id:    String(f.id || ''),
+      home:        f.home_team || '',
+      away:        f.away_team || '',
+      score:       (f.home_score != null && f.away_score != null) ? f.home_score + '-' + f.away_score : null,
+      date:        f.date || null,
+      competition: f.league_name || '',
+    }));
+    return { h2h, homeForm: [], awayForm: [], summary: {} };
+  } catch (err) {
+    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
+    console.error('[SportAPI] H2H failed ' + team1Id + ' vs ' + team2Id + ':', err.message);
+    return { h2h: [], homeForm: [], awayForm: [], summary: {} };
+  }
+}
+
+// GET /api/standings/{leagueId} -> response.data (array)
+// Each row has: position, team{id,name}, won, draw, lost, goals_for, goals_against, goal_difference, points
+// form: [{result,date,home_team,away_team,home_score,away_score,is_home}] <- 6 real matches with scores!
+export async function fetchStandings(leagueId) {
+  if (!leagueId || leagueId === '0') return [];
+  try {
+    const res = await get('/standings/' + leagueId);
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return rows.map(r => ({
+      position:     Number(r.position || 0),
+      team:         r.team?.name || '',
+      team_id:      r.team?.id || null,
+      played:       Number(r.played || 0),
+      wins:         Number(r.won || 0),
+      draws:        Number(r.draw || 0),
+      losses:       Number(r.lost || 0),
+      goalsFor:     Number(r.goals_for || 0),
+      goalsAgainst: Number(r.goals_against || 0),
+      goalDiff:     Number(r.goal_difference || 0),
+      points:       Number(r.points || 0),
+      form:         Array.isArray(r.form) ? r.form.map(m => m.result || '').join('') : '',
+      formMatches:  Array.isArray(r.form) ? r.form.map(m => ({ home: m.home_team, away: m.away_team, score: m.home_score + '-' + m.away_score, date: m.date, is_home: m.is_home, result: m.result })) : [],
+    }));
+  } catch (err) {
+    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
+    console.error('[SportAPI] Standings failed for league ' + leagueId + ':', err.message);
+    return [];
+  }
+}
+
+// GET /api/teams/{id} -> team, matches[], leagues[]
+// matches[].fields: id, home_id, away_id, home_team, away_team, home_score, away_score, date, status, league_id, league_name
+export async function fetchTeamForm(teamId, count = 10) {
+  if (!teamId) return [];
+  try {
+    const res = await get('/teams/' + teamId);
+    const matches = (Array.isArray(res.matches) ? res.matches : []).filter(m => m.home_score != null && m.away_score != null).slice(0, count);
+    return matches.map(m => ({
+      match_id:    String(m.id || ''),
+      home:        m.home_team || '',
+      away:        m.away_team || '',
+      score:       m.home_score + '-' + m.away_score,
+      date:        m.date || null,
+      competition: m.league_name || '',
+    }));
+  } catch (err) {
+    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
+    console.error('[SportAPI] Team form failed for ' + teamId + ':', err.message);
+    return [];
+  }
+}
+
+// Extract team form from standings data (zero extra API calls)
+// standings param = result of fetchStandings(), teamId = numeric team ID
+export function extractFormFromStandings(standings, teamId, teamName) {
+  const row = standings.find(r => String(r.team_id) === String(teamId) || r.team.toLowerCase() === (teamName || '').toLowerCase());
+  if (!row || !row.formMatches) return [];
+  return row.formMatches.map(m => ({
+    home: m.home, away: m.away, score: m.score, date: m.date, competition: '',
+  }));
+}
+
+// GET /api/fixtures/date/{date} with scores for result checking
+export async function fetchFixtureById(fixtureId) {
+  try {
+    const res = await get('/fixtures/' + fixtureId);
+    return res.fixture || res.data || null;
+  } catch (err) {
+    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
+    console.error('[SportAPI] fetchFixtureById failed for ' + fixtureId + ':', err.message);
+    return null;
   }
 }
 
 // GET /api/fixtures/{id}/events
 export async function fetchMatchEvents(matchId) {
-  try {
-    const data = await get('/fixtures/' + matchId + '/events');
-    return data.events || [];
-  } catch (err) {
-    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
-    console.error('[SportAPI] Match events failed for', matchId, ':', err.message);
-    return [];
-  }
+  try { const res = await get('/fixtures/' + matchId + '/events'); return res.events || []; }
+  catch (err) { if (err.message === 'API_BUDGET_EXHAUSTED') throw err; return []; }
 }
 
-// GET /api/fixtures/h2h/{team1}/{team2}
-export async function fetchH2H(team1Id, team2Id) {
-  if (!team1Id || !team2Id || team1Id.endsWith('_h') || team2Id.endsWith('_a')) {
-    return { h2h: [], homeForm: [], awayForm: [], summary: {} };
-  }
-  try {
-    const data = await get('/fixtures/h2h/' + team1Id + '/' + team2Id);
-    const toMatch = (f) => ({
-      match_id: String(f.id || ''),
-      home: f.home_team || f.home?.name || '',
-      away: f.away_team || f.away?.name || '',
-      score: (f.home_score != null && f.away_score != null) ? f.home_score + '-' + f.away_score : null,
-      date: f.date || null,
-      competition: f.league_name || '',
-    });
-    return { h2h: (data.fixtures || []).map(toMatch), homeForm: [], awayForm: [], summary: data.summary || {} };
-  } catch (err) {
-    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
-    console.error('[SportAPI] H2H failed for', team1Id, 'vs', team2Id, ':', err.message);
-    return { h2h: [], homeForm: [], awayForm: [], summary: {} };
-  }
-}
-
-// GET /api/teams/{id} - team info + recent matches (form)
-export async function fetchTeamForm(teamId, count = 10) {
-  if (!teamId || String(teamId).endsWith('_h') || String(teamId).endsWith('_a')) return [];
-  try {
-    const data = await get('/teams/' + teamId);
-    const matches = (data.matches || []).slice(0, count);
-    return matches.map(m => ({
-      match_id: String(m.id || ''),
-      home: m.home_team || m.home?.name || '',
-      away: m.away_team || m.away?.name || '',
-      score: (m.home_score != null && m.away_score != null) ? m.home_score + '-' + m.away_score : null,
-      date: m.date || null,
-      competition: m.league_name || '',
-    }));
-  } catch (err) {
-    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
-    console.error('[SportAPI] Team form failed for', teamId, ':', err.message);
-    return [];
-  }
-}
-
-// GET /api/standings/{leagueId} - league table with form
-export async function fetchStandings(leagueId) {
-  if (!leagueId || leagueId === '0') return [];
-  try {
-    const data = await get('/standings/' + leagueId);
-    const rows = (data.data && data.data.standings) ? data.data.standings : (data.standings || []);
-    return rows.map(r => ({
-      position: Number(r.position || 0),
-      team: r.team_name || r.team || '',
-      team_id: r.team_id || null,
-      played: Number(r.played || 0),
-      wins: Number(r.won || r.wins || 0),
-      draws: Number(r.drawn || r.draws || 0),
-      losses: Number(r.lost || r.losses || 0),
-      goalsFor: Number(r.goals_for || r.gf || 0),
-      goalsAgainst: Number(r.goals_against || r.ga || 0),
-      goalDiff: Number(r.goal_difference || r.gd || 0),
-      points: Number(r.points || 0),
-      form: Array.isArray(r.form) ? r.form.join('') : (r.form || ''),
-    }));
-  } catch (err) {
-    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
-    console.error('[SportAPI] Standings failed for league', leagueId, ':', err.message);
-    return [];
-  }
-}
-
-// GET /api/fixtures/{id} - single fixture with full details
-export async function fetchFixtureById(fixtureId) {
-  try {
-    const data = await get('/fixtures/' + fixtureId);
-    return data.fixture || null;
-  } catch (err) {
-    if (err.message === 'API_BUDGET_EXHAUSTED') throw err;
-    console.error('[SportAPI] fetchFixtureById failed for', fixtureId, ':', err.message);
-    return null;
-  }
-}
-
-// GET /api/standings/leagues - all available leagues
-export async function getAllLeagues() {
-  if (leagueCacheLoaded) return leagueIdCache;
-  try {
-    const data = await get('/standings/leagues');
-    const leagues = data.data || [];
-    for (const l of leagues) {
-      if (l.name && l.id) leagueIdCache.set(l.name.toLowerCase(), l.id);
-    }
-    leagueCacheLoaded = true;
-    console.log('[SportAPI] Loaded ' + leagueIdCache.size + ' leagues into cache');
-    return leagueIdCache;
-  } catch (err) {
-    console.error('[SportAPI] getAllLeagues failed:', err.message);
-    return leagueIdCache;
-  }
-}
-
-// Live matches from DB - no REST call needed (WebSocket keeps DB updated)
-// Used by the /live route as a pass-through stub
+// Stubs for unused endpoints
+export async function fetchMatchStats(_id) { return null; }
+export async function fetchMatchLineups(_id) { return null; }
 export async function fetchLiveMatches() { return []; }
 
-// Stub: match stats not available on basic plan
-export async function fetchMatchStats(_matchId) { return null; }
-
-// Stub: lineups not available on basic plan
-export async function fetchMatchLineups(_matchId) { return null; }
-
-// enrichMatchData - full enrichment for a fixture (called by enrichmentService)
+// enrichMatchData stub (used by legacy callers)
 export async function enrichMatchData(fixture) {
-  const h2hData = await fetchH2H(fixture.home_team_id, fixture.away_team_id).catch(() => ({ h2h: [], homeForm: [], awayForm: [] }));
-  await sleep(350);
+  const h2hData = await fetchH2H(fixture.home_team_id, fixture.away_team_id).catch(() => ({ h2h: [] }));
   const standings = await fetchStandings(fixture.tournament_id).catch(() => []);
-  return { h2h: h2hData.h2h, homeForm: h2hData.homeForm || [], awayForm: h2hData.awayForm || [], standings, homeMomentum: null, awayMomentum: null, homeStats: null, awayStats: null, odds: null };
+  return { h2h: h2hData.h2h, homeForm: extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name), awayForm: extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name), standings, homeMomentum: null, awayMomentum: null, homeStats: null, awayStats: null, odds: null };
 }
