@@ -307,7 +307,7 @@ export default function Login() {
                     )}
                   </AnimatePresence>
                   <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
-                    By continuing, you agree to our <a href="/terms" className="underline hover:text-white">Terms</a> and <a href="/privacy" className="underline hover:text-white">Privacy Policy</a>.
+                    By continuing, you agree to our <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-white">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-white">Privacy Policy</a>.
                   </p>
                 </motion.div>
               )}
