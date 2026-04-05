@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, isValid } from "date-fns";
+import { format, isValid } from "date-fns";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 
-import { ChevronLeft, Check, X, Clock } from "lucide-react";
+import { ChevronLeft, Check, X, Clock, Minus } from "lucide-react";
 
 interface Result {
   fixtureId: string;
@@ -22,15 +22,18 @@ interface Result {
 export default function PredictionResults() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
-  if (authLoading) return <div className="min-h-screen bg-background" />;
-  
+
+  // Hooks must be called before any conditional return
   const { data, isLoading } = useQuery({
     queryKey: ["prediction-results"],
     queryFn: () => fetchApi("/prediction-results?limit=50&days=30"),
+    enabled: !authLoading,
   });
 
+  if (authLoading) return <div className="min-h-screen bg-background" />;
+
   const results: Result[] = data?.results || [];
-  const summary = data?.summary || { total: 0, wins: 0, losses: 0, pending: 0 };
+  const summary = data?.summary || { total: 0, wins: 0, losses: 0, pending: 0, voids: 0 };
 
   if (isLoading) {
     return (
@@ -49,6 +52,8 @@ export default function PredictionResults() {
         return <Check className="w-5 h-5 text-emerald-400" />;
       case "loss":
         return <X className="w-5 h-5 text-red-400" />;
+      case "void":
+        return <Minus className="w-5 h-5 text-amber-400" />;
       case "pending":
         return <Clock className="w-5 h-5 text-blue-400" />;
       default:
@@ -62,6 +67,8 @@ export default function PredictionResults() {
         return "bg-emerald-500/10 border-emerald-500/30";
       case "loss":
         return "bg-red-500/10 border-red-500/30";
+      case "void":
+        return "bg-amber-500/10 border-amber-500/30";
       case "pending":
         return "bg-blue-500/10 border-blue-500/30";
       default:
@@ -97,9 +104,15 @@ export default function PredictionResults() {
             <p className="text-red-400 text-sm mb-2">Losses</p>
             <p className="text-3xl font-bold text-red-400">{summary.losses}</p>
           </div>
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-6">
-            <p className="text-blue-400 text-sm mb-2">Pending</p>
-            <p className="text-3xl font-bold text-blue-400">{summary.pending}</p>
+          <div className="grid grid-rows-2 gap-2">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 flex items-center justify-between">
+              <p className="text-amber-400 text-sm">Void</p>
+              <p className="text-xl font-bold text-amber-400">{summary.voids ?? 0}</p>
+            </div>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-2 flex items-center justify-between">
+              <p className="text-blue-400 text-sm">Pending</p>
+              <p className="text-xl font-bold text-blue-400">{summary.pending ?? 0}</p>
+            </div>
           </div>
         </div>
 
@@ -126,7 +139,7 @@ export default function PredictionResults() {
 
                 <div className="text-right">
                   <p className="text-white/60 text-xs mb-1">Result</p>
-                  <p className="text-white font-semibold">{result.actual || "Pending"}</p>
+                  <p className={result.outcome==="void"?"text-amber-400 font-semibold":result.outcome==="win"?"text-emerald-400 font-semibold":result.outcome==="loss"?"text-red-400 font-semibold":"text-blue-400 font-semibold"}>{result.outcome==="void"?"Void":(result.outcome==="win"||result.outcome==="loss")?(result.actual||"—"):"Checking…"}</p>
                 </div>
               </div>
             ))}
