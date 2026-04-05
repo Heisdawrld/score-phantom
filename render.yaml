@@ -3,6 +3,7 @@ services:
     name: scorephantom
     env: node
     buildCommand: npm install && cd client && npm install && npm run build
+    autoDeploy: true
     startCommand: node src/app.js
     envVars:
       - key: NODE_ENV
