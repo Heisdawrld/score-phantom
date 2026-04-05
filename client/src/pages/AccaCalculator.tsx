@@ -332,6 +332,21 @@ export default function AccaCalculator() {
                     <span className="text-xs text-white/60">Stake</span>
                     <span className="text-sm text-white">₦{stake.toLocaleString()}</span>
                   </div>
+                  {/* Confidence score of slip */}
+                  {(() => {
+                    const avgConf = slip.length > 0 ? slip.reduce((s,p) => s + p.confidence, 0) / slip.length : 0;
+                    const riskLevel = combinedOdds > 10 ? "HIGH" : combinedOdds > 4 ? "MED" : "LOW";
+                    const riskCls = riskLevel==="HIGH" ? "text-red-400 bg-red-500/10 border-red-500/25" : riskLevel==="MED" ? "text-amber-400 bg-amber-500/10 border-amber-500/25" : "text-emerald-400 bg-emerald-500/10 border-emerald-500/25";
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/60">Slip Confidence</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-primary">{avgConf.toFixed(0)}%</span>
+                          <span className={"text-[10px] font-black uppercase tracking-widest border px-2 py-0.5 rounded-full "+riskCls}>{riskLevel} RISK</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="border-t border-primary/20 pt-3">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-white/60">Potential Return</span>

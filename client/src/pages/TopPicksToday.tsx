@@ -182,14 +182,21 @@ export default function TopPicksToday() {
               const isTop = idx === 0;
 
               return (
-                <div
+                <motion.div
                   key={pick.fixtureId}
+                  initial={{ opacity:0, y:16 }}
+                  animate={{ opacity:1, y:0 }}
+                  transition={{ duration:0.35, delay: idx * 0.05 }}
+                  whileHover={{ y: isTop3 ? -3 : -2, boxShadow: isTop ? "0 8px 32px rgba(16,231,116,0.18)" : isTop3 ? "0 6px 20px rgba(16,231,116,0.10)" : "0 4px 16px rgba(255,255,255,0.04)" }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setSelectedFixtureId(pick.fixtureId)}
                   className={cn(
-                    "relative rounded-2xl border p-4 cursor-pointer transition-all group",
+                    "relative rounded-2xl border p-4 cursor-pointer transition-colors group",
                     isTop
-                      ? "bg-primary/5 border-primary/25 hover:bg-primary/8 hover:border-primary/40 " + quality.glow
-                      : "bg-white/4 border-white/8 hover:bg-white/7 hover:border-white/16"
+                      ? "bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30 " + quality.glow
+                      : isTop3
+                      ? "bg-white/5 border-white/15"
+                      : "bg-white/4 border-white/8"
                   )}
                 >
                   {/* Hot pick ribbon for #1 */}
@@ -278,7 +285,7 @@ export default function TopPicksToday() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>

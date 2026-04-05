@@ -19,6 +19,89 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 
+// ── Hero Edge Card
+function HeroEdgeCard({ pick, onView }: { pick: any; onView: () => void }) {
+  const prob = pick.composite ?? pick.confidence ?? 0;
+  const ringColor = prob >= 75 ? "#10e774" : prob >= 60 ? "#3b82f6" : "#f59e0b";
+  return (
+    <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.4 }}
+      className="relative rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5 overflow-hidden"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(16,231,116,0.08),transparent_70%)]" />
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-black uppercase tracking-widest text-primary/70">Today's Edge</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-lg font-black text-white leading-tight truncate">{pick.pick}</p>
+            <p className="text-xs text-white/50 mt-0.5 truncate">{pick.match}</p>
+            <p className="text-[10px] text-white/30 truncate">{pick.tournament}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="font-black text-3xl leading-none" style={{ color: ringColor }}>{prob.toFixed(0)}%</p>
+            <p className="text-[10px] text-white/40 mt-0.5">Confidence</p>
+          </div>
+        </div>
+        <motion.button whileHover={{ scale:1.02 }} whileTap={{ scale:0.97 }} onClick={onView}
+          className="mt-4 w-full py-2.5 rounded-xl bg-primary text-black font-black text-sm tracking-wide shadow-[0_0_20px_rgba(16,231,116,0.3)] hover:shadow-[0_0_30px_rgba(16,231,116,0.5)] transition-shadow">
+          View Analysis
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Proof Strip
+function ProofStrip({ stats, onView }: { stats: any; onView: () => void }) {
+  const wr = stats.winRate ?? 0;
+  return (
+    <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.4, delay:0.1 }}
+      className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/4 border border-white/8"
+    >
+      <div className="flex-1 flex items-center gap-4 flex-wrap">
+        <div className="text-center">
+          <p className="text-lg font-black text-primary">{wr.toFixed(1)}%</p>
+          <p className="text-[9px] text-white/35 uppercase tracking-wider">Win Rate</p>
+        </div>
+        <div className="w-px h-8 bg-white/10" />
+        <div className="text-center">
+          <p className="text-lg font-black text-emerald-400">{stats.wins}</p>
+          <p className="text-[9px] text-white/35 uppercase tracking-wider">Wins</p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-black text-red-400">{stats.losses}</p>
+          <p className="text-[9px] text-white/35 uppercase tracking-wider">Losses</p>
+        </div>
+      </div>
+      <motion.button whileTap={{ scale:0.95 }} onClick={onView}
+        className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-xs font-bold text-white/60 hover:text-white">
+        Record
+      </motion.button>
+    </motion.div>
+  );
+}
+
+// ── Quick Actions
+function QuickActions({ onTopPicks, onAcca }: { onTopPicks: () => void; onAcca: () => void }) {
+  return (
+    <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.4, delay:0.15 }}
+      className="grid grid-cols-2 gap-3">
+      <motion.button whileHover={{ y:-2, boxShadow:"0 8px 24px rgba(16,231,116,0.18)" }} whileTap={{ scale:0.97 }}
+        onClick={onTopPicks}
+        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/10 border border-primary/25 text-primary font-bold text-sm hover:bg-primary/15 transition-all">
+        <span>🔥</span> Top Picks
+      </motion.button>
+      <motion.button whileHover={{ y:-2, boxShadow:"0 8px 24px rgba(59,130,246,0.18)" }} whileTap={{ scale:0.97 }}
+        onClick={onAcca}
+        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 font-bold text-sm hover:bg-blue-500/15 transition-all">
+        <span>⚡</span> ACCA Builder
+      </motion.button>
+    </motion.div>
+  );
+}
+
 // ── Enrichment Badge ──────────────────────────────────────────────────────────
 function EnrichmentBadge({ status }: { status?: string | null }) {
   const config: Record<string, { label: string; cls: string }> = {
@@ -497,7 +580,7 @@ function LeagueGroup({
               <button
                 key={fixture.id}
                 onClick={() => onSelectFixture(fixture.id)}
-                className="w-full flex items-center justify-between p-4 rounded-2xl bg-panel/40 border border-white/5 hover:bg-white/5 hover:border-white/10 transition-all text-left group"
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-panel/40 border border-white/5 hover:bg-white/5 hover:border-primary/15 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(16,231,116,0.07)] active:scale-[0.98] transition-all duration-200 text-left group"
               >
                 <div className="flex items-center gap-4">
                   <div className="text-xs font-bold text-muted-foreground w-12 text-center shrink-0">{time}</div>
@@ -767,7 +850,12 @@ export default function Dashboard() {
   const formattedDate = format(selectedDate, "yyyy-MM-dd");
   const { data, isLoading: fixturesLoading } = useFixtures(formattedDate);
 
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  
+  const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5*60*1000 });
+  const heroPick = (heroData as any)?.picks?.[0] || null;
+  const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30"), enabled: !authLoading, staleTime: 10*60*1000 });
+  const trackStats = (trackData as any)?.overallStats || null;
+const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   const isTrial = user?.access_status === "trial";
   const isExpired = user?.access_status === "expired";
 
@@ -904,6 +992,15 @@ export default function Dashboard() {
             </span>
           </div>
         )}
+
+        {/* Hero Edge */}
+        {heroPick && <HeroEdgeCard pick={heroPick} onView={() => setSelectedFixtureId(heroPick.fixtureId)} />}
+
+        {/* Proof Strip */}
+        {trackStats && trackStats.totalPicks > 0 && <ProofStrip stats={trackStats} onView={() => setLocation("/track-record")} />}
+
+        {/* Quick Actions */}
+        <QuickActions onTopPicks={() => setLocation("/top-picks")} onAcca={() => setLocation("/acca-calculator")} />
 
         {/* Live Scores */}
         <LiveSection />
