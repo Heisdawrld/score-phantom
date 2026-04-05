@@ -384,7 +384,7 @@ router.post("/google", authLimiter, async (req, res) => {
       // Brand-new user — create with trial starting NOW
       const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
       await db.execute({
-        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        sql: `INSERT OR IGNORE INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [email, firebaseUid, trialEnds],
       });
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
@@ -474,12 +474,18 @@ router.post("/email", authLimiter, async (req, res) => {
       // Brand-new user — create with trial starting NOW
       const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
       await db.execute({
-        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        sql: `INSERT OR IGNORE INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [normalizedEmail, firebaseUid, trialEnds],
       });
+      // If INSERT was silently ignored (race condition), SELECT will find the existing user
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
       user = created.rows?.[0];
-
+      if (!user) {
+        // Retry once after short pause (handles transient DB write lag)
+        await new Promise(r => setTimeout(r, 300));
+        const retry = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
+        user = retry.rows?.[0];
+      }
       // Resolve referral — attach referrer if valid, not self
       if (user && referralCode) {
         await attachReferral(user.id, referralCode);

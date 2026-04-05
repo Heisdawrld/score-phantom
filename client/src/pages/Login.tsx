@@ -175,6 +175,8 @@ export default function Login() {
           setGeneralError("Too many attempts. Please try again later.");
         } else if (msg.includes("disposable")) {
           setGeneralError("Disposable emails not allowed.");
+        } else if (msg.toLowerCase().includes("authentication failed") || msg.toLowerCase().includes("token verification")) {
+          setGeneralError("Connection issue — please tap Sign in again.");
         } else {
           setGeneralError(msg);
         }
@@ -210,7 +212,9 @@ export default function Login() {
       onError: (err: any) => {
         const msg = err?.message || "Sign up failed";
         if (msg.includes("email-already-in-use") || msg.includes("already registered")) {
-          setGeneralError("An account with this email already exists."); goTo("email-signin", -1);
+          // Navigate first, then set error (goTo clears generalError so we delay it)
+          goTo("email-signin", -1);
+          setTimeout(() => setGeneralError("This email already has an account — sign in below."), 50);
         } else if (msg.includes("weak-password")) setGeneralError("Password must be at least 6 characters.");
         else if (msg.includes("invalid-email")) setGeneralError("Please enter a valid email address.");
         else if (msg.includes("disposable")) setGeneralError("Disposable emails not allowed.");
