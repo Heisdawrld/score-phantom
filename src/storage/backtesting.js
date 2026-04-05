@@ -26,7 +26,7 @@ export async function initBacktestingTable() {
         away_score INTEGER,
         full_score TEXT,
         -- Outcome
-        outcome TEXT CHECK(outcome IN ('correct', 'wrong', 'void', 'win', 'loss')),
+        outcome TEXT,
         evaluated_at TEXT DEFAULT (datetime('now')),
         created_at TEXT DEFAULT (datetime('now'))
       )
