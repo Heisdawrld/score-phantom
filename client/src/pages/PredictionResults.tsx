@@ -25,7 +25,7 @@ export default function PredictionResults() {
   
   const { data, isLoading } = useQuery({
     queryKey: ["prediction-results"],
-    queryFn: () => fetchApi("/api/prediction-results?limit=50&days=30"),
+    queryFn: () => fetchApi("/prediction-results?limit=50&days=30"),
   });
 
   const results: Result[] = data?.results || [];

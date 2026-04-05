@@ -13,7 +13,7 @@ export default function TrackRecord() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["track-record"],
-    queryFn: () => fetchApi("/api/track-record?days=30"),
+    queryFn: () => fetchApi("/track-record?days=30"),
   });
 
   if (isLoading) {

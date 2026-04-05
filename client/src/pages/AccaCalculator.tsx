@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -114,7 +113,7 @@ export default function AccaCalculator() {
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
   // Paywall for expired users AND free trial users
-  if (!user || user.access_status === "expired" || isTrial) {
+  if (!user || user.access_status === "expired") {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
@@ -131,7 +130,6 @@ export default function AccaCalculator() {
             </button>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
@@ -381,7 +379,6 @@ export default function AccaCalculator() {
         </div>
       </div>
 
-      <BottomNav />
     </div>
   );
 }

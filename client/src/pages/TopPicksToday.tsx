@@ -104,12 +104,12 @@ export default function TopPicksToday() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  if (authLoading) return <div className="min-h-screen bg-background" />;
-  if (!isPremium) { setLocation("/paywall"); return null; }
+  useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
+  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
-    queryFn: () => fetchApi("/api/top-picks-today?limit=15"),
+    queryFn: () => fetchApi("/top-picks-today?limit=15"),
   });
 
   const picks: Pick[] = data?.picks || [];

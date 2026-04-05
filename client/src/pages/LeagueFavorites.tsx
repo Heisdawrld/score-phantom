@@ -21,8 +21,8 @@ export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  if (authLoading) return <div className="min-h-screen bg-background" />;
-  if (!isPremium) { setLocation("/"); return null; }
+  useEffect(() => { if (!authLoading && !isPremium) setLocation("/"); }, [authLoading, isPremium]);
+  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,7 +30,7 @@ export default function LeagueFavorites() {
   // Fetch current favorites
   const { data: currentFavs, isLoading } = useQuery({
     queryKey: ["league-favorites"],
-    queryFn: () => fetchApi("/api/league-favorites"),
+    queryFn: () => fetchApi("/league-favorites"),
   });
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function LeagueFavorites() {
   // Save favorites mutation
   const saveMutation = useMutation({
     mutationFn: (leagues: string[]) =>
-      fetchApi("/api/league-favorites", {
+      fetchApi("/league-favorites", {
         method: "POST",
         body: JSON.stringify({ leagues }),
       }),

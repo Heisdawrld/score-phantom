@@ -338,7 +338,7 @@ function ValueBetBanner({ isPremium }: { isPremium: boolean }) {
 
   const { data } = useQuery({
     queryKey: ["/api/value-bet-today"],
-    queryFn: () => fetchApi("/api/value-bet-today"),
+    queryFn: () => fetchApi("/value-bet-today"),
     enabled: isPremium,
     staleTime: 30 * 60 * 1000,
   });

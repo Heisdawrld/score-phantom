@@ -6,7 +6,7 @@
  * The server verifies the credentials match ADMIN_EMAIL + ADMIN_SECRET.
  * No ProtectedRoute, no shared auth state.
  */
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X } from "lucide-react";
 
 // ── Config ────────────────────────────────────────────────────────────────────
