@@ -137,7 +137,7 @@ export async function checkResults(dateStr) {
 
   // 1. Get all fixtures for this date that have predictions
   const fixtureRes = await db.execute({
-    sql: `SELECT f.id, f.home_team_name, f.away_team_name, f.tournament_name, f.match_date,
+    sql: `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name, f.tournament_name, f.match_date,
                  p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model
           FROM fixtures f
           JOIN predictions_v2 p ON p.fixture_id = f.id
@@ -196,6 +196,21 @@ export async function checkResults(dateStr) {
     } catch (_fe) { console.warn("[ResultChecker] Fixtures fallback failed:", _fe.message); }
   }
 
+  // 2d. BEST FALLBACK: Use /teams/matches.json (confirmed working) to fetch each team's recent results
+  // This is guaranteed to return April 3-4 scores since enrichment uses this same endpoint
+  if (Object.keys(nameMap).length < 5) {
+    const { fetchTeamForm } = await import("./livescore.js");
+    const teamIdsSeen = new Set();
+    for (const fx of fixtures) {
+      const tid = String(fx.home_team_id || ""); if (!tid || teamIdsSeen.has(tid)) continue; teamIdsSeen.add(tid);
+      try {
+        const form = await fetchTeamForm(tid, 15);
+        for (const m of form) { const _s = m.score ? (()=>{ const p=m.score.split("-"); return p.length===2?{home:parseInt(p[0]),away:parseInt(p[1])}:null; })() : null; if (!_s) continue; const _h=(m.home||"").toLowerCase().trim(); const _a=(m.away||"").toLowerCase().trim(); if (_h&&_a){ nameMap[_h+":"+_a]=_s; nameMap[_h.split(" ")[0]+":"+_a.split(" ")[0]]=_s; } }
+        await new Promise(r=>setTimeout(r,500));
+      } catch(_e){ console.warn("[ResultChecker] Team form failed for",tid,_e.message); }
+    }
+    console.log("[ResultChecker] After team form fetch: nameMap has",Object.keys(nameMap).length,"scores");
+  }
   // 3. Check which fixtures already have outcomes (avoid duplicates)
   const existingRes = await db.execute({
     sql: `SELECT fixture_id, outcome FROM prediction_outcomes WHERE match_date LIKE ?`,
