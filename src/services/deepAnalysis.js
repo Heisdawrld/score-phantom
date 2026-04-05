@@ -121,5 +121,30 @@ export async function getOrFetchDeepAnalysis(fixtureId) {
   const isFinished = status === 'FT' || status === 'AET' || status === 'PEN' || status === 'CANC' || status === 'ABD';
   const expiresAt = isFinished ? null : new Date(Date.now() + 10800000).toISOString();
   try { await db.execute({ sql: 'INSERT OR REPLACE INTO deep_analysis_cache (fixture_id, sportsapipro_id, data_json, fetched_at, expires_at) VALUES (?, ?, ?, ?, ?)', args: [fixtureId, matchId, JSON.stringify(data), now2, expiresAt || null] }); } catch (_) {}
+  setImmediate(() => storeH2HFromDeepData(fixtureId, data).catch(() => {}));
+  setImmediate(() => storeH2HFromDeepData(fixtureId, data).catch(() => {}));
   return { cached: false, data };
+}
+async function storeH2HFromDeepData(fixtureId, deepData) {
+  try {
+    const h2hObj = deepData.h2h || {};
+    const events = h2hObj.events || h2hObj.matches || h2hObj.results || (Array.isArray(h2hObj) ? h2hObj : []);
+    if (!events.length) return;
+    const existing = await db.execute({ sql: 'SELECT COUNT(*) as cnt FROM historical_matches WHERE fixture_id = ? AND type = ?', args: [fixtureId, 'h2h'] });
+    if (Number(existing.rows[0].cnt) >= events.length) return;
+    await db.execute({ sql: 'DELETE FROM historical_matches WHERE fixture_id = ? AND type = ?', args: [fixtureId, 'h2h'] });
+    for (const ev of events.slice(0, 10)) {
+      const ht = (ev.homeTeam && ev.homeTeam.name) ? ev.homeTeam.name : (ev.home_team || ev.home || '');
+      const at = (ev.awayTeam && ev.awayTeam.name) ? ev.awayTeam.name : (ev.away_team || ev.away || '');
+      if (!ht || !at) continue;
+      let hg = ev.home_goals != null ? ev.home_goals : (ev.homeGoals != null ? ev.homeGoals : null);
+      let ag = ev.away_goals != null ? ev.away_goals : (ev.awayGoals != null ? ev.awayGoals : null);
+      if (ev.homeScore != null) { hg = typeof ev.homeScore === 'object' ? (ev.homeScore.current != null ? ev.homeScore.current : ev.homeScore.display) : ev.homeScore; }
+      if (ev.awayScore != null) { ag = typeof ev.awayScore === 'object' ? (ev.awayScore.current != null ? ev.awayScore.current : ev.awayScore.display) : ev.awayScore; }
+      if (hg == null || ag == null) continue;
+      const dt = ev.startTimestamp ? new Date(ev.startTimestamp * 1000).toISOString().slice(0,10) : (ev.date || null);
+      await db.execute({ sql: 'INSERT OR IGNORE INTO historical_matches (fixture_id, type, date, home_team, away_team, home_goals, away_goals) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [fixtureId, 'h2h', dt, ht, at, Number(hg), Number(ag)] });
+    }
+    console.log('[deepAnalysis] H2H enriched prediction engine for:', fixtureId);
+  } catch (err) { console.warn('[deepAnalysis] storeH2H err:', err.message); }
 }
