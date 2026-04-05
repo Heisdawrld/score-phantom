@@ -1,9 +1,9 @@
-// Signup now handled via Google — redirect to login
-import { useEffect } from "react";
-import { useLocation } from "wouter";
+// Signup is handled inside the Login page (email-signup mode)
+import { useEffect } from 'react';
+import { useLocation } from 'wouter';
 
 export default function Signup() {
   const [, setLocation] = useLocation();
-  useEffect(() => { setLocation("/login"); }, []);
+  useEffect(() => { setLocation('/login?mode=signup'); }, []);
   return null;
 }

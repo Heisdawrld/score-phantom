@@ -3,12 +3,13 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useGoogleSignIn,
-  useEmailSignIn,
-  useEmailSignUp,
+  useLogin,
+  useSignup,
 } from "@/hooks/use-auth";
-import { resetPassword, resendVerificationForCurrentUser } from "@/lib/firebase";
+import { resetPassword } from "@/lib/firebase";
 import { Chrome, Mail, Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle, KeyRound } from "lucide-react";
 import { z } from "zod";
+import { fetchApi } from "@/lib/api";
 
 const LoginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -16,7 +17,7 @@ const LoginSchema = z.object({
 });
 
 type LoginFormData = z.infer<typeof LoginSchema>;
-type AuthMode = "social" | "email-signin" | "email-signup" | "forgot-password";
+type AuthMode = "email-signin" | "email-signup" | "forgot-password";
 
 function InputField({
   label, type, value, onChange, placeholder, error, rightEl,
@@ -80,7 +81,7 @@ const slideVariants = {
 };
 
 export default function Login() {
-  const [authMode, setAuthMode] = useState<AuthMode>("social");
+  const [authMode, setAuthMode] = useState<AuthMode>("email-signin");
   const [direction, setDirection] = useState(1);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
@@ -97,11 +98,12 @@ export default function Login() {
 
   const [, setLocation] = useLocation();
   const googleSignIn = useGoogleSignIn();
-  const emailSignIn = useEmailSignIn();
-  const emailSignUp = useEmailSignUp();
+  const loginMutation = useLogin();
+  const signupMutation = useSignup();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "signup") goTo("email-signup");
     // Capture referral code from URL ?ref=CODE
     const refCode = params.get("ref");
     if (refCode) {
@@ -159,7 +161,7 @@ export default function Login() {
     setShowUnverifiedActions(false);
     if (!validateForm()) return;
     if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
-    emailSignIn.mutate({ ...formData }, {
+    loginMutation.mutate({ ...formData }, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("email_not_verified")) {
@@ -187,11 +189,11 @@ export default function Login() {
   const handleResendVerification = async () => {
     setResendLoading(true);
     try {
-      await resendVerificationForCurrentUser();
+      await fetchApi("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email: formData.email }) });
       localStorage.setItem("sp_verify_email", formData.email);
       setLocation("/verify-email");
     } catch (err: any) {
-      setGeneralError(err.message || "Failed to resend. Please try signing in again first.");
+      setGeneralError(err.message || "Failed to resend. Please try again.");
     } finally {
       setResendLoading(false);
     }
@@ -202,7 +204,7 @@ export default function Login() {
     setGeneralError(""); setConfirmPasswordError("");
     if (!validateForm()) return;
     if (formData.password !== confirmPassword) { setConfirmPasswordError("Passwords do not match."); return; }
-    emailSignUp.mutate(formData, {
+    signupMutation.mutate({ email: formData.email, password: formData.password }, {
       onSuccess: () => {
         localStorage.setItem("sp_verify_email", formData.email);
         if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
@@ -229,7 +231,8 @@ export default function Login() {
     if (!resetEmail.trim()) return setGeneralError("Please enter your email address.");
     setResetLoading(true); setGeneralError("");
     try {
-      await resetPassword(resetEmail.trim().toLowerCase());
+      try { await fetchApi("/auth/password/reset-request", { method: "POST", body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }) }); } catch (_) {}
+      try { await resetPassword(resetEmail.trim().toLowerCase()); } catch (_) {}
       setSuccessMsg(`Reset email sent to ${resetEmail}. Check your inbox.`);
       setResetEmail("");
       goTo("email-signin", -1);
@@ -276,50 +279,12 @@ export default function Login() {
           <div className="p-7">
             <AnimatePresence mode="wait" custom={direction}>
 
-              {/* ─── SOCIAL ─── */}
-              {authMode === "social" && (
-                <motion.div key="social" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
-                  transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
-                  <div className="text-center">
-                    <p className="text-white font-semibold text-lg">Get started free</p>
-                    <p className="text-muted-foreground text-xs mt-1">3-day trial · No credit card required</p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <motion.button whileTap={{ scale: 0.98 }} onClick={handleGoogleClick} disabled={googleSignIn.isPending}
-                      className="w-full flex items-center justify-center gap-3 bg-white text-gray-800 font-semibold text-sm py-3.5 px-6 rounded-2xl hover:bg-gray-50 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-md">
-                      {googleSignIn.isPending ? <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" /> : <Chrome size={18} />}
-                      {googleSignIn.isPending ? "Signing in…" : "Continue with Google"}
-                    </motion.button>
-                    <div className="flex items-center gap-3"><div className="flex-1 h-px bg-white/8" /><span className="text-xs text-muted-foreground">or</span><div className="flex-1 h-px bg-white/8" /></div>
-                    <motion.button whileTap={{ scale: 0.98 }} onClick={() => goTo("email-signin")}
-                      className="w-full flex items-center justify-center gap-3 bg-primary/15 text-primary font-semibold text-sm py-3.5 px-6 rounded-2xl border border-primary/25 hover:bg-primary/22 hover:border-primary/40 transition-all duration-150">
-                      <Mail size={18} />Sign in with Email
-                    </motion.button>
-                    <button type="button" onClick={() => goTo("email-signup")} className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-white transition-colors py-1">
-                      New here? <span className="text-primary font-semibold">Create a free account →</span>
-                    </button>
-                  </div>
-                  <AnimatePresence>
-                    {(successMsg || generalError) && (
-                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
-                        className={`flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm ${successMsg ? "bg-primary/10 border border-primary/25 text-primary" : "bg-red-500/10 border border-red-500/25 text-red-400"}`}>
-                        {successMsg ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
-                        <span>{successMsg || generalError}</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
-                    By continuing, you agree to our <a href="/terms" target="_blank" rel="noreferrer" className="underline hover:text-white">Terms</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-white">Privacy Policy</a>.
-                  </p>
-                </motion.div>
-              )}
-
               {/* ─── SIGN IN ─── */}
               {authMode === "email-signin" && (
                 <motion.div key="email-signin" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("social", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
+                    <button onClick={() => goTo("email-signin",-1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Welcome back</p><p className="text-xs text-muted-foreground">Sign in to your account</p></div>
@@ -356,9 +321,9 @@ export default function Login() {
                       </button>
                     </div>
 
-                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={emailSignIn.isPending}
+                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={loginMutation.isPending}
                       className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
-                      {emailSignIn.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Signing in…</span> : "Sign in"}
+                      {loginMutation.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Signing in…</span> : "Sign in"}
                     </motion.button>
                   </form>
 
@@ -375,7 +340,7 @@ export default function Login() {
                 <motion.div key="email-signup" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("social", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
+                    <button onClick={() => goTo("email-signin",-1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 3-day free trial</p></div>
@@ -402,9 +367,9 @@ export default function Login() {
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/40 font-mono tracking-widest transition-all"
                       />
                     </div>
-                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={emailSignUp.isPending}
+                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={signupMutation.isPending}
                       className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
-                      {emailSignUp.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Creating account…</span> : "Create account"}
+                      {signupMutation.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Creating account…</span> : "Create account"}
                     </motion.button>
                   </form>
                   <div className="flex flex-col items-center">
@@ -447,7 +412,7 @@ export default function Login() {
                   </form>
 
                   <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
-                    Firebase will send a secure reset link to your email.
+                    A reset link will be sent if this email is registered.
                   </p>
                 </motion.div>
               )}
