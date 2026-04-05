@@ -259,9 +259,14 @@ export async function fetchAndStoreEnrichment(fixture) {
   }
   console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
 
-  // Step 1: Standings first (1 req) — gives form for both teams FREE + H2H (1 req)
-  const standings = await fetchStandings(fixture.tournament_id).catch((e) => {
-    console.warn("[enrichmentService] Standings failed:", e.message); return [];
+  // Step 1: Team form PRIMARY (up to 23 completed matches) + H2H + Standings
+  // Team endpoint is primary: gives 23 matches vs 6 from standings
+  const homeFormRaw = await fetchTeamForm(fixture.home_team_id, 15).catch((e) => {
+    console.warn("[enrichmentService] Home form failed:", e.message); return [];
+  });
+  await sleep(300);
+  const awayFormRaw = await fetchTeamForm(fixture.away_team_id, 15).catch((e) => {
+    console.warn("[enrichmentService] Away form failed:", e.message); return [];
   });
   await sleep(300);
   const h2hData = await fetchH2H(fixture.home_team_id, fixture.away_team_id).catch((e) => {
@@ -269,21 +274,40 @@ export async function fetchAndStoreEnrichment(fixture) {
     return { h2h: [], homeForm: [], awayForm: [] };
   });
   await sleep(300);
-  // Extract form from standings (zero extra budget cost)
-  let homeFormRaw = extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name);
-  let awayFormRaw = extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name);
-  // Fallback: call team endpoint only if standings gave no form (e.g. non-league competitions)
-  if (homeFormRaw.length < 2) {
-    homeFormRaw = await fetchTeamForm(fixture.home_team_id, 10).catch(() => []);
-    await sleep(300);
-  }
-  if (awayFormRaw.length < 2) {
-    awayFormRaw = await fetchTeamForm(fixture.away_team_id, 10).catch(() => []);
-    await sleep(300);
-  }
-  // Step 2: Merge form (prefer richer source)
-  const homeFormMerged = homeFormRaw.length > h2hData.homeForm.length ? homeFormRaw : h2hData.homeForm;
-  const awayFormMerged = awayFormRaw.length > h2hData.awayForm.length ? awayFormRaw : h2hData.awayForm;
+  // Standings for league table context (position, points) - also fallback form
+  const standings = await fetchStandings(fixture.tournament_id).catch((e) => {
+    console.warn("[enrichmentService] Standings failed:", e.message); return [];
+  });
+  // If team endpoint gave thin data, top up from standings form (free)
+  const homeFormFallback = homeFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
+  const awayFormFallback = awayFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
+  // Step 2: Use best source
+  const homeFormMerged = homeFormRaw.length >= homeFormFallback.length ? homeFormRaw : homeFormFallback;
+  const awayFormMerged = awayFormRaw.length >= awayFormFallback.length ? awayFormRaw : awayFormFallback;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
