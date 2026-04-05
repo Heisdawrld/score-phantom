@@ -161,7 +161,7 @@ export default function Login() {
     setShowUnverifiedActions(false);
     if (!validateForm()) return;
     if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
-    emailSignIn.mutate({ ...formData, referralCode: referralCode || undefined }, {
+    emailSignIn.mutate({ ...formData }, {
       onError: (err: any) => {
         const msg = err?.message || "Sign in failed";
         if (msg.includes("email_not_verified")) {
@@ -293,6 +293,9 @@ export default function Login() {
                       className="w-full flex items-center justify-center gap-3 bg-primary/15 text-primary font-semibold text-sm py-3.5 px-6 rounded-2xl border border-primary/25 hover:bg-primary/22 hover:border-primary/40 transition-all duration-150">
                       <Mail size={18} />Sign in with Email
                     </motion.button>
+                    <button type="button" onClick={() => goTo("email-signup")} className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-white transition-colors py-1">
+                      New here? <span className="text-primary font-semibold">Create a free account →</span>
+                    </button>
                   </div>
                   <AnimatePresence>
                     {(successMsg || generalError) && (
@@ -349,16 +352,6 @@ export default function Login() {
                         className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
                         <KeyRound size={11} /> Forgot password?
                       </button>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
-                      <input
-                        type="text"
-                        value={referralCode}
-                        onChange={e => { const v = e.target.value.toUpperCase(); setReferralCode(v); if (v) localStorage.setItem("sp_referral_code", v); else localStorage.removeItem("sp_referral_code"); }}
-                        placeholder="e.g. MAZI"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/40 font-mono tracking-widest transition-all"
-                      />
                     </div>
 
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={emailSignIn.isPending}
