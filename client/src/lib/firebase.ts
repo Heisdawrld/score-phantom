@@ -52,9 +52,8 @@ export async function signUpWithEmail(email: string, password: string) {
     handleCodeInApp: false,
   });
 
-  // Sign out immediately — user must verify email before accessing the app
-  await signOut(auth);
-
+  // Keep Firebase session alive so verify page can check emailVerified
+  // Do NOT sign out — VerifyEmail page needs auth.currentUser to check status
   return {
     email: result.user.email,
     verificationSent: true,

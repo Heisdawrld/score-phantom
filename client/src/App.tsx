@@ -51,6 +51,7 @@ import LeagueFavorites from "@/pages/LeagueFavorites";
 import AccaCalculator from "@/pages/AccaCalculator";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
+import VerifyEmail from "@/pages/VerifyEmail";
 import Privacy from "@/pages/Privacy";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { InstallPrompt } from "@/components/InstallPrompt";
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/signup" component={Signup} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />

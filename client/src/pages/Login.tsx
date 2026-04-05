@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useGoogleSignIn,
@@ -94,6 +95,7 @@ export default function Login() {
   const [resetLoading, setResetLoading] = useState(false);
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("sp_referral_code") || "");
 
+  const [, setLocation] = useLocation();
   const googleSignIn = useGoogleSignIn();
   const emailSignIn = useEmailSignIn();
   const emailSignUp = useEmailSignUp();
@@ -206,9 +208,10 @@ export default function Login() {
     if (formData.password !== confirmPassword) { setConfirmPasswordError("Passwords do not match."); return; }
     emailSignUp.mutate(formData, {
       onSuccess: () => {
+        localStorage.setItem("sp_verify_email", formData.email);
+        if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
         setFormData({ email: "", password: "" }); setConfirmPassword(""); setConfirmPasswordError("");
-        setSuccessMsg("Account created! Check your inbox — we sent a verification email. Verify it, then sign in.");
-        goTo("email-signin", -1);
+        setLocation("/verify-email");
       },
       onError: (err: any) => {
         const msg = err?.message || "Sign up failed";
