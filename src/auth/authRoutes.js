@@ -358,6 +358,11 @@ router.post("/google", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid Google token. Please sign in again." });
     }
 
+    if (!firebasePayload) {
+      console.error("[GoogleAuth] verifyFirebaseToken returned no payload");
+      return res.status(401).json({ error: "Token verification failed. Please sign in again." });
+    }
+
         const email = String(firebasePayload.email || "").trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
     if (!email) return res.status(400).json({ error: "No email address in Google account" });
@@ -440,12 +445,13 @@ router.post("/email", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials. Please try again." });
     }
 
-    // SECURITY: Enforce email verification — Firebase must confirm the email is verified
+    // Guard: null payload (cold-start safety) + email verification
+    if (!firebasePayload) {
+      console.error("[EmailAuth] verifyFirebaseToken returned no payload");
+      return res.status(401).json({ error: "Token verification failed. Please try again." });
+    }
     if (!firebasePayload.email_verified) {
-      return res.status(403).json({
-        error: "Please verify your email first.",
-        code: "email_not_verified",
-      });
+      return res.status(403).json({ error: "Please verify your email first.", code: "email_not_verified" });
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
