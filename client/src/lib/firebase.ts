@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -23,6 +24,28 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Firebase Cloud Messaging (push notifications)
+export let messaging: any = null;
+try { messaging = getMessaging(app); } catch(e) { console.warn("[FCM] messaging not available:", (e as any).message); }
+
+export async function requestPushPermission(): Promise<string | null> {
+  if (!messaging || !("Notification" in window)) return null;
+  const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+  if (!vapidKey) { console.warn("[FCM] VITE_FIREBASE_VAPID_KEY not set"); return null; }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return null;
+    const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
+    return token || null;
+  } catch(e) { console.error("[FCM] getToken failed:", (e as any).message); return null; }
+}
+
+export function onForegroundMessage(cb: (payload: any) => void): () => void {
+  if (!messaging) return () => {};
+  return onMessage(messaging, cb);
+}
 
 // Enable persistence across browser sessions
 setPersistence(auth, browserLocalPersistence).catch(console.error);

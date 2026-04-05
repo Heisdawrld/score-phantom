@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { NotificationCenter } from '@/components/NotificationCenter';
 import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import {
@@ -98,6 +99,7 @@ export function Header() {
           </nav>
         )}
 
+        <NotificationCenter />
         {/* Right side — avatar dropdown */}
         <div className="flex items-center gap-3 shrink-0">
           {!isLoading && user && (

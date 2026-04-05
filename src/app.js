@@ -14,6 +14,7 @@ import errorHandler from "./middlewares/errorHandler.js";
 import { seedFixtures } from './services/fixtureSeeder.js';
 import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
 import { getBudgetStatus } from './services/requestBudget.js';
+import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
 
 dotenv.config();
@@ -381,7 +382,8 @@ app.listen(PORT, async () => {
       } catch (err) {
         console.error('[DailySeed] Failed:', err.message);
       }
-      scheduleNextMidnightSeed();
+      scheduleDaily7amDigest();
+  scheduleNextMidnightSeed();
     }, msUntilMidnight);
     const hrs = Math.round(msUntilMidnight / 3600000);
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');

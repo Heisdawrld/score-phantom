@@ -1362,4 +1362,46 @@ export function createTrialLimitGuard(trialDailyLimit = 5) {
   };
 }
 
+
+// --- PUSH TOKEN REGISTRATION ---
+router.post('/push-token', requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,updated_at) VALUES (?,?,?,datetime("now")) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,updated_at=datetime("now")', args: [req.user.id, token, 'web'] });
+    res.json({ ok: true });
+  } catch(e) { console.error('[PushToken]',e.message); res.status(500).json({ error: 'Failed to save token' }); }
+});
+
+router.delete('/push-token', requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (token) await db.execute({ sql: 'DELETE FROM push_tokens WHERE token=? AND user_id=?', args: [token, req.user.id] });
+    else await db.execute({ sql: 'DELETE FROM push_tokens WHERE user_id=?', args: [req.user.id] });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Failed to remove token' }); }
+});
+
+// --- IN-APP NOTIFICATIONS ---
+router.get('/notifications', requireAuth, async (req, res) => {
+  try {
+    const r = await db.execute({ sql: 'SELECT * FROM notifications WHERE (user_id=? OR user_id IS NULL) ORDER BY created_at DESC LIMIT 30', args: [req.user.id] });
+    const notifs = (r.rows||[]).map(n => ({ ...n, data: n.data ? JSON.parse(n.data) : {} }));
+    res.json({ notifications: notifs, unread: notifs.filter(n=>!n.read).length });
+  } catch(e) { res.json({ notifications: [], unread: 0 }); }
+});
+
+router.post('/notifications/read', requireAuth, async (req, res) => {
+  try {
+    await db.execute({ sql: 'UPDATE notifications SET read=1 WHERE (user_id=? OR user_id IS NULL) AND read=0', args: [req.user.id] });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.post('/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    await db.execute({ sql: 'UPDATE notifications SET read=1 WHERE id=? AND (user_id=? OR user_id IS NULL)', args: [req.params.id, req.user.id] });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
 export default router;

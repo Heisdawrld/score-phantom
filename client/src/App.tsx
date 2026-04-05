@@ -54,6 +54,7 @@ import Terms from "@/pages/Terms";
 import VerifyEmail from "@/pages/VerifyEmail";
 import Privacy from "@/pages/Privacy";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { NotificationPrompt } from '@/components/NotificationPrompt';
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { BottomNav } from "@/components/layout/BottomNav";
 
@@ -140,6 +141,7 @@ function App() {
           </WouterRouter>
           <Toaster />
           <UpdateBanner />
+          <NotificationPrompt />
           <InstallPrompt />
           <BottomNav />
           {/* VerifyEmailHandler removed — Google Auth */}
