@@ -89,7 +89,7 @@ async function runSchema() {
     `CREATE TABLE IF NOT EXISTS match_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, fixture_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, fixture_id))`,
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`
+    `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
     'CREATE TABLE IF NOT EXISTS deep_analysis_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, fixture_id TEXT NOT NULL UNIQUE, sportsapipro_id TEXT, data_json TEXT NOT NULL, fetched_at TEXT, expires_at TEXT)',
     'CREATE TABLE IF NOT EXISTS sportsapipro_usage (date TEXT PRIMARY KEY, request_count INTEGER DEFAULT 0)',
     'CREATE TABLE IF NOT EXISTS schedule_cache (date TEXT PRIMARY KEY, data_json TEXT NOT NULL, fetched_at TEXT)',
