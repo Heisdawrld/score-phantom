@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
+import { motion } from "framer-motion";
 
 // ── Hero Edge Card
 function HeroEdgeCard({ pick, onView }: { pick: any; onView: () => void }) {
