@@ -151,6 +151,7 @@ export async function checkResults(dateStr) {
 
   if (fixtures.length === 0) return { checked: 0, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
 
+  const scoreMap = {}; const nameMap = {};
   // 2a. PRIMARY: Pull scores from our own historical_matches table (populated during enrichment)
   // This avoids LiveScore API issues and uses data we already have
   const dbScoreRes = await db.execute({ sql: "SELECT DISTINCT home_team, away_team, home_goals, away_goals FROM historical_matches WHERE date LIKE ? AND home_goals IS NOT NULL AND away_goals IS NOT NULL", args: ["%" + date + "%"] });
@@ -161,8 +162,6 @@ export async function checkResults(dateStr) {
   }
   console.log("[ResultChecker] DB historical_matches gave " + Object.keys(nameMap).length + " scores for " + date);
   // 2. Fetch actual scores from LiveScore API — paginate through all matches
-  const scoreMap = {}; // fixture_id → { home, away }
-  const nameMap = {}; // "home:away" lower-case → { home, away }
   let page = 1;
   let apiCallsMade = 0;
   while (true) {
