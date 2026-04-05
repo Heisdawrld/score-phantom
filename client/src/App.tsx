@@ -49,6 +49,7 @@ import TopPicksToday from "@/pages/TopPicksToday";
 import PredictionResults from "@/pages/PredictionResults";
 import LeagueFavorites from "@/pages/LeagueFavorites";
 import AccaCalculator from "@/pages/AccaCalculator";
+import MatchAnalysis from "@/pages/MatchAnalysis";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
 import VerifyEmail from "@/pages/VerifyEmail";
@@ -112,6 +113,7 @@ function Router() {
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
       <Route path="/league-favorites" component={() => <ProtectedRoute component={LeagueFavorites} />} />
       <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
+      <Route path="/analysis/:id" component={() => <ProtectedRoute component={MatchAnalysis} />} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route component={() => <ProtectedRoute component={Dashboard} />} />
     </Switch>

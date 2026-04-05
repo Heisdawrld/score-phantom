@@ -1424,4 +1424,20 @@ router.post('/notifications/:id/read', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
+router.get('/deep-analysis/:fixtureId', requireAuth, async (req, res) => {
+  if (!req.access.subscription_active) {
+    return res.status(403).json({ error: 'Deep Analysis requires premium subscription', code: 'subscription_required', access: buildAccessPayload(req.access) });
+  }
+  try {
+    const { getOrFetchDeepAnalysis } = await import('../services/deepAnalysis.js');
+    const result = await getOrFetchDeepAnalysis(req.params.fixtureId);
+    if (result.error === 'not_found') return res.status(404).json({ error: result.message });
+    if (result.error === 'daily_limit') return res.status(429).json({ error: result.message, code: 'daily_limit' });
+    if (result.error === 'no_mapping') return res.status(404).json({ error: result.message, code: 'no_mapping' });
+    return res.json({ ...result.data, cached: result.cached, access: buildAccessPayload(req.access) });
+  } catch (err) {
+    console.error('[DeepAnalysis]', err.message);
+    res.status(500).json({ error: 'Deep analysis failed' });
+  }
+});
 export default router;
