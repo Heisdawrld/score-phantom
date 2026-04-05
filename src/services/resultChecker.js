@@ -151,6 +151,15 @@ export async function checkResults(dateStr) {
 
   if (fixtures.length === 0) return { checked: 0, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
 
+  // 2a. PRIMARY: Pull scores from our own historical_matches table (populated during enrichment)
+  // This avoids LiveScore API issues and uses data we already have
+  const dbScoreRes = await db.execute({ sql: "SELECT DISTINCT home_team, away_team, home_goals, away_goals FROM historical_matches WHERE date LIKE ? AND home_goals IS NOT NULL AND away_goals IS NOT NULL", args: ["%" + date + "%"] });
+  for (const r of dbScoreRes.rows || []) {
+    const _h = (r.home_team || "").toLowerCase().trim();
+    const _a = (r.away_team || "").toLowerCase().trim();
+    if (_h && _a) { const _s = { home: Number(r.home_goals), away: Number(r.away_goals) }; nameMap[_h + ":" + _a] = _s; nameMap[_h.split(" ")[0] + ":" + _a.split(" ")[0]] = _s; }
+  }
+  console.log("[ResultChecker] DB historical_matches gave " + Object.keys(nameMap).length + " scores for " + date);
   // 2. Fetch actual scores from LiveScore API — paginate through all matches
   const scoreMap = {}; // fixture_id → { home, away }
   const nameMap = {}; // "home:away" lower-case → { home, away }
@@ -178,6 +187,14 @@ export async function checkResults(dateStr) {
   }
 
   console.log("[ResultChecker] Scores: " + Object.keys(scoreMap).length + " by ID, " + Object.keys(nameMap).length + " by name (" + apiCallsMade + " API calls)");
+  // 2c. FALLBACK: if no scores found yet, try /fixtures/matches.json for past dates
+  // This endpoint is confirmed working with our API key
+  if (Object.keys(nameMap).length === 0) {
+    try {
+      const _fd = await lsGet("/fixtures/matches.json", { date }); const _fl = (_fd.data?.fixtures || []); console.log("[ResultChecker] Fixtures fallback: " + _fl.length + " fixtures for " + date);
+      for (const _f of _fl) { const _s = parseScore(_f.ft_score || _f.score); if (!_s) continue; const _h = (_f.home_name || "").toLowerCase().trim(); const _a = (_f.away_name || "").toLowerCase().trim(); const _id = String(_f.id || ""); if (_id) scoreMap[_id] = _s; if (_h && _a) { nameMap[_h + ":" + _a] = _s; nameMap[_h.split(" ")[0] + ":" + _a.split(" ")[0]] = _s; } }
+    } catch (_fe) { console.warn("[ResultChecker] Fixtures fallback failed:", _fe.message); }
+  }
 
   // 3. Check which fixtures already have outcomes (avoid duplicates)
   const existingRes = await db.execute({
