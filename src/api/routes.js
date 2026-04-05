@@ -231,7 +231,7 @@ router.get("/live-stream", requireAuth, (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
-  res.write("data: {"type":"connected"}\n\n");
+  res.write("data: {\"type\":\"connected\"}\n\n");
   addSseClient(res);
   const heartbeat = setInterval(() => res.write(":heartbeat\n\n"), 20000);
   req.on("close", () => clearInterval(heartbeat));
