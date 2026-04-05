@@ -121,6 +121,7 @@ export default function Login() {
   const goTo = (mode: AuthMode, dir = 1) => {
     setDirection(dir);
     setGeneralError("");
+    setSuccessMsg("");
     setErrors({});
     setShowUnverifiedActions(false);
     setAuthMode(mode);

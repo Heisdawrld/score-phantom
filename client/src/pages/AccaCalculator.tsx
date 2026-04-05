@@ -238,11 +238,11 @@ export default function AccaCalculator() {
                     ) : (
                       <button
                         onClick={() => addToSlip(pick)}
-                        disabled={trialLimitReached}
+                        disabled={trialLimitReached && false} onClick={trialLimitReached ? () => setLocation("/paywall") : undefined}
                         className={cn(
                           "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
                           trialLimitReached
-                            ? "opacity-40 cursor-not-allowed bg-white/5 text-white/30"
+                            ? "bg-orange-500/15 text-orange-400 border border-orange-500/25 hover:bg-orange-500/25 cursor-pointer"
                             : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
                         )}
                       >

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { format, parseISO, isValid } from "date-fns";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
@@ -115,7 +116,7 @@ export default function PredictionResults() {
                     {getOutcomeIcon(result.outcome)}
                     <h3 className="text-white font-semibold">{result.match}</h3>
                   </div>
-                  <p className="text-white/60 text-sm">{result.date}</p>
+                  <p className="text-white/60 text-sm">{(() => { try { const d = new Date(result.date); return isValid(d) ? format(d, "dd MMM yyyy") : result.date; } catch { return result.date; } })()}</p>
                 </div>
 
                 <div className="text-right mr-4">

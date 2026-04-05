@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
+import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -106,6 +107,7 @@ export default function TopPicksToday() {
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
+  const [selectedFixtureId, setSelectedFixtureId] = useState(null);
   if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
 
   const { data, isLoading } = useQuery({
@@ -181,7 +183,7 @@ export default function TopPicksToday() {
               return (
                 <div
                   key={pick.fixtureId}
-                  onClick={() => setLocation(`/match/${pick.fixtureId}`)}
+                  onClick={() => setSelectedFixtureId(pick.fixtureId)}
                   className={cn(
                     "relative rounded-2xl border p-4 cursor-pointer transition-all group",
                     isTop
@@ -294,6 +296,7 @@ export default function TopPicksToday() {
           </p>
         )}
       </div>
+      <PredictionPanel fixtureId={selectedFixtureId} onClose={() => setSelectedFixtureId(null)} />
     </div>
   );
 }

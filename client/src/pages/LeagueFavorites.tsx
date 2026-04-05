@@ -21,7 +21,7 @@ export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  useEffect(() => { if (!authLoading && !isPremium) setLocation("/"); }, [authLoading, isPremium]);
+  useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
   if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
@@ -138,6 +138,7 @@ export default function LeagueFavorites() {
         {/* Available Leagues */}
         <div>
           <h2 className="text-lg font-semibold mb-4">Available Leagues</h2>
+          {filteredLeagues.length === 0 && (<p className="text-white/40 text-sm py-8 text-center">No leagues found for "{searchQuery}"</p>)}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {filteredLeagues.map((league) => (
               <button
