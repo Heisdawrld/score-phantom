@@ -90,7 +90,7 @@ export function Header() {
                   >
                     <Icon className="w-4 h-4" />
                     {label}
-                    {isActive && <motion.span layoutId="nav-active" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full" />}
+                    {isActive && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full transition-all duration-300" />}
                   </button>
                 </Link>
               );
