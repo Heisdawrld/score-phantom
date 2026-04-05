@@ -15,6 +15,7 @@ import {
 } from "../services/predictionCache.js";
 
 const router = Router();
+let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
 // Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -262,6 +263,20 @@ router.get("/fixtures", requireAuth, async (req, res) => {
 
     const result = await db.execute({ sql: query, args });
     const fixtures = result.rows;
+    // Fire-and-forget: enrich any fixtures with null status so badges update on next poll
+    const _pending = fixtures.filter(f => !f.enrichment_status);
+    if (_pending.length > 0 && !_bgEnrichRunning) {
+      _bgEnrichRunning = true;
+      setImmediate(async () => {
+        try {
+          const { enrichFixture } = await import("../enrichment/enrichOne.js");
+          for (const fx of _pending.slice(0, 5)) {
+            try { await enrichFixture(fx); } catch (_) {}
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } finally { _bgEnrichRunning = false; }
+      });
+    }
 
     // Count deeply-enriched fixtures for the requested date
     let enrichedDeepCount = 0;
@@ -1114,7 +1129,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         confidence:  parseFloat(conf.toFixed(1)),
         composite:   parseFloat(composite.toFixed(1)),
         tournament:  row.tournament_name,
-        time:        row.match_date,
+        time:        row.match_date ? (()=>{ try{ const d=new Date(row.match_date); return d.toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Lagos'}); }catch(e){ return null; } })() : null,
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,
         factors,

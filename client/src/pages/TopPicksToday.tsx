@@ -108,14 +108,15 @@ export default function TopPicksToday() {
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
   const [selectedFixtureId, setSelectedFixtureId] = useState(null);
-  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
+    enabled: !authLoading && !!isPremium,
   });
 
   const picks: Pick[] = data?.picks || [];
+  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
   const avgConf = picks.length > 0
     ? (picks.reduce((s, p) => s + p.confidence, 0) / picks.length).toFixed(0)
     : null;

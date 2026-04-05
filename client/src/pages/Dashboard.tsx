@@ -27,7 +27,7 @@ function EnrichmentBadge({ status }: { status?: string | null }) {
     limited: { label: "Limited",  cls: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
     no_data: { label: "No Data",  cls: "bg-white/5 text-white/30 border-white/10" },
   };
-  const c = config[status ?? "no_data"] ?? config["no_data"];
+  const c = !status ? { label: ". . .", cls: "bg-white/5 text-white/20 border-white/8 animate-pulse" } : (config[status] ?? config["no_data"]);
   return (
     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${c.cls}`}>
       {c.label}
