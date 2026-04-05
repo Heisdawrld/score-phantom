@@ -66,7 +66,7 @@ export default function AccaCalculator() {
   const { data: picksData, isLoading: picksLoading } = useQuery({
     queryKey: ["/api/top-picks-today", 15],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
-    enabled: !!user,
+    enabled: !!user && !!isPremium,
     staleTime: 2 * 60 * 1000,
   });
 

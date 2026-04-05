@@ -363,7 +363,7 @@ function ValueBetBanner({ isPremium }: { isPremium: boolean }) {
 
   if (!data?.found) return null;
 
-  const fmt = (m: string) => (m || '').replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase());
+  const fmt = (m: string) => (m || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
   return (
     <div className="rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/8 to-transparent p-4 space-y-2">
