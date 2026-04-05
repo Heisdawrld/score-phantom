@@ -255,7 +255,8 @@ router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, r
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     // Reset trial to now so it starts fresh from verification (not signup)
-    const freshTrialEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const TRIAL_DAYS = 3;
+    const freshTrialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     await db.execute({
       sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
       args: [freshTrialEnd, userId],
@@ -311,6 +312,7 @@ router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
 
     // Delete related data first
     await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM partner_commissions WHERE referred_user_id = ? OR referrer_user_id = ?", args: [userId, userId] });
     await db.execute({ sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] });
     await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [userId] });
 

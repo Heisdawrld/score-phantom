@@ -10,7 +10,6 @@ import {
   setPersistence,
   browserLocalPersistence,
   reload,
-  signOut,
 } from "firebase/auth";
 
 const firebaseConfig = {
