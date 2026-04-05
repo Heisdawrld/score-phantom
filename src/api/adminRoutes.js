@@ -708,6 +708,22 @@ router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+// GET /api/admin/diagnose-results — diagnostic endpoint to check score sources
+router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const date = req.query.date || new Date(Date.now()-86400000).toLocaleString("en-CA",{timeZone:"Africa/Lagos"}).split(",")[0].trim();
+    const axios = (await import("axios")).default;
+    const KEY = process.env.LIVESCORE_API_KEY; const SECRET = process.env.LIVESCORE_API_SECRET;
+    const hmRes = await db.execute({sql:"SELECT COUNT(*) cnt,MIN(date) earliest,MAX(date) latest FROM historical_matches WHERE home_goals IS NOT NULL AND date LIKE ?",args:["%"+date+"%"]});
+    const hmSample = await db.execute({sql:"SELECT home_team,away_team,home_goals,away_goals,date FROM historical_matches WHERE home_goals IS NOT NULL ORDER BY date DESC LIMIT 5",args:[]});
+    const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
+    let apiRaw=null,apiError=null;
+    try { const r=await axios.get("https://livescore-api.com/api-client/scores/history.json",{params:{key:KEY,secret:SECRET,from:date,to:date,page:1},timeout:10000}); apiRaw={status:r.status,dataKeys:Object.keys(r.data?.data||{}),matchCount:(r.data?.data?.match||r.data?.data?.fixtures||r.data?.data?.history||[]).length,sample:(r.data?.data?.match||r.data?.data?.fixtures||r.data?.data?.history||[]).slice(0,2)}; } catch(e){apiError=e.message;}
+    let fixRaw=null;
+    try { const r=await axios.get("https://livescore-api.com/api-client/fixtures/matches.json",{params:{key:KEY,secret:SECRET,date,page:1},timeout:10000}); fixRaw={matchCount:(r.data?.data?.fixtures||[]).length,sample:(r.data?.data?.fixtures||[]).slice(0,2).map(f=>({id:f.id,home:f.home_name,away:f.away_name,ft:f.ft_score,score:f.score}))}; } catch(e){fixRaw={error:e.message};}
+    return res.json({date,historicalMatchesForDate:hmRes.rows[0],historicalSample:hmSample.rows,predictionOutcomes:poRes.rows,livescoreHistory:{raw:apiRaw,error:apiError},fixturesEndpoint:fixRaw});
+  } catch(err){ return res.status(500).json({error:err.message}); }
+});
 
 // ── POST /users/:id/referral-code — generate or set referral code for a user ─
 router.post("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
