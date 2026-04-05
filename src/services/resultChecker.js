@@ -218,44 +218,21 @@ export async function checkResults(dateStr) {
   });
   const existingOutcomes = {}; for (const _er of existingRes.rows || []) { existingOutcomes[String(_er.fixture_id)] = _er.outcome; }
 
-  // 4. Evaluate each prediction and insert outcome
-  const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0 };
+  // 4. Evaluate each prediction — INSERT OR REPLACE when score found, skip voids
+  const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0, updated: 0 };
   for (const fix of fixtures) {
     const fid = String(fix.id);
-    const _existingOutcome = existingOutcomes[fid]; if (_existingOutcome === "win" || _existingOutcome === "loss") {
-      outcomes.skipped++;
-      continue;
-    }
-
-    const _homeKey = (fix.home_team_name || "").toLowerCase().trim(); const _awayKey = (fix.away_team_name || "").toLowerCase().trim(); const score = scoreMap[fid] || nameMap[_homeKey + ":" + _awayKey] || nameMap[_homeKey.split(" ")[0] + ":" + _awayKey.split(" ")[0]] || null;
-    const outcome = score
-      ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name)
-      : 'void'; // no score available yet
-
+    const existingOutcome = existingOutcomes[fid];
+    if (existingOutcome === "win" || existingOutcome === "loss") { outcomes.skipped++; continue; }
+    const _hk = (fix.home_team_name||"").toLowerCase().trim();
+    const _ak = (fix.away_team_name||"").toLowerCase().trim();
+    const score = scoreMap[fid] || nameMap[_hk+":"+_ak] || nameMap[_hk.split(" ")[0]+":"+_ak.split(" ")[0]] || null;
+    if (!score) { if (!existingOutcome) { try { await db.execute({sql:"INSERT OR IGNORE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",args:[fid,fix.home_team_name,fix.away_team_name,fix.match_date,fix.tournament_name,fix.best_pick_market,fix.best_pick_selection,parseFloat(fix.best_pick_probability||0),fix.confidence_model||"",null,null,null,"void"]}); outcomes.voids++; } catch(e){} } else { outcomes.skipped++; } continue; }
+    const outcome = evaluatePrediction(fix.best_pick_market,fix.best_pick_selection,score.home,score.away,fix.home_team_name,fix.away_team_name);
     try {
-      if (_existingOutcome === "void" && score) { await db.execute({ sql: "UPDATE prediction_outcomes SET outcome=?, home_score=?, away_score=?, full_score=?, evaluated_at=datetime('now') WHERE fixture_id=?", args: [outcome, score.home, score.away, score.home+"-"+score.away, fid] }); outcomes[outcome==="win"?"wins":outcome==="loss"?"losses":"voids"]++; continue; } else if (_existingOutcome === "void") { outcomes.skipped++; continue; }
-      await db.execute({
-        sql: `INSERT OR IGNORE INTO prediction_outcomes
-              (fixture_id, home_team, away_team, match_date, tournament,
-               predicted_market, predicted_selection, predicted_probability, model_confidence,
-               home_score, away_score, full_score, outcome, evaluated_at, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-        args: [
-          fid,
-          fix.home_team_name, fix.away_team_name,
-          fix.match_date, fix.tournament_name,
-          fix.best_pick_market, fix.best_pick_selection,
-          parseFloat(fix.best_pick_probability || 0),
-          fix.confidence_model || '',
-          score?.home ?? null, score?.away ?? null,
-          score ? `${score.home}-${score.away}` : null,
-          outcome,
-        ],
-      });
-      outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;
-    } catch (err) {
-      console.error(`[ResultChecker] Insert failed for ${fid}:`, err.message);
-    }
+      await db.execute({sql:"INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",args:[fid,fix.home_team_name,fix.away_team_name,fix.match_date,fix.tournament_name,fix.best_pick_market,fix.best_pick_selection,parseFloat(fix.best_pick_probability||0),fix.confidence_model||"",score.home,score.away,score.home+"-"+score.away,outcome]});
+      if (existingOutcome === "void") outcomes.updated++; else outcomes[outcome==="win"?"wins":outcome==="loss"?"losses":"voids"]++;
+    } catch(e){ console.error("[RC] DB error for "+fid+":",e.message); }
   }
 
   console.log(`[ResultChecker] Done for ${date}:`, outcomes);
