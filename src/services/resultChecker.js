@@ -177,7 +177,7 @@ export async function checkResults(dateStr) {
         if (id && score) scoreMap[id] = score; const _hn = (f.home_name || "").toLowerCase().trim(); const _an = (f.away_name || "").toLowerCase().trim(); if (_hn && _an && score) { nameMap[_hn + ":" + _an] = score; nameMap[_hn.split(" ")[0] + ":" + _an.split(" ")[0]] = score; }
       }
       apiCallsMade++;
-      if (apiFixtures.length < 50) break; // last page
+      if (!rawD?.next_page) break; // no more pages (next_page is a URL string when more pages exist)
       page++;
       if (page > 20) break; // safety
     } catch (err) {
