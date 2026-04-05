@@ -383,14 +383,6 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
       await incrementDailyCount(req.user.id, trialToday);
     }
 
-    // Gate: require email verification for predictions
-    if (req.user.email_verified === 0 || req.user.email_verified === '0') {
-      return res.status(403).json({
-        error: 'Please verify your email to access predictions.',
-        code: 'email_not_verified',
-      });
-    }
-
     const fixtureId = req.params.fixtureId;
 
     const result = await getOrBuildPrediction(fixtureId);
@@ -421,14 +413,6 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId/explain — requires premium access ──────────────
 router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
   try {
-    // Gate: require email verification
-    if (req.user.email_verified === 0 || req.user.email_verified === '0') {
-      return res.status(403).json({
-        error: 'Please verify your email to access predictions.',
-        code: 'email_not_verified',
-      });
-    }
-
     // Trial users: enforce daily cap
     let predictionsRemaining = null;
     let trialToday = null;

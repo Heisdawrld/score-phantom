@@ -557,7 +557,7 @@ router.post("/signup", authLimiter, async (req, res) => {
     trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS);
 
     await db.execute({
-      sql: `INSERT INTO users (email, password_hash, status, trial_ends_at, email_verified) VALUES (?, ?, ?, ?, 0)`,
+      sql: `INSERT INTO users (email, password_hash, status, trial_ends_at, email_verified) VALUES (?, ?, ?, ?, 1)`,
       args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
     });
 
@@ -568,25 +568,14 @@ router.post("/signup", authLimiter, async (req, res) => {
     const user   = created.rows?.[0];
     if (!user) throw new Error("User created but could not be reloaded");
 
-    // Generate and store email verification token
-    const crypto = await import('crypto');
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    await db.execute({
-      sql: `UPDATE users SET email_verification_token = ? WHERE id = ?`,
-      args: [verifyToken, user.id],
-    });
-    // Send verification email (non-blocking — don't fail signup if email fails)
-    sendVerificationEmail(normalizedEmail, verifyToken).catch(e =>
-      console.warn('[Signup] Verification email failed:', e.message)
-    );
-
-    // SECURITY: Do NOT return a token from signup.
-    // User must verify their email first via /verify-email, then login with /login
+    // Auto-login: return JWT immediately
+    const token  = signToken(user);
+    const access = computeAccessStatus(user);
     return res.status(201).json({
-      success: true,
-      message: "Account created successfully! Please check your email for a verification link.",
-      email: normalizedEmail,
-      next_step: "verify_email",
+      token,
+      user: publicUser(user),
+      has_access:    access.has_full_access,
+      access_status: access.status,
     });
   } catch (err) {
     console.error("[Signup]", err);
@@ -681,15 +670,6 @@ router.post("/login", authLimiter, async (req, res) => {
     });
         const user = result.rows?.[0];
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
-
-    // SECURITY: Require email verification
-    if (!user.email_verified) {
-      return res.status(403).json({ 
-        error: "Please verify your email first. Check your inbox for a verification link.",
-        code: "email_not_verified"
-      });
-    }
-
     const storedHash = user.password_hash || user.password;
     if (!storedHash)
       return res.status(400).json({ error: "Account password not set. Please sign up again." });

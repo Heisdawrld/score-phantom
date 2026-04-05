@@ -205,12 +205,6 @@ export default function Login() {
     if (!validateForm()) return;
     if (formData.password !== confirmPassword) { setConfirmPasswordError("Passwords do not match."); return; }
     signupMutation.mutate({ email: formData.email, password: formData.password }, {
-      onSuccess: () => {
-        localStorage.setItem("sp_verify_email", formData.email);
-        if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
-        setFormData({ email: "", password: "" }); setConfirmPassword(""); setConfirmPasswordError("");
-        setLocation("/verify-email");
-      },
       onError: (err: any) => {
         const msg = err?.message || "Sign up failed";
         if (msg.includes("email-already-in-use") || msg.includes("already registered")) {
