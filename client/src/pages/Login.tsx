@@ -102,11 +102,6 @@ export default function Login() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("verified") === "success") {
-      setSuccessMsg("Email verified! 🎉 Now sign in to access ScorePhantom.");
-      setAuthMode("email-signin");
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
     // Capture referral code from URL ?ref=CODE
     const refCode = params.get("ref");
     if (refCode) {
@@ -191,9 +186,8 @@ export default function Login() {
     setResendLoading(true);
     try {
       await resendVerificationForCurrentUser();
-      setShowUnverifiedActions(false);
-      setGeneralError("");
-      setSuccessMsg("Verification email sent! Check your inbox, then sign in.");
+      localStorage.setItem("sp_verify_email", formData.email);
+      setLocation("/verify-email");
     } catch (err: any) {
       setGeneralError(err.message || "Failed to resend. Please try signing in again first.");
     } finally {
@@ -377,7 +371,7 @@ export default function Login() {
                 <motion.div key="email-signup" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
+                    <button onClick={() => goTo("social", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 3-day free trial</p></div>

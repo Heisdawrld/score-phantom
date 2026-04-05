@@ -27,6 +27,15 @@ export default function VerifyEmail() {
   }, [countdown]);
 
   useEffect(() => {
+    // Check immediately on mount (handles case where user lands here after clicking email link)
+    const checkNow = async () => {
+      if (!auth.currentUser) return;
+      try {
+        await reload(auth.currentUser);
+        if (auth.currentUser.emailVerified) { await finalizeLogin(); return; }
+      } catch {}
+    };
+    checkNow();
     const iv = setInterval(async () => {
       if (!auth.currentUser) return;
       try {

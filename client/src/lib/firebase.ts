@@ -48,7 +48,7 @@ export async function signUpWithEmail(email: string, password: string) {
   const result = await createUserWithEmailAndPassword(auth, email, password);
 
   await sendEmailVerification(result.user, {
-    url: `${window.location.origin}/login?verified=success`,
+    url: window.location.origin + "/verify-email",
     handleCodeInApp: false,
   });
 
@@ -107,9 +107,9 @@ export async function resendVerificationForCurrentUser() {
   const user = auth.currentUser;
   if (!user) throw new Error("Not signed in to Firebase. Please enter your password and try again.");
   await sendEmailVerification(user, {
-    url: `${window.location.origin}/login?verified=success`,
+    url: window.location.origin + "/verify-email",
     handleCodeInApp: false,
   });
   // Sign out after sending so they must verify before next sign-in
-  await signOut(auth);
+  // Do NOT sign out — keep session alive so verify-email page works
 }
