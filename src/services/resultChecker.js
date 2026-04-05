@@ -153,18 +153,19 @@ export async function checkResults(dateStr) {
 
   // 2. Fetch actual scores from LiveScore API — paginate through all matches
   const scoreMap = {}; // fixture_id → { home, away }
+  const nameMap = {}; // "home:away" lower-case → { home, away }
   let page = 1;
   let apiCallsMade = 0;
   while (true) {
     try {
       const data = await lsGet('/scores/history.json', { from: date, to: date, page });
-      const apiFixtures = data.data?.match || [];
+      const rawD = data.data; const apiFixtures = Array.isArray(rawD) ? rawD : (rawD?.match || rawD?.fixtures || rawD?.history || rawD?.results || rawD?.matches || []); console.log("[ResultChecker] API page " + page + ": " + apiFixtures.length + " matches (keys: " + Object.keys(rawD || {}).join(",") + ")");
       if (!apiFixtures.length) break;
 
       for (const f of apiFixtures) {
         const id = String(f.fixture_id || f.id || f.match_id || '');
         const score = parseScore(f.ft_score || f.score);
-        if (id && score) scoreMap[id] = score;
+        if (id && score) scoreMap[id] = score; const _hn = (f.home_name || "").toLowerCase().trim(); const _an = (f.away_name || "").toLowerCase().trim(); if (_hn && _an && score) { nameMap[_hn + ":" + _an] = score; nameMap[_hn.split(" ")[0] + ":" + _an.split(" ")[0]] = score; }
       }
       apiCallsMade++;
       if (apiFixtures.length < 50) break; // last page
@@ -176,30 +177,31 @@ export async function checkResults(dateStr) {
     }
   }
 
-  console.log(`[ResultChecker] Retrieved scores for ${Object.keys(scoreMap).length} matches (${apiCallsMade} API calls)`);
+  console.log("[ResultChecker] Scores: " + Object.keys(scoreMap).length + " by ID, " + Object.keys(nameMap).length + " by name (" + apiCallsMade + " API calls)");
 
   // 3. Check which fixtures already have outcomes (avoid duplicates)
   const existingRes = await db.execute({
-    sql: `SELECT fixture_id FROM prediction_outcomes WHERE match_date LIKE ?`,
+    sql: `SELECT fixture_id, outcome FROM prediction_outcomes WHERE match_date LIKE ?`,
     args: [`%${date}%`],
   });
-  const existing = new Set((existingRes.rows || []).map(r => String(r.fixture_id)));
+  const existingOutcomes = {}; for (const _er of existingRes.rows || []) { existingOutcomes[String(_er.fixture_id)] = _er.outcome; }
 
   // 4. Evaluate each prediction and insert outcome
   const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0 };
   for (const fix of fixtures) {
     const fid = String(fix.id);
-    if (existing.has(fid)) {
+    const _existingOutcome = existingOutcomes[fid]; if (_existingOutcome === "win" || _existingOutcome === "loss") {
       outcomes.skipped++;
       continue;
     }
 
-    const score = scoreMap[fid];
+    const _homeKey = (fix.home_team_name || "").toLowerCase().trim(); const _awayKey = (fix.away_team_name || "").toLowerCase().trim(); const score = scoreMap[fid] || nameMap[_homeKey + ":" + _awayKey] || nameMap[_homeKey.split(" ")[0] + ":" + _awayKey.split(" ")[0]] || null;
     const outcome = score
       ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name)
       : 'void'; // no score available yet
 
     try {
+      if (_existingOutcome === "void" && score) { await db.execute({ sql: "UPDATE prediction_outcomes SET outcome=?, home_score=?, away_score=?, full_score=?, evaluated_at=datetime('now') WHERE fixture_id=?", args: [outcome, score.home, score.away, score.home+"-"+score.away, fid] }); outcomes[outcome==="win"?"wins":outcome==="loss"?"losses":"voids"]++; continue; } else if (_existingOutcome === "void") { outcomes.skipped++; continue; }
       await db.execute({
         sql: `INSERT OR IGNORE INTO prediction_outcomes
               (fixture_id, home_team, away_team, match_date, tournament,

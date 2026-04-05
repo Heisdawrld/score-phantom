@@ -314,6 +314,14 @@ app.listen(PORT, async () => {
       return autoBuildPredictions({ limit: 100 });
     })
     .catch((err) => console.error("[AutoEnrich/PredRunner] startup error:", err.message));
+  // Immediately backfill last 7 days of results on startup (fixes void outcomes)
+  setTimeout(async () => {
+    try {
+      const { backfillResults } = await import("./services/resultChecker.js");
+      const res = await backfillResults(7);
+      console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
+    } catch (err) { console.error("[ResultChecker] Startup backfill failed:", err.message); }
+  }, 30000);
 
   // Re-run enrichment every 1 hour, then immediately pre-generate predictions
   setInterval(async () => {
@@ -399,6 +407,17 @@ app.listen(PORT, async () => {
   }
   scheduleNextResultCheck();
 
+  // Run result checker every 3h during the day to catch todays results as they finish
+  setInterval(async () => {
+    try {
+      const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const yesterday = new Date(Date.now() - 86400000).toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const r1 = await checkResults(today);
+      console.log("[ResultChecker] 3h check (today):", r1.outcomes);
+      const r2 = await checkResults(yesterday);
+      if (r2.outcomes?.updated > 0) console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
+    } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
+  }, 3 * 60 * 60 * 1000);
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing
   // the server to cold-start on the next request, which makes /auth/me
