@@ -1,14 +1,14 @@
 import { useLocation, Link } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
-import { LayoutDashboard, Flame, Zap, Trophy, BarChart2 } from 'lucide-react';
+import { Home, Calendar, Zap, Flame, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Home', icon: LayoutDashboard },
-  { href: '/top-picks', label: 'Top Picks', icon: Flame },
-  { href: '/acca-calculator', label: 'Daily ACCA', icon: Zap },
-  { href: '/track-record', label: 'Record', icon: Trophy },
-  { href: '/results', label: 'Results', icon: BarChart2 },
+  { href: "/", label: "Home", icon: Home },
+  { href: "/matches", label: "Matches", icon: Calendar },
+  { href: "/acca", label: "ACCA", icon: Zap },
+  { href: "/picks", label: "Picks", icon: Flame },
+  { href: "/profile", label: "Profile", icon: User },
 ];
 
 export function BottomNav() {

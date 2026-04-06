@@ -1,6 +1,6 @@
 // fixtureSeeder.js - Seeds fixtures from SportAPI.ai (replaces LiveScore)
 import db from '../config/database.js';
-import { fetchFixturesByDate } from './sportapi.js';
+import { fetchFixturesByDate } from './sportmonks.js';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -21,8 +21,8 @@ async function ensureColumns() {
 }
 
 export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = false, log = console.log } = {}) {
-  const key = process.env.SPORTAPI_KEY;
-  if (!key) throw new Error('SPORTAPI_KEY must be set in environment variables');
+  const key = process.env.SPORTMONKS_API_KEY;
+  if (!key) throw new Error('SPORTMONKS_API_KEY must be set in environment variables');
   await ensureColumns();
   if (clearFirst) {
     log('[Seeder] Clearing old fixture data (keeping users/payments/referrals/outcomes)...');

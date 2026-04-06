@@ -1424,4 +1424,21 @@ router.get('/deep-analysis/:fixtureId', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Deep analysis failed' });
   }
 });
+// 250025002500 GET /matches/:id 2014 Sportmonks Match Center data (free + premium tabs)
+router.get("/matches/:id", requireAuth, async (req, res) => {
+  try {
+    const { fetchMatchDetail, fetchMatchOdds } = await import("../services/sportmonks.js");
+    const fixtureId = req.params.id;
+    const detail = await fetchMatchDetail(fixtureId);
+    if (!detail) return res.status(404).json({ error: "Match not found" });
+    let odds = [];
+    if (req.access.subscription_active || req.access.has_full_access) {
+      odds = await fetchMatchOdds(fixtureId);
+    }
+    return res.json({ ...detail, odds, access: buildAccessPayload(req.access) });
+  } catch(err) {
+    console.error("[MatchCenter]", err.message);
+    res.status(500).json({ error: "Failed to load match data" });
+  }
+});
 export default router;

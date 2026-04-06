@@ -50,6 +50,9 @@ import PredictionResults from "@/pages/PredictionResults";
 import LeagueFavorites from "@/pages/LeagueFavorites";
 import AccaCalculator from "@/pages/AccaCalculator";
 import MatchAnalysis from "@/pages/MatchAnalysis";
+import Matches from "@/pages/Matches";
+import MatchCenter from "@/pages/MatchCenter";
+import Profile from "@/pages/Profile";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
 import VerifyEmail from "@/pages/VerifyEmail";
@@ -114,6 +117,11 @@ function Router() {
       <Route path="/league-favorites" component={() => <ProtectedRoute component={LeagueFavorites} />} />
       <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/analysis/:id" component={() => <ProtectedRoute component={MatchAnalysis} />} />
+      <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
+      <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchCenter} />} />
+      <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
+      <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
+      <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route component={() => <ProtectedRoute component={Dashboard} />} />
     </Switch>
