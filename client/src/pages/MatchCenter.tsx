@@ -4,50 +4,376 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Zap, Send, Bot } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-function TeamLogo({ src, name, size=12 }: { src?: string; name: string; size?: number }) {
-  const [err, setErr] = useState(false);
-  if (src && !err) return <img src={src} alt={name} onError={()=>setErr(true)} className="rounded-full object-contain bg-white/5 border border-white/10" style={{width:size*4,height:size*4}} loading="lazy"/>;
-  return <div className="rounded-full bg-primary/10 border border-white/10 flex items-center justify-center font-black text-primary" style={{width:size*4,height:size*4,fontSize:size*1.4}}>{(name||"?").slice(0,2).toUpperCase()}</div>;
+
+function SpiralWatermark() {
+  return (
+    <svg width="110" height="110" viewBox="0 0 110 110" fill="none"
+      className="absolute top-3 right-3 opacity-[0.08] pointer-events-none text-primary">
+      <circle cx="55" cy="55" r="50" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="55" cy="55" r="38" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="55" cy="55" r="27" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="55" cy="55" r="16" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="55" cy="55" r="6" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="55" cy="55" r="2" fill="currentColor"/>
+    </svg>
+  );
 }
 
-function PredictionTab({ fixtureId, isPremium, setLocation }: any) {
-  const { data, isLoading, error } = useQuery({ queryKey: ["/api/predict", fixtureId], queryFn: () => fetchApi("/predict/"+fixtureId), enabled: !!fixtureId && !!isPremium, staleTime: 5*60*1000 });
-  if (!isPremium) return (<div className="flex flex-col items-center justify-center py-16 gap-4"><div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center"><Zap size={28} className="text-primary"/></div><div className="text-center"><p className="font-bold text-white mb-1">Trial or Premium Required</p><p className="text-sm text-white/40">AI predictions for this match</p></div><button onClick={()=>setLocation("/paywall")} className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">Get Access</button></div>);
-  if (isLoading) return <div className="flex justify-center py-16"><div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/></div>;
-  if (error||!data) return <div className="text-center py-12 text-white/30"><p>Prediction not available</p></div>;
-  const rec = (data as any)?.predictions?.recommendation||{};
-  const conf = Math.round((rec.probability||0)*100);
-  const confColor = conf>=75?"text-primary":conf>=60?"text-blue-400":"text-amber-400";
-  const backups = (data as any)?.predictions?.backup_picks||[];
-  return (<div className="flex flex-col gap-4"><div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/25 p-5"><div className="flex items-center gap-2 mb-4"><Zap size={14} className="text-primary"/><span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">Phantom Pick</span></div><p className="text-2xl font-black text-white mb-1">{rec.pick||"No clear pick"}</p><p className="text-sm text-white/40 mb-4">{(rec.market||"").replace(/_/g," ")}</p><div className="flex items-center gap-3 mb-3"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-primary transition-all" style={{width:conf+"%"}}/></div><span className={"text-2xl font-black "+confColor}>{conf}%</span></div><div className="flex gap-2 flex-wrap"><span className={"text-[10px] font-bold px-2 py-1 rounded-full border "+(rec.modelConfidence==="high"?"bg-primary/10 border-primary/25 text-primary":"bg-white/5 border-white/10 text-white/40")}>Model: {rec.modelConfidence||"-"}</span><span className="text-[10px] font-bold px-2 py-1 rounded-full border bg-white/5 border-white/10 text-white/40">Edge: {rec.edgeLabel||"-"}</span></div></div>{backups.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Backup Picks</p>{backups.slice(0,3).map((p: any,i: number)=>(<div key={i} className="flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0"><div className="flex-1 min-w-0"><p className="text-sm font-semibold text-white">{p.pick}</p><p className="text-[11px] text-white/35">{(p.market||"").replace(/_/g," ")}</p></div><span className="text-sm font-bold text-white/50">{Math.round((p.probability||0)*100)}%</span></div>))}</div>}</div>);
+const TABS = [
+  { key: "Prediction", label: "Prediction", Icon: Target },
+  { key: "Stats", label: "Stats", Icon: BarChart2 },
+  { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
+];
+
+function riskColor(r: string) {
+  const l = (r || "").toLowerCase();
+  if (l.includes("low")) return "text-primary";
+  if (l.includes("high")) return "text-red-400";
+  return "text-amber-400";
+}
+
+function confBadgeStyle(c: string) {
+  const l = (c || "").toLowerCase();
+  if (l === "high") return "bg-primary/15 border-primary/40 text-primary";
+  if (l === "low") return "bg-red-500/10 border-red-500/30 text-red-400";
+  return "bg-white/8 border-white/15 text-white/60";
+}
+
+function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["/api/predict", fixtureId],
+    queryFn: () => fetchApi("/predict/" + fixtureId),
+    enabled: !!fixtureId && !!isPremium,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (!isPremium) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <Zap size={28} className="text-primary"/>
+      </div>
+      <div className="text-center">
+        <p className="font-bold text-white mb-1">Trial or Premium Required</p>
+        <p className="text-sm text-white/40">AI predictions for this match</p>
+      </div>
+      <button onClick={() => setLocation("/paywall")}
+        className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
+        Get Access
+      </button>
+    </div>
+  );
+
+  if (isLoading) return (
+    <div className="flex justify-center py-16">
+      <div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/>
+    </div>
+  );
+
+  if (error || !data) return (
+    <div className="text-center py-12 text-white/30">
+      <p className="text-4xl mb-3">🔮</p>
+      <p>Prediction not available</p>
+    </div>
+  );
+
+  const rec = (data as any)?.predictions?.recommendation || {};
+  const conf = Math.round((rec.probability || 0) * 100);
+  const backups = (data as any)?.predictions?.backup_picks || [];
+  const reasonCodes: string[] = rec.reasonCodes || rec.reason_codes || [];
+  const odds = rec.odds ?? null;
+  const impliedPct = rec.impliedProb != null
+    ? Math.round(rec.impliedProb * 100)
+    : odds ? Math.round((1 / Number(odds)) * 100) : null;
+  const hasValue = rec.hasValue ?? (impliedPct != null && conf > impliedPct + 3);
+  const riskLabel = rec.risk || rec.riskLevel || (conf >= 75 ? "LOW RISK" : conf >= 60 ? "MODERATE RISK" : "HIGH RISK");
+  const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
+  const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE (AGGRESSIVE)" : conf >= 60 ? "GOOD EDGE" : "MARGINAL EDGE");
+  const confLevel = (rec.modelConfidence || (conf >= 75 ? "high" : conf >= 60 ? "medium" : "low")).toUpperCase();
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="relative rounded-2xl overflow-hidden border border-[#1e4030]"
+        style={{ background: "linear-gradient(135deg, #0a2018 0%, #061510 100%)" }}>
+        <SpiralWatermark/>
+        <div className="relative p-5">
+          <p className="text-[10px] font-black text-primary/70 uppercase tracking-[0.15em] mb-3">
+            Best Bet Angle
+          </p>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <span className={cn("text-[11px] font-black px-3 py-1 rounded-full border uppercase tracking-wide", confBadgeStyle(confLevel))}>
+              {confLevel}
+            </span>
+            <span className="text-[11px] font-black px-3 py-1 rounded-full border border-primary/50 text-primary bg-primary/8 uppercase tracking-wide">
+              {edgeLabel}
+            </span>
+          </div>
+          <p className={cn("text-[11px] font-black uppercase tracking-widest mb-4", riskColor(riskLabel))}>
+            {riskLabel}
+          </p>
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <div className="flex-1">
+              <p className="text-[11px] text-white/40 mb-1 capitalize">{marketLabel}</p>
+              <p className="text-2xl font-black text-white uppercase leading-tight">
+                {rec.pick || "No clear pick"}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-4xl font-black text-primary leading-none">{conf}%</p>
+              <p className="text-[10px] text-white/35 uppercase tracking-wider mt-1">Model Prob.</p>
+            </div>
+          </div>
+          {reasonCodes.length > 0 && (
+            <div className="border-t border-white/8 pt-4 mb-4">
+              <div className="flex flex-col gap-2.5">
+                {reasonCodes.slice(0, 5).map((r: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <div className="w-4 h-4 rounded-full border-2 border-primary/70 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary"/>
+                    </div>
+                    <p className="text-[12px] text-white/65 leading-snug">{r}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {odds && (
+            <div className="border-t border-white/8 pt-4">
+              <p className="text-[10px] font-black text-white/35 uppercase tracking-widest mb-3">
+                Sportybet Odds
+              </p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="rounded-xl p-3 text-center bg-[#0d1e17] border border-white/8">
+                  <p className="text-[10px] text-white/40 mb-1">Odds</p>
+                  <p className="text-lg font-black text-white">{odds}</p>
+                </div>
+                <div className="rounded-xl p-3 text-center bg-[#0d1e17] border border-white/8">
+                  <p className="text-[10px] text-white/40 mb-1">Implied</p>
+                  <p className="text-lg font-black text-white">{impliedPct}%</p>
+                </div>
+                <div className={cn("rounded-xl p-3 text-center", hasValue ? "bg-primary" : "bg-white/5 border border-white/8")}>
+                  <p className={cn("text-[10px] mb-1", hasValue ? "text-black/60" : "text-white/40")}>Value</p>
+                  <p className={cn("text-xl font-black", hasValue ? "text-black" : "text-white/30")}>
+                    {hasValue ? "✓" : "✗"}
+                  </p>
+                </div>
+              </div>
+              {hasValue && (
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp size={12} className="text-primary"/>
+                  <p className="text-[11px] text-primary font-semibold">Value bet — bookmaker underpricing this outcome</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {backups.length > 0 && (
+        <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
+          <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Backup Picks</p>
+          <div className="flex flex-col gap-2">
+            {backups.slice(0, 3).map((p: any, i: number) => (
+              <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+                <div>
+                  <p className="text-sm font-bold text-white/80">{p.pick || p.market}</p>
+                  <p className="text-[10px] text-white/35">{(p.market || "").replace(/_/g, " ")}</p>
+                </div>
+                <span className="text-sm font-black text-primary">{Math.round((p.probability || 0) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function StatsTab({ d }: any) {
-  const h2h = Array.isArray(d?.h2h)&&d.h2h.length?d.h2h:Array.isArray(d?.meta?.h2h)?d.meta.h2h:[], hf = Array.isArray(d?.homeForm)&&d.homeForm.length?d.homeForm:Array.isArray(d?.meta?.homeForm)?d.meta.homeForm:[], af = Array.isArray(d?.awayForm)&&d.awayForm.length?d.awayForm:Array.isArray(d?.meta?.awayForm)?d.meta.awayForm:[], st = Array.isArray(d?.standings)&&d.standings.length?d.standings:Array.isArray(d?.meta?.standings)?d.meta.standings:[], fix = d?.fixture||{};
-  const dot = (m: any, t: string) => { if (!m?.score) return "bg-white/20"; const [h,a] = (m.score).split("-").map(Number); const home = (m.home||"").toLowerCase().includes((t||"").toLowerCase().split(" ")[0]); return (home?(h>a):(a>h))?"bg-primary":h===a?"bg-amber-400":"bg-red-500"; };
-  return (<div className="flex flex-col gap-4">
-    {hf.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">{fix.home_team_name||"Home"} — Last 5</p><div className="flex gap-2">{hf.slice(0,5).map((m: any,i: number)=><div key={i} className={"w-9 h-9 rounded-xl "+dot(m,fix.home_team_name||"")}/>)}</div></div>}
-    {af.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">{fix.away_team_name||"Away"} — Last 5</p><div className="flex gap-2">{af.slice(0,5).map((m: any,i: number)=><div key={i} className={"w-9 h-9 rounded-xl "+dot(m,fix.away_team_name||"")}/>)}</div></div>}
-    {h2h.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Head to Head</p><div className="flex flex-col gap-1.5">{h2h.slice(0,8).map((m: any,i: number)=>(<div key={i} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0"><span className="text-[10px] text-white/25 w-14 shrink-0">{m.date?new Date(m.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short"}):""}</span><span className="text-xs text-white/70 truncate flex-1 text-right">{m.home}</span><span className="text-xs font-black text-white bg-white/8 px-2 py-0.5 rounded shrink-0">{m.score||"-"}</span><span className="text-xs text-white/40 truncate flex-1">{m.away}</span></div>))}</div></div>}
-    {st.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">League Table</p><div className="flex flex-col gap-0.5">{st.slice(0,8).map((r: any,i: number)=>{ const hi=[fix.home_team_name,fix.away_team_name].some(n=>(n||"").toLowerCase().includes((r.team||"").toLowerCase().split(" ")[0])); return <div key={i} className={"flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs "+(hi?"bg-primary/8 border border-primary/20":"")}><span className="w-5 text-white/30 font-bold">{r.position}</span><span className={"flex-1 font-semibold truncate "+(hi?"text-primary":"text-white/70")}>{r.team}</span><span className="w-5 text-center text-white/40">{r.played}</span><span className={"w-6 text-center font-black "+(hi?"text-primary":"text-white")}>{r.points}</span></div>; })}</div></div>}
-    {h2h.length===0&&hf.length===0&&<div className="text-center py-12 text-white/30"><p className="text-4xl mb-3">📊</p><p>Stats loading — check back soon</p></div>}
-  </div>);
+  const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) ? d.meta.h2h : [];
+  const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) ? d.meta.homeForm : [];
+  const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) ? d.meta.awayForm : [];
+  const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
+  const fix = d?.fixture || {};
+  const dot = (m: any, t: string) => {
+    if (!m?.score) return "bg-white/15";
+    const parts = String(m.score).split("-").map(Number);
+    const h = parts[0], a = parts[1];
+    const home = (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
+    return (home ? (h > a) : (a > h)) ? "bg-primary" : h === a ? "bg-amber-400" : "bg-red-500";
+  };
+  const rl = (m: any, t: string) => {
+    if (!m?.score) return "-";
+    const parts = String(m.score).split("-").map(Number);
+    const h = parts[0], a = parts[1];
+    const home = (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
+    return (home ? (h > a) : (a > h)) ? "W" : h === a ? "D" : "L";
+  };
+  return (
+    <div className="flex flex-col gap-4">
+      {[
+        { label: fix.home_team_name || "Home", form: hf },
+        { label: fix.away_team_name || "Away", form: af }
+      ].map(({ label, form }) => form.length > 0 ? (
+        <div key={label} className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">{label} — Last 5</p>
+          <div className="flex gap-2">
+            {form.slice(0, 5).map((m: any, i: number) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs", dot(m, label))}>
+                  <span className="text-black/80">{rl(m, label)}</span>
+                </div>
+                <span className="text-[9px] text-white/25">{m.score || "-"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null)}
+      {h2h.length > 0 && (
+        <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Head to Head</p>
+          <div className="flex flex-col">
+            {h2h.slice(0, 6).map((m: any, i: number) => (
+              <div key={i} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
+                <span className="text-[10px] text-white/25 w-14 shrink-0">
+                  {m.date ? new Date(m.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : ""}
+                </span>
+                <span className="text-xs text-white/65 truncate flex-1 text-right">{m.home}</span>
+                <span className="text-xs font-black text-white bg-white/8 px-2 py-0.5 rounded shrink-0">{m.score || "-"}</span>
+                <span className="text-xs text-white/40 truncate flex-1">{m.away}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {st.length > 0 && (
+        <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">League Table</p>
+          <div className="flex flex-col gap-0.5">
+            {st.slice(0, 10).map((r: any, i: number) => {
+              const hi = [fix.home_team_name, fix.away_team_name].some(
+                n => (n || "").toLowerCase().includes((r.team || "").toLowerCase().split(" ")[0])
+              );
+              return (
+                <div key={i} className={cn("flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs",
+                  hi ? "bg-primary/10 border border-primary/20" : "")}>
+                  <span className={cn("w-5 font-bold", hi ? "text-primary" : "text-white/30")}>{r.position}</span>
+                  <span className={cn("flex-1 font-semibold truncate", hi ? "text-primary" : "text-white/70")}>{r.team}</span>
+                  <span className="w-6 text-center text-white/40">{r.played}</span>
+                  <span className={cn("w-6 text-center font-black", hi ? "text-primary" : "text-white")}>{r.points}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {h2h.length === 0 && hf.length === 0 && (
+        <div className="text-center py-12 text-white/30">
+          <p className="text-4xl mb-3">📊</p>
+          <p>Stats loading — check back soon</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function PhantomAITab({ fixtureId, isPremium, setLocation }: any) {
-  const [msgs, setMsgs] = useState<{role:string;content:string}[]>([{role:"assistant",content:"I have analysed this match. What would you like to know? Ask about form, tactics, injuries or value."}]);
+function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
+  const [msgs, setMsgs] = useState<{ role: string; content: string }[]>([
+    { role: "assistant", content: "I have analysed this match. Ask me about form, tactics, value bets, or anything you want to know." }
+  ]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const mutation = useMutation({ mutationFn: (body: any) => fetchApi("/predict/"+fixtureId+"/chat", {method:"POST",body:JSON.stringify(body)}) });
-  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=scrollRef.current.scrollHeight; },[msgs]);
-  if (!isPremium) return (<div className="flex flex-col items-center justify-center py-16 gap-4"><div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center"><Bot size={28} className="text-blue-400"/></div><div className="text-center"><p className="font-bold text-white mb-1">Phantom AI</p><p className="text-sm text-white/40">Ask anything about this match</p></div><button onClick={()=>setLocation("/paywall")} className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">Unlock AI Chat</button></div>);
-  const send = (e: React.FormEvent) => { e.preventDefault(); if (!input.trim()||mutation.isPending) return; const msg = input.trim(); setInput(""); const next = [...msgs,{role:"user",content:msg}]; setMsgs(next); mutation.mutate({message:msg,history:msgs.slice(1)},{onSuccess:(r:any)=>setMsgs([...next,{role:"assistant",content:r.reply||"No response"}]),onError:()=>setMsgs([...next,{role:"assistant",content:"Sorry, I cannot analyse that right now."}])}); };
-  return (<div className="flex flex-col rounded-2xl bg-white/4 border border-white/8 overflow-hidden" style={{height:"520px"}}><div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-blue-500/5 shrink-0"><Bot size={14} className="text-blue-400"/><span className="text-xs font-bold text-blue-400">Phantom AI</span><span className="ml-auto text-[10px] text-white/25">Groq LLM</span></div><div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">{msgs.map((m,i)=>(<div key={i} className={"flex gap-2 "+(m.role==="user"?"flex-row-reverse":"")}><div className={"w-6 h-6 rounded-full flex items-center justify-center shrink-0 "+(m.role==="user"?"bg-primary/20":"bg-blue-500/20")}>{m.role==="user"?<span className="text-[10px] font-black text-primary">U</span>:<Bot size={10} className="text-blue-400"/>}</div><div className={"max-w-[82%] px-3 py-2 rounded-2xl text-sm leading-relaxed "+(m.role==="user"?"bg-primary/15 text-white rounded-tr-none":"bg-white/5 text-white/80 rounded-tl-none")}>{m.content}</div></div>))}{mutation.isPending&&<div className="flex gap-2"><div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center"><Bot size={10} className="text-blue-400"/></div><div className="bg-white/5 rounded-2xl rounded-tl-none px-3 py-2"><div className="flex gap-1">{[0,1,2].map(i=><span key={i} className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce" style={{animationDelay:i*0.15+"s"}}/>)}</div></div></div>}</div><form onSubmit={send} className="flex gap-2 p-3 border-t border-white/5 shrink-0"><input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about this match..." className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-primary/30 transition"/><button type="submit" disabled={mutation.isPending||!input.trim()} className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center disabled:opacity-40 shrink-0"><Send size={14} className="text-black"/></button></form></div>);
+  const mutation = useMutation({
+    mutationFn: (body: any) => fetchApi("/predict/" + fixtureId + "/chat", { method: "POST", body: JSON.stringify(body) }),
+  });
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [msgs]);
+  if (!isPremium) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <Bot size={28} className="text-primary"/>
+      </div>
+      <div className="text-center">
+        <p className="font-bold text-white mb-1">Phantom AI Chat</p>
+        <p className="text-sm text-white/40">Ask anything about this match</p>
+      </div>
+      <button onClick={() => setLocation("/paywall")}
+        className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
+        Unlock AI Chat
+      </button>
+    </div>
+  );
+  const send = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || mutation.isPending) return;
+    const msg = input.trim();
+    setInput("");
+    const next = [...msgs, { role: "user", content: msg }];
+    setMsgs(next);
+    mutation.mutate(
+      { message: msg, history: msgs.slice(1) },
+      {
+        onSuccess: (r: any) => setMsgs([...next, { role: "assistant", content: r.reply || "No response" }]),
+        onError: () => setMsgs([...next, { role: "assistant", content: "Sorry, I cannot analyse that right now." }]),
+      }
+    );
+  };
+  return (
+    <div className="rounded-2xl border border-white/8 overflow-hidden flex flex-col bg-[#0c1810]" style={{ height: "480px" }}>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/6 bg-primary/5 shrink-0">
+        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+          <Bot size={12} className="text-primary"/>
+        </div>
+        <span className="text-xs font-black text-primary">Phantom AI</span>
+        <span className="ml-auto text-[10px] text-white/25">Powered by Groq</span>
+      </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+        {msgs.map((m, i) => (
+          <div key={i} className={cn("flex gap-2", m.role === "user" ? "flex-row-reverse" : "")}>
+            <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0",
+              m.role === "user" ? "bg-white/10" : "bg-primary/15")}>
+              {m.role === "user"
+                ? <span className="text-[10px] font-black text-white/60">U</span>
+                : <Bot size={11} className="text-primary"/>}
+            </div>
+            <div className={cn("max-w-[82%] px-3 py-2.5 rounded-2xl text-sm leading-relaxed",
+              m.role === "user"
+                ? "bg-primary/15 text-white rounded-tr-none"
+                : "bg-white/5 text-white/80 rounded-tl-none")}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {mutation.isPending && (
+          <div className="flex gap-2">
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
+              <Bot size={11} className="text-primary"/>
+            </div>
+            <div className="bg-white/5 rounded-2xl rounded-tl-none px-3 py-2.5">
+              <div className="flex gap-1">
+                {[0, 1, 2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce"
+                    style={{ animationDelay: i * 0.15 + "s" }}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <form onSubmit={send} className="flex gap-2 p-3 border-t border-white/6 shrink-0">
+        <input value={input} onChange={e => setInput(e.target.value)}
+          placeholder="Ask about this match..."
+          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-primary/40"/>
+        <button type="submit" disabled={mutation.isPending || !input.trim()}
+          className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center disabled:opacity-40 shrink-0">
+          <Send size={14} className="text-black"/>
+        </button>
+      </form>
+    </div>
+  );
 }
 
-const TABS = ["Prediction","Stats","Phantom AI"];
 export default function MatchCenter() {
   const params = useParams();
   const fixtureId = params.id;
@@ -55,28 +381,81 @@ export default function MatchCenter() {
   const { data: user } = useAuth();
   const isPremium = (user as any)?.has_access;
   const [tab, setTab] = useState("Prediction");
-  const { data, isLoading } = useQuery({ queryKey: ["/api/matches", fixtureId], queryFn: () => fetchApi("/matches/"+fixtureId), staleTime: 3*60*1000, enabled: !!fixtureId });
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/matches", fixtureId],
+    queryFn: () => fetchApi("/matches/" + fixtureId),
+    staleTime: 3 * 60 * 1000,
+    enabled: !!fixtureId,
+  });
   const d = data as any;
-  const fix = d?.fixture||{};
-  const isLive = ["LIVE","HT","1H","2H"].includes(fix.match_status||"");
-  const isFT = ["FT","AET","Pen"].includes(fix.match_status||"");
-  return (<div className="min-h-screen bg-[#090d13] pb-24">
-    <div className="sticky top-0 z-20 bg-[#090d13]/95 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
-      <button onClick={()=>setLocation("/")} className="w-9 h-9 rounded-xl bg-white/6 flex items-center justify-center hover:bg-white/10 transition shrink-0"><ArrowLeft size={16} className="text-white/60"/></button>
-      <div className="flex-1 min-w-0 text-center">{isLive&&<span className="text-xs font-black text-red-400 animate-pulse">● LIVE {fix.live_minute||""}</span>}{isFT&&<span className="text-xs font-bold text-white/40">FULL TIME</span>}{!isLive&&!isFT&&<span className="text-xs text-white/40 truncate block">{fix.tournament_name||"Match Detail"}</span>}</div>
-    </div>
-    {isLoading&&<div className="flex justify-center py-20"><div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/></div>}
-    {!isLoading&&(<>
-      <div className="px-6 pt-6 pb-4 flex flex-col items-center gap-3">
-        <div className="flex items-center justify-between w-full max-w-xs">
-          <div className="flex flex-col items-center gap-2 flex-1"><TeamLogo src={fix.home_team_logo} name={fix.home_team_name||"Home"} size={14}/><span className="text-sm font-bold text-white text-center leading-tight">{fix.home_team_name||"Home"}</span></div>
-          <div className="flex flex-col items-center px-4 gap-1">{(isLive||isFT)?<span className="text-4xl font-black text-white tabular-nums">{fix.home_score??0} - {fix.away_score??0}</span>:<span className="text-xl font-bold text-white/25">vs</span>}{isLive&&<span className="text-[10px] font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}{isFT&&<span className="text-[10px] font-bold text-white/30">FT</span>}</div>
-          <div className="flex flex-col items-center gap-2 flex-1"><TeamLogo src={fix.away_team_logo} name={fix.away_team_name||"Away"} size={14}/><span className="text-sm font-bold text-white/70 text-center leading-tight">{fix.away_team_name||"Away"}</span></div>
+  const fix = d?.fixture || {};
+  const isLive = ["LIVE", "HT", "1H", "2H"].includes(fix.match_status || "");
+  const isFT = ["FT", "AET", "Pen"].includes(fix.match_status || "");
+  const matchTime = fix.match_date
+    ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return (
+    <div className="min-h-screen pb-28" style={{ background: "#080f0b" }}>
+      <div className="sticky top-0 z-20 px-4 pt-5 pb-0" style={{ background: "#080f0b" }}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 pr-4">
+            <h1 className="text-xl font-black text-white leading-tight">
+              {fix.home_team_name || "Home"}{" "}
+              <span className="text-white/40 font-normal text-lg">vs</span>{" "}
+              {fix.away_team_name || "Away"}
+            </h1>
+            <p className="text-[10px] font-black text-primary/60 uppercase tracking-[0.2em] mt-0.5">
+              ScorePhantom Analysis
+            </p>
+          </div>
+          <button onClick={() => setLocation("/")}
+            className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0">
+            <X size={14} className="text-white/50"/>
+          </button>
         </div>
-        <p className="text-[11px] text-white/25">{fix.tournament_name||""}{ fix.category_name?" · "+fix.category_name:""}</p>
+        {(isLive || isFT) && (
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-3xl font-black text-white tabular-nums">
+              {fix.home_score ?? 0} - {fix.away_score ?? 0}
+            </span>
+            {isLive && <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-1 rounded-full animate-pulse">● LIVE</span>}
+            {isFT && <span className="text-xs font-bold text-white/30 bg-white/5 px-2 py-1 rounded-full">FT</span>}
+          </div>
+        )}
+        {!isLive && !isFT && (
+          <p className="text-[11px] text-white/25 mb-3">{fix.tournament_name || ""}{matchTime ? " · " + matchTime : ""}</p>
+        )}
+        <div className="flex border-b border-white/8">
+          {TABS.map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={cn("flex items-center gap-1.5 px-4 py-3 text-sm font-bold transition-all border-b-2 -mb-px",
+                tab === key ? "text-primary border-primary" : "text-white/35 border-transparent hover:text-white/55")}>
+              <Icon size={13}/>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="px-4 mb-5"><div className="flex gap-0 bg-white/4 rounded-2xl p-1">{TABS.map(t=>(<button key={t} onClick={()=>setTab(t)} className={cn("flex-1 py-2.5 rounded-xl text-xs font-bold transition-all",tab===t?"bg-primary text-black shadow-sm":"text-white/40 hover:text-white/70")}>{t}</button>))}</div></div>
-      <div className="px-4"><AnimatePresence mode="wait"><motion.div key={tab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.15}}>{tab==="Prediction"&&<PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation}/>}{tab==="Stats"&&<StatsTab d={d}/>}{tab==="Phantom AI"&&<PhantomAITab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation}/>}</motion.div></AnimatePresence></div>
-    </>)}
-  </div>);
+      {isLoading && (
+        <div className="flex justify-center py-20">
+          <div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/>
+        </div>
+      )}
+      {!isLoading && (
+        <div className="px-4 pt-5">
+          <AnimatePresence mode="wait">
+            <motion.div key={tab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15 }}>
+              {tab === "Prediction" && <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d}/>}
+              {tab === "Stats" && <StatsTab d={d}/>}
+              {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation}/>}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
 }
