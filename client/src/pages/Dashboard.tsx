@@ -450,11 +450,6 @@ function LeagueGroup({
                       <TeamLogo src={fixture.away_team_logo} name={fixture.away_team_name} />
                       <span className='font-semibold text-sm text-white truncate'>{fixture.away_team_name}</span>
                     </div>
-                    {fixture.best_pick_selection && pct > 0 && !isLive && isPremium && (
-                      <div className={'inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ' + (lvl === 'HIGH' ? 'bg-primary/10 text-primary border-primary/20' : lvl === 'MEDIUM' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20')}>
-                        {pct.toFixed(0)}% &middot; {fixture.best_pick_selection}
-                      </div>
-                    )}
                   </div>
                   <div className='flex flex-col items-end gap-1.5 shrink-0'>
                     {isPremium && !isLive && !isFinished && (
