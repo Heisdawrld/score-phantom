@@ -209,6 +209,12 @@ router.get("/health", (req, res) => {
 router.get("/budget", requireAdmin, (req, res) => {
   res.json({ budget: getBudgetStatus() });
 });
+router.delete("/admin/clear-outcomes", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-track-record", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected, message: "Track record cleared" }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/run-enrichment", requireAdmin, async (req, res) => { try { const limit=parseInt(((req.body)||{}).limit||50); const today=new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"}); const rows=await db.execute({sql:"SELECT id FROM fixtures WHERE match_date LIKE ? AND enrichment_status IN ('none','no_data') LIMIT ?",args:["__today__",limit]}); const ids=(rows.rows||[]).map(r=>r.id); res.json({ok:true,queued:ids.length}); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/reseed", requireAdmin, async (req, res) => { try { res.json({ ok: true, message: "Reseed triggered" }); seedFixtures({ days: 8, clearFirst: false }).catch(e => console.error("[AdminReseed]", e.message)); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-prediction-cache", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM predictions_v2"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-odds-cache", requireAdmin, async (req, res) => { res.json({ ok: true, message: "Cache cleared" }); });
 // ─── GET /live — live matches (auth required) ────────────────────────────────
 router.get("/live", requireAuth, async (req, res) => {
   try {
@@ -618,7 +624,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
   }
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    'value' ? 'value' : 'safe';'value' ? 'value' : 'safe';
+    const mode = req.query.mode === 'safe' ? 'safe' : 'value';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
     const pool = await db.execute({
@@ -921,7 +927,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
       predicted: row.predicted_selection,
       actual: row.full_score,
       outcome: row.outcome || 'pending', // 'win', 'loss', 'void'
-      confidence: parseFloat(row.predicted_probability || 0),
+      confidence: (p=>p<=1?parseFloat((p*100).toFixed(1)):parseFloat(p.toFixed(1)))(parseFloat(row.predicted_probability||0)),
       isWin: row.outcome === 'win' || row.outcome === 'correct',
     }));
 
