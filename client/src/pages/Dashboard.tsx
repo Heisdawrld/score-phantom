@@ -686,6 +686,7 @@ export default function Dashboard() {
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(dates[0]);
+  const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment")==="success");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
@@ -769,6 +770,23 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
             <h1 className="text-xl font-black text-white">Welcome back 👋</h1>
           </div>
         </div>
+        {showPayBanner&&(
+          <motion.div initial={{opacity:0,y:-16,scale:0.97}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-10}}
+            className="relative rounded-2xl overflow-hidden border border-primary/40 p-4 flex items-center gap-4"
+            style={{background:"linear-gradient(135deg,#0c2018 0%,#0a1a12 100%)",boxShadow:"0 0 30px rgba(16,231,116,0.15)"}}>
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"/>
+            <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+              <span className="text-2xl">🎉</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-black text-primary">Welcome to Premium!</p>
+              <p className="text-xs text-white/50 mt-0.5">Your account is fully activated. Enjoy unlimited predictions.</p>
+            </div>
+            <button onClick={()=>setShowPayBanner(false)} className="text-white/20 hover:text-white/50 transition-colors shrink-0 p-1">
+              <span className="text-lg leading-none">×</span>
+            </button>
+          </motion.div>
+        )}
         {/* Expired trial FOMO banner — stay on dashboard, blur all predictions */}
         {isExpired && (
           <div
