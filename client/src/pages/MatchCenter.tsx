@@ -81,12 +81,31 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
   const rec = (data as any)?.predictions?.recommendation || {};
   const conf = Math.round((rec.probability || 0) * 100);
   const backups = (data as any)?.predictions?.backup_picks || [];
-  const reasonCodes: string[] = rec.reasonCodes || rec.reason_codes || [];
-  const odds = rec.odds ?? null;
-  const impliedPct = rec.impliedProb != null
-    ? Math.round(rec.impliedProb * 100)
-    : odds ? Math.round((1 / Number(odds)) * 100) : null;
-  const hasValue = rec.hasValue ?? (impliedPct != null && conf > impliedPct + 3);
+  const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
+  const oddsData = (data as any)?.odds ?? null;
+  const homeNm = matchData?.fixture?.home_team_name || fix?.home_team_name || "";
+  const pickLo = (rec.pick || "").toLowerCase();
+  const ouRaw = oddsData?.over_under || {};
+  const odds = !oddsData ? null
+    : pickLo.includes("both teams to score") ? oddsData.btts_yes
+    : pickLo.includes("not to score") ? oddsData.btts_no
+    : pickLo === "draw" ? oddsData.draw
+    : pickLo.includes("over 3.5") ? ouRaw.over_3_5
+    : pickLo.includes("over 2.5") ? ouRaw.over_2_5
+    : pickLo.includes("over 1.5") ? ouRaw.over_1_5
+    : pickLo.includes("under 3.5") ? ouRaw.under_3_5
+    : pickLo.includes("under 2.5") ? ouRaw.under_2_5
+    : pickLo.includes("under 1.5") ? ouRaw.under_1_5
+    : pickLo.includes("win") && homeNm && pickLo.includes(homeNm.split(" ")[0].toLowerCase()) ? oddsData.home
+    : pickLo.includes("win") ? oddsData.away
+    : null;
+  const impliedPct = odds ? Math.round((1 / Number(odds)) * 100)
+    : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
+  const hasValue = impliedPct != null && conf > impliedPct + 2;
+  const betLink = oddsData?.betLinkSportybet || null;
+  const gameScript = (data as any)?.gameScript;
+  const scriptLabel = gameScript?.label || null;
+  const scriptVol = gameScript?.volatility || null;
   const riskLabel = rec.risk || rec.riskLevel || (conf >= 75 ? "LOW RISK" : conf >= 60 ? "MODERATE RISK" : "HIGH RISK");
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE (AGGRESSIVE)" : conf >= 60 ? "GOOD EDGE" : "MARGINAL EDGE");
@@ -109,9 +128,16 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
               {edgeLabel}
             </span>
           </div>
-          <p className={cn("text-[11px] font-black uppercase tracking-widest mb-4", riskColor(riskLabel))}>
+          <p className={cn("text-[11px] font-black uppercase tracking-widest mb-2", riskColor(riskLabel))}>
             {riskLabel}
           </p>
+          {scriptLabel && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[9px] text-white/25 uppercase tracking-widest">Script:</span>
+              <span className="text-[10px] font-bold text-amber-300/70">{scriptLabel}</span>
+              {scriptVol && <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold", scriptVol === "HIGH" ? "bg-red-500/10 text-red-400" : scriptVol === "LOW" ? "bg-primary/10 text-primary" : "bg-white/5 text-white/25")}>{scriptVol}</span>}
+            </div>
+          )}
           <div className="flex items-start justify-between gap-3 mb-5">
             <div className="flex-1">
               <p className="text-[11px] text-white/40 mb-1 capitalize">{marketLabel}</p>
@@ -138,10 +164,10 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
               </div>
             </div>
           )}
-          {odds && (
+          {(odds || oddsData?.home) && (
             <div className="border-t border-white/8 pt-4">
               <p className="text-[10px] font-black text-white/35 uppercase tracking-widest mb-3">
-                Sportybet Odds
+                {oddsData ? "SportyBet Odds" : "Sportybet Odds"}
               </p>
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div className="rounded-xl p-3 text-center bg-[#0d1e17] border border-white/8">
@@ -164,6 +190,28 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
                   <TrendingUp size={12} className="text-primary"/>
                   <p className="text-[11px] text-primary font-semibold">Value bet — bookmaker underpricing this outcome</p>
                 </div>
+              )}
+              {oddsData?.home && (
+                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                  <div className="rounded-xl p-2 text-center bg-[#0d1e17] border border-white/5">
+                    <p className="text-[9px] text-white/25 mb-0.5">1 (H)</p>
+                    <p className="text-sm font-black text-white">{oddsData.home?.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-xl p-2 text-center bg-[#0d1e17] border border-white/5">
+                    <p className="text-[9px] text-white/25 mb-0.5">X</p>
+                    <p className="text-sm font-black text-white">{oddsData.draw?.toFixed(2) || "-"}</p>
+                  </div>
+                  <div className="rounded-xl p-2 text-center bg-[#0d1e17] border border-white/5">
+                    <p className="text-[9px] text-white/25 mb-0.5">2 (A)</p>
+                    <p className="text-sm font-black text-white">{oddsData.away?.toFixed(2)}</p>
+                  </div>
+                </div>
+              )}
+              {betLink && (
+                <a href={betLink} target="_blank" rel="noopener noreferrer"
+                  className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-primary text-black font-black text-xs shadow-[0_0_16px_rgba(16,231,116,0.3)] hover:brightness-110 transition-all">
+                  Bet on SportyBet →
+                </a>
               )}
             </div>
           )}
