@@ -10,7 +10,7 @@ const FEATURES=[
   {icon:Zap,label:"Unlimited daily predictions — no cap"},
   {icon:TrendingUp,label:"Real odds + value bet detection"},
   {icon:Crown,label:"Daily ACCA Builder — safe and value picks"},
-  {icon:Star,label:"Phantom AI — ask anything about any match"},
+  {icon:Star,label:"PhantomChat — deep match analysis, any game"},
   {icon:Shield,label:"Track Record — backtested win rates"},
   {icon:Users,label:"Top Picks — multi-factor ranked predictions"},
 ];
@@ -36,7 +36,7 @@ function PaymentSuccess({onContinue}:any){
       </motion.h1>
       <motion.p initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.45}}
         className="text-white/40 text-sm leading-relaxed max-w-xs mb-8">
-        Your account is fully activated. You now have unlimited access to all predictions, ACCA builder, and Phantom AI.
+        Your account is fully activated. Enjoy unlimited predictions, ACCA Builder, Top Picks, PhantomChat and deep match analysis.
       </motion.p>
       <motion.button initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.55}}
         onClick={onContinue} whileTap={{scale:0.97}}
@@ -117,7 +117,7 @@ export default function Paywall(){
                 </motion.h1>
                 <motion.p initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:0.2}}
                   className="text-white/35 text-sm mt-3 leading-relaxed">
-                  {user?.access_status==="trial"?"You're on free trial. Upgrade before it ends.":"AI-powered football predictions, daily picks & value bets."}
+                  {user?.access_status==="trial"?"You're on free trial. Upgrade before it ends.":"Data-powered predictions, daily picks & real value edges."}
                 </motion.p>
               </div>
               <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:0.25}}

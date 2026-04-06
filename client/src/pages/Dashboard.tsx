@@ -849,7 +849,7 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
                   </span>
                 )}
                 {trialHoursRemaining !== null && <span>·</span>}
-                <span>3 predictions/day · upgrade for full access</span>
+                <span>{usageData ? (usageData.limit)+"/day limit" : "5 predictions/day"} · upgrade for full access</span>
               </p>
             </div>
             <span className={`text-[11px] font-black text-black px-3 py-1.5 rounded-xl shrink-0 group-hover:opacity-90 transition-opacity ${

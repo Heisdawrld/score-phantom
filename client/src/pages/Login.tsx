@@ -339,6 +339,13 @@ export default function Login() {
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 3-day free trial</p></div>
                   </div>
+                  <div className="p-3 rounded-xl bg-white/4 border border-primary/10 text-xs space-y-1.5">
+                    <p className="text-white/50 font-semibold uppercase tracking-wider text-[9px] mb-2">Free trial includes</p>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>5 predictions per day</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Match Predictions tab</div>
+                    <div className="flex items-center gap-2 text-white/30"><span className="text-white/20 mr-1">✗</span>Stats, ACCA, PhantomChat — Premium</div>
+                    <div className="flex items-center gap-2 text-white/30"><span className="text-white/20 mr-1">✗</span>Top Picks + value bets — Premium</div>
+                  </div>
                   <AnimatePresence>
                     {generalError && (
                       <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}

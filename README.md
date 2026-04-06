@@ -1,6 +1,6 @@
-# ⚽ ScorePhantom — AI Football Prediction Engine
+# ⚽ ScorePhantom — Data-Driven Football Prediction Engine
 
-Premium football prediction web app with a multi-layered AI prediction engine, game script analysis, value detection, and market scoring.
+Premium football prediction web app with a multi-stage prediction engine with game script analysis, Poisson modelling, market scoring, and real-odds value detection.
 
 ## 🧠 How the Prediction Engine Works
 
@@ -22,27 +22,27 @@ Each prediction includes 3 confidence dimensions:
 - **Market Value** — how mispriced the odds are (STRONG/FAIR/WEAK)
 - **Match Volatility** — how unpredictable the match is (LOW/MEDIUM/HIGH)
 
-### Groq AI (~30% Usage)
-- Groq evaluates ~30% of predictions for enhanced analysis
+### PhantomChat (Groq-powered)
+- Deep per-match analysis available to Premium users
 - Smart budget system: max 20 calls/hour, 200/day
-- High-value matches (top leagues, tight games) always get AI evaluation
-- 70% handled by the deterministic engine for speed and cost efficiency
+- Smart rate limiting: max 20 calls/hour, 200/day
+- Deterministic engine handles all core predictions; Groq powers explanations
 
 ## 💰 Payment System
 
-- **OPay Bank Transfer** — users transfer ₦3,000/month directly
-- **WhatsApp Receipt Verification** — users upload payment proof via WhatsApp
+- **Flutterwave** — hosted checkout, ₦3,000/month instant activation
+- **Webhook confirmation** — no manual verification needed
 - No third-party payment gateway fees
 
 ## 🔒 Access Tiers
 
 | Feature | Free Trial (3 days) | Premium |
 |---------|:-------------------:|:-------:|
-| View matches | Limited (2 per league) | ✅ All |
-| Basic predictions | ✅ | ✅ |
+| Browse all fixtures | ✅ | ✅ |
+| Predictions (5/day cap) | ✅ | ✅ Unlimited |
 | Game scripts & reasons | ❌ | ✅ |
 | Value detection | ❌ | ✅ |
-| AI chat | ❌ | ✅ |
+| PhantomChat deep analysis | ❌ | ✅ |
 | Confidence breakdown | ❌ | ✅ |
 
 ## 🚀 Setup
