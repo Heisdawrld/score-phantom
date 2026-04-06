@@ -144,7 +144,7 @@ async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
 
     // Count pending unenriched fixtures for today + next 6 days
     const pending = await db.execute({
-      sql: `SELECT id, home_team_name, away_team_name, match_date
+      sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
             FROM fixtures
             WHERE enriched = 0 AND match_date >= ?
             ORDER BY match_date ASC
@@ -184,7 +184,7 @@ async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
     // Re-enrich fixtures that came back LIMITED with 0 form data (API returned empty last time)
     if (success > 0) {
       const retryResult = await db.execute({
-        sql: `SELECT id, home_team_name, away_team_name, match_date
+        sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
               FROM fixtures
               WHERE enrichment_status IN ('limited', 'no_data')
                 AND match_date >= ?
@@ -289,7 +289,7 @@ app.use(errorHandler);
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   startLiveScoreWatcher();
-  console.log("[WS] Live score WebSocket watcher started");
+  console.log("[Live] LiveScore watcher started");
   await initUsersTable();
   await initPredictionsTable();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
