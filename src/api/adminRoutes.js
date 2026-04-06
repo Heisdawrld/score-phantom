@@ -416,7 +416,7 @@ router.post("/clear-fixture-odds", adminLimiter, requireAdmin, async (req, res) 
 router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const tables = ["predictions_v2","historical_matches","fixture_odds","fixtures","teams","tournaments"];
-    const caches = ["sportmonks_cache","deep_analysis_cache","schedule_cache","sportsapipro_usage"];
+    const caches = ["sportmonks_cache"];
     let cleared = [];
     for (const t of tables) {
       try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) { console.warn("Skip " + t + ":", e.message); }

@@ -7,7 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ChevronRight, ChevronDown, ChevronUp, Search, Trophy, BellRing, Microscope,
+  ChevronRight, ChevronDown, ChevronUp, Search, Trophy, BellRing,
   Crown, Zap, Lock, AlertCircle
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -452,9 +452,6 @@ function LeagueGroup({
                     </div>
                   </div>
                   <div className='flex flex-col items-end gap-1.5 shrink-0'>
-                    {isPremium && !isLive && !isFinished && (
-                      <button onClick={(e) => { e.stopPropagation(); setLocation('/analysis/' + fixture.id); }} className='p-1.5 rounded-lg border border-primary/20 bg-primary/8 text-primary/60 hover:text-primary hover:bg-primary/15 hover:border-primary/40 transition-all' title='Deep Analysis'><Microscope className='w-3.5 h-3.5' /></button>
-                    )}
                     {isLive && (
                       <button onClick={(e) => toggleNotify(e, fixture.id)} className={'p-1.5 rounded-lg border transition-all ' + (isNotified ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60 hover:bg-white/8')}>
                         <BellRing className='w-3.5 h-3.5' />
