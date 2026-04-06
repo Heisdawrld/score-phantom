@@ -82,6 +82,7 @@ export async function initUsersTable() {
     ["own_referral_code",         "ALTER TABLE users ADD COLUMN own_referral_code TEXT"],
     ["referred_by_user_id",       "ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER"],
     ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
+    ["partner_id",                "ALTER TABLE users ADD COLUMN partner_id INTEGER"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
@@ -123,10 +124,31 @@ export async function initUsersTable() {
   `);
 
   // Migrate: add payment_id if missing
-  await ensureColumn("partner_commissions", "payment_id", "ALTER TABLE partner_commissions ADD COLUMN payment_id INTEGER");
+  await ensureColumn("partner_commissions", "payment_id",         "ALTER TABLE partner_commissions ADD COLUMN payment_id INTEGER");
+  await ensureColumn("partner_commissions", "partner_id",          "ALTER TABLE partner_commissions ADD COLUMN partner_id INTEGER");
+  await ensureColumn("partner_commissions", "payment_reference",   "ALTER TABLE partner_commissions ADD COLUMN payment_reference TEXT");
+  await ensureColumn("partner_commissions", "paid_at",             "ALTER TABLE partner_commissions ADD COLUMN paid_at TEXT");
+  await ensureColumn("partner_commissions", "payout_batch_id",     "ALTER TABLE partner_commissions ADD COLUMN payout_batch_id TEXT");
+  await ensureColumn("partner_commissions", "notes",               "ALTER TABLE partner_commissions ADD COLUMN notes TEXT");
 
-  // Partners table - named accounts with per-partner commission rates
-  await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_payout_at TEXT)");
+  // Partners table — migrate to standalone schema (no user_id required)
+  const _ptInfo = await db.execute("PRAGMA table_info(partners)");
+  const _ptCols = (_ptInfo.rows||[]).map(r=>r.name);
+  if (!_ptCols.includes("email")) {
+    try {
+      await db.execute("ALTER TABLE partners RENAME TO partners_legacy");
+    } catch(_){}
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_payout_at TEXT)");
+    try {
+      await db.execute("INSERT OR IGNORE INTO partners (id,name,user_id,referral_code,commission_rate,created_at,last_payout_at) SELECT id,name,user_id,referral_code,commission_rate,created_at,last_payout_at FROM partners_legacy");
+      await db.execute("DROP TABLE IF EXISTS partners_legacy");
+    } catch(_){}
+  } else {
+    await ensureColumn("partners","email","ALTER TABLE partners ADD COLUMN email TEXT");
+    await ensureColumn("partners","status","ALTER TABLE partners ADD COLUMN status TEXT DEFAULT 'active'");
+    await ensureColumn("partners","notes","ALTER TABLE partners ADD COLUMN notes TEXT");
+  }
+  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TEXT DEFAULT CURRENT_TIMESTAMP)");
 
 }
 
@@ -243,43 +265,46 @@ async function activatePremium(userId, flwChargeId, reference) {
   return { expiryISO, subscriptionCode };
 }
 
-// ── Referral commission on first verified payment ────────────────────────────
-async function createReferralCommission(userId, grossAmount, paymentId) {
+// ── Referral commission on first verified payment ────────────────────────
+async function createReferralCommission(userId, grossAmount, paymentId, paymentReference) {
   try {
-    // Check if user was referred
-    const userResult = await db.execute({
-      sql: `SELECT referred_by_user_id FROM users WHERE id = ? AND referred_by_user_id IS NOT NULL LIMIT 1`,
-      args: [userId],
-    });
-    const user = userResult.rows?.[0];
-    if (!user) return; // not a referred user
-
-    // Check no existing commission for this referred user (first payment only)
-    const existing = await db.execute({
-      sql: `SELECT id FROM partner_commissions WHERE referred_user_id = ? LIMIT 1`,
-      args: [userId],
-    });
-    if ((existing.rows || []).length > 0) return; // already credited
-
-    // Look up per-partner commission rate (falls back to 25% default)
-    const partnerRateRes = await db.execute({
-      sql: "SELECT commission_rate FROM partners WHERE user_id = ? LIMIT 1",
-      args: [user.referred_by_user_id],
-    });
-    const commissionRate = partnerRateRes.rows?.[0]?.commission_rate ?? 0.25;
+    // Prevent duplicate commission for same user
+    const dup = await db.execute({ sql: "SELECT id FROM partner_commissions WHERE referred_user_id = ? LIMIT 1", args: [userId] });
+    if ((dup.rows||[]).length > 0) return;
+    // Get user attribution
+    const uRes = await db.execute({ sql: "SELECT partner_id, referred_by_user_id FROM users WHERE id = ? LIMIT 1", args: [userId] });
+    const u = uRes.rows?.[0];
+    if (!u) return;
+    let partnerId = null;
+    let referrerUserId = null;
+    let commissionRate = 0.25;
+    if (u.partner_id) {
+      // Standalone partner
+      const pRes = await db.execute({ sql: "SELECT id, commission_rate FROM partners WHERE id = ? LIMIT 1", args: [u.partner_id] });
+      const p = pRes.rows?.[0];
+      if (!p) return;
+      partnerId = p.id;
+      commissionRate = p.commission_rate ?? 0.25;
+    } else if (u.referred_by_user_id) {
+      // Legacy: user-based referral — look up their partner record
+      const pRes = await db.execute({ sql: "SELECT id, commission_rate FROM partners WHERE user_id = ? LIMIT 1", args: [u.referred_by_user_id] });
+      const p = pRes.rows?.[0];
+      if (!p) return;
+      partnerId = p.id;
+      referrerUserId = u.referred_by_user_id;
+      commissionRate = p.commission_rate ?? 0.25;
+    } else return; // not a referred user
     const commissionAmount = Math.round(grossAmount * commissionRate);
-
+    const now = new Date().toISOString();
     await db.execute({
-      sql: `INSERT INTO partner_commissions (referrer_user_id, referred_user_id, payment_id, gross_amount, commission_rate, commission_amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      args: [user.referred_by_user_id, userId, paymentId || null, grossAmount, commissionRate, commissionAmount],
+      sql: "INSERT INTO partner_commissions (partner_id, referrer_user_id, referred_user_id, payment_id, payment_reference, gross_amount, commission_rate, commission_amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+      args: [partnerId, referrerUserId, userId, paymentId||null, paymentReference||null, grossAmount, commissionRate, commissionAmount, now],
     });
-    console.log(`[Commission] ✓ ₦${commissionAmount} commission created for referrer ${user.referred_by_user_id} (referred user ${userId})`);
+    console.log("[Commission] ✓ ₦" + commissionAmount + " created for partner " + partnerId + " (referred user " + userId + ")");
   } catch (err) {
-    console.error('[Commission] Error creating commission:', err.message);
+    console.error("[Commission] Error:", err.message);
   }
 }
-
 // ── Firebase Admin SDK initialization ────────────────────────────────────────
 import admin from 'firebase-admin';
 
@@ -318,29 +343,35 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
-// ── Referral helper ──────────────────────────────────────────────────────────
+// ── Referral helper ────────────────────────────────────────────
 async function attachReferral(newUserId, referralCode) {
   if (!referralCode) return;
-  const code = String(referralCode).trim();
+  const code = String(referralCode).trim().toUpperCase();
   if (!code) return;
   try {
-    const referrerResult = await db.execute({
-      sql: `SELECT id, own_referral_code FROM users WHERE own_referral_code = ? LIMIT 1`,
-      args: [code],
-    });
-    const referrer = referrerResult.rows?.[0];
-    if (!referrer) { console.log(`[Referral] Code "${code}" not found — skipping`); return; }
-    if (Number(referrer.id) === Number(newUserId)) { console.log(`[Referral] Self-referral blocked`); return; }
-    await db.execute({
-      sql: `UPDATE users SET referred_by_user_id = ?, referred_by_code = ? WHERE id = ? AND referred_by_user_id IS NULL`,
-      args: [referrer.id, code, newUserId],
-    });
-    console.log(`[Referral] ✓ User ${newUserId} referred by user ${referrer.id} (code=${code})`);
+    // First-referral-wins: skip if already attributed
+    const already = await db.execute({ sql: "SELECT partner_id, referred_by_user_id FROM users WHERE id = ? LIMIT 1", args: [newUserId] });
+    if (already.rows?.[0]?.partner_id || already.rows?.[0]?.referred_by_user_id) return;
+    // 1. Check standalone partners table first
+    const pRes = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? AND status = 'active' LIMIT 1", args: [code] });
+    const partner = pRes.rows?.[0];
+    if (partner) {
+      await db.execute({ sql: "UPDATE users SET partner_id = ?, referred_by_code = ? WHERE id = ?", args: [partner.id, code, newUserId] });
+      await db.execute({ sql: "INSERT OR IGNORE INTO partner_referrals (partner_id, user_id, referral_code) VALUES (?, ?, ?)", args: [partner.id, newUserId, code] });
+      console.log("[Referral] User " + newUserId + " attributed to partner " + partner.id + " code=" + code);
+      return;
+    }
+    // 2. Fallback: old user-based referral
+    const uRes = await db.execute({ sql: "SELECT id FROM users WHERE own_referral_code = ? LIMIT 1", args: [code] });
+    const referrer = uRes.rows?.[0];
+    if (!referrer) { console.log("[Referral] Code not found: " + code); return; }
+    if (Number(referrer.id) === Number(newUserId)) { console.log("[Referral] Self-referral blocked"); return; }
+    await db.execute({ sql: "UPDATE users SET referred_by_user_id = ?, referred_by_code = ? WHERE id = ? AND referred_by_user_id IS NULL", args: [referrer.id, code, newUserId] });
+    console.log("[Referral] User " + newUserId + " referred by user " + referrer.id + " code=" + code);
   } catch (err) {
-    console.error('[Referral] Error attaching referral:', err.message);
+    console.error("[Referral] Error:", err.message);
   }
 }
-
 // ── POST /api/auth/google ─────────────────────────────────────────────────────
 // Accepts a Firebase ID token, verifies it, returns our own JWT.
 // Creates new users automatically; matches existing users by email.
@@ -911,7 +942,7 @@ router.get("/payment/callback", async (req, res) => {
 
     // Create referral commission if applicable (first verified payment only)
     const _pmtId1 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(tx_ref)] });
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId1.rows?.[0]?.id || null);
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId1.rows?.[0]?.id || null, String(tx_ref||""));
 
     return res.redirect(`${appUrl}/?payment=success`);
   } catch (err) {
@@ -970,7 +1001,7 @@ router.post("/webhook/flutterwave", async (req, res) => {
 
     // Create referral commission if applicable (first verified payment only)
     const _pmtId2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(txRef||"")] });
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId2.rows?.[0]?.id || null);
+    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId2.rows?.[0]?.id || null, String(txRef||""));
   } catch (err) {
     console.error('[FLW Webhook Error]', err.message);
   }

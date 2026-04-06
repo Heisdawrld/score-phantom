@@ -818,127 +818,134 @@ router.delete("/users/:id/referral-code", adminLimiter, requireAdmin, async (req
 
 // ── Partner / Referral endpoints ─────────────────────────────────────────────
 
-// POST /api/admin/partners — create a new named partner
+// POST /api/admin/partners — create standalone partner (no user account needed)
 router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const { name, userEmail, referralCode, commissionRate } = req.body || {};
-    if (!name || !name.trim()) return res.status(400).json({ error: "Partner name is required" });
-    if (!userEmail || !userEmail.trim()) return res.status(400).json({ error: "User email is required" });
-    if (!referralCode || !referralCode.trim()) return res.status(400).json({ error: "Referral code is required" });
-    const code = String(referralCode).trim().toUpperCase();
-    if (!/^[A-Za-z0-9_-]{2,20}$/.test(code)) return res.status(400).json({ error: "Code: 2-20 chars, letters/numbers/underscore/hyphen" });
-    const rate = parseFloat(commissionRate || 0.25);
-    if (isNaN(rate) || rate < 0 || rate > 1) return res.status(400).json({ error: "Commission rate must be 0-1 (e.g. 0.25 = 25%)" });
-    const normEmail = String(userEmail).trim().toLowerCase();
-    const userResult = await db.execute({ sql: "SELECT id, email FROM users WHERE email = ? LIMIT 1", args: [normEmail] });
-    const user = userResult.rows?.[0];
-    if (!user) return res.status(404).json({ error: "User not found: " + normEmail });
-    const codeCheck = await db.execute({ sql: "SELECT id FROM users WHERE own_referral_code = ? AND id != ? LIMIT 1", args: [code, user.id] });
-    if ((codeCheck.rows || []).length > 0) return res.status(409).json({ error: "Referral code already taken: " + code });
-    const partnerCheck = await db.execute({ sql: "SELECT id FROM partners WHERE user_id = ? LIMIT 1", args: [user.id] });
-    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/\/$/, "");
-    if ((partnerCheck.rows || []).length > 0) {
-      await db.execute({ sql: "UPDATE partners SET name = ?, referral_code = ?, commission_rate = ? WHERE user_id = ?", args: [name.trim(), code, rate, user.id] });
-    } else {
-      await db.execute({ sql: "INSERT INTO partners (name, user_id, referral_code, commission_rate) VALUES (?, ?, ?, ?)", args: [name.trim(), user.id, code, rate] });
-    }
-    await db.execute({ sql: "UPDATE users SET own_referral_code = ? WHERE id = ?", args: [code, user.id] });
-    console.log("[Partners] Created partner: " + name + " (" + normEmail + ") code=" + code);
-    return res.json({ success: true, partner: { name: name.trim(), email: normEmail, referral_code: code, commission_rate: rate }, referral_link: appOrigin + "/?ref=" + code });
-  } catch (err) {
-    console.error("[Admin/create-partner]", err);
-    return res.status(500).json({ error: "Failed to create partner" });
-  }
+    const { name, email, code, status, notes } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+    if (!code?.trim()) return res.status(400).json({ error: "Referral code required" });
+    const cleanCode = String(code).trim().toUpperCase();
+    if (!/^[A-Za-z0-9_-]{2,20}$/.test(cleanCode)) return res.status(400).json({ error: "Code: 2-20 chars, letters/numbers/underscore/hyphen only" });
+    const cnt = await db.execute("SELECT COUNT(*) as c FROM partners");
+    if (Number(cnt.rows?.[0]?.c || 0) >= 5) return res.status(400).json({ error: "Maximum 5 partners allowed" });
+    const dup = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? LIMIT 1", args: [cleanCode] });
+    if ((dup.rows||[]).length > 0) return res.status(409).json({ error: "Code already taken: " + cleanCode });
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(//$/,"");
+    const r = await db.execute({ sql: "INSERT INTO partners (name, email, referral_code, commission_rate, status, notes) VALUES (?, ?, ?, 0.25, ?, ?)", args: [name.trim(), email?.trim()||null, cleanCode, status||"active", notes?.trim()||null] });
+    const pid = r.lastInsertRowid || null;
+    console.log("[Partners] Created: " + name + " code=" + cleanCode);
+    return res.json({ success: true, partner_id: pid, referral_link: appOrigin + "/?ref=" + cleanCode });
+  } catch (err) { console.error("[Admin/create-partner]", err); return res.status(500).json({ error: err.message }); }
 });
-
-// GET /api/admin/partners — list all partners from partners table with full stats
+// GET /api/admin/partners — list all partners with full metrics
 router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/\/$/, "");
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(//$/,"");
     const result = await db.execute(
-      "SELECT pt.id as partner_id, pt.name, pt.referral_code, pt.commission_rate, pt.created_at, pt.last_payout_at," +
-      " u.id as user_id, u.email," +
-      " (SELECT COUNT(*) FROM users WHERE referred_by_user_id = pt.user_id) as total_referred_signups," +
-      " COUNT(DISTINCT pc.referred_user_id) as total_referred_paid," +
-      " COALESCE(SUM(pc.commission_amount), 0) as total_commission," +
-      " COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END), 0) as pending_commission," +
-      " COALESCE(SUM(CASE WHEN pc.status = 'settled' THEN pc.commission_amount ELSE 0 END), 0) as settled_commission" +
-      " FROM partners pt JOIN users u ON u.id = pt.user_id" +
-      " LEFT JOIN partner_commissions pc ON pc.referrer_user_id = pt.user_id" +
+      "SELECT pt.id as partner_id, pt.name, pt.email, pt.referral_code, pt.commission_rate, pt.status, pt.notes, pt.created_at, pt.last_payout_at," +
+      " (SELECT COUNT(*) FROM partner_referrals WHERE partner_id = pt.id) as total_referred_signups," +
+      " COUNT(DISTINCT CASE WHEN pc.status IN ('pending','paid','settled') THEN pc.referred_user_id END) as total_referred_paid," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END),0) as pending_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
+      " FROM partners pt" +
+      " LEFT JOIN partner_commissions pc ON pc.partner_id = pt.id" +
       " GROUP BY pt.id ORDER BY pt.created_at DESC"
     );
-    const partners = (result.rows || []).map(p => ({ ...p, referral_link: appOrigin + "/?ref=" + p.referral_code }));
+    const partners = (result.rows||[]).map(p => ({ ...p, referral_link: appOrigin + "/?ref=" + p.referral_code }));
     return res.json({ partners });
-  } catch (err) {
-    console.error("[Admin/partners]", err);
-    return res.status(500).json({ error: "Failed to load partners" });
-  }
+  } catch (err) { console.error("[Admin/partners]", err); return res.status(500).json({ error: err.message }); }
 });
-
-// DELETE /api/admin/partners/:id — remove a partner record
+// PATCH /api/admin/partners/:id — update partner details
+router.patch("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, code, notes, commissionRate } = req.body || {};
+    const updates = [];
+    const args = [];
+    if (name?.trim()) { updates.push("name = ?"); args.push(name.trim()); }
+    if (email !== undefined) { updates.push("email = ?"); args.push(email?.trim()||null); }
+    if (code?.trim()) {
+      const c = String(code).trim().toUpperCase();
+      const dup = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? AND id != ? LIMIT 1", args: [c, req.params.id] });
+      if ((dup.rows||[]).length > 0) return res.status(409).json({ error: "Code taken: " + c });
+      updates.push("referral_code = ?"); args.push(c);
+    }
+    if (notes !== undefined) { updates.push("notes = ?"); args.push(notes?.trim()||null); }
+    if (commissionRate !== undefined) { updates.push("commission_rate = ?"); args.push(parseFloat(commissionRate)); }
+    if (!updates.length) return res.status(400).json({ error: "Nothing to update" });
+    args.push(req.params.id);
+    await db.execute({ sql: "UPDATE partners SET " + updates.join(", ") + " WHERE id = ?", args });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// POST /api/admin/partners/:id/status — change partner status
+router.post("/partners/:id/status", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    if (!["active","paused","suspended"].includes(status)) return res.status(400).json({ error: "status must be active, paused, or suspended" });
+    await db.execute({ sql: "UPDATE partners SET status = ? WHERE id = ?", args: [status, req.params.id] });
+    return res.json({ success: true, status });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// DELETE /api/admin/partners/:id
 router.delete("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const pt = await db.execute({ sql: "SELECT user_id FROM partners WHERE id = ? LIMIT 1", args: [req.params.id] });
-    if (!pt.rows?.[0]) return res.status(404).json({ error: "Partner not found" });
     await db.execute({ sql: "DELETE FROM partners WHERE id = ?", args: [req.params.id] });
     return res.json({ success: true });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
-
-// GET /api/admin/partners/:id/commissions — full earnings ledger
+// GET /api/admin/partners/:id/commissions — full ledger
 router.get("/partners/:id/commissions", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: "SELECT pc.id, pc.referred_user_id, pc.payment_id, pc.gross_amount, pc.commission_rate, pc.commission_amount, pc.status, pc.created_at, pc.settled_at," +
+      sql: "SELECT pc.id, pc.referred_user_id, pc.payment_id, pc.payment_reference, pc.gross_amount, pc.commission_rate, pc.commission_amount, pc.status, pc.created_at, pc.paid_at, pc.settled_at, pc.notes," +
            " ru.email as referred_email, ru.created_at as referred_signup_date," +
-           " p.paid_at as payment_date, p.status as payment_status" +
+           " p.paid_at as payment_date, p.status as payment_status, p.reference as payment_ref" +
            " FROM partner_commissions pc" +
            " LEFT JOIN users ru ON ru.id = pc.referred_user_id" +
            " LEFT JOIN payments p ON p.id = pc.payment_id" +
-           " WHERE pc.referrer_user_id = (SELECT user_id FROM partners WHERE id = ? LIMIT 1)" +
+           " WHERE pc.partner_id = ?" +
            " ORDER BY pc.created_at DESC",
       args: [req.params.id],
     });
     return res.json({ commissions: result.rows || [] });
-  } catch (err) {
-    return res.status(500).json({ error: "Failed to load commissions" });
-  }
+  } catch (err) { return res.status(500).json({ error: err.message }); }
 });
-
-// POST /api/admin/partners/:id/settle — settle ALL pending commissions for this partner
+// POST /api/admin/partners/:id/settle — mark ALL pending as paid
 router.post("/partners/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const pt = await db.execute({ sql: "SELECT user_id FROM partners WHERE id = ? LIMIT 1", args: [req.params.id] });
-    if (!pt.rows?.[0]) return res.status(404).json({ error: "Partner not found" });
-    const userId = pt.rows[0].user_id;
     const now = new Date().toISOString();
-    const result = await db.execute({ sql: "UPDATE partner_commissions SET status = 'settled', settled_at = ? WHERE referrer_user_id = ? AND status = 'pending'", args: [now, userId] });
+    const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'paid', paid_at = ?, settled_at = ? WHERE partner_id = ? AND status = 'pending'", args: [now, now, req.params.id] });
     await db.execute({ sql: "UPDATE partners SET last_payout_at = ? WHERE id = ?", args: [now, req.params.id] });
-    console.log("[Admin] Settled all commissions for partner " + req.params.id);
-    return res.json({ success: true, settled_count: result.rowsAffected || 0, settled_at: now });
-  } catch (err) {
-    return res.status(500).json({ error: "Failed to settle commissions" });
-  }
+    return res.json({ success: true, paid_count: r.rowsAffected || 0, paid_at: now });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
 });
-
-// POST /api/admin/partners/:id/settle-selected — settle specific commission rows by id
+// POST /api/admin/partners/:id/settle-selected — mark selected pending as paid
 router.post("/partners/:id/settle-selected", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const { ids } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
-    const pt = await db.execute({ sql: "SELECT user_id FROM partners WHERE id = ? LIMIT 1", args: [req.params.id] });
-    if (!pt.rows?.[0]) return res.status(404).json({ error: "Partner not found" });
-    const userId = pt.rows[0].user_id;
     const now = new Date().toISOString();
-    let settled = 0;
-    for (const commId of ids) {
-      const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'settled', settled_at = ? WHERE id = ? AND referrer_user_id = ? AND status = 'pending'", args: [now, commId, userId] });
-      settled += r.rowsAffected || 0;
+    let paid = 0;
+    for (const cid of ids) {
+      const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'paid', paid_at = ?, settled_at = ? WHERE id = ? AND partner_id = ? AND status = 'pending'", args: [now, now, cid, req.params.id] });
+      paid += r.rowsAffected || 0;
     }
-    if (settled > 0) await db.execute({ sql: "UPDATE partners SET last_payout_at = ? WHERE id = ?", args: [now, req.params.id] });
-    return res.json({ success: true, settled_count: settled, settled_at: now });
+    if (paid > 0) await db.execute({ sql: "UPDATE partners SET last_payout_at = ? WHERE id = ?", args: [now, req.params.id] });
+    return res.json({ success: true, paid_count: paid, paid_at: now });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
+// POST /api/admin/commissions/:commId/reverse — reverse a commission entry
+router.post("/commissions/:commId/reverse", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'reversed', notes = ? WHERE id = ? AND status != 'reversed'", args: [notes||null, req.params.commId] });
+    if (!r.rowsAffected) return res.status(404).json({ error: "Commission not found or already reversed" });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
 
 // Clear prediction outcomes (reset track record)
 router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) => {
