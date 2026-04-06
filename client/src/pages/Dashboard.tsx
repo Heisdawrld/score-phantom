@@ -897,8 +897,8 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
           <div className="flex items-center gap-2 px-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399] shrink-0" />
             <span className="text-xs text-muted-foreground">
-              <span className="text-emerald-400 font-semibold">{(data as any).enrichedDeepCount ?? 0}</span>
-              {" "}deeply enriched fixtures today · {data.total} total
+              <span className="text-emerald-400 font-semibold">{(data as any).total ?? 0}</span>
+              {" "}fixtures today
             </span>
           </div>
         )}

@@ -197,7 +197,7 @@ function StatsTab({ d }: any) {
   const fix = d?.fixture || {};
   const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
   const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
-  const resultOf = (m: any, t: string) => { const { h, a } = parseScore(m); const home = isHome(m, t); const sc = home ? h : a; const cn = home ? a : h; return sc > cn ? "W" : sc === cn ? "D" : "L"; };
+  const resultOf = (m: any, t: string) => { const { h, a } = parseScore(m); const home = isHome(m, t); const sc = home ? h : a; const conc = home ? a : h; return sc > conc ? "W" : sc === conc ? "D" : "L"; };
   const dotColor = (m: any, t: string) => { if (!m?.score) return "bg-white/15"; const r = resultOf(m, t); return r === "W" ? "bg-primary" : r === "D" ? "bg-amber-400" : "bg-red-500"; };
   const rColor = (r: string) => r === "W" ? "text-primary" : r === "D" ? "text-amber-400" : "text-red-400";
   const formAnalysis = (form: any[], teamName: string) => {
