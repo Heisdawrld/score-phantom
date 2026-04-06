@@ -1439,7 +1439,8 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
     if (req.access.has_full_access) {
       oddsRow = await getOdds(fixtureId);
     }
-    return res.json({ fixture, meta, h2h, homeForm, awayForm, odds: oddsRow, access: buildAccessPayload(req.access) });
+    const standings = meta?.standings || [];
+    return res.json({ fixture, meta, h2h, homeForm, awayForm, standings, odds: oddsRow, access: buildAccessPayload(req.access) });
   } catch(err) {
     console.error("[MatchCenter]", err.message);
     res.status(500).json({ error: "Failed to load match data" });

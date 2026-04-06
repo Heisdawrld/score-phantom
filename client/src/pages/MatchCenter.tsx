@@ -25,7 +25,7 @@ function PredictionTab({ fixtureId, isPremium, setLocation }: any) {
 }
 
 function StatsTab({ d }: any) {
-  const h2h = Array.isArray(d?.h2h)?d.h2h:[], hf = Array.isArray(d?.homeForm)?d.homeForm:[], af = Array.isArray(d?.awayForm)?d.awayForm:[], st = Array.isArray(d?.standings)?d.standings:[], fix = d?.fixture||{};
+  const h2h = Array.isArray(d?.h2h)&&d.h2h.length?d.h2h:Array.isArray(d?.meta?.h2h)?d.meta.h2h:[], hf = Array.isArray(d?.homeForm)&&d.homeForm.length?d.homeForm:Array.isArray(d?.meta?.homeForm)?d.meta.homeForm:[], af = Array.isArray(d?.awayForm)&&d.awayForm.length?d.awayForm:Array.isArray(d?.meta?.awayForm)?d.meta.awayForm:[], st = Array.isArray(d?.standings)&&d.standings.length?d.standings:Array.isArray(d?.meta?.standings)?d.meta.standings:[], fix = d?.fixture||{};
   const dot = (m: any, t: string) => { if (!m?.score) return "bg-white/20"; const [h,a] = (m.score).split("-").map(Number); const home = (m.home||"").toLowerCase().includes((t||"").toLowerCase().split(" ")[0]); return (home?(h>a):(a>h))?"bg-primary":h===a?"bg-amber-400":"bg-red-500"; };
   return (<div className="flex flex-col gap-4">
     {hf.length>0&&<div className="rounded-2xl bg-white/4 border border-white/8 p-4"><p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">{fix.home_team_name||"Home"} — Last 5</p><div className="flex gap-2">{hf.slice(0,5).map((m: any,i: number)=><div key={i} className={"w-9 h-9 rounded-xl "+dot(m,fix.home_team_name||"")}/>)}</div></div>}
@@ -40,7 +40,7 @@ function PhantomAITab({ fixtureId, isPremium, setLocation }: any) {
   const [msgs, setMsgs] = useState<{role:string;content:string}[]>([{role:"assistant",content:"I have analysed this match. What would you like to know? Ask about form, tactics, injuries or value."}]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const mutation = useMutation({ mutationFn: (body: any) => fetchApi("/chat/"+fixtureId, {method:"POST",body:JSON.stringify(body)}) });
+  const mutation = useMutation({ mutationFn: (body: any) => fetchApi("/predict/"+fixtureId+"/chat", {method:"POST",body:JSON.stringify(body)}) });
   useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=scrollRef.current.scrollHeight; },[msgs]);
   if (!isPremium) return (<div className="flex flex-col items-center justify-center py-16 gap-4"><div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center"><Bot size={28} className="text-blue-400"/></div><div className="text-center"><p className="font-bold text-white mb-1">Phantom AI</p><p className="text-sm text-white/40">Ask anything about this match</p></div><button onClick={()=>setLocation("/paywall")} className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">Unlock AI Chat</button></div>);
   const send = (e: React.FormEvent) => { e.preventDefault(); if (!input.trim()||mutation.isPending) return; const msg = input.trim(); setInput(""); const next = [...msgs,{role:"user",content:msg}]; setMsgs(next); mutation.mutate({message:msg,history:msgs.slice(1)},{onSuccess:(r:any)=>setMsgs([...next,{role:"assistant",content:r.reply||"No response"}]),onError:()=>setMsgs([...next,{role:"assistant",content:"Sorry, I cannot analyse that right now."}])}); };
