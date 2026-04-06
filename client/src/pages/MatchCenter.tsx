@@ -195,49 +195,86 @@ function StatsTab({ d }: any) {
   const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) ? d.meta.awayForm : [];
   const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
   const fix = d?.fixture || {};
-  const dot = (m: any, t: string) => {
-    if (!m?.score) return "bg-white/15";
-    const parts = String(m.score).split("-").map(Number);
-    const h = parts[0], a = parts[1];
-    const home = (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
-    return (home ? (h > a) : (a > h)) ? "bg-primary" : h === a ? "bg-amber-400" : "bg-red-500";
+  const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
+  const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
+  const resultOf = (m: any, t: string) => { const { h, a } = parseScore(m); const home = isHome(m, t); const sc = home ? h : a; const cn = home ? a : h; return sc > cn ? "W" : sc === cn ? "D" : "L"; };
+  const dotColor = (m: any, t: string) => { if (!m?.score) return "bg-white/15"; const r = resultOf(m, t); return r === "W" ? "bg-primary" : r === "D" ? "bg-amber-400" : "bg-red-500"; };
+  const rColor = (r: string) => r === "W" ? "text-primary" : r === "D" ? "text-amber-400" : "text-red-400";
+  const formAnalysis = (form: any[], teamName: string) => {
+    if (!form.length) return null;
+    const items = form.slice(0, 5).map((m: any) => {
+      const { h, a } = parseScore(m); const home = isHome(m, teamName);
+      const sc = home ? h : a; const cc = home ? a : h;
+      return { result: sc > cc ? "W" : sc === cc ? "D" : "L", sc, cc, score: m.score };
+    });
+    const n = items.length;
+    return { items, n,
+      wins: items.filter(i => i.result === "W").length,
+      draws: items.filter(i => i.result === "D").length,
+      losses: items.filter(i => i.result === "L").length,
+      avgSc: (items.reduce((s, i) => s + i.sc, 0) / n).toFixed(1),
+      avgCc: (items.reduce((s, i) => s + i.cc, 0) / n).toFixed(1),
+      cs: items.filter(i => i.cc === 0).length,
+      btts: items.filter(i => i.sc > 0 && i.cc > 0).length,
+    };
   };
-  const rl = (m: any, t: string) => {
-    if (!m?.score) return "-";
-    const parts = String(m.score).split("-").map(Number);
-    const h = parts[0], a = parts[1];
-    const home = (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
-    return (home ? (h > a) : (a > h)) ? "W" : h === a ? "D" : "L";
+  const h2hSum = () => {
+    const sl = h2h.slice(0, 5); if (!sl.length) return null;
+    let hw = 0, aw = 0, dr = 0;
+    sl.forEach((m: any) => { const { h, a } = parseScore(m); if (h > a) hw++; else if (a > h) aw++; else dr++; });
+    return { hw, aw, dr };
   };
+  const homeF = formAnalysis(hf, fix.home_team_name || "");
+  const awayF = formAnalysis(af, fix.away_team_name || "");
+  const h2hS = h2hSum();
   return (
     <div className="flex flex-col gap-4">
       {[
-        { label: fix.home_team_name || "Home", form: hf },
-        { label: fix.away_team_name || "Away", form: af }
-      ].map(({ label, form }) => form.length > 0 ? (
+        { label: fix.home_team_name || "Home", form: hf, fa: homeF },
+        { label: fix.away_team_name || "Away", form: af, fa: awayF },
+      ].map(({ label, form, fa }) => !fa ? null : (
         <div key={label} className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">{label} — Last 5</p>
-          <div className="flex gap-2">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">{label} — Form</p>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex gap-2">
+              {fa.items.map((it, i) => (
+                <span key={i} className={cn("text-base font-black tracking-wider", rColor(it.result))}>{it.result}</span>
+              ))}
+            </div>
+            <span className="text-[10px] text-white/30 ml-1">{fa.wins}W {fa.draws}D {fa.losses}L</span>
+          </div>
+          <div className="flex gap-2 mb-4">
             {form.slice(0, 5).map((m: any, i: number) => (
               <div key={i} className="flex flex-col items-center gap-1">
-                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs", dot(m, label))}>
-                  <span className="text-black/80">{rl(m, label)}</span>
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs", dotColor(m, label))}>
+                  <span className="text-black/80">{resultOf(m, label)}</span>
                 </div>
                 <span className="text-[9px] text-white/25">{m.score || "-"}</span>
               </div>
             ))}
           </div>
+          <div className="grid grid-cols-4 gap-1 pt-3 border-t border-white/6">
+            <div className="text-center"><p className="text-sm font-black text-white">{fa.avgSc}</p><p className="text-[9px] text-white/35 mt-0.5">Avg Scored</p></div>
+            <div className="text-center"><p className="text-sm font-black text-white">{fa.avgCc}</p><p className="text-[9px] text-white/35 mt-0.5">Avg Conc.</p></div>
+            <div className="text-center"><p className="text-sm font-black text-primary">{Math.round((fa.cs / fa.n) * 100)}%</p><p className="text-[9px] text-white/35 mt-0.5">Clean Sh.</p></div>
+            <div className="text-center"><p className="text-sm font-black text-amber-400">{Math.round((fa.btts / fa.n) * 100)}%</p><p className="text-[9px] text-white/35 mt-0.5">BTTS</p></div>
+          </div>
         </div>
-      ) : null)}
+      ))}
       {h2h.length > 0 && (
         <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Head to Head</p>
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">Head to Head</p>
+          {h2hS && (
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="rounded-xl bg-primary/10 border border-primary/20 p-2.5 text-center"><p className="text-xl font-black text-primary">{h2hS.hw}</p><p className="text-[9px] text-white/40 truncate">{(fix.home_team_name || "Home").split(" ")[0]}</p></div>
+              <div className="rounded-xl bg-white/5 border border-white/10 p-2.5 text-center"><p className="text-xl font-black text-white/50">{h2hS.dr}</p><p className="text-[9px] text-white/40">Draw</p></div>
+              <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2.5 text-center"><p className="text-xl font-black text-blue-400">{h2hS.aw}</p><p className="text-[9px] text-white/40 truncate">{(fix.away_team_name || "Away").split(" ")[0]}</p></div>
+            </div>
+          )}
           <div className="flex flex-col">
             {h2h.slice(0, 6).map((m: any, i: number) => (
               <div key={i} className="flex items-center gap-2 py-2 border-b border-white/5 last:border-0">
-                <span className="text-[10px] text-white/25 w-14 shrink-0">
-                  {m.date ? new Date(m.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : ""}
-                </span>
+                <span className="text-[10px] text-white/25 w-14 shrink-0">{m.date ? new Date(m.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : ""}</span>
                 <span className="text-xs text-white/65 truncate flex-1 text-right">{m.home}</span>
                 <span className="text-xs font-black text-white bg-white/8 px-2 py-0.5 rounded shrink-0">{m.score || "-"}</span>
                 <span className="text-xs text-white/40 truncate flex-1">{m.away}</span>
@@ -248,19 +285,23 @@ function StatsTab({ d }: any) {
       )}
       {st.length > 0 && (
         <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">League Table</p>
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">League Table</p>
+          <div className="flex text-[9px] text-white/25 font-bold px-2 mb-1 gap-0"><span className="w-5">#</span><span className="flex-1">Club</span><span className="w-5 text-center">P</span><span className="w-5 text-center">W</span><span className="w-5 text-center">D</span><span className="w-5 text-center">L</span><span className="w-7 text-center">GD</span><span className="w-7 text-right">Pts</span></div>
           <div className="flex flex-col gap-0.5">
-            {st.slice(0, 10).map((r: any, i: number) => {
-              const hi = [fix.home_team_name, fix.away_team_name].some(
-                n => (n || "").toLowerCase().includes((r.team || "").toLowerCase().split(" ")[0])
-              );
+            {st.slice(0, 12).map((r: any, i: number) => {
+              const hi = [fix.home_team_name, fix.away_team_name].some(n => (n || "").toLowerCase().includes((r.team || "").toLowerCase().split(" ")[0]));
+              const gd = r.goal_difference ?? r.gd ?? null; const gdN = Number(gd);
+              const gdStr = gd !== null ? (gdN > 0 ? "+" + gd : String(gd)) : "-";
               return (
-                <div key={i} className={cn("flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs",
-                  hi ? "bg-primary/10 border border-primary/20" : "")}>
-                  <span className={cn("w-5 font-bold", hi ? "text-primary" : "text-white/30")}>{r.position}</span>
-                  <span className={cn("flex-1 font-semibold truncate", hi ? "text-primary" : "text-white/70")}>{r.team}</span>
-                  <span className="w-6 text-center text-white/40">{r.played}</span>
-                  <span className={cn("w-6 text-center font-black", hi ? "text-primary" : "text-white")}>{r.points}</span>
+                <div key={i} className={cn("flex items-center gap-0 px-2 py-1.5 rounded-lg text-xs", hi ? "bg-primary/10 border border-primary/20" : "")}>
+                  <span className={cn("w-5 font-bold shrink-0", hi ? "text-primary" : "text-white/30")}>{r.position}</span>
+                  <span className={cn("flex-1 font-semibold truncate mr-1", hi ? "text-primary" : "text-white/70")}>{r.team}</span>
+                  <span className="w-5 text-center text-white/40">{r.played ?? "-"}</span>
+                  <span className="w-5 text-center text-white/40">{r.won ?? "-"}</span>
+                  <span className="w-5 text-center text-white/40">{r.drawn ?? "-"}</span>
+                  <span className="w-5 text-center text-white/40">{r.lost ?? "-"}</span>
+                  <span className={cn("w-7 text-center font-bold", gdN > 0 ? "text-primary/70" : gdN < 0 ? "text-red-400/70" : "text-white/30")}>{gdStr}</span>
+                  <span className={cn("w-7 text-right font-black", hi ? "text-primary" : "text-white")}>{r.points ?? "-"}</span>
                 </div>
               );
             })}
@@ -268,10 +309,7 @@ function StatsTab({ d }: any) {
         </div>
       )}
       {h2h.length === 0 && hf.length === 0 && (
-        <div className="text-center py-12 text-white/30">
-          <p className="text-4xl mb-3">📊</p>
-          <p>Stats loading — check back soon</p>
-        </div>
+        <div className="text-center py-12 text-white/30"><p className="text-4xl mb-3">📊</p><p>Stats loading — check back soon</p></div>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -98,9 +99,22 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 // VerifyEmailHandler removed — Google Auth handles email verification
 
-function Router() {
+function GlassBubbles() {
   return (
-    <Switch>
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+      <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)", filter: "blur(80px)" }}/>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)", filter: "blur(90px)" }}/>
+      <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)", filter: "blur(60px)" }}/>
+    </div>
+  );
+}
+
+function Router() {
+  const [loc] = useLocation();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div key={loc} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: "easeOut" }}>
+        <Switch>
       <Route path="/home" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
@@ -123,6 +137,8 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route component={() => <ProtectedRoute component={Dashboard} />} />
     </Switch>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -144,6 +160,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <GlassBubbles />
             <ReferralCapture />
             <Router />
           </WouterRouter>
