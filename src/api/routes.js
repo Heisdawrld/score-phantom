@@ -361,7 +361,7 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /predict/:fixtureId — trial (2/day) or premium ─────────────────────
+// ─── GET /predict/:fixtureId — trial (5/day cap) or premium ───────────────────
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
     // Trial users: enforce daily predictions cap (TRIAL_DAILY_LIMIT)

@@ -25,25 +25,27 @@ Each prediction includes 3 confidence dimensions:
 ### PhantomChat (Groq-powered)
 - Deep per-match analysis available to Premium users
 - Smart budget system: max 20 calls/hour, 200/day
-- Smart rate limiting: max 20 calls/hour, 200/day
 - Deterministic engine handles all core predictions; Groq powers explanations
 
 ## 💰 Payment System
 
 - **Flutterwave** — hosted checkout, ₦3,000/month instant activation
 - **Webhook confirmation** — no manual verification needed
-- No third-party payment gateway fees
+- Cancel anytime, instant activation on payment
 
 ## 🔒 Access Tiers
 
 | Feature | Free Trial (3 days) | Premium |
 |---------|:-------------------:|:-------:|
 | Browse all fixtures | ✅ | ✅ |
-| Predictions (5/day cap) | ✅ | ✅ Unlimited |
-| Game scripts & reasons | ❌ | ✅ |
-| Value detection | ❌ | ✅ |
+| Match predictions | ✅ 5/day | ✅ Unlimited |
+| Game scripts + reason codes | ✅ | ✅ |
+| Confidence breakdown | ✅ | ✅ |
+| Stats tab (H2H, form, standings) | ❌ | ✅ |
+| Value detection + real odds | ❌ | ✅ |
+| Daily ACCA Builder | ❌ | ✅ |
+| Top Picks (ranked by edge) | ❌ | ✅ |
 | PhantomChat deep analysis | ❌ | ✅ |
-| Confidence breakdown | ❌ | ✅ |
 
 ## 🚀 Setup
 
@@ -69,10 +71,10 @@ npm start
 ├── src/
 │   ├── app.js                          # Express server
 │   ├── api/routes.js                   # API endpoints
-│   ├── auth/authRoutes.js              # Auth + OPay payment
-│   ├── predictions/poissonEngine.js    # Core prediction engine (1153 lines)
-│   ├── evaluations/groqEvaluator.js    # Groq AI evaluator with rate limiting
-│   ├── explanations/groqExplainer.js   # AI explanation + chat
+│   ├── auth/authRoutes.js              # Auth + payment webhook
+│   ├── engine/runPredictionEngine.js   # Thin orchestrator (4 stages)
+│   ├── engine/runMarketSelection.js    # Gate-first market selection
+│   ├── services/flutterwave.js         # Flutterwave V3 payment
 │   ├── features/computeFeatures.js     # Feature extraction
 │   ├── enrichment/enrichOne.js         # Data enrichment
 │   ├── services/livescore.js           # Live score API
@@ -98,5 +100,5 @@ npm start
 | `DATABASE_URL` | Turso/LibSQL database URL |
 | `JWT_SECRET` | Secret for JWT tokens |
 | `APIFY_TOKEN` | Apify token for data enrichment |
-| `OPAY_ACCOUNT_NUMBER` | OPay account for payments |
-| `WHATSAPP_NUMBER` | WhatsApp number for receipt verification |
+| `FLUTTERWAVE_SECRET_KEY` | Flutterwave secret key |
+| `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave public key + webhook hash |
