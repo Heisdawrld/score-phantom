@@ -105,7 +105,7 @@ async function autoSeed() {
 
     // Check each of the next 7 days — seed any day that has 0 fixtures
     const missingDays = [];
-    for (let i = 0; i <= 6; i++) {
+    for (let i = 0; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
       const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });

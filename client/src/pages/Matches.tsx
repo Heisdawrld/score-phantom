@@ -17,7 +17,7 @@ function TeamLogo({ src, name }: { src?: string; name: string }) {
 }
 function getDates() {
   const dates = [];
-  for (let i=-2; i<=4; i++) {
+  for (let i=-1; i<=6; i++) {
     const d = new Date(); d.setDate(d.getDate()+i);
     const iso = d.toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"});
     const label = i===0?"Today":i===-1?"Yest":i===1?"Tom":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric"});
