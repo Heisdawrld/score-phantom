@@ -15,6 +15,8 @@ import { buildConfidenceProfile } from './buildConfidenceProfile.js';
 import { buildReasonCodes } from './buildReasonCodes.js';
 import { savePrediction } from '../storage/savePrediction.js';
 import { getRecentMarkets, logRecommendedMarket } from '../storage/marketTracking.js';
+import { refineScriptPostXg } from '../scripts/refineScriptPostXg.js';
+import { computeLayer2Shifts, computeLayer2Override } from '../markets/computeLayer2Override.js';
 
 /**
  * Flatten the nested feature vector from buildFeatureVector into a flat
@@ -221,43 +223,16 @@ export async function runPredictionEngine(fixtureId, rawData) {
 
     // Step 4: Estimate expected goals
     const xg = estimateExpectedGoals(features, script);
-
-    // Step 4.5: Post-xG script correction
-    // If xG difference is < 0.5, the match is NOT actually dominant — downgrade
-    const xgDiff = Math.abs(xg.homeExpectedGoals - xg.awayExpectedGoals);
-    if (xgDiff < 0.5 && script.primary === 'dominant_home_pressure') {
-      script.primary = 'balanced_high_event';
-      script.secondary = null;
-    } else if (xgDiff < 0.5 && script.primary === 'dominant_away_pressure') {
-      script.primary = 'balanced_high_event';
-      script.secondary = null;
-    }
+    refineScriptPostXg(script, xg); // Step 4.5: validate script against actual xG output
 
     // Step 5: Build score matrix
     const scoreMatrix = buildScoreMatrix(xg.homeExpectedGoals, xg.awayExpectedGoals);
 
     // Step 6: Derive raw market probabilities
     const rawProbs = deriveMarketProbabilities(scoreMatrix);
-
-    // ── Layer 2 Shift Measurement (Step 6.5) ────────────────────────────────
-    // Build a L1-only score matrix and measure per-market shifts.
-    // The override DECISION happens at Step 12.5 (after ranking), where we can
-    // check whether the shifted market is actually the final top-ranked candidate.
     const baseScoreMatrix = buildScoreMatrix(xg.baseHomeXg, xg.baseAwayXg);
-    const baseProbs       = deriveMarketProbabilities(baseScoreMatrix);
-
-    const LAYER2_OVERRIDE_MARKETS = [
-      'homeWin', 'awayWin', 'draw', 'bttsYes', 'over25', 'under25', 'over15',
-    ];
-    // Store shift per probKey so we can look up any candidate later
-    const layer2ShiftsPerMarket = {};
-    let maxLayer2Shift       = 0;
-    let maxLayer2ShiftMarket = null;
-    for (const mkt of LAYER2_OVERRIDE_MARKETS) {
-      const shift = Math.abs((rawProbs[mkt] ?? 0) - (baseProbs[mkt] ?? 0));
-      layer2ShiftsPerMarket[mkt] = shift;
-      if (shift > maxLayer2Shift) { maxLayer2Shift = shift; maxLayer2ShiftMarket = mkt; }
-    }
+    const baseProbs = deriveMarketProbabilities(baseScoreMatrix);
+    const { shiftMap, maxShift: maxLayer2Shift, maxShiftMarket: maxLayer2ShiftMarket } = computeLayer2Shifts(rawProbs, baseProbs); // Step 6.5
 
     // Step 7: Calibrate probabilities
     const calibratedProbs = calibrateProbabilities(rawProbs, script);
@@ -279,69 +254,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
 
     // Step 12: Rank candidates
     const rankedCandidates = rankMarkets(filteredCandidates);
-
-    // Step 12.5: Tightened Layer 2 override decision
-    // Override fires ONLY when ALL five conditions hold:
-    //  1. dataCompletenessScore >= 0.55   (data quality good)
-    //  2. The >= 6pp L2 shift belongs to the FINAL top-ranked candidate itself
-    //     (not just any market that happened to move)
-    //  3. Top candidate modelProbability >= 0.58  (not a marginal pick)
-    //  4. Top candidate tacticalFitScore  >= 0.50  (script-aligned)
-    //  5. Score gap to #2 >= 0.005        (some meaningful separation exists)
-    const MARKET_KEY_TO_PROB_KEY = {
-      home_win: 'homeWin', away_win: 'awayWin', draw: 'draw',
-      btts_yes: 'bttsYes', over_25: 'over25', under_25: 'under25', over_15: 'over15',
-    };
-    const topCandidate    = rankedCandidates[0] ?? null;
-    const secondCandidate = rankedCandidates[1] ?? null;
-    const topProbKey      = topCandidate
-      ? (MARKET_KEY_TO_PROB_KEY[topCandidate.marketKey] ?? null)
-      : null;
-    const topCandidateL2Shift = topProbKey
-      ? (layer2ShiftsPerMarket[topProbKey] ?? 0)
-      : 0;
-    const topScoreGap = (topCandidate && secondCandidate)
-      ? safeNum(topCandidate.finalScore, 0) - safeNum(secondCandidate.finalScore, 0)
-      : 1;
-
-    const isDataQualityGood = safeNum(features.dataCompletenessScore, 0) >= 0.55;
-    const layer2Override =
-      isDataQualityGood &&
-      topCandidateL2Shift >= 0.06 &&
-      safeNum(topCandidate?.modelProbability, 0) >= 0.58 &&
-      safeNum(topCandidate?.tacticalFitScore,  0) >= 0.50 &&
-      topScoreGap >= 0.005;
-
-    if (layer2Override) {
-      const l1Pct   = ((baseProbs[topProbKey]  ?? 0) * 100).toFixed(1);
-      const l2Pct   = ((rawProbs[topProbKey]   ?? 0) * 100).toFixed(1);
-      const shiftPp = (topCandidateL2Shift * 100).toFixed(1);
-      console.log(
-        `[PICK OVERRIDE] Triggered | fixture=${fixtureId} ` +
-        `top-candidate="${topCandidate.marketKey}" L2-shift=${shiftPp}pp ` +
-        `(L1: ${l1Pct}% → L1+L2: ${l2Pct}%) ` +
-        `prob=${(safeNum(topCandidate.modelProbability, 0) * 100).toFixed(1)}% ` +
-        `tacticalFit=${safeNum(topCandidate.tacticalFitScore, 0).toFixed(3)} ` +
-        `scoreGap=${topScoreGap.toFixed(4)} ` +
-        `dataCompleteness=${features.dataCompletenessScore?.toFixed(2)}`
-      );
-    } else if (maxLayer2Shift >= 0.06 && isDataQualityGood) {
-      // Shift existed but NOT on the top candidate — log why override was skipped
-      const reason = topProbKey && topCandidateL2Shift < 0.06
-        ? `top-candidate="${topCandidate?.marketKey}" shift only ${(topCandidateL2Shift*100).toFixed(1)}pp`
-        : safeNum(topCandidate?.modelProbability, 0) < 0.58
-          ? `top-candidate prob too low (${(safeNum(topCandidate?.modelProbability,0)*100).toFixed(1)}% < 58%)`
-          : safeNum(topCandidate?.tacticalFitScore, 0) < 0.50
-            ? `tacticalFit too low (${safeNum(topCandidate?.tacticalFitScore,0).toFixed(3)} < 0.50)`
-            : `scoreGap too small (${topScoreGap.toFixed(4)} < 0.005)`;
-      console.log(
-        `[PICK OVERRIDE] Skipped | fixture=${fixtureId} ` +
-        `biggest-shift="${maxLayer2ShiftMarket}" (${(maxLayer2Shift*100).toFixed(1)}pp) — ` +
-        reason
-      );
-    }
-
-    // Step 13: Select best pick
+    const { override: layer2Override, topProbKey, topShift: maxL2TopShift } = computeLayer2Override({ rankedCandidates, shiftMap, features }); // Step 12.5
     // Pass layer2Override options — selectBestPick will relax the gap check when active.
     const { bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied } =
       selectBestPick(rankedCandidates, script, features, {

@@ -11,7 +11,7 @@ const HOME_ADVANTAGE_BOOST = 1.10;
  * 3-layer xG estimation:
  *   Layer 1 — Base xG: team strength ratios, home advantage, thin-data dampening, venue anchoring
  *   Layer 2 — Form-derived modifier: ±0–20% from goal rates, BTTS, clean sheets
- *   Layer 3 — Premium stats modifier: NOT ACTIVE (shots/possession — requires API upgrade)
+ *   Layer 3 (inactive) — Premium stats modifier: NOT ACTIVE (shots/possession — requires API upgrade)
  *
  * Hard caps: per-team 0.2–2.5, total 0.8–4.5.
  * Thin-data dampening: regress toward mean when < 3 matches available.
@@ -37,7 +37,7 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
   let awayXg = awayAttackRatio * homeDefRatio * LEAGUE_AVG;
 
   // Thin-data dampening — regress toward mean when sample is small
-  const homeMatches = safeNum(fv.h2hMatchesAvailable ?? fv.homeMatchesAvailable, 5);
+  const homeMatches = safeNum(fv.homeMatchesAvailable, 5); // form count only — H2H count must not substitute for team form sample size
   const awayMatches = safeNum(fv.awayMatchesAvailable, 5);
   const minMatches  = Math.min(homeMatches, awayMatches);
 
@@ -106,7 +106,7 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
     awayXg = awayXg * (1 + formAwayBoost);
   }
 
-  // ── Layer 3: Premium stats modifier (NOT ACTIVE) ──────────────────────────
+  // ── Layer 3 (inactive): Premium stats — shots/possession not available ──────────────────────────
   // Requires higher LiveScore API plan. Currently returns zero boosts.
   // To activate: upgrade API plan, then uncomment and wire in fetchHistoricalStats.
   // const { homeXgBoost: premHomeBoost, awayXgBoost: premAwayBoost } =
@@ -114,7 +114,7 @@ export function estimateExpectedGoals(featureVector, scriptOutput) {
   // homeXg = homeXg * (1 + premHomeBoost);
   // awayXg = awayXg * (1 + premAwayBoost);
 
-  // ── Layer 3: Bookmaker implied probability signal ──────────────────────
+  // ── Layer 4: Bookmaker implied probability anchor ──────────────────────
   // Use odds-derived implied probability to anchor xG when available.
   // Bookmakers aggregate massive data — their price IS a premium stat.
   const impliedHome = fv.impliedHomeProb != null ? safeNum(fv.impliedHomeProb) : null;
