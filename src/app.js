@@ -98,8 +98,8 @@ app.get("*", (req, res) => {
 
 async function autoSeed() {
   try {
-    if (!process.env.SPORTAPI_KEY) {
-      console.warn("[AutoSeed] No SPORTAPI_KEY set — skipping seed.");
+    if (!process.env.LIVESCORE_API_KEY) {
+      console.warn("[AutoSeed] No LIVESCORE_API_KEY set — skipping seed.");
       return;
     }
 

@@ -1,12 +1,8 @@
 import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js - SportAPI WebSocket client + SSE push to frontend
-import WebSocket from 'ws';
 import db from '../config/database.js';
+import { fetchLiveMatches } from './livescore.js';
 
-let ws = null;
-let isConnected = false;
-let reconnectTimer = null;
-let pingTimer = null;
 const sseClients = new Set();
 
 export function addSseClient(res) {
@@ -72,37 +68,8 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore) {
   broadcastPush({ title: pushTitle, body: pushBody, data: pushData, url: '/results' }).catch(()=>{});
   saveNotification({ userId: null, type: 'match_result', title: pushTitle, body: pushBody, data: pushData }).catch(()=>{});
 }
-
-function connect() {
-  const key = process.env.SPORTAPI_KEY;
-  if (!key) { console.warn('[WS] SPORTAPI_KEY not set, skipping live score WebSocket'); return; }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  console.log('[WS] Connecting to SportAPI live scores...');
-  ws = new WebSocket('wss://sportapi.ai/ws', { headers: { 'X-Api-Key': key } });
-  ws.on('open', () => {
-    isConnected = true;
-    console.log('[WS] Connected - subscribing to all live fixtures');
-    ws.send(JSON.stringify({ action: 'subscribe_all' }));
-    pingTimer = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'ping' }));
-      else clearInterval(pingTimer);
-    }, 25000);
-  });
-  ws.on('message', (raw) => {
-    try {
-      const msg = JSON.parse(raw);
-      if (msg.type === 'score_update') handleScoreUpdate(msg);
-    } catch (_) {}
-  });
-  ws.on('close', () => {
-    isConnected = false;
-    if (pingTimer) clearInterval(pingTimer);
-    console.warn('[WS] Disconnected - reconnecting in 30s');
-    reconnectTimer = setTimeout(connect, 30000);
-  });
-  ws.on('error', (err) => { console.error('[WS] Error:', err.message); });
-}
-
-export function startLiveScoreWatcher() { connect(); }
+let pollTimer = null; let isConnected = false;
+async function pollLiveScores() { try { const matches = await fetchLiveMatches(); if (matches.length > 0) { if (!isConnected) { isConnected = true; } for (const m of matches) { const parts = String(m.score || '0 - 0').replace(/ /g,'').split('-'); const hs = parseInt(parts[0]||'0',10)||0; const as2 = parseInt(parts[1]||'0',10)||0; const fid = m.fixture_id||m.match_id; await handleScoreUpdate({fixture_id:fid,home_score:hs,away_score:as2,status:m.status||'LIVE',minute:m.minute||null}).catch(()=>{}); } } } catch(err) { console.warn('[Live] Poll error:',err.message); } }
+export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting LiveScore polling (60s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 60000); isConnected = true; }
 export function getLiveStatus() { return { connected: isConnected, sseClients: sseClients.size }; }
-export function stopLiveScoreWatcher() { if (ws) ws.close(); if (pingTimer) clearInterval(pingTimer); if (reconnectTimer) clearTimeout(reconnectTimer); }
+export function stopLiveScoreWatcher() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } isConnected = false; }
