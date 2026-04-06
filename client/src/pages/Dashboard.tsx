@@ -751,7 +751,7 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
 
 
   const handleSelectFixture = (id: string) => {
-    setSelectedFixtureId(id);
+    setLocation("/matches/"+id);
   };
 
   const handlePredictionError = (code: string) => {
@@ -768,8 +768,15 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
     <div className="min-h-screen bg-background flex flex-col pb-20">
       <Header />
 
-      <main className="flex-1 container mx-auto max-w-3xl px-4 pt-6 space-y-5">
+      <main className="flex-1 container mx-auto max-w-3xl px-4 pt-4 space-y-4">
 
+        {/* Greeting */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] text-white/30 uppercase tracking-wider">ScorePhantom</p>
+            <h1 className="text-xl font-black text-white">Welcome back 👋</h1>
+          </div>
+        </div>
         {/* Expired trial FOMO banner — stay on dashboard, blur all predictions */}
         {isExpired && (
           <div
@@ -845,13 +852,13 @@ const isPremium = user?.access_status === "active" || (user as any)?.subscriptio
         )}
 
         {/* Hero Edge */}
-        {heroPick && <HeroEdgeCard pick={heroPick} onView={() => setSelectedFixtureId(heroPick.fixtureId)} />}
+        {heroPick && <HeroEdgeCard pick={heroPick} onView={() => setLocation("/matches/"+heroPick.fixtureId)} />}
 
         {/* Proof Strip */}
         {trackStats && trackStats.totalPicks > 0 && <ProofStrip stats={trackStats} onView={() => setLocation("/track-record")} />}
 
         {/* Quick Actions */}
-        <QuickActions onTopPicks={() => setLocation("/top-picks")} onAcca={() => setLocation("/acca-calculator")} />
+        <QuickActions onTopPicks={() => setLocation("/picks")} onAcca={() => setLocation("/acca")} />
 
 
 
