@@ -1,173 +1,89 @@
-import { safeNum, clamp } from '../utils/math.js';
-import { computeFormDerivedBoosts } from './computeFormDerivedBoosts.js';
-import { computePremiumStatsBoosts } from './computePremiumStatsBoosts.js';
+import { safeNum, clamp } from "../utils/math.js";
+import { computeFormDerivedBoosts } from "./computeFormDerivedBoosts.js";
 
-const LEAGUE_AVG = 1.35;          // average goals per team per game across top leagues
-const HOME_ADVANTAGE_BOOST = 1.10;
+const LEAGUE_AVG = 1.35;
+const HOME_ADV = 1.10;
+
+// Stage A: Base xG from strength ratios + home advantage
+function computeBaseXg(fv) {
+  const hAS = safeNum(fv.homeAvgScored, LEAGUE_AVG), aAS = safeNum(fv.awayAvgScored, LEAGUE_AVG*0.9);
+  const hAC = safeNum(fv.homeAvgConceded, LEAGUE_AVG), aAC = safeNum(fv.awayAvgConceded, LEAGUE_AVG);
+  const hAtk = clamp(hAS/LEAGUE_AVG,0.3,2.2), aAtk = clamp(aAS/LEAGUE_AVG,0.3,2.2);
+  const hDef = clamp(hAC/LEAGUE_AVG,0.3,1.8), aDef = clamp(aAC/LEAGUE_AVG,0.3,1.8);
+  return { homeXg: hAtk*aDef*LEAGUE_AVG*HOME_ADV, awayXg: aAtk*hDef*LEAGUE_AVG };
+}
+
+// Stage B: Thin-data dampening — regress toward mean (form count ONLY, never H2H)
+function applyThinDataRegression(homeXg, awayXg, fv) {
+  const min = Math.min(safeNum(fv.homeMatchesAvailable,5), safeNum(fv.awayMatchesAvailable,5));
+  if (min < 3) return { homeXg: homeXg*0.5+LEAGUE_AVG*HOME_ADV*0.5, awayXg: awayXg*0.5+LEAGUE_AVG*0.5 };
+  if (min < 5) return { homeXg: homeXg*0.75+LEAGUE_AVG*HOME_ADV*0.25, awayXg: awayXg*0.75+LEAGUE_AVG*0.25 };
+  return { homeXg, awayXg };
+}
+
+// Stage C: Venue anchoring using home/away split stats when available
+function applyVenueAnchoring(homeXg, awayXg, fv) {
+  const { homeHomeGoalsFor:hhGF, awayAwayGoalsFor:aaGF, homeHomeGoalsAgainst:hhGA, awayAwayGoalsAgainst:aaGA } = fv;
+  if (hhGF!=null&&aaGA!=null) homeXg=homeXg*0.65+(hhGF*0.6+aaGA*0.4)*0.35; else if(hhGF!=null) homeXg=homeXg*0.75+hhGF*0.25;
+  if (aaGF!=null&&hhGA!=null) awayXg=awayXg*0.65+(aaGF*0.6+hhGA*0.4)*0.35; else if(aaGF!=null) awayXg=awayXg*0.75+aaGF*0.25;
+  return { homeXg, awayXg };
+}
+
+// Stage D: Script micro-adjustments (max ±0.08 per team — script must not drive large xG swings)
+function applyScriptAdjustments(homeXg, awayXg, script) {
+  const p = script.primary||"";
+  if (p==="open_end_to_end") { homeXg+=0.05; awayXg+=0.05; }
+  else if (p==="tight_low_event") { homeXg-=0.08; awayXg-=0.08; }
+  else if (p==="dominant_home_pressure") { homeXg+=0.05; awayXg-=0.04; }
+  else if (p==="dominant_away_pressure") { awayXg+=0.05; homeXg-=0.04; }
+  else if (p==="chaotic_unreliable") { homeXg=homeXg*0.9+LEAGUE_AVG*HOME_ADV*0.1; awayXg=awayXg*0.9+LEAGUE_AVG*0.1; }
+  return { homeXg, awayXg };
+}
+
+// Stage E (Layer 2): Form-derived boosts — ±0–20% from recent goal rates, BTTS, clean sheets
+function applyFormBoosts(homeXg, awayXg, fv) {
+  const { homeXgBoost, awayXgBoost, _debug } = computeFormDerivedBoosts(fv);
+  if (homeXgBoost!==0||awayXgBoost!==0) console.log("[xG] L2 form boosts home:"+( homeXgBoost*100).toFixed(1)+"% away:"+(awayXgBoost*100).toFixed(1)+"%", _debug);
+  return { homeXg: homeXg*(1+homeXgBoost), awayXg: awayXg*(1+awayXgBoost) };
+}
+
+// Stage F (Layer 3): Bookmaker odds anchor — blend implied over-2.5 probability (35% weight)
+function applyOddsAnchor(homeXg, awayXg, fv) {
+  const impl = fv.impliedOver25!=null ? safeNum(fv.impliedOver25) : null;
+  if (impl==null) return { homeXg, awayXg };
+  const implTotal = Math.max(1.2, -2.1*Math.log(Math.max(0.01,1-impl)));
+  const engTotal = homeXg+awayXg;
+  const blended = engTotal*0.65+implTotal*0.35;
+  const scale = blended/Math.max(0.5,engTotal);
+  console.log("[xG] L3 odds anchor over25="+impl.toFixed(2)+" implied="+implTotal.toFixed(2)+" blended="+blended.toFixed(2));
+  return { homeXg: homeXg*scale, awayXg: awayXg*scale };
+}
+
+// Stage G: Hard caps — per-team [0.2,2.5], total [0.8,4.5]
+function capXg(homeXg, awayXg, baseHome, baseAway) {
+  const cap = (h,a) => { h=clamp(h,0.2,2.5); a=clamp(a,0.2,2.5); const t=h+a; if(t>4.5){const s=4.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;a*=s;} return {h,a}; };
+  const {h:fh,a:fa}=cap(homeXg,awayXg), {h:bh,a:ba}=cap(baseHome,baseAway);
+  return { homeExpectedGoals:parseFloat(fh.toFixed(3)), awayExpectedGoals:parseFloat(fa.toFixed(3)), totalExpectedGoals:parseFloat((fh+fa).toFixed(3)), baseHomeXg:parseFloat(bh.toFixed(3)), baseAwayXg:parseFloat(ba.toFixed(3)) };
+}
 
 /**
- * Estimate expected goals using attack/defense strength ratios.
+ * estimateExpectedGoals — 6-stage xG pipeline.
  *
- * 3-layer xG estimation:
- *   Layer 1 — Base xG: team strength ratios, home advantage, thin-data dampening, venue anchoring
- *   Layer 2 — Form-derived modifier: ±0–20% from goal rates, BTTS, clean sheets
- *   Layer 3 (inactive) — Premium stats modifier: NOT ACTIVE (shots/possession — requires API upgrade)
- *
- * Hard caps: per-team 0.2–2.5, total 0.8–4.5.
- * Thin-data dampening: regress toward mean when < 3 matches available.
+ *   A: computeBaseXg          — strength ratios x home advantage
+ *   B: applyThinDataRegression — regress toward mean (form count only, never H2H)
+ *   C: applyVenueAnchoring    — home/away split stats blend
+ *   D: applyScriptAdjustments — tiny nudges (max ±0.08 per team)
+ *   E: applyFormBoosts        — Layer 2: form rates ±0-20%
+ *   F: applyOddsAnchor        — Layer 3: bookmaker over-2.5 blend 35%
+ *   G: capXg                  — hard caps per-team [0.2,2.5] total [0.8,4.5]
  */
-export function estimateExpectedGoals(featureVector, scriptOutput) {
-  const fv = featureVector || {};
-  const script = scriptOutput || {};
-
-  // Raw goal averages
-  const homeAvgScored = safeNum(fv.homeAvgScored, LEAGUE_AVG);
-  const awayAvgScored = safeNum(fv.awayAvgScored, LEAGUE_AVG * 0.9);
-  const homeAvgConceded = safeNum(fv.homeAvgConceded, LEAGUE_AVG);
-  const awayAvgConceded = safeNum(fv.awayAvgConceded, LEAGUE_AVG);
-
-  // Strength ratios (1.0 = league average)
-  const homeAttackRatio = clamp(homeAvgScored / LEAGUE_AVG, 0.3, 2.2);
-  const awayAttackRatio = clamp(awayAvgScored / LEAGUE_AVG, 0.3, 2.2);
-  const homeDefRatio    = clamp(homeAvgConceded / LEAGUE_AVG, 0.3, 1.8); // weakness: higher = leakier
-  const awayDefRatio    = clamp(awayAvgConceded / LEAGUE_AVG, 0.3, 1.8);
-
-  // Core xG
-  let homeXg = homeAttackRatio * awayDefRatio * LEAGUE_AVG * HOME_ADVANTAGE_BOOST;
-  let awayXg = awayAttackRatio * homeDefRatio * LEAGUE_AVG;
-
-  // Thin-data dampening — regress toward mean when sample is small
-  const homeMatches = safeNum(fv.homeMatchesAvailable, 5); // form count only — H2H count must not substitute for team form sample size
-  const awayMatches = safeNum(fv.awayMatchesAvailable, 5);
-  const minMatches  = Math.min(homeMatches, awayMatches);
-
-  if (minMatches < 3) {
-    // Extreme thin data — force to league mean
-    homeXg = homeXg * 0.5 + LEAGUE_AVG * HOME_ADVANTAGE_BOOST * 0.5;
-    awayXg = awayXg * 0.5 + LEAGUE_AVG * 0.5;
-  } else if (minMatches < 5) {
-    // Partial thin data — gentle regression
-    homeXg = homeXg * 0.75 + LEAGUE_AVG * HOME_ADVANTAGE_BOOST * 0.25;
-    awayXg = awayXg * 0.75 + LEAGUE_AVG * 0.25;
-  }
-
-  // Venue anchoring (split stats) — use when available
-  const homeHomeGoalsFor     = fv.homeHomeGoalsFor;
-  const awayAwayGoalsFor     = fv.awayAwayGoalsFor;
-  const awayAwayGoalsAgainst = fv.awayAwayGoalsAgainst;
-  const homeHomeGoalsAgainst = fv.homeHomeGoalsAgainst;
-
-  if (homeHomeGoalsFor != null && awayAwayGoalsAgainst != null) {
-    const venueHome = homeHomeGoalsFor * 0.6 + awayAwayGoalsAgainst * 0.4;
-    homeXg = homeXg * 0.65 + venueHome * 0.35;
-  } else if (homeHomeGoalsFor != null) {
-    homeXg = homeXg * 0.75 + homeHomeGoalsFor * 0.25;
-  }
-
-  if (awayAwayGoalsFor != null && homeHomeGoalsAgainst != null) {
-    const venueAway = awayAwayGoalsFor * 0.6 + homeHomeGoalsAgainst * 0.4;
-    awayXg = awayXg * 0.65 + venueAway * 0.35;
-  } else if (awayAwayGoalsFor != null) {
-    awayXg = awayXg * 0.75 + awayAwayGoalsFor * 0.25;
-  }
-
-  // Script-level micro-adjustments (tiny — script should not drive xG explosions)
-  const primary = script.primary || '';
-  if (primary === 'open_end_to_end') {
-    homeXg += 0.05; awayXg += 0.05;
-  } else if (primary === 'tight_low_event') {
-    homeXg -= 0.08; awayXg -= 0.08;
-  } else if (primary === 'dominant_home_pressure') {
-    homeXg += 0.05; awayXg -= 0.04;
-  } else if (primary === 'dominant_away_pressure') {
-    awayXg += 0.05; homeXg -= 0.04;
-  } else if (primary === 'chaotic_unreliable') {
-    homeXg = homeXg * 0.9 + LEAGUE_AVG * HOME_ADVANTAGE_BOOST * 0.1;
-    awayXg = awayXg * 0.9 + LEAGUE_AVG * 0.1;
-  }
-
-  // Snapshot Layer 1 (base) xG before form-derived boosts —
-  // returned so the engine can compare L1 vs L1+L2 probabilities.
-  const layer1HomeXg = homeXg;
-  const layer1AwayXg = awayXg;
-
-  // ── Layer 2: Form-derived modifier ───────────────────────────────────────
-  // Applies small multiplicative adjustments (±0–20%) based on form outcomes:
-  // goals scored/conceded rates, BTTS rate, clean sheet rate, scoring consistency.
-  // Always available for teams with ≥3 form matches.
-  const { homeXgBoost: formHomeBoost, awayXgBoost: formAwayBoost, _debug: formDebug } =
-    computeFormDerivedBoosts(fv);
-  if (formHomeBoost !== 0 || formAwayBoost !== 0) {
-    console.log(
-      `[xG] layer2 form boosts → home: ${(formHomeBoost * 100).toFixed(1)}%, away: ${(formAwayBoost * 100).toFixed(1)}%`,
-      formDebug
-    );
-    homeXg = homeXg * (1 + formHomeBoost);
-    awayXg = awayXg * (1 + formAwayBoost);
-  }
-
-  // ── Layer 3 (inactive): Premium stats — shots/possession not available ──────────────────────────
-  // Requires higher LiveScore API plan. Currently returns zero boosts.
-  // To activate: upgrade API plan, then uncomment and wire in fetchHistoricalStats.
-  // const { homeXgBoost: premHomeBoost, awayXgBoost: premAwayBoost } =
-  //   computePremiumStatsBoosts(fv);
-  // homeXg = homeXg * (1 + premHomeBoost);
-  // awayXg = awayXg * (1 + premAwayBoost);
-
-  // ── Layer 4: Bookmaker implied probability anchor ──────────────────────
-  // Use odds-derived implied probability to anchor xG when available.
-  // Bookmakers aggregate massive data — their price IS a premium stat.
-  const impliedHome = fv.impliedHomeProb != null ? safeNum(fv.impliedHomeProb) : null;
-  const impliedAway = fv.impliedAwayProb != null ? safeNum(fv.impliedAwayProb) : null;
-  const impliedOver25 = fv.impliedOver25 != null ? safeNum(fv.impliedOver25) : null;
-
-  if (impliedOver25 != null) {
-    // Convert bookmaker over 2.5 implied prob to expected total goals anchor
-    // P(over2.5) ≈ 1 - e^(-lambda) * (1 + lambda + lambda^2/2) where lambda = total xG
-    // Simpler: implied total ≈ -1.5 * ln(1 - impliedOver25) roughly maps prob to xG
-    const impliedTotal = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - impliedOver25)));
-    const engineTotal  = homeXg + awayXg;
-    const ratio        = impliedTotal / Math.max(0.5, engineTotal);
-    // Blend 35% bookmaker anchor, 65% engine (conservative — trust engine more)
-    const blendFactor = 0.35;
-    const blendedTotal = engineTotal * (1 - blendFactor) + impliedTotal * blendFactor;
-    const scale = blendedTotal / Math.max(0.5, engineTotal);
-    homeXg *= scale;
-    awayXg *= scale;
-    console.log('[xG] L3 odds anchor: implied_over25='+impliedOver25.toFixed(2)+' implied_total='+impliedTotal.toFixed(2)+' engine_total='+engineTotal.toFixed(2)+' blended='+blendedTotal.toFixed(2));
-  }
-
-  // Per-team hard cap: 0.2 – 2.5
-  homeXg = clamp(homeXg, 0.2, 2.5);
-  awayXg = clamp(awayXg, 0.2, 2.5);
-
-  // Total hard cap: 0.8 – 4.5
-  const rawTotal = homeXg + awayXg;
-  if (rawTotal > 4.5) {
-    const scale = 4.5 / rawTotal;
-    homeXg *= scale;
-    awayXg *= scale;
-  }
-  if (rawTotal < 0.8) {
-    const scale = 0.8 / rawTotal;
-    homeXg *= scale;
-    awayXg *= scale;
-  }
-
-  // Apply the same per-team and total caps to L1 base xG so probability
-  // comparisons in the engine are fair (apples-to-apples after capping).
-  let baseHome = clamp(layer1HomeXg, 0.2, 2.5);
-  let baseAway = clamp(layer1AwayXg, 0.2, 2.5);
-  const baseTot = baseHome + baseAway;
-  if (baseTot > 4.5) { const s = 4.5 / baseTot; baseHome *= s; baseAway *= s; }
-  if (baseTot < 0.8) { const s = 0.8 / baseTot; baseHome *= s; baseAway *= s; }
-
-  return {
-    homeExpectedGoals: parseFloat(homeXg.toFixed(3)),
-    awayExpectedGoals: parseFloat(awayXg.toFixed(3)),
-    totalExpectedGoals: parseFloat((homeXg + awayXg).toFixed(3)),
-    // Layer 1-only base xG (before form-derived boosts) — used for override detection
-    baseHomeXg: parseFloat(baseHome.toFixed(3)),
-    baseAwayXg: parseFloat(baseAway.toFixed(3)),
-  };
+export function estimateExpectedGoals(fv, script) {
+  let { homeXg, awayXg } = computeBaseXg(fv);
+  ({ homeXg, awayXg } = applyThinDataRegression(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyVenueAnchoring(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyScriptAdjustments(homeXg, awayXg, script));
+  const baseHomeXg = homeXg, baseAwayXg = awayXg; // L1 snapshot before form/odds boosts
+  ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
+  return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
 }
