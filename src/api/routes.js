@@ -1424,18 +1424,22 @@ router.get('/deep-analysis/:fixtureId', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Deep analysis failed' });
   }
 });
-// 250025002500 GET /matches/:id 2014 Sportmonks Match Center data (free + premium tabs)
+// GET /matches/:id 2014 Match Center data from existing LiveScore enrichment
 router.get("/matches/:id", requireAuth, async (req, res) => {
   try {
-    const { fetchMatchDetail, fetchMatchOdds } = await import("../services/sportmonks.js");
     const fixtureId = req.params.id;
-    const detail = await fetchMatchDetail(fixtureId);
-    if (!detail) return res.status(404).json({ error: "Match not found" });
-    let odds = [];
-    if (req.access.subscription_active || req.access.has_full_access) {
-      odds = await fetchMatchOdds(fixtureId);
+    const bundle = await ensureFixtureData(fixtureId);
+    if (!bundle) return res.status(404).json({ error: "Match not found" });
+    const { fixture, meta } = bundle;
+    const historyRows = await getHistoryRows(fixtureId);
+    const h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
+    const homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
+    const awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
+    let oddsRow = null;
+    if (req.access.has_full_access) {
+      oddsRow = await getOdds(fixtureId);
     }
-    return res.json({ ...detail, odds, access: buildAccessPayload(req.access) });
+    return res.json({ fixture, meta, h2h, homeForm, awayForm, odds: oddsRow, access: buildAccessPayload(req.access) });
   } catch(err) {
     console.error("[MatchCenter]", err.message);
     res.status(500).json({ error: "Failed to load match data" });

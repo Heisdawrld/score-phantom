@@ -99,23 +99,23 @@ function LineupsTab({ lineups }: any) {
 }
 
 function H2HTab({ h2h }: any) {
-  const matches = Array.isArray(h2h) ? h2h : (h2h?.data||[]);
+  const matches = Array.isArray(h2h) ? h2h : [];
   if (matches.length===0) return <div className="text-center py-8 text-white/30"><p>No H2H data available</p></div>;
   return (
     <div className="flex flex-col gap-2">
       {matches.slice(0,10).map((m: any,i: number)=>{
-        const home = (m.participants||[]).find((p: any)=>p.meta?.location==="home")||{};
-        const away = (m.participants||[]).find((p: any)=>p.meta?.location==="away")||{};
-        const hs = (m.scores||[]).find((s: any)=>s.description==="CURRENT"&&s.score?.participant==="home")?.score?.goals??"-";
-        const as_ = (m.scores||[]).find((s: any)=>s.description==="CURRENT"&&s.score?.participant==="away")?.score?.goals??"-";
-        const dt = m.starting_at?new Date(m.starting_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"2-digit"}):"";
+        const isNative = typeof m.home === "string";
+        const homeTeam = isNative ? m.home : ((m.participants||[]).find((p: any)=>p.meta?.location==="home")||{}).name||"Home";
+        const awayTeam = isNative ? m.away : ((m.participants||[]).find((p: any)=>p.meta?.location==="away")||{}).name||"Away";
+        const score = isNative ? (m.score||"-") : (() => { const s = m.scores||[]; const h=s.find((x: any)=>x.description==="CURRENT"&&x.score?.participant==="home")?.score?.goals??"-"; const a=s.find((x: any)=>x.description==="CURRENT"&&x.score?.participant==="away")?.score?.goals??"-"; return h+"-"+a; })();
+        const dt = isNative ? (m.date||"") : (m.starting_at?new Date(m.starting_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"2-digit"}):"")
         return (
           <div key={i} className="flex items-center gap-2 p-3 rounded-xl bg-white/4 border border-white/6">
             <span className="text-[10px] text-white/30 w-16 shrink-0">{dt}</span>
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <span className="text-xs text-white truncate flex-1 text-right">{home.name||home.short_name||"Home"}</span>
-              <span className="text-sm font-black text-white bg-white/8 px-2 py-0.5 rounded shrink-0">{hs} - {as_}</span>
-              <span className="text-xs text-white/60 truncate flex-1">{away.name||away.short_name||"Away"}</span>
+              <span className="text-xs text-white truncate flex-1 text-right">{homeTeam}</span>
+              <span className="text-sm font-black text-white bg-white/8 px-2 py-0.5 rounded shrink-0">{score}</span>
+              <span className="text-xs text-white/60 truncate flex-1">{awayTeam}</span>
             </div>
           </div>
         );
@@ -132,21 +132,42 @@ function OddsTab({ odds, isPremium, setLocation }: any) {
       <button onClick={()=>setLocation("/paywall")} className="px-6 py-2.5 rounded-xl bg-amber-400 text-black font-bold text-sm">Upgrade Now</button>
     </div>
   );
-  const markets = (odds||[]).slice(0,8);
-  if (markets.length===0) return <div className="text-center py-8 text-white/30"><p>No odds available</p></div>;
+  const isFlat = odds && typeof odds === "object" && !Array.isArray(odds) && odds.home;
+  if (!odds || (!isFlat && (!Array.isArray(odds) || odds.length===0))) return <div className="text-center py-8 text-white/30"><p>No odds available</p></div>;
+  if (isFlat) {
+    const markets = [
+      { label: "Match Result", items: [{label:"Home",val:odds.home},{label:"Draw",val:odds.draw},{label:"Away",val:odds.away}]},
+      odds.over_under && { label: "Goals", items: [{label:"Over 2.5",val:""},{label:"Under 2.5",val:""}]},
+      (odds.btts_yes||odds.btts_no) && { label: "Both Teams Score", items: [{label:"Yes",val:odds.btts_yes},{label:"No",val:odds.btts_no}]},
+    ].filter(Boolean) as any[];
+    return (
+      <div className="flex flex-col gap-3">
+        {markets.map((mkt: any,i: number)=>(
+          <div key={i} className="rounded-2xl bg-white/4 border border-white/8 p-4">
+            <p className="text-[11px] font-black text-white/40 uppercase tracking-wider mb-3">{mkt.label}</p>
+            <div className="flex gap-2">{mkt.items.filter((o: any)=>o.val).map((o: any,j: number)=>(
+              <div key={j} className="flex-1 text-center p-2 rounded-xl bg-white/5 border border-white/8">
+                <p className="text-xs text-white/40">{o.label}</p>
+                <p className="text-base font-black text-primary mt-0.5">{parseFloat(o.val).toFixed(2)}</p>
+              </div>
+            ))}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const markets = (odds as any[]).slice(0,6);
   return (
     <div className="flex flex-col gap-3">
       {markets.map((mkt: any,i: number)=>(
         <div key={i} className="rounded-2xl bg-white/4 border border-white/8 p-4">
           <p className="text-[11px] font-black text-white/40 uppercase tracking-wider mb-3">{mkt.name||mkt.market_description||"Market"}</p>
-          <div className="flex gap-2 flex-wrap">
-            {(mkt.odds||[]).slice(0,4).map((o: any,j: number)=>(
-              <div key={j} className="flex-1 min-w-[60px] text-center p-2 rounded-xl bg-white/5 border border-white/8">
-                <p className="text-xs text-white/40 truncate">{o.label||o.description||o.name}</p>
-                <p className="text-base font-black text-primary mt-0.5">{o.value||o.odds||"-"}</p>
-              </div>
-            ))}
-          </div>
+          <div className="flex gap-2 flex-wrap">{(mkt.odds||[]).slice(0,4).map((o: any,j: number)=>(
+            <div key={j} className="flex-1 min-w-[60px] text-center p-2 rounded-xl bg-white/5 border border-white/8">
+              <p className="text-xs text-white/40 truncate">{o.label||o.description||o.name}</p>
+              <p className="text-base font-black text-primary mt-0.5">{o.value||o.odds||"-"}</p>
+            </div>
+          ))}</div>
         </div>
       ))}
     </div>
@@ -283,9 +304,9 @@ export default function MatchCenter() {
           <div className="px-3">
             <AnimatePresence mode="wait">
               <motion.div key={tab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}} transition={{duration:0.15}}>
-                {tab==="Overview"&&<OverviewTab stats={d?.statistics} events={d?.events} state={d?.state}/>}
-                {tab==="Stats"&&<OverviewTab stats={d?.statistics} events={[]} state={d?.state}/>}
-                {tab==="Lineups"&&<LineupsTab lineups={d?.lineups}/>}
+                {tab==="Overview"&&<OverviewTab stats={d?.meta?.matchStats||d?.statistics||[]} events={d?.meta?.matchEvents||d?.events||[]} state={d?.state}/>}
+                {tab==="Stats"&&<OverviewTab stats={d?.meta?.matchStats||d?.statistics||[]} events={[]} state={d?.state}/>}
+                {tab==="Lineups"&&<LineupsTab lineups={d?.meta?.lineups||d?.lineups||[]} homeTeam={d?.fixture?.home_team_name} awayTeam={d?.fixture?.away_team_name}/>}
                 {tab==="H2H"&&<H2HTab h2h={d?.h2h}/>}
                 {tab==="Odds"&&<OddsTab odds={d?.odds} isPremium={isPremium} setLocation={setLocation}/>}
                 {tab==="Prediction"&&<PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation}/>}
