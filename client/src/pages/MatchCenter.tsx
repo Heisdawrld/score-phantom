@@ -83,7 +83,7 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
   const backups = (data as any)?.predictions?.backup_picks || [];
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
-  const homeNm = matchData?.fixture?.home_team_name || fix?.home_team_name || "";
+  const homeNm = matchData?.fixture?.home_team_name || (data as any)?.fixture?.homeTeam || "";
   const pickLo = (rec.pick || "").toLowerCase();
   const ouRaw = oddsData?.over_under || {};
   const odds = !oddsData ? null
