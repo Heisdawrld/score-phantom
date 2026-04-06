@@ -9,7 +9,7 @@ import { finalizePredictionResult } from "./finalizePredictionResult.js";
  * Delegates to four clean stages:
  *   Stage 1: preparePredictionContext  — normalize, build features, classify script
  *   Stage 2: runProbabilityPipeline    — xG, Poisson, calibration, L2 shifts
- *   Stage 3: runMarketSelection        — candidates, scoring, filtering, ranking, pick
+ *   Stage 3: runMarketSelection        — gate, candidates, prune, rank, selectOrAbstain
  *   Stage 4: finalizePredictionResult  — confidence, reason codes, save, track
  */
 export async function runPredictionEngine(fixtureId, rawData) {

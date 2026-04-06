@@ -9,7 +9,7 @@ import { logRecommendedMarket } from "../storage/marketTracking.js";
  * persists to DB, logs market tracking. Returns the full prediction.
  */
 export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection }) {
-  const { bestPick, backupPicks, noSafePick, noSafePickReason, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
+  const { bestPick, backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
   const confidence = buildConfidenceProfile(bestPick, features);
   const reasonCodes = buildReasonCodes(features, script);
   const result = {
@@ -23,6 +23,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     backupPicks,
     noSafePick,
     noSafePickReason: noSafePickReason || null,
+    abstainCode: abstainCode || null,
     layer2Override: { triggered: layer2Override, applied: layer2OverrideApplied, shiftMarket: maxShiftMarket, shiftPp: parseFloat(((maxShift||0)*100).toFixed(1)), dataComplete: features.dataCompletenessScore ?? null },
     confidence,
     reasonCodes,
