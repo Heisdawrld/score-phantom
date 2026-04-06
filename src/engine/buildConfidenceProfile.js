@@ -86,5 +86,25 @@ export function buildConfidenceProfile(bestPick, featureVector) {
     if (volatility === 'low') volatility = 'medium';
   }
 
-  return { model, value, volatility, dataQualityNote };
+  // Step 3 (User spec): CONTEXT affects confidence, NOT xG
+  // Lineup missing = unpredictable team composition = lower confidence
+  const hasLineupData = fv.hasLineupData || false;
+  const lineupComplete = fv.homeLineupComplete && fv.awayLineupComplete;
+  if (!hasLineupData) {
+    if (model === "high") model = "medium";
+  } else if (!lineupComplete) {
+    // Partial lineup — small downgrade
+    if (model === "high") model = "medium";
+  }
+  // High rotation risk (motivationScore < 0.4 = unmotivated) — flag in note
+  const homeMotivation = safeNum(fv.homeMotivationScore, 0.5);
+  const awayMotivation = safeNum(fv.awayMotivationScore, 0.5);
+  if (homeMotivation < 0.4 || awayMotivation < 0.4) {
+    if (!dataQualityNote) dataQualityNote = "Low motivation detected — confidence reduced";
+    if (model === "high") model = "medium";
+  }
+  // Enrichment tier "thin" (< 0.3) → restrict markets signal
+  const restrictMarkets = enrichmentTier === "thin" || safeNum(fv.enrichmentCompleteness, 0.5) < 0.30;
+
+  return { model, value, volatility, dataQualityNote, restrictMarkets: !!restrictMarkets };
 }

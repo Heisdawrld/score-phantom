@@ -99,9 +99,9 @@ export function Header() {
           </nav>
         )}
 
-        <NotificationCenter />
+        <div className="hidden md:block"><NotificationCenter /></div>
         {/* Right side — avatar dropdown */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 md:flex hidden">
           {!isLoading && user && (
             <div ref={ref} className="relative">
               {/* Avatar button */}

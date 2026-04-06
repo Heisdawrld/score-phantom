@@ -305,6 +305,27 @@ export async function fetchMatchLineups(matchId) {
 
 // ── Competition top scorers ───────────────────────────────────────────────────
 // Endpoint: /competitions/topscorers.json?competition_id=X
+// -- Commentary (goals/events narrative) ------------------------------------------
+export async function fetchMatchCommentary(matchId) {
+  try {
+    const data = await get("/matches/commentary.json", { match_id: matchId });
+    return data.data || null;
+  } catch (err) {
+    console.error("[LiveScore] Commentary failed:", err.message);
+    return null;
+  }
+}
+
+// -- Extract form from standings rows (fallback when team endpoint thin) ------
+export function extractFormFromStandings(standings, teamId, teamName) {
+  const row = (standings || []).find(r =>
+    String(r.team_id || "") === String(teamId) ||
+    (r.team || "").toLowerCase() === (teamName || "").toLowerCase()
+  );
+  if (!row || !row.form) return [];
+  const letters = String(row.form).split("").filter(c => ["W","D","L"].includes(c.toUpperCase()));
+  return letters.map((l, i) => ({ home: teamName, away: "Opponent", score: l === "W" ? "1-0" : l === "D" ? "1-1" : "0-1", date: null, competition: "" }));
+}
 export async function fetchTopScorers(competitionId) {
   try {
     const data = await get('/competitions/topscorers.json', { competition_id: competitionId });

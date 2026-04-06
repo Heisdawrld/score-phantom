@@ -21,7 +21,7 @@ import {
   fetchMatchLineups,
   fetchMatchStats,
   fetchMatchEvents,
-} from '../services/sportapi.js';
+} from '../services/livescore.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -188,60 +188,33 @@ function parseLineupModifier(rawLineup) {
  *   National team (profiles only, API has no form):      0.20 [floor]        → LIMITED
  *   No form at all from either team:                     0.00                → NO DATA (truly broken)
  */
-function computeDataCompleteness({ homeForm, awayForm, h2h, standings, homeProfile, awayProfile, lineupModifier }) {
+
+function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupModifier, matchEvents }) {
   let score = 0;
   const checks = {};
-
   const homeCount = homeForm?.length || 0;
   const awayCount = awayForm?.length || 0;
-
-  // ── Core: form data (primary engine fuel) ────────────────────────────────
   checks.hasHomeForm = homeCount >= 3;
   checks.hasAwayForm = awayCount >= 3;
-  if (checks.hasHomeForm) score += 0.30;
-  if (checks.hasAwayForm) score += 0.30;
-
-  // ── Rich form bonus (strong bilateral sample) ─────────────────────────────
-  checks.homeFormRich = homeCount >= 8;
-  checks.awayFormRich = awayCount >= 8;
-  if (checks.homeFormRich) score += 0.10;
-  if (checks.awayFormRich) score += 0.10;
-
-  // ── Context enhancers (upgrade quality, not requirements) ─────────────────
-  checks.hasH2H = (h2h?.length || 0) >= 2;
+  if (checks.hasHomeForm) score += 0.15;
+  if (checks.hasAwayForm) score += 0.15;
   checks.hasStandings = (standings?.length || 0) >= 4;
-  checks.hasLineup = lineupModifier?.homeLineupConfirmed || lineupModifier?.awayLineupConfirmed;
-
-  if (checks.hasH2H) score += 0.10;
-  if (checks.hasStandings) score += 0.10;
-  if (checks.hasLineup) score += 0.05;
-
-  // ── Floor rules: prevent NO DATA when engine can still predict ───────────
-  //
-  // Floor 1: Any non-zero form from either team → minimum LIMITED (0.30)
-  if (score < 0.30 && (homeCount > 0 || awayCount > 0)) {
-    score = 0.30;
-    checks.floorApplied = true;
-  }
-  // Floor 2: Valid team profiles exist (e.g. national teams with no API form)
-  // The prediction engine CAN still compute baselines from team quality profiles,
-  // so this fixture is not truly "no data" — it's LIMITED quality.
-  if (score < 0.20 && homeProfile && awayProfile) {
-    score = 0.20;
-    checks.floorApplied = true;
-  }
-
+  if (checks.hasStandings) score += 0.20;
+  checks.hasH2H = (h2h?.length || 0) >= 2;
+  if (checks.hasH2H) score += 0.20;
+  checks.hasLineup = !!(lineupModifier?.homeLineupConfirmed || lineupModifier?.awayLineupConfirmed);
+  if (checks.hasLineup) score += 0.20;
+  checks.hasEvents = !!(matchEvents && (Array.isArray(matchEvents) ? matchEvents.length > 0 : true));
+  if (checks.hasEvents) score += 0.10;
+  if (score < 0.30 && (homeCount > 0 || awayCount > 0)) { score = 0.30; checks.floorApplied = true; }
   const completeness = Math.min(1, parseFloat(score.toFixed(2)));
-
   let tier;
-  if (completeness >= 0.80) tier = 'rich';
-  else if (completeness >= 0.55) tier = 'good';
-  else if (completeness >= 0.20) tier = 'partial';   // was 0.30 — lowered to catch profile-only fixtures
-  else tier = 'thin';
-
+  if (completeness >= 0.75) tier = "rich";
+  else if (completeness >= 0.50) tier = "good";
+  else if (completeness >= 0.30) tier = "partial";
+  else tier = "thin";
   return { score: completeness, tier, checks };
 }
-
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -380,8 +353,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     awayForm,
     h2h: h2hData.h2h,
     standings,
-    homeProfile,
-    awayProfile,
+    matchEvents,
     lineupModifier,
   });
 
@@ -402,8 +374,6 @@ export async function fetchAndStoreEnrichment(fixture) {
     standings,
     homeMomentum,
     awayMomentum,
-    homeProfile,
-    awayProfile,
     lineupModifier,
     completeness,
     homeStats: homeProfile,

@@ -412,6 +412,25 @@ router.post("/clear-fixture-odds", adminLimiter, requireAdmin, async (req, res) 
   }
 });
 
+// POST /full-reset -- clear fixtures/enrichment/predictions, keep users/payments
+router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const tables = ["predictions_v2","historical_matches","fixture_odds","fixtures","teams","tournaments"];
+    const caches = ["sportmonks_cache","deep_analysis_cache","schedule_cache","sportsapipro_usage"];
+    let cleared = [];
+    for (const t of tables) {
+      try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) { console.warn("Skip " + t + ":", e.message); }
+    }
+    for (const t of caches) {
+      try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) {}
+    }
+    console.log("[Admin] Full reset complete. Tables cleared:", cleared.join(", "));
+    return res.json({ success: true, message: "DB reset complete. Cleared: " + cleared.join(", ") + ". Users and payments preserved.", cleared });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /clear-prediction-cache — wipe predictions so engine re-runs ─────────
 router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, res) => {
   try {
