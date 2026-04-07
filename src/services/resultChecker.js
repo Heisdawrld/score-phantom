@@ -79,6 +79,18 @@ export async function checkResults(dateStr) {
       if (hk && ak) { nameMap[hk + ':' + ak] = s; }
     }
   }
+  // Also check historical_matches - stores real form/h2h match results with goals
+  const hmScores = await db.execute({ sql: 'SELECT DISTINCT home_team, away_team, home_goals, away_goals FROM historical_matches WHERE date LIKE ? AND home_goals IS NOT NULL', args: ['%' + date + '%'] });
+  let hmAdded = 0;
+  for (const f of hmScores.rows || []) {
+    const hk = (f.home_team || '').toLowerCase().trim();
+    const ak = (f.away_team || '').toLowerCase().trim();
+    if (!hk || !ak) continue;
+    const s = { home: Number(f.home_goals), away: Number(f.away_goals) };
+    if (!nameMap[hk + ':' + ak]) { nameMap[hk + ':' + ak] = s; hmAdded++; }
+    if (!nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]]) nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s;
+  }
+  console.log('[ResultChecker] historical_matches added', hmAdded, 'name-matched scores for', date);
   console.log('[ResultChecker] Score map: ' + Object.keys(scoreMap).length + ' by ID, ' + Object.keys(nameMap).length + ' by name');
   // Auto-build predictions for finished fixtures that were never clicked
   try {
@@ -108,7 +120,7 @@ export async function checkResults(dateStr) {
     const score = scoreMap[fid] || nameMap[hk + ':' + ak] || nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] || null;
     const outcome = score ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name) : 'void';
     try {
-      await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"),datetime("now"))', args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score ? score.home : null, score ? score.away : null, score ? score.home + '-' + score.away : null, outcome] });
+      await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)', args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score ? score.home : null, score ? score.away : null, score ? score.home + '-' + score.away : null, outcome] });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;
     } catch (e) { console.error('[ResultChecker] DB error for', fid, ':', e.message); }
