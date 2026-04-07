@@ -352,8 +352,13 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   useEffect(() => { if (tab === "partners") { loadPartners(); setSelectedPartner(null); setCommissions([]); setSelectedCommIds(new Set()); } }, [tab, loadPartners]);
   useEffect(() => { if (tab === "system") loadCalibration(); }, [tab, loadCalibration]);
 
+  const [rebuildLoading, setRebuildLoading] = useState(false);
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
+  };
+  const runRebuild = async () => {
+    setRebuildLoading(true);
+    try { await call("/api/admin/rebuild-track-record", { method: "POST", body: JSON.stringify({ days: 30 }) }); flash(true, "Rebuild started in background — check Track Record in 2-3 minutes."); } catch(e: any) { flash(false, e?.message || "Failed"); } finally { setRebuildLoading(false); }
   };
 
   const handleUpgrade = async (e: React.FormEvent) => {
@@ -977,7 +982,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
                 <h3 className="text-sm font-bold text-white">Prediction Cache</h3>
                 <p className="text-xs text-gray-500">Clear cached predictions so the engine rebuilds fresh picks.</p>
-                <button onClick={() => { run(() => call("/api/admin/rebuild-track-record", { method: "POST", body: JSON.stringify({ days: 30 }) }), "Track Record rebuild started — building predictions + evaluating results for last 30 days. This may take 2-3 minutes."); }} className="w-full bg-primary/10 border border-primary/30 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">🔄 Rebuild Track Record (last 30 days)</button>
+                <button onClick={runRebuild} disabled={rebuildLoading} className="w-full bg-primary/10 border border-primary/30 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{rebuildLoading ? "⏳ Rebuilding... (runs in background)" : "🔄 Rebuild Track Record (last 30 days)"}</button>
                 <button onClick={() => { if(confirm("Clear ALL prediction_outcomes? This resets track record.")) run(() => call("/api/admin/clear-track-record", { method: "POST" }), "Track record cleared"); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-red-400 border border-red-500/20">🗑️ Clear Track Record (reset outcomes)</button>
                 <button onClick={() => run(() => call("/api/admin/clear-prediction-cache", { method: "POST" }), "Prediction cache cleared — engine will re-run fresh")}
                   className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
