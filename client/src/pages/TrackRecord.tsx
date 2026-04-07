@@ -149,7 +149,6 @@ function MarketRow({ market, index, label }: { market: any; index: number; label
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-semibold text-white/80 group-hover:text-white transition-colors">{label}</span>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="text-white/35">{market.wins}W / {market.losses}L</span>
           <span className={"font-bold px-1.5 py-0.5 rounded " + rateClass}>{market.winRate.toFixed(1)}%</span>
         </div>
       </div>
@@ -265,28 +264,8 @@ export default function TrackRecord() {
                     <span className="text-[8px] text-white/25 mt-0.5">settled only</span>
                   </div>
                 </div>
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  {[
-                    { val: animTotal,  label: "Total",    cls: "bg-white/4",                                            txt: "text-white" },
-                    { val: animWins,   label: "Wins ✓",   cls: "bg-emerald-500/10 border border-emerald-500/20", txt: "text-emerald-400" },
-                    { val: animLosses, label: "Losses ✗", cls: "bg-red-500/10 border border-red-500/20",         txt: "text-red-400" },
-                    { val: animVoids,  label: "Voids",    cls: "bg-white/4",                                            txt: "text-white/40" },
-                  ].map(({ val, label, cls, txt }) => (
-                    <div key={label} className={cls + " rounded-xl p-3 text-center"}>
-                      <p className={txt + " text-2xl font-black tabular-nums"}>{val}</p>
-                      <p className="text-[10px] text-white/40 uppercase tracking-wide mt-0.5">{label}</p>
-                    </div>
-                  ))}
-                </div>
               </motion.div>
 
-              {/* W/L bar */}
-              <motion.div variants={fade} className="bg-white/4 border border-white/8 rounded-2xl p-5">
-                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-primary" /> W/L Breakdown
-                </h3>
-                <AnimatedBar wins={stats.wins} losses={stats.losses} voids={stats.voids ?? 0} total={stats.totalPicks} settled={settled} />
-              </motion.div>
 
               {/* Market breakdown */}
               {topMarkets.length > 0 && (
@@ -307,7 +286,7 @@ export default function TrackRecord() {
                 <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                 <div>
                   <p className="text-xs font-bold text-white/80">Verified Performance</p>
-                  <p className="text-[11px] text-white/40 mt-0.5">Based on {stats.totalPicks} logged predictions — settled matches only count toward win rate.</p>
+                  <p className="text-[11px] text-white/40 mt-0.5">Win rate is calculated from settled matches only.</p>
                 </div>
               </motion.div>
 

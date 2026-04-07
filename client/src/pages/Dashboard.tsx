@@ -82,15 +82,6 @@ function ProofStrip({ stats, onView }: { stats: any; onView: () => void }) {
           <p className="text-lg font-black text-primary">{wr.toFixed(1)}%</p>
           <p className="text-[9px] text-white/35 uppercase tracking-wider">Win Rate</p>
         </div>
-        <div className="w-px h-8 bg-white/10" />
-        <div className="text-center">
-          <p className="text-lg font-black text-emerald-400">{stats.wins}</p>
-          <p className="text-[9px] text-white/35 uppercase tracking-wider">Wins</p>
-        </div>
-        <div className="text-center">
-          <p className="text-lg font-black text-red-400">{stats.losses}</p>
-          <p className="text-[9px] text-white/35 uppercase tracking-wider">Losses</p>
-        </div>
       </div>
       <motion.button whileTap={{ scale:0.95 }} onClick={onView}
         className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-xs font-bold text-white/60 hover:text-white">
