@@ -3,7 +3,6 @@ import { safeNum, clamp } from '../utils/math.js';
 export function computeContextFeatures(tableContext, standings = [], restData = {}) {
   const tc = tableContext || {};
   const totalTeams = standings.length || 20;
-
   const homePos = safeNum(tc.home_position, 10);
   const awayPos = safeNum(tc.away_position, 10);
   const homeCtx = tc.home_context || 'midtable';
@@ -18,22 +17,19 @@ export function computeContextFeatures(tableContext, standings = [], restData = 
     return 0.5;
   }
 
+  // Rest day differential - MUST be declared before motivationScore usage
+  const restDiffDays = restData.restDiffDays != null ? restData.restDiffDays : 0;
+  const homeRestDays = restData.homeRestDays != null ? restData.homeRestDays : null;
+  const awayRestDays = restData.awayRestDays != null ? restData.awayRestDays : null;
+  const homeRestBonus = restDiffDays > 4 ? 0.05 : restDiffDays < -4 ? -0.04 : 0;
+  const awayRestBonus = restDiffDays < -4 ? 0.05 : restDiffDays > 4 ? -0.04 : 0;
+
   const homeMotivationScore = Math.min(1, motivationScore(homeCtx, homePos) + homeRestBonus);
   const awayMotivationScore = Math.min(1, motivationScore(awayCtx, awayPos) + awayRestBonus);
 
   const titleRacePressure = (homeCtx === 'title' || awayCtx === 'title') ? 0.8 : 0;
   const relegationPressure = (homeCtx === 'relegation' || awayCtx === 'relegation') ? 0.8 : 0;
 
-  // Rest day differential - computed from historical match dates vs fixture date
-  const restDiffDays = restData.restDiffDays ?? 0;
-  const homeRestDays = restData.homeRestDays ?? null;
-  const awayRestDays = restData.awayRestDays ?? null;
-
-  // Rest-based motivation adjustment: team with significantly more rest has a small edge
-  const homeRestBonus = restDiffDays > 4 ? 0.05 : restDiffDays < -4 ? -0.04 : 0;
-  const awayRestBonus = restDiffDays < -4 ? 0.05 : restDiffDays > 4 ? -0.04 : 0;
-
-  // Rotation risk - estimate from context (cup distractions not tracked yet)
   const rotationRiskHome = 0;
   const rotationRiskAway = 0;
   const cupDistractionHome = 0;
