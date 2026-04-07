@@ -23,8 +23,12 @@ export function useAuth() {
       const user = res?.user ? { ...res.user, has_access: res.has_access, access_status: res.access_status } : res;
       return UserSchema.parse(user);
     },
-    retry: 2,               // retry twice before giving up (handles Render cold start)
-    retryDelay: 1500,        // 1.5s between retries
+    retry: (failureCount, error: any) => {
+      // Never retry 401 — user is simply not authenticated, retrying wastes 3 seconds
+      if (error?.status === 401) return false;
+      return failureCount < 2; // retry up to 2x for genuine network/server errors
+    },
+    retryDelay: 1000,
     staleTime: 10 * 60 * 1000, // 10 min cache
     gcTime: 30 * 60 * 1000,    // keep in memory 30 min
   });

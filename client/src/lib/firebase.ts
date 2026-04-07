@@ -1,5 +1,4 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -26,25 +25,41 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Firebase Cloud Messaging (push notifications)
-export let messaging: any = null;
-try { messaging = getMessaging(app); } catch(e) { console.warn("[FCM] messaging not available:", (e as any).message); }
+// Messaging is initialised lazily — only when push notifications are actually requested.
+// This prevents the ~100KB firebase/messaging chunk from loading on every page.
+let _messaging: any = null;
+async function getMessagingLazy() {
+  if (_messaging) return _messaging;
+  try {
+    const { getMessaging } = await import("firebase/messaging");
+    _messaging = getMessaging(app);
+  } catch(e) { console.warn("[FCM] messaging not available:", (e as any).message); }
+  return _messaging;
+}
 
 export async function requestPushPermission(): Promise<string | null> {
-  if (!messaging || !("Notification" in window)) return null;
+  if (!("Notification" in window)) return null;
+  const messaging = await getMessagingLazy();
+  if (!messaging) return null;
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
   if (!vapidKey) { console.warn("[FCM] VITE_FIREBASE_VAPID_KEY not set"); return null; }
   try {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return null;
     const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const { getToken } = await import("firebase/messaging");
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
     return token || null;
   } catch(e) { console.error("[FCM] getToken failed:", (e as any).message); return null; }
 }
 
 export function onForegroundMessage(cb: (payload: any) => void): () => void {
-  if (!messaging) return () => {};
-  return onMessage(messaging, cb);
+  getMessagingLazy().then(async m => {
+    if (!m) return;
+    const { onMessage } = await import("firebase/messaging");
+    onMessage(m, cb);
+  });
+  return () => {};
 }
 
 // Enable persistence across browser sessions
