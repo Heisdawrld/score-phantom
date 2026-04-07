@@ -39,7 +39,7 @@ async function handleScoreUpdate(msg) {
     await db.execute({ sql: 'UPDATE fixtures SET home_score = ?, away_score = ?, match_status = ?, live_minute = ? WHERE id = ?', args: [msg.home_score, msg.away_score, msg.status || 'LIVE', msg.minute || null, fixtureId] });
     if (msg.home_score !== null && msg.away_score !== null) notifyMatchSubscribers(fixtureId, '', '', msg.home_score, msg.away_score, msg.minute).catch(()=>{});
     broadcast({ type: 'score_update', fixture_id: fixtureId, home_score: msg.home_score, away_score: msg.away_score, status: msg.status, minute: msg.minute });
-    if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
+    const st=(msg.status||'').toUpperCase(); if (st==='FT'||st==='AET'||st==='PEN'||st==='FINISHED'||st==='FULL TIME') {
       setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score).catch(() => {}), 5000);
     }
   } catch (err) {

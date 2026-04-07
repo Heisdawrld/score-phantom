@@ -69,7 +69,7 @@ export async function checkResults(dateStr) {
       db.execute({ sql: 'UPDATE fixtures SET home_score=?,away_score=?,match_status=? WHERE id=? AND home_score IS NULL', args:[Number(f.home_score),Number(f.away_score),'FT',f.match_id] }).catch(()=>{});
     }
   }
-  const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ('FT','AET','Pen') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
+  const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ('FT','AET','Pen','FINISHED','Finished') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
   for (const f of dbScores.rows || []) {
     if (!scoreMap[f.id]) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };
