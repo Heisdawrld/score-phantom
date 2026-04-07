@@ -111,7 +111,7 @@ export async function initUsersTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS partner_commissions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      referrer_user_id INTEGER NOT NULL,
+      referrer_user_id INTEGER,
       referred_user_id INTEGER NOT NULL UNIQUE,
       payment_id INTEGER,
       gross_amount INTEGER NOT NULL,
@@ -130,6 +130,16 @@ export async function initUsersTable() {
   await ensureColumn("partner_commissions", "paid_at",             "ALTER TABLE partner_commissions ADD COLUMN paid_at TEXT");
   await ensureColumn("partner_commissions", "payout_batch_id",     "ALTER TABLE partner_commissions ADD COLUMN payout_batch_id TEXT");
   await ensureColumn("partner_commissions", "notes",               "ALTER TABLE partner_commissions ADD COLUMN notes TEXT");
+  // Migrate: make referrer_user_id nullable if it was created with NOT NULL
+  const _pcInfo = await db.execute("PRAGMA table_info(partner_commissions)");
+  const _refCol = (_pcInfo.rows||[]).find(r=>r.name==="referrer_user_id");
+  if (_refCol && Number(_refCol.notnull) === 1) {
+    await db.execute("ALTER TABLE partner_commissions RENAME TO partner_commissions_legacy2");
+    await db.execute("CREATE TABLE partner_commissions (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT \"pending\", created_at TEXT DEFAULT CURRENT_TIMESTAMP, settled_at TEXT, payment_reference TEXT, paid_at TEXT, payout_batch_id TEXT, notes TEXT)");
+    await db.execute("INSERT OR IGNORE INTO partner_commissions SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2");
+    await db.execute("DROP TABLE IF EXISTS partner_commissions_legacy2");
+    console.log("[Migration] partner_commissions.referrer_user_id made nullable");
+  }
 
   // Partners table — migrate to standalone schema (no user_id required)
   const _ptInfo = await db.execute("PRAGMA table_info(partners)");
@@ -266,7 +276,7 @@ async function activatePremium(userId, flwChargeId, reference) {
 }
 
 // ── Referral commission on first verified payment ────────────────────────
-async function createReferralCommission(userId, grossAmount, paymentId, paymentReference) {
+export async function createReferralCommission(userId, grossAmount, paymentId, paymentReference) {
   try {
     // Prevent duplicate commission for same user
     const dup = await db.execute({ sql: "SELECT id FROM partner_commissions WHERE referred_user_id = ? LIMIT 1", args: [userId] });
@@ -1079,7 +1089,7 @@ router.post("/admin/verify-payment", adminLimiter, requireAdminSecret, async (re
 
     const { expiryISO, subscriptionCode } = await activatePremium(targetUserId, null, reference || `MANUAL_${targetUserId}_${Date.now()}`);
 
-    return res.json({ success: true, user_id: targetUserId, email: user.email, status: "premium", premium_expires_at: expiryISO });
+    try { const _pm = await db.execute({ sql: "SELECT id, amount FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", args: [Number(targetUserId)] }); await createReferralCommission(Number(targetUserId), Number(_pm.rows?.[0]?.amount)||3000, _pm.rows?.[0]?.id||null, String(reference||"")); } catch(ce) { console.error("[AdminVerify] Commission:", ce.message); }
   } catch (err) {
     console.error("[Admin Verify]", err);
     return res.status(500).json({ error: "Failed to verify payment" });
@@ -1121,7 +1131,7 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
     // Ensure payment record exists for tracking
     await db.execute({ sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
     const { expiryISO } = await activatePremium(user.id, null, ref);
-    return res.json({ success: true, user_id: user.id, email: user.email, status: "premium", premium_expires_at: expiryISO, days: planDays });
+    try { const _pm2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] }); await createReferralCommission(Number(user.id), 3000, _pm2.rows?.[0]?.id||null, ref); } catch(ce) { console.error("[AdminUpgrade] Commission:", ce.message); }
   } catch (err) {
     console.error("[Admin Upgrade]", err);
     return res.status(500).json({ error: "Failed to upgrade user" });

@@ -1,5 +1,6 @@
 import express from "express";
 import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
+import { createReferralCommission } from "../auth/authRoutes.js";
 import rateLimit from "express-rate-limit";
 
 const adminLimiter = rateLimit({
@@ -232,6 +233,11 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
             VALUES (?, ?, 3000, 'NGN', 'verified', 'manual_grant', ?)`,
       args: [userId, ref, new Date().toISOString()],
     });
+    // Create partner commission if this user was referred (treats manual grant as ₦3000 payment)
+    try {
+      const pmtRow = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] });
+      await createReferralCommission(Number(userId), 3000, pmtRow.rows?.[0]?.id || null, ref);
+    } catch(ce) { console.error("[Grant] Commission error:", ce.message); }
 
     return res.json({
       success: true,
@@ -508,7 +514,7 @@ router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res)
     const expiryISO = expiry.toISOString();
     await db.execute({ sql: "UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?", args: [new Date().toISOString(), ref] });
     await db.execute({ sql: "UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ? WHERE id = ?", args: [expiryISO, expiryISO, payment.user_id] });
-    return res.json({ success: true, message: `Payment ${ref} verified, user upgraded to premium for 30 days` });
+    try { await createReferralCommission(Number(payment.user_id), Number(payment.amount)||3000, payment.id||null, ref); } catch(ce) { console.error("[VerifyPmt] Commission error:", ce.message); }
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
