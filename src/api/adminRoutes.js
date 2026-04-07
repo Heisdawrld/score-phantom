@@ -1027,3 +1027,51 @@ router.post("/enter-score", adminLimiter, requireAdmin, async (req, res) => {
     return res.json({ success: true, outcome, pick: row.best_pick_selection, score: hs+'-'+as2, home: f?.home_team_name, away: f?.away_team_name });
   } catch(err) { console.error('[Admin] enter-score error:', err.message); return res.status(500).json({ error: err.message }); }
 });
+
+// -- fixture-dates: list distinct dates that have fixtures
+router.get('/fixture-dates', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.execute({ sql: "SELECT substr(match_date,1,10) as d, COUNT(*) as total, SUM(CASE WHEN home_score IS NOT NULL THEN 1 ELSE 0 END) as with_score, SUM(CASE WHEN match_status IN ('FT','AET','Pen','FINISHED','Finished') THEN 1 ELSE 0 END) as finished FROM fixtures GROUP BY substr(match_date,1,10) ORDER BY d DESC LIMIT 40" });
+    return res.json(r.rows || []);
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+// -- fixtures-by-date: list all fixtures for a date with prediction info
+router.get('/fixtures-by-date', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const date = (req.query.date || '').trim();
+    if (!date) return res.status(400).json({ error: 'date required YYYY-MM-DD' });
+    const q2 = 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.match_status, f.home_score, f.away_score, p.best_pick_market, p.best_pick_selection, o.outcome, o.full_score as settled_score FROM fixtures f LEFT JOIN predictions_v2 p ON p.fixture_id = f.id LEFT JOIN prediction_outcomes o ON o.fixture_id = f.id WHERE f.match_date LIKE ? ORDER BY f.match_date ASC';
+    const r2 = await db.execute({ sql: q2, args: [date + '%'] });
+    return res.json(r2.rows || []);
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+// -- bulk-enter-scores: settle multiple matches at once
+router.post('/bulk-enter-scores', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const scores = (req.body || {}).scores;
+    if (!Array.isArray(scores) || !scores.length) return res.status(400).json({ error: 'scores array required' });
+    const { evaluatePrediction } = await import('../services/resultChecker.js');
+    const results = [];
+    for (const entry of scores) {
+      try {
+        const fid = entry.fixtureId; const hs = parseInt(entry.homeScore,10); const as2 = parseInt(entry.awayScore,10);
+        if (isNaN(hs)||isNaN(as2)||!fid){results.push({fixtureId:fid,error:'invalid'});continue;}
+        await db.execute({sql:'UPDATE fixtures SET home_score=?,away_score=?,match_status=? WHERE id=?',args:[hs,as2,'FINISHED',String(fid)]});
+        const pred=await db.execute({sql:'SELECT * FROM predictions_v2 WHERE fixture_id=? LIMIT 1',args:[String(fid)]});
+        const fix=await db.execute({sql:'SELECT * FROM fixtures WHERE id=? LIMIT 1',args:[String(fid)]});
+        const row=pred.rows&&pred.rows[0]; const f=fix.rows&&fix.rows[0];
+        if(!row||!row.best_pick_selection){results.push({fixtureId:fid,home:f&&f.home_team_name,away:f&&f.away_team_name,score:hs+'-'+as2,message:'no prediction'});continue;}
+        const outcome=evaluatePrediction(row.best_pick_market,row.best_pick_selection,hs,as2,f&&f.home_team_name,f&&f.away_team_name);
+        const oSql='INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)';
+        const oArgs=[String(fid),(f&&f.home_team_name)||'',(f&&f.away_team_name)||'',(f&&f.match_date)||'',(f&&f.tournament_name)||'',row.best_pick_market||'',row.best_pick_selection||'',parseFloat(row.best_pick_probability||0),row.confidence_model||'',hs,as2,hs+'-'+as2,outcome];
+        await db.execute({sql:oSql,args:oArgs});
+        console.log('[Admin] bulk-settle:',f&&f.home_team_name,'vs',f&&f.away_team_name,hs+'-'+as2,'->',outcome);
+        results.push({fixtureId:fid,home:f&&f.home_team_name,away:f&&f.away_team_name,score:hs+'-'+as2,outcome,pick:row.best_pick_selection});
+      } catch(e){results.push({fixtureId:entry.fixtureId,error:e.message});}
+    }
+    const settled=results.filter(function(r){return r.outcome;}).length;
+    return res.json({success:true,settled,results});
+  } catch(err){return res.status(500).json({error:err.message});}
+});

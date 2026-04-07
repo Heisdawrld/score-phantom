@@ -359,6 +359,11 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [scoreH, setScoreH] = useState("");
   const [scoreA, setScoreA] = useState("");
   const [scoreMsg, setScoreMsg] = useState<string|null>(null);
+  const [browseDate, setBrowseDate] = useState("");
+  const [browseFixtures, setBrowseFixtures] = useState<any[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseScores, setBrowseScores] = useState<Record<string,{h:string;a:string}>>({});
+  const [bulkMsg, setBulkMsg] = useState<string|null>(null);
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
   };
@@ -1004,6 +1009,25 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 {scoreResults.length>0 && <div className="space-y-1 max-h-48 overflow-y-auto">{scoreResults.map((f:any)=>(<button key={f.id} onClick={()=>{setScoreEntry({id:String(f.id),home:f.home_team_name,away:f.away_team_name});setScoreSearch("");setScoreResults([]);setScoreH("");setScoreA("");setScoreMsg(null);}} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-gray-300">{f.home_team_name} vs {f.away_team_name} <span className="text-gray-600">{f.match_date?.slice(0,10)} {f.match_status}{f.home_score!=null?" "+f.home_score+"-"+f.away_score:""}</span></button>))}</div>}
                 {scoreEntry && <div className="space-y-2 border border-primary/20 rounded-xl p-3"><p className="text-xs font-bold text-primary">{scoreEntry.home} vs {scoreEntry.away}</p><div className="flex gap-2 items-center"><input type="number" min="0" max="20" value={scoreH} onChange={e=>setScoreH(e.target.value)} placeholder="Home" className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center" /><span className="text-gray-500">-</span><input type="number" min="0" max="20" value={scoreA} onChange={e=>setScoreA(e.target.value)} placeholder="Away" className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center" /><button onClick={async()=>{ if(!scoreH||!scoreA)return; try{const r=await call("/api/admin/enter-score",{method:"POST",body:JSON.stringify({fixtureId:scoreEntry.id,homeScore:parseInt(scoreH),awayScore:parseInt(scoreA)})});setScoreMsg((r.outcome||"saved").toUpperCase()+": "+scoreEntry.home+" "+scoreH+"-"+scoreA+" "+scoreEntry.away+" | Pick: "+r.pick);setScoreEntry(null);}catch(e:any){setScoreMsg("Error: "+(e.message||"failed"));}}} className="px-3 py-1.5 bg-primary/20 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/30">Save</button><button onClick={()=>{setScoreEntry(null);setScoreMsg(null);}} className="text-gray-600 text-xs">Cancel</button></div></div>}
                 {scoreMsg && <p className={"text-xs font-bold px-3 py-2 rounded-lg "+(scoreMsg.startsWith("WIN")?"text-primary bg-primary/10":scoreMsg.startsWith("LOSS")?"text-red-400 bg-red-500/10":"text-yellow-400 bg-yellow-500/10")}>{scoreMsg}</p>}
+              </div>
+
+              {/* Browse Fixtures by Date */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Browse Fixtures by Date</h3>
+                <p className="text-xs text-gray-500">Pick a date to see all fixtures, then enter scores to bulk-settle predictions.</p>
+                <div className="flex gap-2">
+                  <input type="date" value={browseDate} onChange={e=>setBrowseDate(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white" />
+                  <button onClick={async()=>{if(!browseDate)return;setBrowseLoading(true);setBulkMsg(null);try{const r=await call("/api/admin/fixtures-by-date?date="+browseDate);setBrowseFixtures(r||[]);}catch(e:any){setBulkMsg("Error: "+e.message);}finally{setBrowseLoading(false);}}} disabled={browseLoading} className="px-4 py-2 bg-primary/20 border border-primary/30 text-primary text-xs font-bold rounded-xl hover:bg-primary/30">{browseLoading?"Loading...":"Load"}</button>
+                </div>
+                {browseFixtures.length>0 && (<div className="space-y-2 max-h-96 overflow-y-auto">
+                  {browseFixtures.map((f:any)=>(<div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                    <div className="flex-1 min-w-0"><p className="text-xs text-white truncate">{f.home_team_name} vs {f.away_team_name}</p><p className="text-[10px] text-gray-600">{f.best_pick_selection||"no pick"} {f.settled_score?"| "+f.settled_score:""} {f.outcome?"| "+f.outcome:""}</p></div>
+                    {!f.outcome && (<><input type="number" min="0" max="20" placeholder="H" value={browseScores[f.id]?.h||""} onChange={e=>setBrowseScores(p=>({...p,[f.id]:{...p[f.id],h:e.target.value}}))} className="w-12 bg-white/5 border border-white/10 rounded-lg px-1 py-1 text-xs text-white text-center" /><span className="text-gray-600 text-xs">-</span><input type="number" min="0" max="20" placeholder="A" value={browseScores[f.id]?.a||""} onChange={e=>setBrowseScores(p=>({...p,[f.id]:{...p[f.id],a:e.target.value}}))} className="w-12 bg-white/5 border border-white/10 rounded-lg px-1 py-1 text-xs text-white text-center" /></>)}
+                    {f.outcome && <span className={"text-xs font-bold px-2 py-0.5 rounded-lg "+(f.outcome==="WIN"?"text-primary bg-primary/10":f.outcome==="LOSS"?"text-red-400 bg-red-500/10":"text-yellow-400 bg-yellow-500/10")}>{f.outcome}</span>}
+                  </div>))}
+                  <button onClick={async()=>{const scores=browseFixtures.filter((f:any)=>!f.outcome&&browseScores[f.id]?.h&&browseScores[f.id]?.a).map((f:any)=>({fixtureId:f.id,homeScore:parseInt(browseScores[f.id].h),awayScore:parseInt(browseScores[f.id].a)}));if(!scores.length)return;try{const r=await call("/api/admin/bulk-enter-scores",{method:"POST",body:JSON.stringify({scores})});setBulkMsg("Settled "+r.settled+" of "+scores.length+" matches. Wins: "+r.results.filter((x:any)=>x.outcome==="WIN").length+", Losses: "+r.results.filter((x:any)=>x.outcome==="LOSS").length);const updated=await call("/api/admin/fixtures-by-date?date="+browseDate);setBrowseFixtures(updated||[]);}catch(e:any){setBulkMsg("Error: "+(e as any).message);}}} className="w-full py-2 bg-primary/20 border border-primary/30 text-primary text-xs font-bold rounded-xl hover:bg-primary/30">Settle All Entered Scores</button>
+                </div>)}
+                {bulkMsg && <p className="text-xs font-bold text-primary px-3 py-2 rounded-lg bg-primary/10">{bulkMsg}</p>}
               </div>
 
               {/* Odds Cache */}
