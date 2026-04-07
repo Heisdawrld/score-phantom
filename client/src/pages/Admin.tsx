@@ -343,7 +343,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   useEffect(() => { if (tab === "partners") { loadPartners(); setSelectedPartner(null); setCommissions([]); setSelectedCommIds(new Set()); } }, [tab, loadPartners]);
 
   const run = async (fn: () => Promise<any>, msg: string) => {
-    try { await fn(); flash(true, msg); } catch (e: any) { flash(false, e.message); }
+    try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
   };
 
   const handleUpgrade = async (e: React.FormEvent) => {

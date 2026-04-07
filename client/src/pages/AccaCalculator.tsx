@@ -8,6 +8,8 @@ import { ChevronLeft, Zap, Crown, Lock, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
+function formatAccaMarket(key: string): string { const m: Record<string,string> = { home_win:"Home Win", away_win:"Away Win", draw:"Draw", over_15:"Over 1.5", over_25:"Over 2.5", over_35:"Over 3.5", under_15:"Under 1.5", under_25:"Under 2.5", under_35:"Under 3.5", btts_yes:"Both Teams Score", btts_no:"BTTS No", double_chance_home:"Home or Draw", double_chance_away:"Away or Draw", dnb_home:"Home Win (DNB)", dnb_away:"Away Win (DNB)", home_over_15:"Home Over 1.5", away_over_15:"Away Over 1.5", home_under_15:"Home Under 1.5", away_under_15:"Away Under 1.5" }; return m[key] ?? (key||'').replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase()); }
+
 function toWAT(dateStr: string) {
   try { return new Date(dateStr).toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }); } catch { return ''; }
 }
@@ -86,7 +88,7 @@ export default function DailyAcca() {
                         <p className='font-bold text-sm text-white'>{pick.homeTeam} <span className='text-white/40'>vs</span> {pick.awayTeam}</p>
                         <p className='text-[11px] text-muted-foreground mt-0.5'>{pick.tournament}</p>
                         <div className='flex items-center gap-2 mt-1.5'>
-                          <span className='text-xs font-bold text-white bg-white/8 px-2 py-0.5 rounded border border-white/10'>{(pick.market||'').replace(/_/g,' ')} — {pick.selection}</span>
+                          <span className='text-xs font-bold text-white bg-white/8 px-2 py-0.5 rounded border border-white/10'>{formatAccaMarket(pick.market)} — {pick.selection}</span>
                         </div>
                       </div>
                       <div className='text-right shrink-0'>

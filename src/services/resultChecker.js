@@ -65,7 +65,7 @@ export async function checkResults(dateStr) {
       if (hk && ak) { nameMap[hk + ':' + ak] = s; nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s; }
     }
   }
-  const dbScores = await db.execute({ sql: 'SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ("FT","AET","Pen") AND home_score IS NOT NULL', args: ['%' + date + '%'] });
+  const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ('FT','AET','Pen') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
   for (const f of dbScores.rows || []) {
     if (!scoreMap[f.id]) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };

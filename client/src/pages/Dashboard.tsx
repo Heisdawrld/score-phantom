@@ -238,7 +238,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
                 <div className='flex-1 min-w-0'>
                   <p className='text-sm font-semibold truncate'>{pick.homeTeam} <span className='text-muted-foreground text-xs'>vs</span> {pick.awayTeam}</p>
                   <p className='text-xs text-muted-foreground truncate'>{pick.tournament}</p>
-                  <p className='text-xs font-bold text-white mt-0.5'>{(pick.market||'').replace(/_/g,' ')} — {pick.selection}</p>
+                  <p className='text-xs font-bold text-white mt-0.5'>{(pick.market||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())} \u2014 {pick.selection}</p>
                 </div>
                 <div className='text-right shrink-0 space-y-1'>
                   <p className='text-sm font-black text-primary'>{pick.probability?.toFixed(0)}%</p>

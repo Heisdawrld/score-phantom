@@ -258,7 +258,7 @@ export function buildAcca(rows, mode = 'safe') {
   const selected     = [];
   const usedLeagues  = new Map(); // tournamentName → count
   const scriptCounts = {};        // scriptCat → count
-  let   underCount  = 0; // track Under picks for diversity
+  let   defensiveCount = 0; // track Under + BTTS-No + Team-Under picks for diversity
   let   moderateUsed = 0;
 
   for (const pick of candidates) {
@@ -282,17 +282,26 @@ export function buildAcca(rows, mode = 'safe') {
     }
 
     // Diversity: max 1 Under per SAFE ACCA, max 2 per VALUE ACCA
-    const isUnderPick = (pick.best_pick_market||'').toLowerCase().includes('under');
-    const maxUnder = 1;
-    if (isUnderPick && underCount >= maxUnder) continue;
+    // Diversity: max 1 defensive pick (Under + BTTS-No + NOT-to-Score combined)
+    const mk_ = (pick.best_pick_market||'').toLowerCase();
+    const sel_ = (pick.best_pick_selection||'').toLowerCase();
+    const isDefensive = mk_.includes('under') || mk_ === 'btts_no' || sel_.includes('not to score') || sel_.includes('no btts');
+    if (isDefensive && defensiveCount >= 1) continue;
+    // Min odds filter: skip picks where odds < 1.05 (no perceived value)
+    const pickOdds_ = parseFloat(pick.odds_home || pick.odds_away || 0);
+    if (pickOdds_ > 0 && pickOdds_ < 1.05) continue;
 
     selected.push(pick);
-    if (isUnderPick) underCount++;
+    if (isDefensive) defensiveCount++;
     usedLeagues.set(tournament, leagueCount + 1);
     scriptCounts[pick.scriptCat] = catCount + 1;
   }
 
   // ── Step 3: Validate final set ────────────────────────────────────────────
+  // Ensure at least 1 attacking/result pick for variety
+  const hasAttackingPick = selected.some(p => { const m=(p.best_pick_market||'').toLowerCase(); return m==='home_win'||m==='away_win'||m.includes('over')||m==='btts_yes'||m==='double_chance_home'||m==='double_chance_away'; });
+  if (!hasAttackingPick && selected.length >= 2) console.log('[ACCA] Warning: all defensive picks');
+
   if (selected.length < targetMin) {
     return {
       accaType:           null,

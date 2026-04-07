@@ -219,7 +219,7 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
       </div>
       {backups.length > 0 && (
         <div className="rounded-2xl border border-white/8 p-4 bg-[#0c1810]">
-          <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Backup Picks</p>
+          <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Lean Options</p>
           <div className="flex flex-col gap-2">
             {backups.slice(0, 3).map((p: any, i: number) => (
               <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
