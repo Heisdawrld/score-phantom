@@ -24,6 +24,8 @@ export async function autoBuildPredictions({ limit = BATCH_SIZE } = {}) {
       .toLocaleString('en-CA', { timeZone: 'Africa/Lagos' })
       .split(',')[0]
       .trim();
+    const weekAgoDate = new Date(); weekAgoDate.setDate(weekAgoDate.getDate()-7);
+    const weekAgo = weekAgoDate.toLocaleString('en-CA',{timeZone:'Africa/Lagos'}).split(',')[0].trim();
 
     // Find enriched fixtures for today + next 2 days that have NO prediction yet
     const result = await db.execute({
@@ -31,11 +33,11 @@ export async function autoBuildPredictions({ limit = BATCH_SIZE } = {}) {
             FROM fixtures f
             LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
             WHERE f.enriched = 1
-              AND f.match_date >= ?
+              AND f.match_date >= ? -- covers past 7 days + future
               AND p.fixture_id IS NULL
             ORDER BY f.match_date ASC
             LIMIT ?`,
-      args: [today, limit],
+      args: [weekAgo, limit],
     });
 
     const fixtures = result.rows || [];

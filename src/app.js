@@ -322,8 +322,10 @@ app.listen(PORT, async () => {
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
   setTimeout(async () => {
     try {
+      const { autoBuildPredictions } = await import("./services/predictionRunner.js");
+      await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
       const { backfillResults } = await import("./services/resultChecker.js");
-      const res = await backfillResults(7);
+      const res = await backfillResults(30);
       console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
     } catch (err) { console.error("[ResultChecker] Startup backfill failed:", err.message); }
   }, 30000);

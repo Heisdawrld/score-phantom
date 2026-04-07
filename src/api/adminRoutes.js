@@ -733,6 +733,27 @@ router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+// POST /api/admin/rebuild-track-record — build missing predictions then evaluate all past results
+router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const days = parseInt(req.body?.days || 30, 10);
+    console.log("[Admin] rebuild-track-record started, days=", days);
+    // Step 1: Build predictions for past enriched fixtures
+    const { autoBuildPredictions } = await import("../services/predictionRunner.js");
+    const built = await autoBuildPredictions({ limit: 200 });
+    console.log("[Admin] Predictions built:", built);
+    // Step 2: Evaluate results for each day
+    const { backfillResults } = await import("../services/resultChecker.js");
+    const results = await backfillResults(days);
+    const totals = results.reduce((acc, r) => ({ wins: acc.wins+(r.outcomes?.wins||0), losses: acc.losses+(r.outcomes?.losses||0), voids: acc.voids+(r.outcomes?.voids||0), updated: acc.updated+(r.outcomes?.updated||0) }), { wins:0, losses:0, voids:0, updated:0 });
+    return res.json({ success: true, predictions_built: built, days_checked: results.length, totals, results });
+  } catch(err) {
+    console.error("[Admin] rebuild-track-record error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/diagnose-results — diagnostic endpoint to check score sources
 router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
   try {

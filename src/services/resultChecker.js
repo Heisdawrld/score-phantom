@@ -76,6 +76,17 @@ export async function checkResults(dateStr) {
     }
   }
   console.log('[ResultChecker] Score map: ' + Object.keys(scoreMap).length + ' by ID, ' + Object.keys(nameMap).length + ' by name');
+  // Auto-build predictions for finished fixtures that were never clicked
+  try {
+    const unpredicted = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name FROM fixtures f LEFT JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.fixture_id IS NULL', args: ['%' + date + '%'] });
+    const toBuild = (unpredicted.rows || []).filter(f => scoreMap[String(f.id)]);
+    if (toBuild.length > 0) {
+      console.log('[ResultChecker] Auto-building', toBuild.length, 'predictions for finished fixtures...');
+      const { getOrBuildPrediction } = await import('./predictionCache.js');
+      await Promise.allSettled(toBuild.slice(0, 30).map(f => getOrBuildPrediction(String(f.id)).catch(() => null)));
+    }
+  } catch(buildErr) { console.warn('[ResultChecker] Auto-build warning:', buildErr.message); }
+
   const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
   const fixtures = predRes.rows || [];
   console.log('[ResultChecker] Found', fixtures.length, 'predictions to check for', date);
