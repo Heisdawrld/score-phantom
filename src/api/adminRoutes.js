@@ -1000,3 +1000,30 @@ router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 export default router;
+// -- fixture-search: find fixture by team name
+router.get("/fixture-search", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const q = (req.query.q || '').toLowerCase().trim();
+    if (!q || q.length < 2) return res.json([]);
+    const r = await db.execute({ sql: "SELECT id, home_team_name, away_team_name, match_date, match_status, home_score, away_score FROM fixtures WHERE (LOWER(home_team_name) LIKE ? OR LOWER(away_team_name) LIKE ?) ORDER BY match_date DESC LIMIT 15", args: ['%'+q+'%','%'+q+'%'] });
+    return res.json(r.rows || []);
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+// -- enter-score: manually set score and evaluate prediction
+router.post("/enter-score", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { fixtureId, homeScore, awayScore } = req.body || {};
+    if (!fixtureId || homeScore == null || awayScore == null) return res.status(400).json({ error: 'fixtureId, homeScore, awayScore required' });
+    const hs = parseInt(homeScore, 10); const as2 = parseInt(awayScore, 10);
+    await db.execute({ sql: 'UPDATE fixtures SET home_score=?,away_score=?,match_status=? WHERE id=?', args:[hs,as2,'FINISHED',String(fixtureId)] });
+    const [pred, fix] = await Promise.all([ db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id=? LIMIT 1', args:[String(fixtureId)] }), db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[String(fixtureId)] }) ]);
+    const row = pred.rows?.[0]; const f = fix.rows?.[0];
+    if (!row || !row.best_pick_selection) return res.json({ success: true, message: 'Score saved but no prediction to evaluate', score: hs+'-'+as2 });
+    const { evaluatePrediction } = await import('../services/resultChecker.js');
+    const outcome = evaluatePrediction(row.best_pick_market, row.best_pick_selection, hs, as2, f?.home_team_name, f?.away_team_name);
+    await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)', args:[String(fixtureId),f?.home_team_name,f?.away_team_name,f?.match_date,f?.tournament_name,row.best_pick_market,row.best_pick_selection,parseFloat(row.best_pick_probability||0),row.confidence_model||'',hs,as2,hs+'-'+as2,outcome] });
+    console.log('[Admin] enter-score:', f?.home_team_name, 'vs', f?.away_team_name, hs+'-'+as2, '->', outcome);
+    return res.json({ success: true, outcome, pick: row.best_pick_selection, score: hs+'-'+as2, home: f?.home_team_name, away: f?.away_team_name });
+  } catch(err) { console.error('[Admin] enter-score error:', err.message); return res.status(500).json({ error: err.message }); }
+});

@@ -353,6 +353,12 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   useEffect(() => { if (tab === "system") loadCalibration(); }, [tab, loadCalibration]);
 
   const [rebuildLoading, setRebuildLoading] = useState(false);
+  const [scoreSearch, setScoreSearch] = useState("");
+  const [scoreResults, setScoreResults] = useState<any[]>([]);
+  const [scoreEntry, setScoreEntry] = useState<{id:string;home:string;away:string}|null>(null);
+  const [scoreH, setScoreH] = useState("");
+  const [scoreA, setScoreA] = useState("");
+  const [scoreMsg, setScoreMsg] = useState<string|null>(null);
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
   };
@@ -988,6 +994,16 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                   className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
                   Clear Prediction Cache
                 </button>
+              </div>
+
+              {/* Manual Score Entry */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">Enter Match Score Manually</h3>
+                <p className="text-xs text-gray-500">Search for a fixture and enter the final score to settle a prediction.</p>
+                <input value={scoreSearch} onChange={async e => { setScoreSearch(e.target.value); if(e.target.value.length>1){const r=await call("/api/admin/fixture-search?q="+encodeURIComponent(e.target.value));setScoreResults(r||[]);}else setScoreResults([]); }} placeholder="Search team name..." className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-600" />
+                {scoreResults.length>0 && <div className="space-y-1 max-h-48 overflow-y-auto">{scoreResults.map((f:any)=>(<button key={f.id} onClick={()=>{setScoreEntry({id:String(f.id),home:f.home_team_name,away:f.away_team_name});setScoreSearch("");setScoreResults([]);setScoreH("");setScoreA("");setScoreMsg(null);}} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-xs text-gray-300">{f.home_team_name} vs {f.away_team_name} <span className="text-gray-600">{f.match_date?.slice(0,10)} {f.match_status}{f.home_score!=null?" "+f.home_score+"-"+f.away_score:""}</span></button>))}</div>}
+                {scoreEntry && <div className="space-y-2 border border-primary/20 rounded-xl p-3"><p className="text-xs font-bold text-primary">{scoreEntry.home} vs {scoreEntry.away}</p><div className="flex gap-2 items-center"><input type="number" min="0" max="20" value={scoreH} onChange={e=>setScoreH(e.target.value)} placeholder="Home" className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center" /><span className="text-gray-500">-</span><input type="number" min="0" max="20" value={scoreA} onChange={e=>setScoreA(e.target.value)} placeholder="Away" className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center" /><button onClick={async()=>{ if(!scoreH||!scoreA)return; try{const r=await call("/api/admin/enter-score",{method:"POST",body:JSON.stringify({fixtureId:scoreEntry.id,homeScore:parseInt(scoreH),awayScore:parseInt(scoreA)})});setScoreMsg((r.outcome||"saved").toUpperCase()+": "+scoreEntry.home+" "+scoreH+"-"+scoreA+" "+scoreEntry.away+" | Pick: "+r.pick);setScoreEntry(null);}catch(e:any){setScoreMsg("Error: "+(e.message||"failed"));}}} className="px-3 py-1.5 bg-primary/20 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/30">Save</button><button onClick={()=>{setScoreEntry(null);setScoreMsg(null);}} className="text-gray-600 text-xs">Cancel</button></div></div>}
+                {scoreMsg && <p className={"text-xs font-bold px-3 py-2 rounded-lg "+(scoreMsg.startsWith("WIN")?"text-primary bg-primary/10":scoreMsg.startsWith("LOSS")?"text-red-400 bg-red-500/10":"text-yellow-400 bg-yellow-500/10")}>{scoreMsg}</p>}
               </div>
 
               {/* Odds Cache */}
