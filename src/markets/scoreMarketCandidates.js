@@ -39,8 +39,8 @@ const SCRIPT_MARKET_FIT = {
     away_over_15: 0.65,
   },
   tight_low_event: {
-    under_25: 0.9,
-    btts_no: 0.85,
+    under_25: 0.70,
+    btts_no: 0.68,
     under_35: 0.7,
     away_under_15: 0.7,
     home_under_15: 0.7,

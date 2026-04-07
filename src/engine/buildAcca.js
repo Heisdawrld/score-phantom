@@ -13,10 +13,6 @@
 
 /** Markets always allowed in ACCA — stable, low-variance outcomes. */
 const ALWAYS_ALLOWED = new Set([
-  'under_35',
-  'under_25',
-  'home_under_15',
-  'away_under_15',
   'double_chance_home',
   'double_chance_away',
   'dnb_home',
@@ -46,6 +42,11 @@ function isAccaEligibleMarket(marketKey, volatility, probability) {
 
   if (BLOCKED_MARKETS.has(mk)) return false;
   if (ALWAYS_ALLOWED.has(mk)) return true;
+
+  // Under markets — must have genuine low-scoring signal, not just base-rate inflation
+  if (mk === 'under_25') return probability >= 0.68;
+  if (mk === 'under_35') return probability >= 0.72;
+  if (mk === 'home_under_15' || mk === 'away_under_15') return probability >= 0.72;
 
   // Home/Away win
   if (mk === 'home_win' || mk === 'away_win') return probability >= 0.65;
@@ -144,7 +145,7 @@ function scoreAccaCandidate(row) {
   if (historicalAccuracy < 0.50) historicalAccuracy = 0; // filter out low-accuracy picks
   
   // Diversity: mild penalty on Unders, bonus for clean wins
-  const diversityMult = mk.includes('under') ? 0.72 : (mk === 'home_win' || mk === 'away_win') ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
+  const diversityMult = mk.includes('under') ? 0.55 : (mk === 'home_win' || mk === 'away_win') ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
   
   return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
 }
