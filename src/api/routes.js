@@ -901,7 +901,7 @@ router.get("/track-record", requireAuth, async (req, res) => {
 // Visible to all users: track which picks hit and which didn't
 router.get("/prediction-results", requireAuth, async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || 20, 10);
+    const limit = Math.min(parseInt(req.query.limit || 20, 10), 500);
     const days = parseInt(req.query.days || 7, 10);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);

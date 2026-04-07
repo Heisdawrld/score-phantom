@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { useLocation } from 'wouter';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { ChevronLeft, CheckCircle2, XCircle, Clock, Minus, TrendingUp, BarChart2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -21,38 +22,43 @@ const OUTCOME_CONFIG = {
 
 export default function PredictionResults() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading } = useAuth();
+  const [filter, setFilter] = useState('settled');
   const { data, isLoading } = useQuery({
     queryKey: ['prediction-results'],
-    queryFn: () => fetchApi('/prediction-results?limit=50&days=30'),
+    queryFn: () => fetchApi('/prediction-results?limit=500&days=60'),
     enabled: !authLoading,
   });
   if (authLoading) return <div className='min-h-screen bg-background' />;
-  const results = data?.results || [];
-  const summary = data?.summary || { total:0, wins:0, losses:0, pending:0, voids:0 };
-  const settled = summary.wins + summary.losses;
-  const winRate = settled > 0 ? ((summary.wins / settled) * 100).toFixed(1) : '0.0';
+  const allResults = data?.results || [];
+  const wins   = allResults.filter((r: any) => r.outcome === 'win' || r.outcome === 'correct').length;
+  const losses = allResults.filter((r: any) => r.outcome === 'loss' || r.outcome === 'wrong').length;
+  const voids  = allResults.filter((r: any) => r.outcome === 'void').length;
+  const settled = wins + losses;
+  const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : '0.0';
+  const filtered = filter === 'win' ? allResults.filter((r:any)=>r.outcome==='win'||r.outcome==='correct') : filter === 'loss' ? allResults.filter((r:any)=>r.outcome==='loss'||r.outcome==='wrong') : filter === 'void' ? allResults.filter((r:any)=>r.outcome==='void') : allResults.filter((r:any)=>r.outcome==='win'||r.outcome==='correct'||r.outcome==='loss'||r.outcome==='wrong');
   return (
     <div className='min-h-screen bg-background'>
       <Header />
       <div className='max-w-2xl mx-auto px-4 pb-24'>
         <div className='flex items-center gap-3 pt-6 mb-6'>
           <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition'><ChevronLeft className='w-5 h-5' /></button>
-          <div className='flex-1'><h1 className='text-2xl font-black flex items-center gap-2'><BarChart2 className='w-6 h-6 text-primary' />Results</h1><p className='text-xs text-muted-foreground mt-0.5'>Last 30 days of prediction outcomes</p></div>
+          <div className='flex-1'><h1 className='text-2xl font-black flex items-center gap-2'><BarChart2 className='w-6 h-6 text-primary' />Results</h1><p className='text-xs text-muted-foreground mt-0.5'>Last 60 days of prediction outcomes</p></div>
         </div>
         <div className='grid grid-cols-4 gap-2 mb-5'>
-          <div className='bg-white/5 border border-white/8 rounded-2xl p-3 text-center'><p className='text-xl font-black text-white'>{summary.total}</p><p className='text-[9px] text-muted-foreground uppercase tracking-wide mt-0.5'>Total</p></div>
-          <div className='bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 text-center'><p className='text-xl font-black text-emerald-400'>{summary.wins}</p><p className='text-[9px] text-emerald-400/70 uppercase tracking-wide mt-0.5'>Wins</p></div>
-          <div className='bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-center'><p className='text-xl font-black text-red-400'>{summary.losses}</p><p className='text-[9px] text-red-400/70 uppercase tracking-wide mt-0.5'>Losses</p></div>
+          <div className='bg-white/5 border border-white/8 rounded-2xl p-3 text-center'><p className='text-xl font-black text-white'>{settled}</p><p className='text-[9px] text-muted-foreground uppercase tracking-wide mt-0.5'>Settled</p></div>
+          <div className='bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 text-center'><p className='text-xl font-black text-emerald-400'>{wins}</p><p className='text-[9px] text-emerald-400/70 uppercase tracking-wide mt-0.5'>Wins</p></div>
+          <div className='bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-center'><p className='text-xl font-black text-red-400'>{losses}</p><p className='text-[9px] text-red-400/70 uppercase tracking-wide mt-0.5'>Losses</p></div>
           <div className='bg-primary/10 border border-primary/20 rounded-2xl p-3 text-center'><p className='text-xl font-black text-primary'>{winRate}%</p><p className='text-[9px] text-primary/70 uppercase tracking-wide mt-0.5'>Win Rate</p></div>
         </div>
+        <div className='flex gap-1 mb-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1'>{[{k:'settled',l:'Settled',c:settled},{k:'win',l:'Won',c:wins},{k:'loss',l:'Lost',c:losses},{k:'void',l:'Void',c:voids}].map(t=>(<button key={t.k} onClick={()=>setFilter(t.k)} className={'flex-1 py-1.5 text-xs font-bold rounded-xl transition-all '+(filter===t.k?'bg-primary text-black shadow':'text-muted-foreground hover:text-white')}>{t.l} ({t.c})</button>))}</div>
         {isLoading ? (
           <div className='flex justify-center py-16'><div className='w-10 h-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin' /></div>
-        ) : results.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className='text-center py-16 bg-white/4 border border-white/8 rounded-2xl'><TrendingUp className='w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20' /><p className='text-white/60 font-semibold'>No results yet</p><p className='text-white/30 text-sm mt-2'>Your prediction outcomes will appear here as matches resolve.</p></div>
         ) : (
           <div className='space-y-2'>
-            {results.map((result: any, i: number) => {
+            {filtered.map((result: any, i: number) => {
               const cfg = OUTCOME_CONFIG[result.outcome as keyof typeof OUTCOME_CONFIG] || OUTCOME_CONFIG.pending;
               const Icon = cfg.icon;
               return (
