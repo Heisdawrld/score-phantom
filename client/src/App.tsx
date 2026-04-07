@@ -1,12 +1,10 @@
-import React, { useEffect } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
-
-import Login from "@/pages/Login";
 
 // Global error boundary
 class ErrorBoundary extends React.Component<
@@ -40,25 +38,29 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-import Signup from "@/pages/Signup";
-import Dashboard from "@/pages/Dashboard";
-import Paywall from "@/pages/Paywall";
-import ResetPassword from "@/pages/ResetPassword";
-import Admin from "@/pages/Admin";
-import TrackRecord from "@/pages/TrackRecord";
-import TopPicksToday from "@/pages/TopPicksToday";
-import PredictionResults from "@/pages/PredictionResults";
-import LeagueFavorites from "@/pages/LeagueFavorites";
-import AccaCalculator from "@/pages/AccaCalculator";
-import Matches from "@/pages/Matches";
-import MatchCenter from "@/pages/MatchCenter";
-import Profile from "@/pages/Profile";
 import Landing from "@/pages/Landing";
-import Terms from "@/pages/Terms";
-import VerifyEmail from "@/pages/VerifyEmail";
-import Privacy from "@/pages/Privacy";
+
+function PageSpinner(){return(<div className="min-h-screen bg-background flex items-center justify-center"><div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" /></div>);}
+
+const Login=React.lazy(()=>import("@/pages/Login"));
+const Signup=React.lazy(()=>import("@/pages/Signup"));
+const Dashboard=React.lazy(()=>import("@/pages/Dashboard"));
+const Paywall=React.lazy(()=>import("@/pages/Paywall"));
+const ResetPassword=React.lazy(()=>import("@/pages/ResetPassword"));
+const Admin=React.lazy(()=>import("@/pages/Admin"));
+const TrackRecord=React.lazy(()=>import("@/pages/TrackRecord"));
+const TopPicksToday=React.lazy(()=>import("@/pages/TopPicksToday"));
+const PredictionResults=React.lazy(()=>import("@/pages/PredictionResults"));
+const LeagueFavorites=React.lazy(()=>import("@/pages/LeagueFavorites"));
+const AccaCalculator=React.lazy(()=>import("@/pages/AccaCalculator"));
+const Matches=React.lazy(()=>import("@/pages/Matches"));
+const MatchCenter=React.lazy(()=>import("@/pages/MatchCenter"));
+const Profile=React.lazy(()=>import("@/pages/Profile"));
+const Terms=React.lazy(()=>import("@/pages/Terms"));
+const VerifyEmail=React.lazy(()=>import("@/pages/VerifyEmail"));
+const Privacy=React.lazy(()=>import("@/pages/Privacy"));
 import { UpdateBanner } from "@/components/UpdateBanner";
-import { NotificationPrompt } from '@/components/NotificationPrompt';
+import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { BottomNav } from "@/components/layout/BottomNav";
 
@@ -81,13 +83,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const { data: user, isLoading, error } = useAuth();
   // (Sign in required toast removed - redirect to login is sufficient UX)
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <PageSpinner />;
 
   if (error || !user) {
     return <RedirectTo path="/login" />;
@@ -98,14 +94,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 
 function SmartRoot() {
+  const hasToken = !!localStorage.getItem("sp_token");
   const { data: user, isLoading } = useAuth();
-  if (isLoading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-    </div>
-  );
+  if (!hasToken) return <Landing />;
+  if (isLoading) return <PageSpinner />;
   if (!user) return <Landing />;
-  return <Dashboard />;
+  return <Suspense fallback={<PageSpinner />}><Dashboard /></Suspense>;
 }
 
 
@@ -114,9 +108,9 @@ function SmartRoot() {
 function GlassBubbles() {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
-      <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)", filter: "blur(80px)" }}/>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)", filter: "blur(90px)" }}/>
-      <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)", filter: "blur(60px)" }}/>
+      <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)" }}/>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)" }}/>
+      <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)" }}/>
     </div>
   );
 }
@@ -126,7 +120,8 @@ function Router() {
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div key={loc} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: "easeOut" }}>
-        <Switch>
+        <Suspense fallback={<PageSpinner />}>
+          <Switch>
       <Route path="/home" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
@@ -149,6 +144,7 @@ function Router() {
       <Route path="/" component={SmartRoot} />
       <Route component={SmartRoot} />
     </Switch>
+        </Suspense>
       </motion.div>
     </AnimatePresence>
   );
