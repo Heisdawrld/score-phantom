@@ -174,13 +174,22 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let diversityBonus = 0;
     if (typeCount === 0) diversityBonus = 0.03;
 
+    // Rest day boost: team with more rest has a slight edge in team-specific markets
+    const restDiff = safeNum(fv.restDiffDays, 0);
+    let restBonus = 0;
+    if (restDiff > 4 && marketKey.includes("home")) restBonus = 0.06;
+    else if (restDiff < -4 && marketKey.includes("away")) restBonus = 0.06;
+    else if (restDiff > 4 && marketKey.includes("away")) restBonus = -0.04;
+    else if (restDiff < -4 && marketKey.includes("home")) restBonus = -0.04;
+
     const finalScore =
       0.28 * modelConfidenceScore +
       0.28 * Math.max(0, edgeScore) +
       0.26 * tacticalFitScore +
       0.12 * dataSupportScore +
       0.06 * formMomentumScore +
-      diversityBonus -
+      diversityBonus +
+      restBonus -
       0.22 * volatilityPenalty -
       0.14 * badMarketPenalty -
       0.08 * repetitionPenalty -

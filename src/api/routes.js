@@ -1024,7 +1024,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     let pickQuery = `
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-             p.best_pick_score, p.confidence_model, p.confidence_volatility,
+             p.best_pick_score, p.best_pick_edge, p.confidence_model, p.confidence_volatility,
              p.explanation_json, p.backup_picks_json,
              f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
       FROM predictions_v2 p
@@ -1125,6 +1125,17 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // Composite rank score (0–100 range for display)
       const composite = (score * 0.5 + (conf / 100) * 0.3 + prob * 0.2) * 100;
 
+      function valueSignalFromEdge(edge) {
+        if (edge === null || edge === undefined) return null;
+        const e = parseFloat(edge);
+        if (isNaN(e)) return null;
+        const pct = Math.round(Math.abs(e) * 100);
+        if (e > 0.12) return { label: "Strong Value", detail: "Bookmaker underpricing by ~" + pct + "%", color: "green", positive: true };
+        if (e > 0.06) return { label: "Value", detail: "Model sees +" + pct + "% edge vs market", color: "green", positive: true };
+        if (e > 0.02) return { label: "Slight Edge", detail: "Marginal edge vs bookmaker", color: "yellow", positive: true };
+        if (e >= -0.02) return { label: "Fair Price", detail: "Market and model aligned", color: "neutral", positive: false };
+        return { label: "No Edge", detail: "Bookmaker prices this higher than model", color: "red", positive: false };
+      }
       return {
         fixtureId:   row.fixture_id,
         match:       `${row.home_team} vs ${row.away_team}`,
@@ -1139,6 +1150,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,
         factors,
+        edge: row.best_pick_edge != null ? parseFloat(row.best_pick_edge) : null,
+        valueSignal: valueSignalFromEdge(row.best_pick_edge),
       };
     });
 

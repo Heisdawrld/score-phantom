@@ -1,6 +1,6 @@
 import { safeNum, clamp } from '../utils/math.js';
 
-export function computeContextFeatures(tableContext, standings = []) {
+export function computeContextFeatures(tableContext, standings = [], restData = {}) {
   const tc = tableContext || {};
   const totalTeams = standings.length || 20;
 
@@ -18,14 +18,20 @@ export function computeContextFeatures(tableContext, standings = []) {
     return 0.5;
   }
 
-  const homeMotivationScore = motivationScore(homeCtx, homePos);
-  const awayMotivationScore = motivationScore(awayCtx, awayPos);
+  const homeMotivationScore = Math.min(1, motivationScore(homeCtx, homePos) + homeRestBonus);
+  const awayMotivationScore = Math.min(1, motivationScore(awayCtx, awayPos) + awayRestBonus);
 
   const titleRacePressure = (homeCtx === 'title' || awayCtx === 'title') ? 0.8 : 0;
   const relegationPressure = (homeCtx === 'relegation' || awayCtx === 'relegation') ? 0.8 : 0;
 
-  // Rest day differential - not available from current data, default to 0
-  const restDiffDays = 0;
+  // Rest day differential - computed from historical match dates vs fixture date
+  const restDiffDays = restData.restDiffDays ?? 0;
+  const homeRestDays = restData.homeRestDays ?? null;
+  const awayRestDays = restData.awayRestDays ?? null;
+
+  // Rest-based motivation adjustment: team with significantly more rest has a small edge
+  const homeRestBonus = restDiffDays > 4 ? 0.05 : restDiffDays < -4 ? -0.04 : 0;
+  const awayRestBonus = restDiffDays < -4 ? 0.05 : restDiffDays > 4 ? -0.04 : 0;
 
   // Rotation risk - estimate from context (cup distractions not tracked yet)
   const rotationRiskHome = 0;

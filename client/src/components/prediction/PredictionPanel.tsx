@@ -81,6 +81,27 @@ function EdgeBadge({ label }: { label?: string }) {
   );
 }
 
+
+function ValueSignalBadge({ signal }: { signal?: { label: string; detail: string; color: string; positive: boolean } | null }) {
+  if (!signal || signal.color === "neutral" || signal.color === "red") return null;
+  const isStrong = signal.color === "green" && signal.label.includes("Strong");
+  const isValue = signal.color === "green";
+  const isEdge = signal.color === "yellow";
+  const cls = isStrong
+    ? "bg-primary/15 border-primary/30 text-primary"
+    : isValue
+    ? "bg-emerald-500/12 border-emerald-500/25 text-emerald-400"
+    : "bg-amber-500/12 border-amber-500/25 text-amber-400";
+  return (
+    <div className={"flex items-center gap-2 px-3 py-2 rounded-xl border " + cls}>
+      <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+      <div>
+        <span className="text-[11px] font-black uppercase tracking-wider">{signal.label}</span>
+        <span className="text-[10px] ml-2 opacity-70">{signal.detail}</span>
+      </div>
+    </div>
+  );
+}
 function RiskBadge({ level }: { level?: string }) {
   if (!level) return null;
   const map: Record<string, string> = { SAFE: "text-emerald-400", MODERATE: "text-orange-400", AGGRESSIVE: "text-red-400" };
@@ -572,6 +593,11 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Model Prob.</p>
                                 </div>
                               </div>
+                              {rec.valueSignal && (
+                                <div className="mt-3 mb-1">
+                                  <ValueSignalBadge signal={rec.valueSignal} />
+                                </div>
+                              )}
                               {rec.reasons?.length > 0 && (
                                 <div className="space-y-1.5 border-t border-white/10 pt-4">
                                   {rec.reasons.map((reason: string, i: number) => (

@@ -123,6 +123,9 @@ function flattenFeatureVector(fv) {
     awayMotivationScore: safeNum(cf.awayMotivationScore, 0.5),
     rotationRiskHome: safeNum(cf.rotationRiskHome, 0),
     rotationRiskAway: safeNum(cf.rotationRiskAway, 0),
+    restDiffDays: safeNum(cf.restDiffDays, 0),
+    homeRestDays: cf.homeRestDays ?? null,
+    awayRestDays: cf.awayRestDays ?? null,
 
     // Table context
     homePosition: safeNum(tc.home_position, 10),

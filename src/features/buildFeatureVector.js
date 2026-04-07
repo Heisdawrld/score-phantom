@@ -158,6 +158,18 @@ function extractLineupModifiers(lineupModifier) {
   };
 }
 
+
+// ── Rest day helper ──────────────────────────────────────────────────────────
+function computeRestDays(formRaw, fixtureDate) {
+  if (!formRaw || !formRaw.length || !fixtureDate) return null;
+  const dates = formRaw
+    .map(m => m.date ? new Date(m.date) : null)
+    .filter(d => d && !isNaN(d.getTime()))
+    .sort((a, b) => b - a);
+  if (!dates.length) return null;
+  const diffDays = Math.round((fixtureDate.getTime() - dates[0].getTime()) / 86400000);
+  return diffDays > 0 && diffDays < 60 ? diffDays : null;
+}
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -170,12 +182,18 @@ function extractLineupModifiers(lineupModifier) {
  * @returns {object} full feature vector
  */
 export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null) {
-  const [h2hRaw, homeFormRaw, awayFormRaw, meta] = await Promise.all([
+  const [h2hRaw, homeFormRaw, awayFormRaw, meta, fixtureRow] = await Promise.all([
     getMatches(fixtureId, 'h2h'),
     getMatches(fixtureId, 'home_form'),
     getMatches(fixtureId, 'away_form'),
     getFixtureMeta(fixtureId),
+    db.execute({ sql: 'SELECT match_date FROM fixtures WHERE id = ? LIMIT 1', args: [fixtureId] }).catch(() => ({ rows: [] })),
   ]);
+  const fixtureDateRaw = fixtureRow?.rows?.[0]?.match_date;
+  const fixtureDate = fixtureDateRaw ? new Date(fixtureDateRaw) : null;
+  const homeRestDays = computeRestDays(homeFormRaw, fixtureDate);
+  const awayRestDays = computeRestDays(awayFormRaw, fixtureDate);
+  const restDiffDays = (homeRestDays !== null && awayRestDays !== null) ? homeRestDays - awayRestDays : 0;
 
   const standings = Array.isArray(meta?.standings) ? meta.standings : [];
   const standingsMap = buildStandingsMap(standings);
@@ -199,7 +217,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const teamStrength = computeTeamStrength(homeFormFeatures, awayFormFeatures, tableContext, standings);
 
   // ── Context features ───────────────────────────────────────────────────────
-  const contextFeatures = computeContextFeatures(tableContext, standings);
+  const contextFeatures = computeContextFeatures(tableContext, standings, { restDiffDays, homeRestDays, awayRestDays });
 
   // ── Volatility features ────────────────────────────────────────────────────
   const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures);

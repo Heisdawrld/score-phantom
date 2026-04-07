@@ -23,6 +23,8 @@ interface Pick {
   enrichment?: string;
   dataQuality?: string;
   factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
+  edge?: number | null;
+  valueSignal?: { label: string; detail: string; color: string; positive: boolean } | null;
 }
 
 function formatMarket(key: string): string {

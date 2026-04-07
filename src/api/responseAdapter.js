@@ -129,12 +129,29 @@ function resolveEdgeLabel(pick) {
   return 'NO EDGE';
 }
 
-function mapValueRating(edgeScore) {
+function mapValueRating(edgeScore, hasOdds) {
   const s = safeNum(edgeScore, 0);
+  if (hasOdds) {
+    if (s > 0.12) return "STRONG";
+    if (s > 0.06) return "GOOD";
+    if (s > 0.02) return "FAIR";
+    return "WEAK";
+  }
   if (s >= 0.72) return "STRONG";
   if (s >= 0.66) return "GOOD";
   if (s >= 0.60) return "FAIR";
   return "WEAK";
+}
+
+function computeValueSignal(edge) {
+  if (edge === null || edge === undefined) return null;
+  const e = safeNum(edge, 0);
+  const pct = Math.round(Math.abs(e) * 100);
+  if (e > 0.12) return { label: "Strong Value", detail: "Bookmaker underpricing by ~" + pct + "%", color: "green", positive: true };
+  if (e > 0.06) return { label: "Value", detail: "Model sees +" + pct + "% edge vs market", color: "green", positive: true };
+  if (e > 0.02) return { label: "Slight Edge", detail: "Marginal edge vs bookmaker", color: "yellow", positive: true };
+  if (e >= -0.02) return { label: "Fair Price", detail: "Market and model aligned", color: "neutral", positive: false };
+  return { label: "No Edge", detail: "Bookmaker prices this higher than model", color: "red", positive: false };
 }
 
 function mapVolatility(volatilityScore) {
@@ -410,7 +427,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       edgeScore,
       modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
       tacticalFit: mapTacticalFit(tacticalFitScore),
-      valueRating: mapValueRating(edgeScore),
+      valueRating: mapValueRating(edgeScore, bestPick.edge != null),
+      valueSignal: computeValueSignal(bestPick.edge),
       riskLevel: resolveRiskLevel(bestPick),
       edgeLabel: resolveEdgeLabel(bestPick),
       reasons: humanReasonCodes,
