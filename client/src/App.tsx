@@ -38,11 +38,11 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
 
 function PageSpinner(){return(<div className="min-h-screen bg-background flex items-center justify-center"><div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" /></div>);}
 
-const Login=React.lazy(()=>import("@/pages/Login"));
+const Landing=React.lazy(()=>import("@/pages/Landing"));
 const Signup=React.lazy(()=>import("@/pages/Signup"));
 const Dashboard=React.lazy(()=>import("@/pages/Dashboard"));
 const Paywall=React.lazy(()=>import("@/pages/Paywall"));
@@ -96,9 +96,9 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function SmartRoot() {
   const hasToken = !!localStorage.getItem("sp_token");
   const { data: user, isLoading } = useAuth();
-  if (!hasToken) return <Landing />;
+  if (!hasToken) return <Login />;
   if (isLoading) return <PageSpinner />;
-  if (!user) return <Landing />;
+  if (!user) return <Login />;
   return <Suspense fallback={<PageSpinner />}><Dashboard /></Suspense>;
 }
 
