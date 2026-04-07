@@ -258,7 +258,7 @@ export default function Login() {
                 <motion.div key="email-signin" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("email-signin",-1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
+                    <button onClick={() => setLocation("/home")} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Welcome back</p><p className="text-xs text-muted-foreground">Sign in to your account</p></div>
@@ -307,7 +307,7 @@ export default function Login() {
                 <motion.div key="email-signup" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("email-signin",-1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
+                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
                     <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 3-day free trial</p></div>

@@ -56,7 +56,7 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
       </div>
       <div className="text-center">
         <p className="font-bold text-white mb-1">Trial or Premium Required</p>
-        <p className="text-sm text-white/40">AI predictions for this match</p>
+        <p className="text-sm text-white/40">Data-driven match analysis</p>
       </div>
       <button onClick={() => setLocation("/paywall")}
         className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
@@ -381,12 +381,12 @@ function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
         <Bot size={28} className="text-primary"/>
       </div>
       <div className="text-center">
-        <p className="font-bold text-white mb-1">Phantom AI Chat</p>
-        <p className="text-sm text-white/40">Ask anything about this match</p>
+        <p className="font-bold text-white mb-1">PhantomChat</p>
+        <p className="text-sm text-white/40">Deep match insights</p>
       </div>
       <button onClick={() => setLocation("/paywall")}
         className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
-        Unlock AI Chat
+        Unlock PhantomChat
       </button>
     </div>
   );
@@ -411,8 +411,8 @@ function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
           <Bot size={12} className="text-primary"/>
         </div>
-        <span className="text-xs font-black text-primary">Phantom AI</span>
-        <span className="ml-auto text-[10px] text-white/25">Powered by Groq</span>
+        <span className="text-xs font-black text-primary">PhantomChat</span>
+        <span className="ml-auto text-[10px] text-white/25">ScorePhantom Analysis</span>
       </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {msgs.map((m, i) => (
@@ -431,6 +431,14 @@ function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
             </div>
           </div>
         ))}
+        {msgs.length === 1 && !mutation.isPending && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {['Best pick here?','What could go wrong?','Safer angle?','Form analysis?','Is there value?'].map(chip => (
+              <button key={chip} type="button" onClick={() => { setInput(chip); }}
+                className="text-[11px] px-3 py-1.5 rounded-full border border-primary/25 text-primary/80 bg-primary/5 hover:bg-primary/15 transition-all active:scale-95 shrink-0">{chip}</button>
+            ))}
+          </div>
+        )}
         {mutation.isPending && (
           <div className="flex gap-2">
             <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
@@ -494,7 +502,7 @@ export default function MatchCenter() {
               ScorePhantom Analysis
             </p>
           </div>
-          <button onClick={() => setLocation("/")}
+          <button onClick={() => window.history.back()}
             className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0">
             <X size={14} className="text-white/50"/>
           </button>

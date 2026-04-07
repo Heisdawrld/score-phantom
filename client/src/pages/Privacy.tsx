@@ -53,12 +53,12 @@ export default function Privacy() {
         <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-primary/4 blur-[100px]" />
       </div>
       <div className="relative z-10 max-w-2xl mx-auto px-4 py-8 pb-20">
-        <Link href="/login">
+        <Link href="/profile">
           <a className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-white transition-colors mb-8">
             <span className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
               <ArrowLeft size={14} />
             </span>
-            Back to Login
+            Back to Profile
           </a>
         </Link>
         <div className="mb-8">

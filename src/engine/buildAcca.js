@@ -144,7 +144,7 @@ function scoreAccaCandidate(row) {
   if (historicalAccuracy < 0.50) historicalAccuracy = 0; // filter out low-accuracy picks
   
   // Diversity: mild penalty on Unders, bonus for clean wins
-  const diversityMult = mk.includes('under') ? 0.88 : (mk === 'home_win' || mk === 'away_win') ? 1.06 : 1.0;
+  const diversityMult = mk.includes('under') ? 0.72 : (mk === 'home_win' || mk === 'away_win') ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
   
   return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
 }
@@ -283,7 +283,7 @@ export function buildAcca(rows, mode = 'safe') {
 
     // Diversity: max 1 Under per SAFE ACCA, max 2 per VALUE ACCA
     const isUnderPick = (pick.best_pick_market||'').toLowerCase().includes('under');
-    const maxUnder = isSafeMode ? 1 : 2;
+    const maxUnder = 1;
     if (isUnderPick && underCount >= maxUnder) continue;
 
     selected.push(pick);

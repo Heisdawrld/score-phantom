@@ -75,3 +75,8 @@
     scrollbar-width: none;
   }
 }
+
+/* Global smooth interactions */
+button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled):active { transform: scale(0.97); transition: transform 0.08s ease; }
+html { scroll-behavior: smooth; }

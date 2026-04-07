@@ -265,6 +265,25 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
     }
   }, [data, queryClient]);
 
+  // Lock body scroll when panel is open to prevent scroll jumping
+  useEffect(() => {
+    if (fixtureId) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = -scrollY + 'px';
+      document.body.style.width = '100%';
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        const top = parseInt(document.body.style.top || '0', 10);
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, -top);
+      };
+    }
+  }, [fixtureId]);
+
   if (!fixtureId) return null;
 
   const pred = data?.predictions;

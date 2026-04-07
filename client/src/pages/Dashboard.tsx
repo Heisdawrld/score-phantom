@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 function toWAT(dateStr: string): string {
   try {
@@ -212,7 +212,7 @@ function AccaSection({ isPremium }: { isPremium: boolean }) {
         <div className='w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0'><Zap className='w-4 h-4 text-primary' /></div>
         <div className='flex-1 text-left'>
           <p className='text-sm font-black text-primary tracking-wide'>Daily ACCA</p>
-          <p className='text-xs text-muted-foreground'>5-pick auto-generated accumulator</p>
+          <p className='text-xs text-muted-foreground'>Smart auto-generated accumulator</p>
         </div>
         {picks.length > 0 && <span className='text-xs font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full'>{combinedOdds.toFixed(2)}x</span>}
         {open ? <ChevronUp className='w-4 h-4 text-primary shrink-0' /> : <ChevronDown className='w-4 h-4 text-primary shrink-0' />}
@@ -405,7 +405,7 @@ function LeagueGroup({
         {open ? <ChevronUp className='w-3 h-3 text-muted-foreground' /> : <ChevronDown className='w-3 h-3 text-muted-foreground' />}
       </button>
       {open && (
-        <div className='space-y-2'>
+        <motion.div className='space-y-2' initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} transition={{duration:0.2,ease:'easeOut'}}>
           {fixtures.map((fixture: any) => {
             const timeStr = toWAT(fixture.match_date);
             const isLive = ['LIVE','HT','1H','2H','ET','PEN'].includes(fixture.match_status || '');
@@ -451,6 +451,12 @@ function LeagueGroup({
                       <span className='font-semibold text-sm text-white truncate'>{fixture.away_team_name}</span>
                     </div>
                   </div>
+                    {!isPremium && pct > 0 && (
+                      <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary/8 border border-primary/15">
+                        <span className="text-[9px] font-black text-primary/70 blur-[3px] select-none">{pct.toFixed(0)}%</span>
+                        <Lock className="w-2.5 h-2.5 text-primary/50" />
+                      </div>
+                    )}
                   <div className='flex flex-col items-end gap-1.5 shrink-0'>
                     {isLive && (
                       <button onClick={(e) => toggleNotify(e, fixture.id)} className={'p-1.5 rounded-lg border transition-all ' + (isNotified ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-white/30 border-white/10 hover:text-white/60 hover:bg-white/8')}>
@@ -470,7 +476,7 @@ function LeagueGroup({
               </button>
             );
           })}
-        </div>
+        </motion.div>
       )}
     </div>
   );
@@ -685,13 +691,14 @@ export default function Dashboard() {
     }
   }, []);
 
-  const [selectedDate, setSelectedDate] = useState(dates[0]);
+  const [selectedDate, setSelectedDate] = useState(() => { try { const s = sessionStorage.getItem("sp_dash_date"); if (s) { const d = new Date(s); if (!isNaN(d.getTime())) return d; } } catch(_) {} return dates[0]; });
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment")==="success");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
   const formattedDate = format(selectedDate, "yyyy-MM-dd");
+  useEffect(() => { try { sessionStorage.setItem("sp_dash_date", selectedDate.toISOString()); } catch(_) {} }, [selectedDate]);
   const { data, isLoading: fixturesLoading } = useFixtures(formattedDate);
 
   

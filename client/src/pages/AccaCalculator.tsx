@@ -43,7 +43,7 @@ export default function DailyAcca() {
           <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition'><ChevronLeft className='w-5 h-5' /></button>
           <div className='flex-1'>
             <h1 className='text-2xl font-black flex items-center gap-2'><Zap className='w-6 h-6 text-primary' />Daily ACCA</h1>
-            <p className='text-xs text-muted-foreground mt-0.5'>5-pick auto-generated accumulator</p>
+            <p className='text-xs text-muted-foreground mt-0.5'>Smart auto-generated accumulator</p>
           </div>
           {isPremium && <button onClick={() => refetch()} className='p-2 hover:bg-white/5 rounded-xl transition text-muted-foreground hover:text-white'><RefreshCw className='w-4 h-4' /></button>}
         </div>

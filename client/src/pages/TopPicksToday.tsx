@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
@@ -72,36 +72,20 @@ function ConfRing({ value }: { value: number }) {
   const radius = 20;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(value, 100) / 100;
-  const strokeColor =
-    value >= 75 ? "#10e774" :
-    value >= 60 ? "#3b82f6" :
-    "#f59e0b";
-
+  const strokeColor = value >= 75 ? "#10e774" : value >= 60 ? "#3b82f6" : "#f59e0b";
   return (
-    <svg width="52" height="52" className="rotate-[-90deg]">
-      <circle cx="26" cy="26" r={radius} stroke="rgba(255,255,255,0.06)" strokeWidth="4" fill="none" />
-      <circle
-        cx="26" cy="26" r={radius}
-        stroke={strokeColor}
-        strokeWidth="4" fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={circumference * (1 - progress)}
-        style={{ transition: "stroke-dashoffset 0.8s ease", filter: `drop-shadow(0 0 4px ${strokeColor}80)` }}
-      />
-      <text
-        x="26" y="26"
-        textAnchor="middle" dominantBaseline="central"
-        fill={strokeColor}
-        fontSize="11"
-        fontWeight="700"
-        style={{ transform: "rotate(90deg) translate(0,-52px)", transformOrigin: "26px 26px" }}
-      >
-        {value.toFixed(0)}%
-      </text>
-    </svg>
+    <div className="relative w-[52px] h-[52px]">
+      <svg width="52" height="52" className="rotate-[-90deg]">
+        <circle cx="26" cy="26" r={radius} stroke="rgba(255,255,255,0.12)" strokeWidth="4" fill="none" />
+        <circle cx="26" cy="26" r={radius} stroke={strokeColor} strokeWidth="4" fill="none" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)} style={{ transition: "stroke-dashoffset 0.8s ease" }} />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span style={{ color: strokeColor }} className="text-[11px] font-black leading-none tabular-nums">{value.toFixed(0)}%</span>
+      </div>
+    </div>
   );
 }
+
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
@@ -109,6 +93,9 @@ export default function TopPicksToday() {
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
+  const savedScrollRef = useRef(0);
+  const handleOpenPanel = (id: string) => { savedScrollRef.current = window.scrollY; setSelectedFixtureId(id); };
+  const handleClosePanel = () => { setSelectedFixtureId(null); requestAnimationFrame(() => window.scrollTo(0, savedScrollRef.current)); };
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
@@ -190,7 +177,7 @@ export default function TopPicksToday() {
                   transition={{ duration:0.35, delay: idx * 0.05 }}
                   whileHover={{ y: isTop3 ? -3 : -2, boxShadow: isTop ? "0 8px 32px rgba(16,231,116,0.18)" : isTop3 ? "0 6px 20px rgba(16,231,116,0.10)" : "0 4px 16px rgba(255,255,255,0.04)" }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedFixtureId(pick.fixtureId)}
+                  onClick={() => handleOpenPanel(pick.fixtureId)}
                   className={cn(
                     "relative rounded-2xl border p-4 cursor-pointer transition-colors group",
                     isTop
@@ -305,7 +292,7 @@ export default function TopPicksToday() {
           </p>
         )}
       </div>
-      <PredictionPanel fixtureId={selectedFixtureId} onClose={() => setSelectedFixtureId(null)} />
+      <PredictionPanel fixtureId={selectedFixtureId} onClose={handleClosePanel} />
     </div>
   );
 }

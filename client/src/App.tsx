@@ -97,6 +97,18 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 
+function SmartRoot() {
+  const { data: user, isLoading } = useAuth();
+  if (isLoading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+    </div>
+  );
+  if (!user) return <Landing />;
+  return <Dashboard />;
+}
+
+
 // VerifyEmailHandler removed — Google Auth handles email verification
 
 function GlassBubbles() {
@@ -134,8 +146,8 @@ function Router() {
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/" component={SmartRoot} />
+      <Route component={SmartRoot} />
     </Switch>
       </motion.div>
     </AnimatePresence>
