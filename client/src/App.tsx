@@ -148,7 +148,7 @@ function ReferralCapture() {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref && ref.trim()) {
-      localStorage.setItem("sp_referral_code", ref.trim());
+      localStorage.setItem("sp_referral_code", ref.trim().toUpperCase());
     }
   }, []);
   return null;

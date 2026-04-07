@@ -56,10 +56,11 @@ export function useSignup() {
   const [, setLocation] = useLocation();
 
   return useMutation({
-    mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
+    mutationFn: async (credentials: z.infer<typeof LoginSchema> & { referralCode?: string }) => {
+      const referralCode = (credentials as any).referralCode || localStorage.getItem("sp_referral_code") || undefined;
       return fetchApi("/auth/signup", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ email: credentials.email, password: credentials.password, referralCode }),
       });
     },
     onSuccess: (data) => {

@@ -555,7 +555,7 @@ router.post("/email", authLimiter, async (req, res) => {
 
 router.post("/signup", authLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body || {};
+    const { email, password, referralCode } = req.body || {};
     if (!email || !password)
       return res.status(400).json({ error: "Email and password are required" });
 
@@ -598,6 +598,11 @@ router.post("/signup", authLimiter, async (req, res) => {
     });
     const user   = created.rows?.[0];
     if (!user) throw new Error("User created but could not be reloaded");
+
+    // Attach referral if code was provided (partner or user-based)
+    if (referralCode && user) {
+      await attachReferral(user.id, referralCode);
+    }
 
     // Auto-login: return JWT immediately
     const token  = signToken(user);
