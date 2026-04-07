@@ -117,6 +117,9 @@ export async function fetchFixturesByDate(date) {
           odds_home: f.odds?.pre?.['1'] || null,
           odds_draw: f.odds?.pre?.['X'] || null,
           odds_away: f.odds?.pre?.['2'] || null,
+          match_status: f.status || (f.ft_score ? 'FT' : 'NS'),
+          home_score: f.home_score != null ? Number(f.home_score) : (f.ft_score ? parseInt(String(f.ft_score).split('-')[0],10) : null),
+          away_score: f.away_score != null ? Number(f.away_score) : (f.ft_score ? parseInt(String(f.ft_score).split('-')[1],10) : null),
         });
       }
 

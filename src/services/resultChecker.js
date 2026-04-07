@@ -1,6 +1,6 @@
-// resultChecker.js - Checks match results using SportAPI fixture date endpoint
+// resultChecker.js - Checks match results using LiveScore API (same IDs as fixtures table)
 import db from '../config/database.js';
-import { fetchFixturesByDate } from './sportapi.js';
+import { fetchFixturesByDate } from './livescore.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -49,7 +49,7 @@ export async function checkResults(dateStr) {
   let apiFixtures = [];
   try {
     apiFixtures = await fetchFixturesByDate(date);
-    console.log('[ResultChecker] SportAPI returned', apiFixtures.length, 'fixtures for', date);
+    console.log('[ResultChecker] LiveScore returned', apiFixtures.length, 'fixtures for', date);
   } catch (err) {
     apiFailed = true;
     console.warn('[ResultChecker] API fetch failed, using DB scores only:', err.message);
@@ -57,12 +57,16 @@ export async function checkResults(dateStr) {
   const scoreMap = {};
   const nameMap = {};
   for (const f of apiFixtures) {
-    if ((f.match_status === 'FT' || f.match_status === 'AET' || f.match_status === 'Pen') && f.home_score != null) {
+    const st = (f.match_status||'').toUpperCase();
+    const isFt = st === 'FT' || st === 'AET' || st === 'PEN' || st === 'FINISHED' || st === 'FULL TIME';
+    if (isFt && f.home_score != null && !isNaN(Number(f.home_score))) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };
       scoreMap[f.match_id] = s;
       const hk = (f.home_team_name || '').toLowerCase().trim();
       const ak = (f.away_team_name || '').toLowerCase().trim();
       if (hk && ak) { nameMap[hk + ':' + ak] = s; nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s; }
+      // Persist score back to fixtures table so DB fallback works next time
+      db.execute({ sql: 'UPDATE fixtures SET home_score=?,away_score=?,match_status=? WHERE id=? AND home_score IS NULL', args:[Number(f.home_score),Number(f.away_score),'FT',f.match_id] }).catch(()=>{});
     }
   }
   const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ('FT','AET','Pen') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
