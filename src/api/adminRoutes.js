@@ -1,5 +1,5 @@
 import express from "express";
-import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
+import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome, getCalibrationData } from "../storage/backtesting.js";
 import { createReferralCommission } from "../auth/authRoutes.js";
 import rateLimit from "express-rate-limit";
 
@@ -396,6 +396,11 @@ router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
   return res.json({ pending: pending.length, fixtures: pending.map(f => ({ id: f.fixture_id, home: f.home_team, away: f.away_team, market: f.best_pick_market, selection: f.best_pick_selection })) });
 });
 
+
+router.get("/calibration", adminLimiter, requireAdmin, async (req, res) => {
+  const data = await getCalibrationData();
+  return res.json(data);
+});
 // ── POST /clear-odds-cache — wipe league odds cache so slugs re-fetch ─────────
 router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
   try {

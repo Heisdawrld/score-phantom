@@ -187,6 +187,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [refCodeLoading, setRefCodeLoading] = useState(false);
   const [refCodeResult, setRefCodeResult] = useState<{ code: string; link: string } | null>(null);
   // Create Partner modal
+  const [calibData, setCalibData] = useState<any>(null);
+  const [calibLoading, setCalibLoading] = useState(false);
   const [createPartnerOpen, setCreatePartnerOpen] = useState(false);
   const [createPartnerForm, setCreatePartnerForm] = useState({ name: "", email: "", code: "", status: "active", notes: "" });
   const [createPartnerLoading, setCreatePartnerLoading] = useState(false);
@@ -241,6 +243,13 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       const r = await call("/api/admin/partners");
       setPartners(r.partners || []);
     } catch { } finally { setLoading(false); }
+  }, [call]);
+
+  const loadCalibration = useCallback(async () => {
+    setCalibLoading(true);
+    try { const r = await call("/api/admin/calibration"); setCalibData(r); }
+    catch (e: any) { flash(false, e.message); }
+    finally { setCalibLoading(false); }
   }, [call]);
 
   const loadCommissions = useCallback(async (partnerId: number) => {
@@ -341,6 +350,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   useEffect(() => { if (tab === "users") loadUsers(); }, [tab, loadUsers]);
   useEffect(() => { if (tab === "payments") loadPayments(); }, [tab, loadPayments]);
   useEffect(() => { if (tab === "partners") { loadPartners(); setSelectedPartner(null); setCommissions([]); setSelectedCommIds(new Set()); } }, [tab, loadPartners]);
+  useEffect(() => { if (tab === "system") loadCalibration(); }, [tab, loadCalibration]);
 
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
@@ -992,6 +1002,94 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               </div>
             </div>
 
+            {/* Calibration Report */}
+            <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white">📊 Calibration Report</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Predicted confidence vs actual hit rate from settled outcomes.</p>
+                </div>
+                <button onClick={loadCalibration} disabled={calibLoading} className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/[0.06] transition-all">
+                  {calibLoading ? <Loader2 size={12} className="animate-spin inline" /> : "Refresh"}
+                </button>
+              </div>
+              {calibData ? (
+                <>
+                  {calibData.summary?.overconfident && (
+                    <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                      <AlertCircle size={14} className="text-red-400 shrink-0" />
+                      <p className="text-xs text-red-400">Model may be overconfident in HIGH tier — actual hit rate below 60%. Consider tightening thresholds.</p>
+                    </div>
+                  )}
+                  {calibData.summary?.calibrationHealthy && calibData.byTier?.length > 0 && (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                      <p className="text-xs text-emerald-400">Calibration looks healthy — confidence tiers are tracking actual outcomes well.</p>
+                    </div>
+                  )}
+                  {calibData.byTier?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">By Confidence Tier</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-white/[0.06]">
+                            {["Tier","Sample","Avg Predicted","Actual Hit Rate","Status"].map(h => <th key={h} className="text-left px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>)}
+                          </tr></thead>
+                          <tbody>
+                            {calibData.byTier.map((row: any) => {
+                              const gap = (row.avg_predicted_pct || 0) - (row.actual_hit_rate || 0);
+                              const health = row.total < 5 ? "gray" : gap > 10 ? "red" : gap > 5 ? "yellow" : "green";
+                              return (
+                                <tr key={row.tier} className="border-b border-white/[0.03]">
+                                  <td className="px-3 py-2 font-bold text-white">{row.tier}</td>
+                                  <td className="px-3 py-2 text-gray-400">{row.total}</td>
+                                  <td className="px-3 py-2 text-gray-300">{row.avg_predicted_pct}%</td>
+                                  <td className="px-3 py-2 font-bold" style={{color: health==="green"?"#10e774":health==="yellow"?"#f59e0b":health==="red"?"#f87171":"#6b7280"}}>{row.actual_hit_rate != null ? row.actual_hit_rate + "%" : "—"}</td>
+                                  <td className="px-3 py-2">
+                                    {row.total < 5 ? <span className="text-gray-600 text-[10px]">Need more data</span> :
+                                    gap > 10 ? <span className="text-red-400 text-[10px] font-bold">Overconfident +{gap.toFixed(0)}pp</span> :
+                                    gap > 5 ? <span className="text-yellow-400 text-[10px]">Slightly high +{gap.toFixed(0)}pp</span> :
+                                    <span className="text-emerald-400 text-[10px]">On track</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {calibData.byMarket?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">By Market (min 3 settled)</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-white/[0.06]">
+                            {["Market","Picks","Wins","Hit Rate","Avg Predicted"].map(h => <th key={h} className="text-left px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>)}
+                          </tr></thead>
+                          <tbody>
+                            {calibData.byMarket.map((row: any) => (
+                              <tr key={row.market} className="border-b border-white/[0.03]">
+                                <td className="px-3 py-2 text-gray-300 font-mono text-[10px]">{row.market}</td>
+                                <td className="px-3 py-2 text-gray-400">{row.total}</td>
+                                <td className="px-3 py-2 text-gray-400">{row.wins}</td>
+                                <td className="px-3 py-2 font-bold" style={{color: (row.actual_hit_rate||0) >= 60 ? "#10e774" : (row.actual_hit_rate||0) >= 45 ? "#f59e0b" : "#f87171"}}>{row.actual_hit_rate != null ? row.actual_hit_rate + "%" : "—"}</td>
+                                <td className="px-3 py-2 text-gray-500">{row.avg_predicted_pct}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {calibData.byTier?.length === 0 && calibData.byMarket?.length === 0 && (
+                    <p className="text-xs text-gray-600 text-center py-4">No settled outcomes yet. Run Rebuild Track Record first.</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-gray-600 text-center py-4">{calibLoading ? "Loading calibration data..." : "Click Refresh to load calibration report."}</p>
+              )}
+            </div>
             {/* Manual upgrade section */}
             <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-6">
               <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><Crown size={15} className="text-primary" /> Manual Premium Upgrade</h3>

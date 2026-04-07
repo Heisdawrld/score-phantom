@@ -256,15 +256,34 @@ export function buildAcca(rows, mode = 'safe') {
 
   // ── Step 2: Correlation-aware selection ───────────────────────────────────
   const selected     = [];
+  const usedFixtures = new Set();  // one pick per fixture (hardest correlation rule)
   const usedLeagues  = new Map(); // tournamentName → count
   const scriptCounts = {};        // scriptCat → count
-  let   defensiveCount = 0; // track Under + BTTS-No + Team-Under picks for diversity
+  const marketFamily = {};        // family → count (over_family, under_family, result_family)
+  let   defensiveCount = 0;
   let   moderateUsed = 0;
+
+  function getMarketFamily(mk) {
+    if (["over_15","over_25","over_35","btts_yes","home_over_15","away_over_15","home_over_25","away_over_25"].includes(mk)) return "over_family";
+    if (["under_25","under_35","btts_no","home_under_15","away_under_15"].includes(mk)) return "under_family";
+    if (["home_win","away_win","dnb_home","dnb_away","double_chance_home","double_chance_away"].includes(mk)) return "result_family";
+    return "other";
+  }
 
   for (const pick of candidates) {
     if (selected.length >= targetMax) break;
 
     const tournament = pick.tournament_name || 'Unknown';
+
+    // HARD RULE: one pick per fixture — same fixture = same event = full correlation
+    const fid = String(pick.fixture_id || "");
+    if (fid && usedFixtures.has(fid)) { console.log("[ACCA] Skipping duplicate fixture:", fid); continue; }
+
+    // Market family limit: max 2 from same market family to prevent over-clustering
+    const family = getMarketFamily((pick.best_pick_market||"" ).toLowerCase());
+    const familyCount = marketFamily[family] || 0;
+    const familyMax = family === "other" ? 3 : 2;
+    if (familyCount >= familyMax) { console.log("[ACCA] Market family limit hit:", family); continue; }
 
     // Correlation rule: max 1 fixture per league in SAFE mode, max 2 in VALUE
     const leagueCount = usedLeagues.get(tournament) || 0;
@@ -292,9 +311,11 @@ export function buildAcca(rows, mode = 'safe') {
     if (pickOdds_ > 0 && pickOdds_ < 1.05) continue;
 
     selected.push(pick);
+    if (fid) usedFixtures.add(fid);
     if (isDefensive) defensiveCount++;
     usedLeagues.set(tournament, leagueCount + 1);
     scriptCounts[pick.scriptCat] = catCount + 1;
+    marketFamily[family] = familyCount + 1;
   }
 
   // ── Step 3: Validate final set ────────────────────────────────────────────

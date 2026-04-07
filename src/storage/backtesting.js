@@ -163,3 +163,33 @@ export async function runBacktestForFinishedFixtures() {
     return [];
   }
 }
+
+export async function getCalibrationData() {
+  try {
+    const bucketSql = "SELECT CASE WHEN predicted_probability >= 0.75 THEN '75-100'% WHEN predicted_probability >= 0.65 THEN '65-75'% WHEN predicted_probability >= 0.55 THEN '55-65'% ELSE 'Below 55'% END as bucket, COUNT(*) as total, ROUND(AVG(predicted_probability)*100,1) as avg_predicted_pct, SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as wins, ROUND(100.0*SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END)/NULLIF(COUNT(*)-SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END),0),1) as actual_hit_rate FROM prediction_outcomes WHERE outcome NOT IN ('void') GROUP BY bucket ORDER BY avg_predicted_pct DESC";
+    const tierSql = "SELECT model_confidence as tier, COUNT(*) as total, ROUND(AVG(predicted_probability)*100,1) as avg_predicted_pct, SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as wins, ROUND(100.0*SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END)/NULLIF(COUNT(*)-SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END),0),1) as actual_hit_rate FROM prediction_outcomes WHERE outcome NOT IN ('void') GROUP BY model_confidence ORDER BY actual_hit_rate DESC";
+    const marketSql = "SELECT predicted_market as market, COUNT(*) as total, SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as wins, ROUND(100.0*SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END)/NULLIF(COUNT(*)-SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END),0),1) as actual_hit_rate, ROUND(AVG(predicted_probability)*100,1) as avg_predicted_pct FROM prediction_outcomes WHERE outcome NOT IN ('void') GROUP BY predicted_market HAVING total >= 3 ORDER BY actual_hit_rate DESC";
+    const [byBucket, byTier, byMarket] = await Promise.all([
+      db.execute(bucketSql),
+      db.execute(tierSql),
+      db.execute(marketSql),
+    ]);
+    const tierData = byTier.rows || [];
+    const highTier = tierData.find(r => r.tier === 'HIGH');
+    const overconfident = highTier && highTier.total >= 5 && highTier.actual_hit_rate < 60;
+    return {
+      byBucket: byBucket.rows || [],
+      byTier: tierData,
+      byMarket: byMarket.rows || [],
+      summary: {
+        overconfident,
+        highTierHitRate: highTier ? highTier.actual_hit_rate : null,
+        highTierSample: highTier ? highTier.total : 0,
+        calibrationHealthy: !overconfident,
+      },
+    };
+  } catch (err) {
+    console.error('[Calibration] Error:', err.message);
+    return { byBucket: [], byTier: [], byMarket: [], summary: {} };
+  }
+}
