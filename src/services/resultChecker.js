@@ -1,6 +1,6 @@
 // resultChecker.js - Checks match results using LiveScore API (same IDs as fixtures table)
 import db from '../config/database.js';
-import { fetchFixturesByDate } from './livescore.js';
+import { fetchResultsByDate } from './livescore.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -48,8 +48,8 @@ export async function checkResults(dateStr) {
   let apiFailed = false;
   let apiFixtures = [];
   try {
-    apiFixtures = await fetchFixturesByDate(date);
-    console.log('[ResultChecker] LiveScore returned', apiFixtures.length, 'fixtures for', date);
+    apiFixtures = await fetchResultsByDate(date);
+    console.log('[ResultChecker] LiveScore results returned', apiFixtures.length, 'finished matches for', date);
   } catch (err) {
     apiFailed = true;
     console.warn('[ResultChecker] API fetch failed, using DB scores only:', err.message);

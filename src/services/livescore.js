@@ -78,6 +78,41 @@ function normaliseScore(raw) {
   return `${h}-${a}`;
 }
 
+// ── Results by date ──────────────────────────────────────────────────────────────
+export async function fetchResultsByDate(date) {
+  const allResults = [];
+  let page = 1;
+  while (true) {
+    try {
+      const data = await get('/scores/history.json', { date, page });
+      const raw = (data && data.data) ? data.data : {};
+      const matches = raw.match || raw.fixtures || [];
+      if (!Array.isArray(matches) || !matches.length) break;
+      for (const m of matches) {
+        const scores = m.scores || {};
+        const ftRaw = (scores.ft_score || m.ft_score || '').replace(/ /g, '');
+        const parts = ftRaw ? ftRaw.split('-') : [];
+        const hs = parts.length >= 2 ? parseInt(parts[0], 10) : null;
+        const as2 = parts.length >= 2 ? parseInt(parts[1], 10) : null;
+        const st = (m.status || '').toUpperCase();
+        const ok = st === 'FT' || st === 'AET' || st === 'PEN' || st === 'FINISHED' || st === 'FULL TIME';
+        if (!ok || hs === null || isNaN(hs)) continue;
+        const homeName = (m.home && m.home.name) ? m.home.name : (m.home_name || '');
+        const awayName = (m.away && m.away.name) ? m.away.name : (m.away_name || '');
+        allResults.push({ match_id: String(m.fixture_id || m.id || ''), home_team_name: homeName, away_team_name: awayName, match_status: 'FT', home_score: hs, away_score: isNaN(as2) ? 0 : as2 });
+      }
+      if (!raw.next_page) break;
+      page++;
+      await sleep(350);
+    } catch (err) {
+      console.error('[LiveScore] Results failed for ' + date + ' p' + page + ':', err.message);
+      break;
+    }
+  }
+  console.log('[LiveScore] fetchResultsByDate ' + date + ': ' + allResults.length + ' finished');
+  return allResults;
+}
+
 // ── Fixtures by date ──────────────────────────────────────────────────────────
 // Endpoint: /fixtures/matches.json (confirmed correct endpoint)
 export async function fetchFixturesByDate(date) {
