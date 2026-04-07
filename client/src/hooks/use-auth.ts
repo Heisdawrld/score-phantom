@@ -1,10 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchApi, setAuthToken, removeAuthToken, UserSchema } from "@/lib/api";
-import {
-  signInWithGoogle,
-  signInWithEmail,
-  signUpWithEmail,
-} from "@/lib/firebase";
 import { z } from "zod";
 import { useLocation } from "wouter";
 
@@ -74,83 +69,6 @@ export function useSignup() {
       queryClient.setQueryData(["/api/auth/me"], user);
       setLocation("/");
     }
-  });
-}
-
-export function useGoogleSignIn() {
-  const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
-
-  return useMutation({
-    mutationFn: async (referralCodeOverride?: string) => {
-      const { idToken } = await signInWithGoogle();
-      const referralCode = referralCodeOverride || localStorage.getItem("sp_referral_code") || undefined;
-      return fetchApi("/auth/google", {
-        method: "POST",
-        body: JSON.stringify({ idToken, referralCode }),
-      });
-    },
-    onSuccess: (data) => {
-      setAuthToken(data.token);
-      localStorage.removeItem("sp_referral_code");
-      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation("/");
-    },
-  });
-}
-
-
-export function useEmailSignUp() {
-  return useMutation({
-    mutationFn: async (credentials: z.infer<typeof LoginSchema>) => {
-      // Create Firebase account + send verification email — no backend call yet
-      return signUpWithEmail(credentials.email, credentials.password);
-    },
-  });
-}
-
-export function useEmailSignIn() {
-  const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
-
-  return useMutation({
-    mutationFn: async ({ email, password, referralCode: referralCodeOverride }: z.infer<typeof LoginSchema> & { referralCode?: string }) => {
-      // Try Firebase first, fall back to direct backend login.
-      // Users created via /auth/signup have bcrypt credentials in the DB
-      // but no Firebase account, so Firebase will reject them.
-      try {
-        const { idToken, firebaseUser } = await signInWithEmail(
-          email,
-          password
-        );
-        const referralCode = referralCodeOverride || localStorage.getItem("sp_referral_code") || undefined;
-        // Exchange Firebase ID token for our own JWT
-        return await fetchApi("/auth/email", {
-          method: "POST",
-          body: JSON.stringify({ idToken, email: firebaseUser.email, referralCode }),
-        });
-      } catch (firebaseErr: any) {
-        const msg = (firebaseErr?.message || "").toLowerCase();
-        const isCredentialError =
-          msg.includes("auth/invalid-credential") ||
-          msg.includes("auth/invalid-login-credentials") ||
-          msg.includes("auth/wrong-password") ||
-          msg.includes("auth/user-not-found");
-        if (!isCredentialError) throw firebaseErr;
-        return await fetchApi("/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        });
-      }
-    },
-    onSuccess: (data) => {
-      setAuthToken(data.token);
-      localStorage.removeItem("sp_referral_code");
-      const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation("/");
-    },
   });
 }
 

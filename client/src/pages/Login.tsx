@@ -1,13 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  useGoogleSignIn,
-  useLogin,
-  useSignup,
-} from "@/hooks/use-auth";
-import { resetPassword } from "@/lib/firebase";
-import { Chrome, Mail, Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle, KeyRound } from "lucide-react";
+import { useLogin, useSignup } from "@/hooks/use-auth";
+import { Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { z } from "zod";
 import { fetchApi } from "@/lib/api";
 
@@ -97,7 +92,6 @@ export default function Login() {
   const [referralCode, setReferralCode] = useState(() => localStorage.getItem("sp_referral_code") || "");
 
   const [, setLocation] = useLocation();
-  const googleSignIn = useGoogleSignIn();
   const loginMutation = useLogin();
   const signupMutation = useSignup();
 
@@ -126,19 +120,6 @@ export default function Login() {
     setAuthMode(mode);
   };
 
-  const handleGoogleClick = () => {
-    setGeneralError("");
-    if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
-    googleSignIn.mutate(referralCode || undefined, {
-      onError: (err: any) => {
-        const msg = err?.message || "Sign in failed";
-        if (msg.includes("popup-closed") || msg.includes("cancelled")) setGeneralError("Sign-in cancelled. Try again.");
-        else if (msg.includes("popup-blocked")) setGeneralError("Popup blocked. Allow popups for this site.");
-        else if (msg.includes("Disposable email")) setGeneralError("Please use a permanent email address.");
-        else setGeneralError(msg);
-      },
-    });
-  };
 
   const validateForm = () => {
     try {
@@ -226,7 +207,6 @@ export default function Login() {
     setResetLoading(true); setGeneralError("");
     try {
       try { await fetchApi("/auth/password/reset-request", { method: "POST", body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }) }); } catch (_) {}
-      try { await resetPassword(resetEmail.trim().toLowerCase()); } catch (_) {}
       setSuccessMsg(`Reset email sent to ${resetEmail}. Check your inbox.`);
       setResetEmail("");
       goTo("email-signin", -1);
@@ -307,13 +287,6 @@ export default function Login() {
                     <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
                     <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData({ ...formData, password: v })} error={errors.password} />
 
-                    {/* Forgot Password link */}
-                    <div className="flex justify-end">
-                      <button type="button" onClick={() => { setResetEmail(formData.email); goTo("forgot-password"); }}
-                        className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                        <KeyRound size={11} /> Forgot password?
-                      </button>
-                    </div>
 
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={loginMutation.isPending}
                       className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
