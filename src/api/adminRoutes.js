@@ -844,6 +844,8 @@ router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
     const result = await db.execute(
       "SELECT pt.id as partner_id, pt.name, pt.email, pt.referral_code, pt.commission_rate, pt.status, pt.notes, pt.created_at, pt.last_payout_at," +
       " (SELECT COUNT(*) FROM partner_referrals WHERE partner_id = pt.id) as total_referred_signups," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND status = 'trial' AND trial_ends_at > datetime('now')) as total_referred_trials," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND (status = 'premium' OR (subscription_expires_at IS NOT NULL AND subscription_expires_at > datetime('now')))) as total_referred_premium," +
       " COUNT(DISTINCT CASE WHEN pc.status IN ('pending','paid','settled') THEN pc.referred_user_id END) as total_referred_paid," +
       " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
       " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +

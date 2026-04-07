@@ -18,7 +18,7 @@ interface AdminSession { token: string; adminSecret: string; email: string; }
 interface AdminStats { total_users: number; premium_users: number; trial_users: number; expired_users: number; revenue_total: number; payments_today: number; revenue_today: number; fixtures_total: number; }
 interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; own_referral_code?: string | null; referred_by_code?: string | null; }
 interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
-interface Partner { partner_id: number; name: string; email: string | null; referral_code: string; referral_link: string; commission_rate: number; status: string; notes: string | null; total_referred_signups: number; total_referred_paid: number; total_revenue: number; total_commission: number; pending_commission: number; settled_commission: number; last_payout_at: string | null; created_at: string; own_referral_code?: string; }
+interface Partner { partner_id: number; name: string; email: string | null; referral_code: string; referral_link: string; commission_rate: number; status: string; notes: string | null; total_referred_signups: number; total_referred_trials: number; total_referred_premium: number; total_referred_paid: number; total_revenue: number; total_commission: number; pending_commission: number; settled_commission: number; last_payout_at: string | null; created_at: string; own_referral_code?: string; }
 interface Commission { id: number; referred_user_id: number; referred_email: string; referred_signup_date: string | null; payment_id: number | null; payment_reference: string | null; gross_amount: number; commission_rate: number; commission_amount: number; status: string; created_at: string; paid_at: string | null; settled_at: string | null; payment_date: string | null; payment_status: string | null; notes: string | null; }
 
 // ── Session helpers ───────────────────────────────────────────────────────────
@@ -790,7 +790,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/[0.06]">
-                          {["Partner", "Code / Link", "Signups", "Paid", "Revenue", "Commission", "Pending", "Settled", "Last Payout", "Actions"].map(h => (
+                          {["Partner", "Code / Link", "Signups", "Trial", "Premium", "Revenue", "Commission", "Pending", "Settled", "Last Payout", "Actions"].map(h => (
                           <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -812,6 +812,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                             <p className="text-[9px] text-gray-600 mt-0.5 max-w-[160px] truncate">{p.referral_link}</p>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-300">{Number(p.total_referred_signups)}</td>
+                          <td className="px-4 py-3"><span className="text-xs font-bold text-blue-400">{Number(p.total_referred_trials||0)}</span></td>
+                          <td className="px-4 py-3"><span className="text-xs font-bold text-primary">{Number(p.total_referred_premium||0)}</span></td>
                           <td className="px-4 py-3 text-xs text-gray-300">{Number(p.total_referred_paid)}</td>
                           <td className="px-4 py-3 text-xs text-gray-300">₦{Number(p.total_revenue||0).toLocaleString()}</td>
                           <td className="px-4 py-3 text-xs font-bold text-white">₦{Number(p.total_commission).toLocaleString()}</td>
@@ -848,7 +850,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                     <p className="text-xs text-gray-500">{selectedPartner.email} &middot; Code: <span className="font-mono text-primary">{selectedPartner.referral_code}</span> &middot; Rate: {Math.round(selectedPartner.commission_rate * 100)}%</p>
                     <div className="flex gap-4 mt-2">
                       <span className="text-[10px] text-gray-500">Signups: <span className="text-white font-bold">{selectedPartner.total_referred_signups}</span></span>
-                      <span className="text-[10px] text-gray-500">Paid: <span className="text-white font-bold">{selectedPartner.total_referred_paid}</span></span>
+                      <span className="text-[10px] text-blue-400">Trial: <span className="font-bold">{Number(selectedPartner.total_referred_trials||0)}</span></span>
+                      <span className="text-[10px] text-primary">Premium: <span className="font-bold">{Number(selectedPartner.total_referred_premium||0)}</span></span>
                       <span className="text-[10px] text-yellow-400">Pending: <span className="font-bold">&#8358;{Number(selectedPartner.pending_commission).toLocaleString()}</span></span>
                       <span className="text-[10px] text-emerald-400">Settled: <span className="font-bold">&#8358;{Number(selectedPartner.settled_commission).toLocaleString()}</span></span>
                     </div>
