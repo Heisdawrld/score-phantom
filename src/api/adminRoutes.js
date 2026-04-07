@@ -830,7 +830,7 @@ router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
     if (Number(cnt.rows?.[0]?.c || 0) >= 5) return res.status(400).json({ error: "Maximum 5 partners allowed" });
     const dup = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? LIMIT 1", args: [cleanCode] });
     if ((dup.rows||[]).length > 0) return res.status(409).json({ error: "Code already taken: " + cleanCode });
-    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(//$/,"");
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/[/]$/,"");
     const r = await db.execute({ sql: "INSERT INTO partners (name, email, referral_code, commission_rate, status, notes) VALUES (?, ?, ?, 0.25, ?, ?)", args: [name.trim(), email?.trim()||null, cleanCode, status||"active", notes?.trim()||null] });
     const pid = r.lastInsertRowid || null;
     console.log("[Partners] Created: " + name + " code=" + cleanCode);
@@ -840,7 +840,7 @@ router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
 // GET /api/admin/partners — list all partners with full metrics
 router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(//$/,"");
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/[/]$/,"");
     const result = await db.execute(
       "SELECT pt.id as partner_id, pt.name, pt.email, pt.referral_code, pt.commission_rate, pt.status, pt.notes, pt.created_at, pt.last_payout_at," +
       " (SELECT COUNT(*) FROM partner_referrals WHERE partner_id = pt.id) as total_referred_signups," +
