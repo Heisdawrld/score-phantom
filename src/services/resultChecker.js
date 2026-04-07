@@ -1,6 +1,6 @@
 // resultChecker.js - Checks match results using LiveScore API (same IDs as fixtures table)
 import db from '../config/database.js';
-import { fetchResultsByDate } from './livescore.js';
+import { fetchResultsByDate, fetchFixturesByDate } from './livescore.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -45,14 +45,29 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
 export async function checkResults(dateStr) {
   const date = dateStr || (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }); })();
   console.log('[ResultChecker] Checking results for', date);
-  let apiFailed = false;
   let apiFixtures = [];
+  // Try /scores/history.json first (paid), fall back to /fixtures/matches.json (free)
   try {
     apiFixtures = await fetchResultsByDate(date);
-    console.log('[ResultChecker] LiveScore results returned', apiFixtures.length, 'finished matches for', date);
+    console.log('[ResultChecker] history endpoint returned', apiFixtures.length, 'finished for', date);
   } catch (err) {
-    apiFailed = true;
-    console.warn('[ResultChecker] API fetch failed, using DB scores only:', err.message);
+    console.warn('[ResultChecker] history endpoint failed:', err.message);
+  }
+  // Always also call fixtures endpoint - free tier, includes current status+scores for today
+  try {
+    const fixturesForDate = await fetchFixturesByDate(date);
+    for (const f of fixturesForDate) {
+      const st = (f.match_status||'NS').toUpperCase();
+      const done = st==='FT'||st==='AET'||st==='PEN'||st==='FINISHED'||st==='FULL TIME';
+      if (done && f.home_score != null && !isNaN(Number(f.home_score))) {
+        apiFixtures.push(f);
+        // Also update fixtures table with score
+        db.execute({ sql: 'UPDATE fixtures SET home_score=?,away_score=?,match_status=? WHERE id=? AND home_score IS NULL', args:[Number(f.home_score),Number(f.away_score),'FINISHED',f.match_id] }).catch(()=>{});
+      }
+    }
+    console.log('[ResultChecker] fixtures endpoint added', fixturesForDate.length, 'fixtures for', date);
+  } catch (err) {
+    console.warn('[ResultChecker] fixtures endpoint failed:', err.message);
   }
   const scoreMap = {};
   const nameMap = {};

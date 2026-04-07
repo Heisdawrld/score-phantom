@@ -70,6 +70,6 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore) {
 }
 let pollTimer = null; let isConnected = false;
 async function pollLiveScores() { try { const matches = await fetchLiveMatches(); if (matches.length > 0) { if (!isConnected) { isConnected = true; } for (const m of matches) { const parts = String(m.score || '0 - 0').replace(/ /g,'').split('-'); const hs = parseInt(parts[0]||'0',10)||0; const as2 = parseInt(parts[1]||'0',10)||0; const fid = m.fixture_id||m.match_id; await handleScoreUpdate({fixture_id:fid,home_score:hs,away_score:as2,status:m.status||'LIVE',minute:m.minute||null}).catch(()=>{}); } } } catch(err) { console.warn('[Live] Poll error:',err.message); } }
-export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting LiveScore polling (60s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 60000); isConnected = true; }
+export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting LiveScore polling (30s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 30000); isConnected = true; }
 export function getLiveStatus() { return { connected: isConnected, sseClients: sseClients.size }; }
 export function stopLiveScoreWatcher() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } isConnected = false; }

@@ -426,6 +426,18 @@ app.listen(PORT, async () => {
       if (r2.outcomes?.updated > 0) console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
     } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
   }, 3 * 60 * 60 * 1000);
+  // Also check every 30 minutes during match hours (12:00-23:59 Lagos) to catch settled results quickly
+  setInterval(async () => {
+    try {
+      const lagosHour = parseInt(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos", hour: "numeric", hour12: false }), 10);
+      if (lagosHour < 12) return; // skip early morning - no matches
+      const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const r = await checkResults(today);
+      if (r.outcomes?.wins > 0 || r.outcomes?.losses > 0 || r.outcomes?.updated > 0) {
+        console.log("[ResultChecker] 30min check:", r.outcomes);
+      }
+    } catch (err) { console.error("[ResultChecker] 30min check failed:", err.message); }
+  }, 30 * 60 * 1000);
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing
   // the server to cold-start on the next request, which makes /auth/me
