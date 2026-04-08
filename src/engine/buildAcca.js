@@ -138,6 +138,7 @@ function scoreAccaCandidate(row) {
   const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
   const prestige = getLeaguePrestige(row.tournament_name);
   const mk       = (row.best_pick_market || '').toLowerCase();
+  const sel      = (row.best_pick_selection || '').toLowerCase();
   
   // IMPROVED: Historical accuracy weight (if available from backtesting)
   // Use the confidence_model field as a proxy for proven accuracy (0-1)
@@ -145,7 +146,9 @@ function scoreAccaCandidate(row) {
   if (historicalAccuracy < 0.50) historicalAccuracy = 0; // filter out low-accuracy picks
   
   // Diversity: mild penalty on Unders, bonus for clean wins
-  const diversityMult = mk.includes('under') ? 0.55 : (mk === 'home_win' || mk === 'away_win') ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
+  const isUnderPick = mk.includes('under') || /under\s*\d/i.test(sel);
+  const isWinPick = mk === 'home_win' || mk === 'away_win' || mk === 'match result';
+  const diversityMult = isUnderPick ? 0.55 : isWinPick ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
   
   return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
 }
@@ -264,10 +267,17 @@ export function buildAcca(rows, mode = 'safe') {
   let   defensiveCount = 0;
   let   moderateUsed = 0;
 
-  function getMarketFamily(mk) {
+  function getMarketFamily(mk, sel) {
+    const s = (sel || "").toLowerCase();
     if (["over_15","over_25","over_35","btts_yes","home_over_15","away_over_15","home_over_25","away_over_25"].includes(mk)) return "over_family";
     if (["under_25","under_35","btts_no","home_under_15","away_under_15"].includes(mk)) return "under_family";
     if (["home_win","away_win","dnb_home","dnb_away","double_chance_home","double_chance_away"].includes(mk)) return "result_family";
+    if (mk === "over/under" && s.includes("under")) return "under_family";
+    if (mk === "over/under" && s.includes("over") && !s.includes("under")) return "over_family";
+    if ((mk === "home team goals" || mk === "away team goals") && s.includes("under")) return "under_family";
+    if ((mk === "home team goals" || mk === "away team goals") && s.includes("over") && !s.includes("under")) return "over_family";
+    if (mk === "match result" || mk === "double chance" || mk === "draw no bet") return "result_family";
+    if (mk === "both teams to score") return s.includes("not") ? "under_family" : "over_family";
     return "other";
   }
 
@@ -281,7 +291,7 @@ export function buildAcca(rows, mode = 'safe') {
     if (fid && usedFixtures.has(fid)) { console.log("[ACCA] Skipping duplicate fixture:", fid); continue; }
 
     // Market family limit: max 2 from same market family to prevent over-clustering
-    const family = getMarketFamily((pick.best_pick_market||"" ).toLowerCase());
+    const family = getMarketFamily((pick.best_pick_market||"").toLowerCase(), pick.best_pick_selection||"");
     const familyCount = marketFamily[family] || 0;
     const familyMax = family === "other" ? 3 : 2;
     if (familyCount >= familyMax) { console.log("[ACCA] Market family limit hit:", family); continue; }
@@ -305,7 +315,7 @@ export function buildAcca(rows, mode = 'safe') {
     // Diversity: max 1 defensive pick (Under + BTTS-No + NOT-to-Score combined)
     const mk_ = (pick.best_pick_market||'').toLowerCase();
     const sel_ = (pick.best_pick_selection||'').toLowerCase();
-    const isDefensive = mk_.includes('under') || mk_ === 'btts_no' || sel_.includes('not to score') || sel_.includes('no btts');
+    const isDefensive = mk_.includes('under') || mk_ === 'btts_no' || mk_ === 'both teams to score' || /under\s*\d/i.test(sel_) || sel_.includes('not to score') || sel_.includes('no btts');
     if (isDefensive && defensiveCount >= 1) continue;
     // Min odds filter: skip picks where odds < 1.05 (no perceived value)
     const pickOdds_ = parseFloat(pick.odds_home || pick.odds_away || 0);
