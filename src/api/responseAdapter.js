@@ -287,11 +287,12 @@ const NICHE_MARKETS = new Set([
 ]);
 
 function capProbabilityPct(marketKey, rawPct) {
-  const key = (marketKey || '').toLowerCase();
-  if (NICHE_MARKETS.has(key) && rawPct > 93) return 93.0;
+  const key = (marketKey || "").toLowerCase();
+  if (NICHE_MARKETS.has(key) && rawPct > 86) return 86.0;
+  if (key === "under_25" && rawPct > 82) return 82.0;
+  if (key === "under_35" && rawPct > 88) return 88.0;
   return rawPct;
 }
-
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
 

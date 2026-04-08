@@ -86,6 +86,11 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
     cal.under25 = parseFloat((1 - cal.over25).toFixed(4));
   }
 
+  // Cap under probabilities
+  if (cal.under25 != null && cal.under25 > 0.82) { cal.under25 = 0.82; if (cal.over25 != null) cal.over25 = parseFloat((0.18).toFixed(4)); }
+  if (cal.under35 != null && cal.under35 > 0.88) { cal.under35 = 0.88; if (cal.over35 != null) cal.over35 = parseFloat((0.12).toFixed(4)); }
+  if (cal.homeUnder15 != null && cal.homeUnder15 > 0.86) { cal.homeUnder15 = 0.86; if (cal.homeOver15 != null) cal.homeOver15 = parseFloat((0.14).toFixed(4)); }
+  if (cal.awayUnder15 != null && cal.awayUnder15 > 0.86) { cal.awayUnder15 = 0.86; if (cal.awayOver15 != null) cal.awayOver15 = parseFloat((0.14).toFixed(4)); }
   // ── Clamp all to [0, 1] ───────────────────────────────────────────────────
   for (const key of Object.keys(cal)) {
     if (typeof cal[key] === 'number') {

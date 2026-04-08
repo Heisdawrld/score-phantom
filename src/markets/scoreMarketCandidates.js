@@ -8,7 +8,7 @@ const SCRIPT_MARKET_FIT = {
     home_win: 0.9,
     home_over_15: 0.85,
     win_either_half_home: 0.8,
-    away_under_15: 0.75,
+    away_under_15: 0.45,
     home_over_25: 0.6,
     double_chance_home: 0.55,
     btts_no: 0.5,
@@ -17,7 +17,7 @@ const SCRIPT_MARKET_FIT = {
     away_win: 0.9,
     away_over_15: 0.85,
     win_either_half_away: 0.8,
-    home_under_15: 0.75,
+    home_under_15: 0.45,
     away_over_25: 0.6,
     double_chance_away: 0.55,
   },
@@ -39,11 +39,11 @@ const SCRIPT_MARKET_FIT = {
     away_over_15: 0.65,
   },
   tight_low_event: {
-    under_25: 0.70,
+    under_25: 0.50,
     btts_no: 0.68,
-    under_35: 0.7,
-    away_under_15: 0.7,
-    home_under_15: 0.7,
+    under_35: 0.55,
+    away_under_15: 0.55,
+    home_under_15: 0.55,
     under_15: 0.6,
   },
   chaotic_unreliable: {}, // all get default 0.1
@@ -103,6 +103,12 @@ function getBadMarketPenalty(candidate, featureVector) {
     return clamp(excess * 1.2, 0, 0.5);
   }
 
+  // Under markets: base-rate inflation penalty
+  // Under 2.5 has a natural ~55% base rate — the model inflates this further.
+  // Apply a penalty to prevent them dominating the pick selection.
+  if (marketKey === "under_25") return 0.32;
+  if (marketKey === "under_35") return 0.22;
+  if (marketKey === "home_under_15" || marketKey === "away_under_15") return 0.38;
   return 0;
 }
 
