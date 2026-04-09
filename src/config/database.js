@@ -132,6 +132,28 @@ async function runSchema() {
   }
 }
 
-await runSchema();
+async function runSchemaWithRetry(maxAttempts) {
+  if (maxAttempts === undefined) maxAttempts = 5;
+  let delay = 2000;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await runSchema();
+      console.log("[DB] Schema initialised.");
+      return;
+    } catch (err) {
+      const isNetworkErr = err.code === "EAI_AGAIN" || err.code === "ENOTFOUND" || (err.message && err.message.includes("EAI_AGAIN")) || (err.message && err.message.includes("getaddrinfo"));
+      if (attempt < maxAttempts && isNetworkErr) {
+        console.warn("[DB] Attempt " + attempt + " failed (DNS): " + err.message);
+        await new Promise(function(r) { setTimeout(r, delay); });
+        delay = Math.min(delay * 2, 15000);
+      } else {
+        console.error("[DB] FATAL: DB init failed:", err.message);
+        process.exit(1);
+      }
+    }
+  }
+}
+
+await runSchemaWithRetry();
 
 export default db;
