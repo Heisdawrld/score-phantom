@@ -828,19 +828,10 @@ router.get("/track-record", requireAuth, async (req, res) => {
     const startISO = startDate.toISOString().slice(0, 10);
 
     // Query backtesting outcomes (must exist in schema)
-    const outcomes = await db.execute({
-      sql: `SELECT 
-              predicted_market,
-              COUNT(*) as total_picks,
-              SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
-              SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
-              SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
-            FROM prediction_outcomes
-            WHERE DATE(created_at) >= ?
-            GROUP BY predicted_market
-            ORDER BY total_picks DESC`,
-      args: [startISO],
-    });
+    const rawOutcomes = await db.execute({ sql: "SELECT tournament, predicted_market, outcome FROM prediction_outcomes WHERE DATE(created_at) >= ?", args: [startISO] });
+    const allowedRows = (rawOutcomes.rows || []).filter(r => getLeagueTier(r.tournament) < 3);
+    const marketMap = {}; for (const row of allowedRows) { const m = row.predicted_market || "Unknown"; if (!marketMap[m]) marketMap[m] = { wins:0, losses:0, voids:0 }; if (row.outcome === "win" || row.outcome === "correct") marketMap[m].wins++; else if (row.outcome === "loss" || row.outcome === "wrong") marketMap[m].losses++; else if (row.outcome === "void") marketMap[m].voids++; }
+    const outcomes = { rows: Object.entries(marketMap).map(([m,s]) => ({ predicted_market:m, total_picks:s.wins+s.losses+s.voids, wins:s.wins, losses:s.losses, voids:s.voids })).sort((a,b) => b.total_picks - a.total_picks) };
 
     const marketStats = (outcomes.rows || []).map(row => ({
       market: row.predicted_market,
@@ -910,7 +901,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
 
     const results = await db.execute({
       sql: `SELECT 
-              fixture_id, home_team, away_team, match_date,
+              fixture_id, home_team, away_team, match_date, tournament,
               predicted_market, predicted_selection, full_score, outcome,
               predicted_probability, created_at
             FROM prediction_outcomes
@@ -920,7 +911,8 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
       args: [startISO, limit],
     });
 
-    const outcomes = (results.rows || []).map(row => ({
+    const filteredResults = (results.rows || []).filter(r => getLeagueTier(r.tournament) < 3);
+    const outcomes = filteredResults.map(row => ({
       fixtureId: row.fixture_id,
       match: `${row.home_team} vs ${row.away_team}`,
       date: row.match_date,
