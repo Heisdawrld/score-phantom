@@ -10,6 +10,7 @@
  */
 
 import db from '../config/database.js';
+import { isLeagueAllowed } from '../config/leagueTiers.js';
 
 const BATCH_SIZE = 100;
 const DELAY_MS   = 300; // small pause between fixtures to keep DB responsive
@@ -29,7 +30,7 @@ export async function autoBuildPredictions({ limit = BATCH_SIZE } = {}) {
 
     // Find enriched fixtures for today + next 2 days that have NO prediction yet
     const result = await db.execute({
-      sql: `SELECT f.id, f.home_team_name, f.away_team_name, f.match_date
+      sql: `SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name
             FROM fixtures f
             LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
             WHERE f.enriched = 1
@@ -57,6 +58,7 @@ export async function autoBuildPredictions({ limit = BATCH_SIZE } = {}) {
 
     for (const fixture of fixtures) {
       const label = `${fixture.home_team_name} vs ${fixture.away_team_name}`;
+      if (!isLeagueAllowed(fixture.tournament_name)) { console.log("[PredRunner] Skip Tier3:", fixture.tournament_name); continue; }
       try {
         await getOrBuildPrediction(String(fixture.id));
         built++;

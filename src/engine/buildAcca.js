@@ -1,3 +1,4 @@
+import { getLeagueTier, getTierMinProbability } from "../config/leagueTiers.js";
 /**
  * buildAcca.js
  *
@@ -220,6 +221,8 @@ export function buildAcca(rows, mode = 'safe') {
   const candidates = rows
     .filter(row => {
       if (row.no_safe_pick) return false;
+      const tier = getLeagueTier(row.tournament_name); if (tier === 3) return false;
+      const tierMinProb = getTierMinProbability(tier); if (prob < tierMinProb) return false;
       const prob     = parseFloat(row.best_pick_probability || 0);
       const vol      = (row.confidence_volatility || 'medium').toLowerCase();
       const marketKey = row.best_pick_market || '';

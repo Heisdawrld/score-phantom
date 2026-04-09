@@ -1,3 +1,4 @@
+import { getLeagueTier, isLeagueAllowed, getTierMinProbability } from "../config/leagueTiers.js";
 import { getBudgetStatus } from '../services/requestBudget.js';
 import { Router } from "express";
 import jwt from "jsonwebtoken";
@@ -1072,6 +1073,13 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
 
     let result = await db.execute({ sql: pickQuery, args: pickArgs });
     let rows = result.rows || [];
+    // Filter out Tier 3 leagues and apply tier-based probability thresholds
+    rows = rows.filter(row => {
+      const tier = getLeagueTier(row.tournament_name);
+      if (tier === 3) return false;
+      const minProb = getTierMinProbability(tier);
+      return parseFloat(row.best_pick_probability || 0) >= minProb;
+    });
 
     // ── Step 2: No picks? Trigger on-demand generation for enriched fixtures ──
     if (rows.length === 0) {
