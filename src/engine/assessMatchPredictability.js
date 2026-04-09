@@ -22,7 +22,7 @@ export function assessMatchPredictability(features, script, calibratedProbs) {
     return { predictable: false, reason: 'Chaos score too high (' + (matchChaosScore*100).toFixed(0) + '% > 88%) — match too volatile', code: 'HIGH_CHAOS' };
   }
   // 4. High upset risk + weak data
-  if (upsetRiskScore > 0.75 && dataCompleteness < 0.55) {
+  if (upsetRiskScore > 0.82 && dataCompleteness < 0.45) {
     return { predictable: false, reason: 'High upset risk (' + (upsetRiskScore*100).toFixed(0) + '%) with weak data (' + (dataCompleteness*100).toFixed(0) + '%) — too uncertain', code: 'UPSET_RISK_WEAK_DATA' };
   }
   // 5. Contradictory 1X2 probabilities — all outcomes near-equal
@@ -32,7 +32,7 @@ export function assessMatchPredictability(features, script, calibratedProbs) {
     const dr = safeNum(calibratedProbs.draw, 0.33);
     const maxP = Math.max(hw, aw, dr);
     const minP = Math.min(hw, aw, dr);
-    if (maxP - minP < 0.08) {
+    if (maxP - minP < 0.05) {
       return { predictable: false, reason: '1X2 probs too close (spread ' + ((maxP-minP)*100).toFixed(1) + 'pp) — no dominant signal', code: 'CONTRADICTORY_SIGNALS' };
     }
   }

@@ -117,7 +117,7 @@ function getBadMarketPenalty(candidate, featureVector) {
  *
  * REBALANCED FORMULA (v2.1):
  * finalScore =
- *   0.28 * modelConfidenceScore  (reduced from 0.34)
+ *   0.20 * modelConfidenceScore  (edge now leads)
  * + 0.28 * edgeScore
  * + 0.26 * tacticalFitScore      (increased from 0.18)
  * + 0.12 * dataSupportScore
@@ -189,9 +189,9 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     else if (restDiff < -4 && marketKey.includes("home")) restBonus = -0.04;
 
     const finalScore =
-      0.28 * modelConfidenceScore +
-      0.28 * Math.max(0, edgeScore) +
-      0.26 * tacticalFitScore +
+      0.20 * modelConfidenceScore +
+      0.35 * Math.max(0, edgeScore) +
+      0.24 * tacticalFitScore +
       0.12 * dataSupportScore +
       0.06 * formMomentumScore +
       diversityBonus +

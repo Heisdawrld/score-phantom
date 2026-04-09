@@ -1,3 +1,4 @@
+import { safeNum } from "../utils/math.js";
 import { buildMarketCandidates } from '../markets/buildMarketCandidates.js';
 import { computeImpliedProbabilities } from '../markets/computeImpliedProbabilities.js';
 import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
@@ -23,7 +24,7 @@ import { selectBestPickOrAbstain } from './selectBestPickOrAbstain.js';
  *
  * The engine now says: "First decide if this match deserves ANY pick. Then rank markets."
  */
-export async function runMarketSelection({ calibratedProbs, odds, script, features, fixtureId, shiftMap, maxShift, maxShiftMarket }) {
+export async function runMarketSelection({ calibratedProbs, odds, script, features, fixtureId, shiftMap, maxShift, maxShiftMarket, mode = "balanced" }) {
   // ── Stage 3a: Predictability gate ──────────────────────────────────────────
   const assessment = assessMatchPredictability(features, script, calibratedProbs);
   if (!assessment.predictable) {
@@ -50,7 +51,8 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
   const scored            = scoreMarketCandidates(candidatesWithEdge, script, features, recentMarkets);
 
   // ── Stage 3c: Prune weak candidates (new — before ranking) ─────────────────
-  const pruned = pruneWeakCandidates(scored);
+  const dataQuality = safeNum(features?.dataCompletenessScore, 0.5);
+  const pruned = pruneWeakCandidates(scored, { mode, dataQuality });
 
   // ── Stage 3d: Rank survivors ────────────────────────────────────────────────
   const ranked = rankMarkets(pruned);
@@ -60,7 +62,7 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
 
   // ── Stage 3f: Select best pick or abstain ──────────────────────────────────
   const { bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied, abstainCode } =
-    selectBestPickOrAbstain(ranked, script, features, { layer2Override, layer2ShiftMarket: maxShiftMarket, layer2ShiftPp: maxShift });
+    selectBestPickOrAbstain(ranked, script, features, { mode, layer2Override, layer2ShiftMarket: maxShiftMarket, layer2ShiftPp: maxShift });
 
   return { bestPick, backupPicks, noSafePick, noSafePickReason, abstainCode: abstainCode || null, rankedCandidates: ranked, layer2Override, layer2OverrideApplied: layer2OverrideApplied ?? false, maxShift, maxShiftMarket, topProbKey };
 }
