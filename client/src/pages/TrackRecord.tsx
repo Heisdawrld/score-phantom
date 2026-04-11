@@ -5,7 +5,7 @@ import { fetchApi } from '@/lib/api';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Trophy, TrendingUp, Target, Crown, Flame, ShieldCheck, Activity, BarChart3, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronLeft, Trophy, TrendingUp, Target, Crown, Flame, ShieldCheck, Activity, BarChart3, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─ Animated counter hook

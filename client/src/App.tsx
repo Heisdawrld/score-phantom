@@ -53,6 +53,8 @@ import AccaCalculator from "@/pages/AccaCalculator";
 import Matches from "@/pages/Matches";
 import MatchCenter from "@/pages/MatchCenter";
 import Profile from "@/pages/Profile";
+import PaymentBilling from "@/pages/PaymentBilling";
+import Settings from "@/pages/Settings";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
 import VerifyEmail from "@/pages/VerifyEmail";
@@ -146,6 +148,8 @@ function Router() {
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
+      <Route path="/billing" component={() => <ProtectedRoute component={PaymentBilling} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/" component={SmartRoot} />
       <Route component={SmartRoot} />
     </Switch>
