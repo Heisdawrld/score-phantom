@@ -1,17 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme inline {
   --font-sans: 'Outfit', sans-serif;
   --font-display: 'Bebas Neue', sans-serif;
 
-  /* ScorePhantom Dark Theme Palette */
-  --color-background: hsl(220 30% 4%);
+  /* ScorePhantom Dark Theme — refined deeper palette */
+  --color-background: hsl(218 35% 3.5%);
   --color-foreground: hsl(214 33% 97%);
   
-  --color-panel: hsl(215 29% 8%);
-  --color-panel-light: hsl(216 28% 10%);
-  --color-panel-lighter: hsl(218 28% 13%);
+  --color-panel: hsl(215 30% 7%);
+  --color-panel-light: hsl(216 28% 9%);
+  --color-panel-lighter: hsl(218 26% 12%);
   
   --color-primary: hsl(148 86% 48%);
   --color-primary-foreground: hsl(220 30% 4%);
@@ -19,8 +19,8 @@
   --color-secondary: hsl(215 29% 12%);
   --color-secondary-foreground: hsl(214 33% 97%);
   
-  --color-muted: hsl(220 15% 65%);
-  --color-muted-foreground: hsl(220 15% 65%);
+  --color-muted: hsl(220 15% 55%);
+  --color-muted-foreground: hsl(220 15% 55%);
   
   --color-accent-blue: hsl(220 100% 65%);
   --color-accent-orange: hsl(42 100% 50%);
@@ -28,7 +28,7 @@
   --color-destructive: hsl(349 100% 65%);
   --color-destructive-foreground: hsl(214 33% 97%);
   
-  --color-border: hsl(215 20% 15%);
+  --color-border: hsl(215 20% 13%);
   --color-ring: hsl(148 86% 48%);
 
   /* Shadcn standard mapping */
@@ -48,8 +48,8 @@
   body {
     @apply bg-background text-foreground antialiased font-sans;
     background-image: 
-      radial-gradient(circle at top, hsla(148, 86%, 48%, 0.05), transparent 22%),
-      radial-gradient(circle at 88% 8%, hsla(220, 100%, 65%, 0.05), transparent 18%);
+      radial-gradient(circle at 20% 2%, hsla(148, 86%, 48%, 0.04), transparent 30%),
+      radial-gradient(circle at 85% 5%, hsla(220, 100%, 65%, 0.03), transparent 25%);
     background-attachment: fixed;
   }
 
@@ -63,8 +63,36 @@
     @apply bg-panel/80 backdrop-blur-xl border border-white/5 shadow-2xl shadow-black/50;
   }
   
+  .glass-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(20px);
+  }
+
+  .glass-card-hover:hover {
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+    border-color: rgba(255,255,255,0.10);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px rgba(16,231,116,0.15), 0 0 60px rgba(16,231,116,0.05);
+  }
+
+  .glow-primary-strong {
+    box-shadow: 0 0 20px rgba(16,231,116,0.25), 0 0 60px rgba(16,231,116,0.10);
+  }
+  
   .text-glow-primary {
     text-shadow: 0 0 20px hsla(148, 86%, 48%, 0.4);
+  }
+  
+  .gradient-border-primary {
+    border-image: linear-gradient(135deg, rgba(16,231,116,0.3), rgba(16,231,116,0.05)) 1;
+  }
+
+  .gradient-card-green {
+    background: linear-gradient(135deg, rgba(16,231,116,0.08) 0%, rgba(16,231,116,0.02) 60%, rgba(0,0,0,0) 100%);
+    border: 1px solid rgba(16,231,116,0.15);
   }
   
   .hide-scrollbar::-webkit-scrollbar {
@@ -74,9 +102,25 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Safe area inset for phones */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 8px);
+  }
 }
 
 /* Global smooth interactions */
 button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled):active { transform: scale(0.97); transition: transform 0.08s ease; }
 html { scroll-behavior: smooth; }
+
+/* Smooth skeleton animation */
+@keyframes sp-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.sp-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.5s ease-in-out infinite;
+}

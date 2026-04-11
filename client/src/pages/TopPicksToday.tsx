@@ -6,8 +6,10 @@ import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain } from "lucide-react";
+import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
+import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 
 interface Pick {
   fixtureId: string;
@@ -45,47 +47,18 @@ function formatMarket(key: string): string {
   return map[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function getQualityLabel(composite: number): { label: string; color: string; glow: string } {
-  // composite is 0-100
-  if (composite >= 65) return { label: "Elite",   color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", glow: "shadow-[0_0_20px_rgba(16,231,116,0.15)]" };
-  if (composite >= 52) return { label: "Strong",  color: "text-blue-400 bg-blue-500/15 border-blue-500/30",         glow: "shadow-[0_0_20px_rgba(59,130,246,0.12)]" };
-  if (composite >= 40) return { label: "Good",    color: "text-yellow-400 bg-yellow-500/15 border-yellow-500/30",   glow: "" };
-  return               { label: "Fair",    color: "text-white/50 bg-white/5 border-white/15",               glow: "" };
-}
-
-function FactorBadge({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+function FactorTag({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+  if (!active) return null;
   return (
-    <span className={cn(
-      "inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-medium",
-      active
-        ? "text-primary border-primary/30 bg-primary/10"
-        : "text-white/20 border-white/10 bg-white/3"
-    )}>
+    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold text-primary border-primary/25 bg-primary/[0.06]">
       {icon}{label}
     </span>
   );
 }
 
+type FilterMode = "all" | "elite" | "high_edge" | "value";
+
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
-
-function ConfRing({ value }: { value: number }) {
-  const radius = 20;
-  const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(value, 100) / 100;
-  const strokeColor = value >= 75 ? "#10e774" : value >= 60 ? "#3b82f6" : "#f59e0b";
-  return (
-    <div className="relative w-[52px] h-[52px]">
-      <svg width="52" height="52" className="rotate-[-90deg]">
-        <circle cx="26" cy="26" r={radius} stroke="rgba(255,255,255,0.12)" strokeWidth="4" fill="none" />
-        <circle cx="26" cy="26" r={radius} stroke={strokeColor} strokeWidth="4" fill="none" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)} style={{ transition: "stroke-dashoffset 0.8s ease" }} />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span style={{ color: strokeColor }} className="text-[11px] font-black leading-none tabular-nums">{value.toFixed(0)}%</span>
-      </div>
-    </div>
-  );
-}
-
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
@@ -93,6 +66,7 @@ export default function TopPicksToday() {
   const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterMode>("all");
   const savedScrollRef = useRef(0);
   const handleOpenPanel = (id: string) => { savedScrollRef.current = window.scrollY; setSelectedFixtureId(id); };
   const handleClosePanel = () => { setSelectedFixtureId(null); requestAnimationFrame(() => window.scrollTo(0, savedScrollRef.current)); };
@@ -103,12 +77,32 @@ export default function TopPicksToday() {
     enabled: !authLoading && !!isPremium,
   });
 
-  const picks: Pick[] = data?.picks || [];
+  // 7-day results
+  const { data: resultsData } = useQuery({
+    queryKey: ["pick-results-7d"],
+    queryFn: () => fetchApi("/track-record?days=7"),
+    enabled: !authLoading && !!isPremium,
+    staleTime: 10 * 60 * 1000,
+  });
+  const weekStats = (resultsData as any)?.overallStats || null;
+
+  const allPicks: Pick[] = data?.picks || [];
+
+  // Apply filter
+  const picks = allPicks.filter(p => {
+    const comp = p.composite ?? p.score * 100;
+    if (filter === "elite") return comp >= 65;
+    if (filter === "high_edge") return comp >= 52;
+    if (filter === "value") return p.probability >= 65;
+    return true;
+  });
+
   if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
-  const avgConf = picks.length > 0
-    ? (picks.reduce((s, p) => s + p.confidence, 0) / picks.length).toFixed(0)
+
+  const avgConf = allPicks.length > 0
+    ? (allPicks.reduce((s, p) => s + p.confidence, 0) / allPicks.length).toFixed(0)
     : null;
-  const eliteCount = picks.filter(p => (p.composite ?? p.score * 100) >= 65).length;
+  const eliteCount = allPicks.filter(p => (p.composite ?? p.score * 100) >= 65).length;
 
   if (isLoading) {
     return (
@@ -116,7 +110,7 @@ export default function TopPicksToday() {
         <Header />
         <div className="max-w-3xl mx-auto p-6 space-y-3 mt-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-28 rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
+            <div key={i} className="h-28 rounded-2xl sp-shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
           ))}
         </div>
       </div>
@@ -128,7 +122,7 @@ export default function TopPicksToday() {
       <Header />
       <div className="max-w-3xl mx-auto px-4 pb-8">
 
-        {/* Page header */}
+        {/* ── Page header ── */}
         <div className="flex items-center gap-3 pt-6 mb-1">
           <button onClick={() => setLocation("/")} className="p-2 hover:bg-white/5 rounded-xl transition shrink-0">
             <ChevronLeft className="w-5 h-5" />
@@ -138,59 +132,101 @@ export default function TopPicksToday() {
               <Flame className="w-6 h-6 text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.6)]" />
               Best Tips Today
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-white/30 mt-0.5">
               Ranked by composite score — confidence, edge, tactical fit &amp; form
             </p>
           </div>
         </div>
 
-        {/* Summary stats */}
-        {picks.length > 0 && (
+        {/* ── Summary stats ── */}
+        {allPicks.length > 0 && (
           <div className="grid grid-cols-3 gap-3 my-5">
-            <div className="bg-white/4 border border-white/8 rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-white">{picks.length}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Tips Today</p>
+            <div className="glass-card rounded-xl p-3 text-center">
+              <p className="text-xl font-black text-white">{allPicks.length}</p>
+              <p className="text-[9px] text-white/30 uppercase tracking-wider">Tips Today</p>
             </div>
-            <div className="bg-white/4 border border-white/8 rounded-xl p-3 text-center">
+            <div className="glass-card rounded-xl p-3 text-center">
               <p className="text-xl font-black text-primary">{avgConf}%</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg Confidence</p>
+              <p className="text-[9px] text-white/30 uppercase tracking-wider">Avg Confidence</p>
             </div>
-            <div className="bg-white/4 border border-white/8 rounded-xl p-3 text-center">
+            <div className="glass-card rounded-xl p-3 text-center">
               <p className="text-xl font-black text-emerald-400">{eliteCount}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Elite Picks</p>
+              <p className="text-[9px] text-white/30 uppercase tracking-wider">Elite Picks</p>
             </div>
           </div>
         )}
 
+        {/* ── Filter Tabs ── */}
+        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4">
+          {[
+            { key: "all" as FilterMode, label: "All Picks" },
+            { key: "elite" as FilterMode, label: "Elite" },
+            { key: "high_edge" as FilterMode, label: "High Edge" },
+            { key: "value" as FilterMode, label: "Value" },
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={cn(
+                "shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all",
+                filter === f.key
+                  ? "bg-primary/15 border-primary/30 text-primary"
+                  : "bg-white/[0.03] border-white/[0.06] text-white/30 hover:text-white/50"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 7-Day Track Record Strip ── */}
+        {weekStats && weekStats.totalPicks > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl glass-card mb-4"
+          >
+            <TrendingUp className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-[11px] text-white/50">
+              7-Day Record: <span className="text-primary font-bold">{weekStats.wins}W</span>
+              <span className="mx-1">·</span>
+              <span className="text-red-400 font-bold">{weekStats.losses}L</span>
+              <span className="mx-1">·</span>
+              <span className="text-white font-bold">{(weekStats.winRate || 0).toFixed(0)}% WR</span>
+            </span>
+          </motion.div>
+        )}
+
+        {/* ── Pick Cards ── */}
         {picks.length > 0 ? (
           <div className="space-y-3">
             {picks.map((pick, idx) => {
-              const quality = getQualityLabel(pick.composite ?? pick.score * 100);
+              const quality = getConfidenceTier(pick.composite ?? pick.score * 100);
               const isTop3 = idx < 3;
               const isTop = idx === 0;
 
               return (
                 <motion.div
                   key={pick.fixtureId}
-                  initial={{ opacity:0, y:16 }}
-                  animate={{ opacity:1, y:0 }}
-                  transition={{ duration:0.35, delay: idx * 0.05 }}
-                  whileHover={{ y: isTop3 ? -3 : -2, boxShadow: isTop ? "0 8px 32px rgba(16,231,116,0.18)" : isTop3 ? "0 6px 20px rgba(16,231,116,0.10)" : "0 4px 16px rgba(255,255,255,0.04)" }}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: idx * 0.04 }}
+                  whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenPanel(pick.fixtureId)}
                   className={cn(
-                    "relative rounded-2xl border p-4 cursor-pointer transition-colors group",
+                    "relative rounded-2xl border p-4 cursor-pointer transition-all group",
                     isTop
-                      ? "bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30 " + quality.glow
+                      ? "gradient-card-green glow-primary"
                       : isTop3
-                      ? "bg-white/5 border-white/15"
-                      : "bg-white/4 border-white/8"
+                      ? "glass-card border-white/10"
+                      : "glass-card"
                   )}
                 >
                   {/* Hot pick ribbon for #1 */}
                   {isTop && (
                     <div className="absolute top-0 right-4 -translate-y-1/2">
-                      <span className="flex items-center gap-1 bg-primary text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(16,231,116,0.5)]">
+                      <span className="flex items-center gap-1 bg-primary text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full shadow-[0_0_16px_rgba(16,231,116,0.5)]">
                         <Sparkles className="w-2.5 h-2.5" /> Hot Pick
                       </span>
                     </div>
@@ -209,54 +245,52 @@ export default function TopPicksToday() {
                           <h3 className="font-bold text-sm text-white leading-tight truncate">{pick.match}</h3>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {pick.tournament && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-white/6 rounded text-white/40 uppercase">
+                              <span className="text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-white/35 uppercase">
                                 {pick.tournament}
                               </span>
                             )}
                             {pick.time && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-white/30">
+                              <span className="flex items-center gap-0.5 text-[10px] text-white/25">
                                 <Clock className="w-2.5 h-2.5" />{pick.time}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        {/* Confidence ring — shows composite score */}
+                        {/* Confidence ring */}
                         <div className="shrink-0">
-                          <ConfRing value={pick.composite ?? pick.confidence} />
+                          <ConfidenceRing value={pick.composite ?? pick.confidence} size={52} strokeWidth={3.5} />
                         </div>
                       </div>
 
                       {/* Pick details row */}
                       <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1.5 bg-white/6 rounded-lg px-3 py-1.5">
+                        <div className="flex items-center gap-1.5 bg-white/[0.04] rounded-lg px-3 py-1.5">
                           <Target className="w-3 h-3 text-primary shrink-0" />
-                          <span className="text-[11px] text-white/60">{formatMarket(pick.market)}</span>
-                          <span className="text-[11px] text-white/30">·</span>
+                          <span className="text-[11px] text-white/50">{formatMarket(pick.market)}</span>
+                          <span className="text-[11px] text-white/20">·</span>
                           <span className="text-[11px] font-bold text-primary">{pick.pick}</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-white/6 rounded-lg px-2.5 py-1.5">
-                          <TrendingUp className="w-3 h-3 text-white/40 shrink-0" />
-                          <span className="text-[11px] text-white/60">{pick.probability.toFixed(1)}%</span>
+                        <div className="flex items-center gap-1 bg-white/[0.04] rounded-lg px-2.5 py-1.5">
+                          <TrendingUp className="w-3 h-3 text-white/35 shrink-0" />
+                          <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
-                        <div className={cn("px-2.5 py-1 rounded-lg border text-[10px] font-bold", quality.color)}>
-                          {quality.label}
-                        </div>
+                        <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
                       </div>
 
-                      {/* Analysis factors */}
+                      {/* Analysis factor tags */}
                       {pick.factors && (
                         <div className="mt-2 flex items-center gap-1 flex-wrap">
-                          <FactorBadge icon={<Activity className="w-2 h-2" />} label="Form" active={pick.factors.form} />
-                          <FactorBadge icon={<Users className="w-2 h-2" />} label="H2H" active={pick.factors.h2h} />
-                          <FactorBadge icon={<Zap className="w-2 h-2" />} label="xG" active={pick.factors.xg} />
-                          <FactorBadge icon={<Brain className="w-2 h-2" />} label="Tactical" active={pick.factors.tactical} />
+                          <FactorTag icon={<Activity className="w-2 h-2" />} label="Form" active={pick.factors.form} />
+                          <FactorTag icon={<Users className="w-2 h-2" />} label="H2H" active={pick.factors.h2h} />
+                          <FactorTag icon={<Zap className="w-2 h-2" />} label="xG" active={pick.factors.xg} />
+                          <FactorTag icon={<Brain className="w-2 h-2" />} label="Tactical" active={pick.factors.tactical} />
                         </div>
                       )}
 
                       {/* Composite score bar */}
                       <div className="mt-2.5 flex items-center gap-2">
-                        <div className="flex-1 bg-white/6 rounded-full h-1 overflow-hidden">
+                        <div className="flex-1 bg-white/[0.04] rounded-full h-1 overflow-hidden">
                           <div
                             className={cn(
                               "h-full rounded-full transition-all",
@@ -267,7 +301,7 @@ export default function TopPicksToday() {
                             style={{ width: `${Math.min(pick.composite ?? pick.score * 100, 100)}%` }}
                           />
                         </div>
-                        <span className="text-[9px] text-white/25 shrink-0 font-mono">
+                        <span className="text-[9px] text-white/20 shrink-0 font-mono tabular-nums">
                           {(pick.composite ?? pick.score * 100).toFixed(0)} pts
                         </span>
                       </div>
@@ -278,15 +312,19 @@ export default function TopPicksToday() {
             })}
           </div>
         ) : (
-          <div className="bg-white/4 border border-white/8 rounded-2xl p-12 text-center mt-6">
-            <Flame className="w-12 h-12 text-white/20 mx-auto mb-4" />
-            <p className="text-white/60 mb-2 font-semibold">No qualified tips yet today</p>
-            <p className="text-white/30 text-sm">The engine is selective — only high-quality picks make this list. Check back soon.</p>
+          <div className="glass-card rounded-2xl p-12 text-center mt-6">
+            <Flame className="w-12 h-12 text-white/15 mx-auto mb-4" />
+            <p className="text-white/50 mb-2 font-semibold">
+              {filter !== "all" ? "No picks match this filter" : "No qualified tips yet today"}
+            </p>
+            <p className="text-white/25 text-sm">
+              {filter !== "all" ? "Try a different filter or check back soon." : "The engine is selective — only high-quality picks make this list."}
+            </p>
           </div>
         )}
 
         {picks.length > 0 && (
-          <p className="text-center text-[11px] text-white/20 mt-8 flex items-center justify-center gap-1">
+          <p className="text-center text-[11px] text-white/15 mt-8 flex items-center justify-center gap-1">
             <Shield className="w-3 h-3" />
             Only picks above quality threshold. Always gamble responsibly.
           </p>
