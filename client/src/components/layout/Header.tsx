@@ -7,6 +7,7 @@ import {
   LayoutDashboard, ShieldCheck, Flame, Trophy, BarChart2, Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const DESKTOP_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
