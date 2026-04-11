@@ -40,10 +40,9 @@ function WinTicker() {
     <div className="overflow-hidden w-full py-3 bg-[#10e774]/5 border-y border-[#10e774]/10 relative">
       <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#080b10] to-transparent z-10" />
       <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#080b10] to-transparent z-10" />
-      <motion.div
-        animate={{ x: ["0%", "-50%"] }}
-        transition={{ duration: 28, ease: "linear", repeat: Infinity }}
-        className="flex gap-6 whitespace-nowrap w-max"
+      <div
+        className="flex gap-6 whitespace-nowrap w-max animate-[scroll_28s_linear_infinite]"
+        style={{ animationName: 'scroll' }}
       >
         {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
           <div key={i} className="flex items-center gap-2 text-xs shrink-0">
@@ -55,7 +54,13 @@ function WinTicker() {
             <span className="text-white/20">·</span>
           </div>
         ))}
-      </motion.div>
+      </div>
+      <style>{`
+        @keyframes scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
     </div>
   );
 }
