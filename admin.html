@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScorePhantom Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    
+    :root {
+      --primary: #10e774;
+      --bg: #080b10;
+      --panel: #0d1117;
+      --panel2: #111720;
+      --border: rgba(255,255,255,0.08);
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: var(--bg);
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+    
+    .font-display { font-family: 'Space Grotesk', sans-serif; }
+    
+    .glow { box-shadow: 0 0 20px rgba(16,231,116,0.15); }
+    
+    .btn-primary {
+      background: var(--primary);
+      color: #000;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    
+    .btn-danger {
+      background: rgba(239,68,68,0.15);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,0.3);
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    
+    .btn-success {
+      background: rgba(16,231,116,0.1);
+      color: var(--primary);
+      border: 1px solid rgba(16,231,116,0.3);
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .btn-success:hover { background: rgba(16,231,116,0.2); }
+
+    .btn-warn {
+      background: rgba(251,146,60,0.1);
+      color: #fb923c;
+      border: 1px solid rgba(251,146,60,0.3);
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .btn-warn:hover { background: rgba(251,146,60,0.2); }
+    
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+    .stat-card:hover { border-color: rgba(16,231,116,0.2); }
+    
+    input, select {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+    input::placeholder { color: #4a5568; }
+    
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .badge-active { background: rgba(16,231,116,0.15); color: var(--primary); border: 1px solid rgba(16,231,116,0.3); }
+    .badge-trial { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+    .badge-expired { background: rgba(255,255,255,0.05); color: #64748b; border: 1px solid rgba(255,255,255,0.08); }
+    
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 9999;
+      max-width: 320px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-color: rgba(16,231,116,0.4); color: var(--primary); }
+    .toast.error { border-color: rgba(239,68,68,0.4); color: #f87171; }
+    
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid rgba(16,231,116,0.2);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: #64748b;
+    }
+    .tab-btn.active {
+      background: rgba(16,231,116,0.1);
+      color: var(--primary);
+    }
+    .tab-btn:hover:not(.active) { color: #e2e8f0; }
+    
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 28px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Login Screen ──────────────────────────────────────────────────────── -->
+<div id="loginScreen" class="min-h-screen flex items-center justify-center p-6">
+  <div style="width:100%;max-width:400px">
+    <div class="text-center mb-8">
+      <div style="width:56px;height:56px;background:rgba(16,231,116,0.1);border:1px solid rgba(16,231,116,0.2);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;">👁</div>
+      <h1 class="font-display" style="font-size:28px;font-weight:700;color:#fff;letter-spacing:2px;">SCOREPHANTOM</h1>
+      <p style="color:#64748b;font-size:14px;margin-top:4px;">Admin Control Panel</p>
+    </div>
+    <div class="card" style="padding:28px;">
+      <div id="loginError" style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px;font-size:13px;color:#f87171;margin-bottom:16px;"></div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@example.com" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" style="width:100%;" onkeydown="if(event.key==='Enter')doLogin()" />
+      </div>
+      <button class="btn-primary" onclick="doLogin()" id="loginBtn" style="width:100%;padding:12px;">Sign In to Admin</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main App ──────────────────────────────────────────────────────────── -->
+<div id="mainApp" style="display:none;">
+  
+  <!-- Header -->
+  <header style="background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;">
+    <div style="max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">👁</span>
+        <span class="font-display" style="font-size:18px;font-weight:700;color:#fff;letter-spacing:2px;">SCOREPHANTOM</span>
+        <span style="background:rgba(16,231,116,0.1);color:var(--primary);border:1px solid rgba(16,231,116,0.3);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:0.1em;">ADMIN</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="adminEmail" style="font-size:13px;color:#64748b;"></span>
+        <button class="btn-secondary" onclick="logout()" style="padding:6px 14px;">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width:1400px;margin:0 auto;padding:28px 24px;">
+
+    <!-- Stats Row -->
+    <div id="statsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px;">
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Total Users</div>
+        <div class="font-display" id="statTotal" style="font-size:32px;font-weight:700;color:#fff;">—</div>
+      </div>
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Premium Active</div>
+        <div class="font-display" id="statActive" style="font-size:32px;font-weight:700;color:var(--primary);">—</div>
+      </div>
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">On Trial</div>
+        <div class="font-display" id="statTrial" style="font-size:32px;font-weight:700;color:#60a5fa;">—</div>
+      </div>
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Expired</div>
+        <div class="font-display" id="statExpired" style="font-size:32px;font-weight:700;color:#64748b;">—</div>
+      </div>
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Total Revenue</div>
+        <div class="font-display" id="statRevenue" style="font-size:28px;font-weight:700;color:var(--primary);">—</div>
+      </div>
+      <div class="stat-card" style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Today's Revenue</div>
+        <div class="font-display" id="statTodayRevenue" style="font-size:28px;font-weight:700;color:#fb923c;">—</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:6px;width:fit-content;">
+      <button class="tab-btn active" onclick="switchTab('users')" id="tab-users">👥 Users</button>
+      <button class="tab-btn" onclick="switchTab('payments')" id="tab-payments">💳 Payments</button>
+      <button class="tab-btn" onclick="switchTab('system')" id="tab-system">⚡ System</button>
+      <button class="tab-btn" onclick="switchTab('cache')" id="tab-cache">🗑️ Cache</button>
+      <button class="tab-btn" onclick="showTab('backtest')">&#127919; Accuracy</button>
+    </div>
+
+    <!-- Enrichment Control -->
+    <div class="card" style="margin-bottom:18px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span style="font-weight:600;font-size:14px;">🔍 Data Enrichment</span>
+      <button class="btn-primary" id="enrichBtn" onclick="runEnrichment()" style="padding:8px 18px;font-size:13px;">▶ Run Enrichment Now</button>
+      <span id="enrichStatus" style="font-size:13px;color:var(--text-muted);"></span>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="panel-users">
+      <!-- Search + Add Premium -->
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="searchInput" placeholder="Search by email..." style="flex:1;min-width:200px;max-width:360px;" oninput="debounceSearch()" />
+        <button class="btn-primary" onclick="openGrantModal()">+ Grant Premium</button>
+        <button class="btn-secondary" onclick="loadUsers()" style="padding:9px 14px;">↻ Refresh</button>
+      </div>
+
+      <div class="card" style="overflow:auto;">
+        <div id="userTableWrap">
+          <div style="display:flex;justify-content:center;padding:40px;"><div class="spinner"></div></div>
+        </div>
+        <!-- Pagination -->
+        <div id="userPagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:13px;color:#64748b;"></div>
+      </div>
+    </div>
+
+    <!-- Payments Tab -->
+    
+    <!-- SYSTEM PANEL -->
+    <div id="panel-system" style="display:none;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;" id="healthGrid">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <p style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Loading health...</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="loadHealth()">↻ Refresh Health</button>
+      </div>
+    </div>
+
+    <!-- CACHE PANEL -->
+    <div id="panel-cache" style="display:none;">
+      <!-- Cache Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;" id="cacheStatsGrid">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <p style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Fixture Controls -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">📡 Fixture Seeding</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Re-pull today's fixtures from LiveScore API</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="reseedFixtures()">↻ Reseed Today's Fixtures</button>
+        </div>
+      </div>
+
+      <!-- Enrichment Controls -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🔍 Enrichment</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Pull form, H2H, standings for unenriched fixtures</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="runEnrichmentN(50)">▶ Run 50 Fixtures</button>
+          <button class="btn-primary" onclick="runEnrichmentN(200)">▶ Run All (200)</button>
+        </div>
+      </div>
+
+      <!-- Odds Cache -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">📊 Odds Cache</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Clear stale odds so new league mappings kick in immediately</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-warn" onclick="clearLeagueCache()">🗑️ Clear League Slug Cache</button>
+          <button class="btn-warn" onclick="clearFixtureOdds()">🗑️ Clear All Fixture Odds</button>
+        </div>
+      </div>
+
+      <!-- Prediction Cache -->
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🧠 Prediction Cache</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Force engine to re-run fresh predictions (use after accuracy upgrades)</p>
+        <button class="btn-danger" onclick="clearPredictions()">⚠️ Clear Prediction Cache</button>
+      </div>
+    </div>
+
+    <div id="panel-payments" style="display:none;">
+      <div class="card" style="overflow:auto;">
+        <div id="paymentTableWrap">
+          <div style="display:flex;justify-content:center;padding:40px;"><div class="spinner"></div></div>
+        </div>
+        <div id="paymentPagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:13px;color:#64748b;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Grant Premium Modal -->
+<div id="grantModal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <h3 class="font-display" style="font-size:20px;font-weight:700;margin-bottom:6px;">Grant Premium Access</h3>
+    <p style="color:#64748b;font-size:13px;margin-bottom:20px;">Enter the user's email to grant or extend premium.</p>
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Email</label>
+      <input type="email" id="grantEmail" placeholder="user@example.com" style="width:100%;" />
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="display:block;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Duration (days)</label>
+      <input type="number" id="grantDays" value="30" min="1" max="365" style="width:100%;" />
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-primary" onclick="doGrantByEmail()" style="flex:1;padding:11px;">Grant Premium</button>
+      <button class="btn-secondary" onclick="closeModal('grantModal')" style="padding:11px 16px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="deleteModal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <div style="font-size:40px;text-align:center;margin-bottom:12px;">⚠️</div>
+    <h3 class="font-display" style="font-size:20px;font-weight:700;margin-bottom:6px;text-align:center;">Delete User?</h3>
+    <p id="deleteModalText" style="color:#64748b;font-size:13px;margin-bottom:24px;text-align:center;"></p>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-danger" onclick="confirmDelete()" style="flex:1;padding:11px;font-size:14px;">Yes, Delete</button>
+      <button class="btn-secondary" onclick="closeModal('deleteModal')" style="padding:11px 16px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script>
+  let authToken = sessionStorage.getItem('sp_admin_token') || '';
+  let adminEmailValue = sessionStorage.getItem('sp_admin_email') || '';
+  let currentTab = 'users';
+  let userPage = 1;
+  let paymentPage = 1;
+  let searchTimer = null;
+  let pendingDeleteId = null;
+  let pendingDeleteEmail = null;
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  if (authToken) {
+    showApp();
+  }
+
+  function showApp() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('adminEmail').textContent = adminEmailValue;
+    loadStats();
+    loadUsers();
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  async function doLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+
+    if (!email || !password) {
+      showLoginError('Please enter email and password.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    errEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      if (!data.user?.is_admin) throw new Error('Not an admin account');
+
+      authToken = data.token;
+      adminEmailValue = email;
+      sessionStorage.setItem('sp_admin_token', authToken);
+      sessionStorage.setItem('sp_admin_email', adminEmailValue);
+      showApp();
+    } catch (err) {
+      showLoginError(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign In to Admin';
+    }
+  }
+
+  function showLoginError(msg) {
+    const el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function logout() {
+    authToken = '';
+    adminEmailValue = '';
+    sessionStorage.removeItem('sp_admin_token');
+    sessionStorage.removeItem('sp_admin_email');
+    location.reload();
+  }
+
+  // ── API Helper ────────────────────────────────────────────────────────────
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        ...(opts.headers || {}),
+      },
+    });
+    if (res.status === 401 || res.status === 403) {
+      logout();
+      throw new Error('Session expired');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  async function loadStats() {
+    try {
+      const data = await api('/api/admin/stats');
+      document.getElementById('statTotal').textContent = data.users.total;
+      document.getElementById('statActive').textContent = data.users.active;
+      document.getElementById('statTrial').textContent = data.users.trial;
+      document.getElementById('statExpired').textContent = data.users.expired;
+      document.getElementById('statRevenue').textContent = `₦${Number(data.revenue.total).toLocaleString()}`;
+      document.getElementById('statTodayRevenue').textContent = `₦${Number(data.today.revenue).toLocaleString()}`;
+    } catch (e) {
+      console.error('Stats failed:', e.message);
+    }
+  }
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  async function loadUsers(page = userPage) {
+    userPage = page;
+    const search = document.getElementById('searchInput')?.value?.trim() || '';
+    const wrap = document.getElementById('userTableWrap');
+    wrap.innerHTML = '<div style="display:flex;justify-content:center;padding:40px;"><div class="spinner"></div></div>';
+
+    try {
+      const params = new URLSearchParams({ page, limit: 20, ...(search ? { search } : {}) });
+      const data = await api(`/api/admin/users?${params}`);
+      renderUserTable(data.users || []);
+      renderPagination('user', data.page, data.pages, data.total, loadUsers);
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#f87171;text-align:center;padding:40px;">${e.message}</p>`;
+    }
+  }
+
+  function renderUserTable(users) {
+    const wrap = document.getElementById('userTableWrap');
+    if (!users.length) {
+      wrap.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">No users found.</p>';
+      return;
+    }
+
+    const rows = users.map(u => {
+      const badgeClass = u.access_status === 'active' ? 'badge-active' : u.access_status === 'trial' ? 'badge-trial' : 'badge-expired';
+      const badgeLabel = u.access_status === 'active' ? 'PREMIUM' : u.access_status === 'trial' ? 'TRIAL' : 'EXPIRED';
+      const expiry = u.premium_expires_at
+        ? new Date(u.premium_expires_at).toLocaleDateString()
+        : u.trial_ends_at
+          ? `Trial ends ${new Date(u.trial_ends_at).toLocaleDateString()}`
+          : '—';
+
+      const emailVerifiedBadge = u.email_verified
+        ? `<span style="font-size:10px;background:#10e77420;color:#10e774;border:1px solid #10e77440;border-radius:6px;padding:1px 6px;">✓ Verified</span>`
+        : `<span style="font-size:10px;background:#f9731620;color:#fb923c;border:1px solid #f9731640;border-radius:6px;padding:1px 6px;">⚠ Unverified</span>`;
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600;color:#e2e8f0;">${u.email}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">ID: ${u.id} &nbsp;${emailVerifiedBadge}</div>
+          </td>
+          <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+          <td style="color:#94a3b8;font-size:12px;">${expiry}</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${u.access_status === 'active'
+                ? `<button class="btn-warn" onclick="revokeUser(${u.id}, '${u.email}')">Revoke Premium</button>`
+                : `<button class="btn-success" onclick="grantUser(${u.id}, '${u.email}')">Grant Premium</button>`
+              }
+              ${!u.email_verified ? `<button class="btn-secondary" onclick="forceVerifyEmail(${u.id}, '${u.email}')">Verify Email</button>` : ''}
+              <button class="btn-danger" onclick="deleteUser(${u.id}, '${u.email}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Status</th>
+            <th>Expiry / Trial</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  // ── Grant / Revoke ─────────────────────────────────────────────────────────
+  async function grantUser(id, email) {
+    if (!confirm(`Grant 30-day premium to ${email}?`)) return;
+    try {
+      await api(`/api/admin/users/${id}/grant`, { method: 'POST', body: JSON.stringify({ days: 30 }) });
+      showToast(`✅ Premium granted to ${email}`, 'success');
+      loadUsers();
+      loadStats();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  async function revokeUser(id, email) {
+    if (!confirm(`Revoke premium from ${email}?`)) return;
+    try {
+      await api(`/api/admin/users/${id}/revoke`, { method: 'POST' });
+      showToast(`✅ Premium revoked from ${email}`, 'success');
+      loadUsers();
+      loadStats();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  async function forceVerifyEmail(id, email) {
+    if (!confirm(`Force-verify email for ${email}? This will also reset their 1-day trial.`)) return;
+    try {
+      await api(`/api/admin/users/${id}/verify-email`, { method: 'POST' });
+      showToast(`✅ Email verified for ${email}`, 'success');
+      loadUsers();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  function deleteUser(id, email) {
+    pendingDeleteId = id;
+    pendingDeleteEmail = email;
+    document.getElementById('deleteModalText').textContent = `This will permanently delete "${email}" and all their data. This cannot be undone.`;
+    document.getElementById('deleteModal').style.display = 'flex';
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return;
+    closeModal('deleteModal');
+    try {
+      await api(`/api/admin/users/${pendingDeleteId}`, { method: 'DELETE' });
+      showToast(`✅ User ${pendingDeleteEmail} deleted`, 'success');
+      loadUsers();
+      loadStats();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+    pendingDeleteId = null;
+    pendingDeleteEmail = null;
+  }
+
+  // ── Grant by Email Modal ───────────────────────────────────────────────────
+  function openGrantModal() {
+    document.getElementById('grantEmail').value = '';
+    document.getElementById('grantDays').value = '30';
+    document.getElementById('grantModal').style.display = 'flex';
+  }
+
+  async function doGrantByEmail() {
+    const email = document.getElementById('grantEmail').value.trim();
+    const days = parseInt(document.getElementById('grantDays').value, 10) || 30;
+    if (!email) { showToast('Please enter an email', 'error'); return; }
+    try {
+      // Find user by email from users list, grant by id
+      const data = await api(`/api/admin/users?search=${encodeURIComponent(email)}&limit=1`);
+      const user = data.users?.[0];
+      if (!user) throw new Error('User not found');
+      await api(`/api/admin/users/${user.id}/grant`, { method: 'POST', body: JSON.stringify({ days }) });
+      showToast(`✅ ${days}-day premium granted to ${email}`, 'success');
+      closeModal('grantModal');
+      loadUsers();
+      loadStats();
+    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  // ── Payments ──────────────────────────────────────────────────────────────
+  async function runEnrichment() {
+    const btn = document.getElementById('enrichBtn');
+    const status = document.getElementById('enrichStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ Running...';
+    status.textContent = 'Enrichment in progress — this may take a few minutes...';
+    try {
+      const res = await api('/api/admin/run-enrichment', { method: 'POST', body: JSON.stringify({ limit: 50 }) });
+      if (res.error) throw new Error(res.error);
+      if (res.enriched !== undefined) {
+        status.textContent = `✅ Done! Enriched: ${res.enriched} | Failed: ${res.failed}`;
+      } else {
+        status.textContent = `✅ ${res.message || 'Enrichment running in background'}`;
+      }
+    } catch (err) {
+      status.textContent = `❌ Error: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Enrichment Now';
+    }
+  }
+
+  async function loadPayments(page = paymentPage) {
+    paymentPage = page;
+    const wrap = document.getElementById('paymentTableWrap');
+    wrap.innerHTML = '<div style="display:flex;justify-content:center;padding:40px;"><div class="spinner"></div></div>';
+    try {
+      const data = await api(`/api/admin/payments?page=${page}&limit=20`);
+      renderPaymentTable(data.payments || []);
+      renderPagination('payment', data.page, data.pages, data.total, loadPayments);
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#f87171;text-align:center;padding:40px;">${e.message}</p>`;
+    }
+  }
+
+  function renderPaymentTable(payments) {
+    const wrap = document.getElementById('paymentTableWrap');
+    if (!payments.length) {
+      wrap.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">No payments found.</p>';
+      return;
+    }
+
+    const rows = payments.map(p => {
+      const statusColors = {
+        verified: 'badge-active',
+        pending_verification: 'badge-trial',
+        initialized: 'badge-expired',
+      };
+      const statusClass = statusColors[p.status] || 'badge-expired';
+      const amount = `₦${Number(p.amount).toLocaleString()}`;
+      const date = p.paid_at
+        ? new Date(p.paid_at).toLocaleDateString()
+        : new Date(p.created_at).toLocaleDateString();
+
+      return `
+        <tr>
+          <td style="color:#94a3b8;font-size:12px;">${p.reference}</td>
+          <td><div style="font-weight:500;">${p.user_email || '—'}</div></td>
+          <td style="color:var(--primary);font-weight:600;">${amount}</td>
+          <td><span class="badge ${statusClass}">${p.status}</span></td>
+          <td style="color:#64748b;font-size:12px;">${p.channel || '—'}</td>
+          <td style="color:#94a3b8;font-size:12px;">${date}</td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>User</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Channel</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  function renderPagination(type, page, pages, total, loadFn) {
+    const el = document.getElementById(`${type}Pagination`);
+    if (!el) return;
+    const hasPrev = page > 1;
+    const hasNext = page < pages;
+    el.innerHTML = `
+      <span>${total} total</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn-secondary" onclick="${loadFn.name}(${page-1})" ${!hasPrev ? 'disabled style="opacity:0.4;"' : ''} style="padding:6px 12px;">← Prev</button>
+        <span style="color:#e2e8f0;font-weight:600;">Page ${page} / ${pages || 1}</span>
+        <button class="btn-secondary" onclick="${loadFn.name}(${page+1})" ${!hasNext ? 'disabled style="opacity:0.4;"' : ''} style="padding:6px 12px;">Next →</button>
+      </div>
+    `;
+  }
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById('panel-users').style.display = tab === 'users' ? 'block' : 'none';
+    document.getElementById('panel-payments').style.display = tab === 'payments' ? 'block' : 'none';
+    document.getElementById('panel-system').style.display = tab === 'system' ? 'block' : 'none';
+    document.getElementById('panel-cache').style.display = tab === 'cache' ? 'block' : 'none';
+    if (tab === 'payments') loadPayments(1);
+    if (tab === 'system') loadHealth();
+    if (tab === 'cache') loadCacheStats();
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  function debounceSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadUsers(1), 400);
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `toast ${type}`;
+    clearTimeout(toastTimer);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => el.classList.add('show'));
+    });
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+
+  // Close modals on backdrop click
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target === el) el.style.display = 'none';
+    });
+  });
+
+  async function loadCacheStats() {
+    const grid = document.getElementById('cacheStatsGrid');
+    if (!grid) return;
+    try {
+      const f = await api('/api/admin/fixture-stats');
+      const items = [
+        { label: "Today Fixtures", value: f.fixtures?.total ?? '-', sub: (f.fixtures?.enriched||0)+' enriched, '+(f.fixtures?.withOdds||0)+' with odds' },
+        { label: 'Predictions', value: f.cache?.predictions ?? '-', sub: 'cached' },
+        { label: 'League Slugs', value: f.cache?.leagueSlugs ?? '-', sub: 'cached' },
+        { label: 'Fixture Odds', value: f.cache?.fixtureOdds ?? '-', sub: 'cached' },
+      ];
+      grid.innerHTML = items.map(function(s) {
+        return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+          + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:4px;">'+s.label+'</p>'
+          + '<p style="font-size:24px;font-weight:900;color:#e2e8f0;">'+s.value+'</p>'
+          + (s.sub ? '<p style="font-size:11px;color:#64748b;">'+s.sub+'</p>' : '')
+          + '</div>';
+      }).join('');
+    } catch(e) {
+      if (grid) grid.innerHTML = '<p style="color:#f87171;font-size:12px;">Error: '+e.message+'</p>';
+    }
+  }
+
+  async function clearLeagueCache() {
+    if (!confirm('Clear league slug cache? Fresh odds will fetch on next prediction.')) return;
+    try { var r = await api('/api/admin/clear-odds-cache', { method: 'POST' }); showToast(r.message || 'League cache cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function clearFixtureOdds() {
+    if (!confirm('Clear all fixture odds? Matches re-fetch odds on next click.')) return;
+    try { var r = await api('/api/admin/clear-fixture-odds', { method: 'POST' }); showToast(r.message || 'Fixture odds cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function clearPredictions() {
+    if (!confirm('Clear ALL cached predictions? Engine re-runs fresh. Continue?')) return;
+    try { var r = await api('/api/admin/clear-prediction-cache', { method: 'POST' }); showToast(r.message || 'Prediction cache cleared'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function reseedFixtures() {
+    try { var r = await api('/api/admin/reseed', { method: 'POST' }); showToast(r.message || 'Reseeding in background...'); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function runEnrichmentN(n) {
+    showToast('Starting enrichment for ' + n + ' fixtures...');
+    try { var r = await api('/api/admin/run-enrichment', { method: 'POST', body: JSON.stringify({ limit: n }) }); showToast(r.message || 'Done: ' + (r.enriched ?? '?') + ' enriched'); loadCacheStats(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function loadHealth() {
+    var grid = document.getElementById('healthGrid');
+    if (!grid) return;
+    try {
+      var h = await api('/api/admin/system-health');
+      var checks = h.checks || {};
+      var overall = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;grid-column:1/-1;">'
+        + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Overall</p>'
+        + '<p style="font-size:18px;font-weight:900;color:'+(h.status==='healthy'?'#10e774':'#f87171')+';">'
+        + (h.status==='healthy' ? 'ALL SYSTEMS OK' : 'DEGRADED') + '</p></div>';
+      var rows = Object.entries(checks).map(function(entry) {
+        var key = entry[0], val = entry[1];
+        var ok = val==='ok' || String(val).includes('configured');
+        var warn = String(val).includes('no_') || val==='not_configured';
+        var color = ok ? '#10e774' : warn ? '#fb923c' : '#f87171';
+        var dot = ok ? 'OK' : warn ? 'WARN' : 'ERROR';
+        return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+          + '<p style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">'+key.replace(/_/g,' ')+'</p>'
+          + '<p style="font-size:13px;font-weight:900;color:'+color+';">'+String(val).toUpperCase()+'</p>'
+          + '</div>';
+      }).join('');
+      grid.innerHTML = overall + rows;
+    } catch(e) {
+      if (grid) grid.innerHTML = '<p style="color:#f87171;">Failed: '+e.message+'</p>';
+    }
+  }
+
+  async function verifyPayment(ref, email) {
+    if (!confirm('Verify ' + ref + ' and upgrade ' + email + ' to premium?')) return;
+    try { var r = await api('/api/admin/verify-payment/' + ref, { method: 'POST' }); showToast(r.message || 'Payment verified'); loadPayments(paymentPage); }
+    catch(e) { showToast(e.message, 'error'); }
+  }
+
+
+
+async function loadBacktestStats() {
+  const r = await api('/admin/backtest/stats');
+  const el = document.getElementById('backtest-stats');
+  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  const o = r.overall || {};
+  let html = '<div style="background:#1e293b;padding:16px;border-radius:8px;margin-bottom:16px">';
+  html += '<h3 style="margin:0 0 8px">Overall</h3>';
+  html += '<p>Total: <b>'+( o.total||0)+'</b> | Correct: <b>'+(o.correct||0)+'</b> | Wrong: <b>'+(o.wrong||0)+'</b> | Win Rate: <b style="color:'+(parseFloat(o.win_rate||0)>=60?'#22c55e':'#ef4444')+'">'+( o.win_rate||'?')+'%</b></p></div>';
+  if ((r.byMarket||[]).length) {
+    html += '<h3>By Market</h3><table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="background:#334155"><th style="padding:8px;text-align:left">Market</th><th>Total</th><th>Correct</th><th>Win Rate</th></tr>';
+    r.byMarket.forEach(m => {
+      const wr = parseFloat(m.win_rate||0);
+      html += '<tr style="border-bottom:1px solid #334155"><td style="padding:8px">'+m.predicted_market+'</td><td style="text-align:center">'+m.total+'</td><td style="text-align:center">'+m.correct+'</td><td style="text-align:center;color:'+(wr>=60?'#22c55e':'#ef4444')+'">'+m.win_rate+'%</td></tr>';
+    });
+    html += '</table>';
+  }
+  if ((r.recent||[]).length) {
+    html += '<h3 style="margin-top:16px">Recent Results</h3><table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="background:#334155"><th style="padding:8px">Match</th><th>Pick</th><th>Score</th><th>Outcome</th></tr>';
+    r.recent.forEach(row => {
+      const icon = row.outcome==='correct'?'✅':row.outcome==='wrong'?'❌':'⚪';
+      html += '<tr style="border-bottom:1px solid #334155"><td style="padding:8px">'+row.home_team+' vs '+row.away_team+'</td><td>'+row.predicted_selection+'</td><td>'+row.full_score+'</td><td>'+icon+'</td></tr>';
+    });
+    html += '</table>';
+  }
+  if (!o.total) html += '<p style="color:#888;margin-top:16px">No results yet. Add scores using the Backtest Run button or via API.</p>';
+  el.innerHTML = html;
+}
+
+async function runBacktest() {
+  const r = await api('/admin/backtest/run', 'POST', {});
+  const el = document.getElementById('backtest-stats');
+  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  if (r.pending === 0) {
+    el.innerHTML = '<p style="color:#888">No finished fixtures awaiting evaluation. Once matches complete (2h+ ago), results appear here.</p>';
+  } else {
+    let html = '<p style="color:#22c55e">' + r.pending + ' fixtures found awaiting scores:</p><ul>';
+    (r.fixtures||[]).forEach(f => { html += '<li>'+f.home+' vs '+f.away+' — Pick: '+f.selection+'</li>'; });
+    html += '</ul><p style="color:#888">Submit scores via: POST /api/admin/backtest/run {fixtureId, homeScore, awayScore}</p>';
+    el.innerHTML = html;
+  }
+}
+</script>
+</body>
+</html>
+  <div id="tab-backtest" class="tab-content" style="display:none">
+    <h2>&#127919; Prediction Accuracy</h2>
+    <div style="margin-bottom:16px">
+      <button onclick="loadBacktestStats()" style="background:#6366f1;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer">&#128257; Load Stats</button>
+      <button onclick="runBacktest()" style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-left:8px">&#9654; Find Pending Results</button>
+    </div>
+    <div id="backtest-stats"><p style="color:#888">Click Load Stats to see accuracy data</p></div>
+  </div>
+

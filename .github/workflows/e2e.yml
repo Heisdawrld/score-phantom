@@ -1,0 +1,41 @@
+﻿name: E2E (Playwright)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_BASE_URL: https://score-phantom.onrender.com
+      E2E_LOGIN_EMAIL: ${{ secrets.E2E_LOGIN_EMAIL }}
+      E2E_LOGIN_PASSWORD: ${{ secrets.E2E_LOGIN_PASSWORD }}
+      E2E_SIGNUP_EMAIL: ${{ secrets.E2E_SIGNUP_EMAIL }}
+      E2E_SIGNUP_PASSWORD: ${{ secrets.E2E_SIGNUP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate E2E credentials
+        run: |
+          if [ -z "${E2E_LOGIN_EMAIL}" ] || [ -z "${E2E_LOGIN_PASSWORD}" ]; then
+            echo "Missing E2E_LOGIN_EMAIL or E2E_LOGIN_PASSWORD secrets."
+            exit 1
+          fi
+      - name: Install Playwright
+        run: |
+          npm install --no-save @playwright/test
+          npx playwright install --with-deps
+      - name: Run E2E tests
+        run: npx playwright test
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

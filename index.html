@@ -1,0 +1,2815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>ScorePhantom</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0a0f0d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ScorePhantom" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="description" content="AI-powered football prediction engine. Daily ACCA picks, edge scoring, and value bets." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#07090d;
+      --panel:#0f141b;
+      --panel2:#131922;
+      --panel3:#181f2b;
+      --line:rgba(255,255,255,.07);
+      --line2:rgba(255,255,255,.04);
+      --text:#f4f7fb;
+      --muted:#97a0b2;
+      --muted2:#677183;
+      --green:#10e774;
+      --green2:#09c864;
+      --greenSoft:rgba(16,231,116,.10);
+      --blue:#4f89ff;
+      --orange:#ffb400;
+      --danger:#ff4d6d;
+      --shadow:0 18px 48px rgba(0,0,0,.38);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{
+      margin:0;padding:0;min-height:100%;
+      background:
+        radial-gradient(circle at top, rgba(16,231,116,.05), transparent 22%),
+        radial-gradient(circle at 88% 8%, rgba(79,137,255,.05), transparent 18%),
+        var(--bg);
+      color:var(--text);
+      font-family:'Outfit',sans-serif;
+      overflow-x:hidden;
+    }
+    button,input,textarea{font:inherit}
+    .hidden{display:none!important}
+
+    .app-shell{min-height:100vh;padding-bottom:28px}
+    .topbar{
+      position:sticky;top:0;z-index:30;
+      background:rgba(7,9,13,.9);
+      backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--line2);
+    }
+    .topbar-inner{padding:14px 14px 10px}
+    .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .brand{display:flex;align-items:center;gap:10px;min-width:0}
+    .brand-badge{
+      width:42px;height:42px;border-radius:13px;
+      background:linear-gradient(180deg,#0f141a,#0b1015);
+      border:1px solid rgba(16,231,116,.12);
+      box-shadow:0 0 20px rgba(16,231,116,.15);
+      display:grid;place-items:center;overflow:hidden;flex-shrink:0;
+    }
+    .brand-badge img{width:100%;height:100%;object-fit:cover}
+    .brand-fallback{
+      font-family:'Bebas Neue',sans-serif;
+      color:var(--green);
+      font-size:24px;
+      letter-spacing:1px;
+    }
+    .brand-name{
+      font-family:'Bebas Neue',sans-serif;
+      font-size:24px;line-height:1;letter-spacing:1.5px;white-space:nowrap;
+      background:linear-gradient(135deg,#fff 30%,var(--green) 70%,#4f89ff);
+      background-size:200% 200%;
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+      animation:brandGrad 6s ease infinite;
+    }
+    @keyframes brandGrad{
+      0%,100%{background-position:0% 50%}
+      50%{background-position:100% 50%}
+    }
+    .brand-name .green{color:var(--green);-webkit-text-fill-color:var(--green)}
+
+    .top-actions{display:flex;align-items:center;gap:8px}
+    .live-pill{
+      display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border-radius:14px;
+      border:1px solid rgba(16,231,116,.22);background:rgba(16,231,116,.06);
+      color:var(--green);font-size:11px;font-weight:800;letter-spacing:.18em;
+    }
+    .live-pill::before{
+      content:"";width:8px;height:8px;border-radius:999px;background:var(--green);
+      box-shadow:0 0 10px rgba(16,231,116,.75);
+    }
+    .menu-btn{
+      width:42px;height:42px;border:none;border-radius:13px;
+      background:rgba(255,255,255,.03);border:1px solid var(--line);
+      color:var(--text);font-size:18px;
+    }
+
+    /* Trial Banner */
+    .trial-banner{
+      padding:8px 14px;font-size:12px;font-weight:700;text-align:center;
+      border-bottom:1px solid var(--line2);display:none;
+      transition:all .3s ease;
+    }
+    .trial-banner.active{display:block}
+    .trial-banner.trial{
+      background:rgba(255,180,0,.08);color:#ffd277;
+      border-bottom-color:rgba(255,180,0,.15);
+    }
+    .trial-banner.expired{
+      background:rgba(255,77,109,.08);color:var(--danger);
+      border-bottom-color:rgba(255,77,109,.15);
+    }
+    .trial-banner.premium{
+      background:rgba(16,231,116,.06);color:var(--green);
+      border-bottom-color:rgba(16,231,116,.12);
+    }
+    .trial-banner a{
+      color:inherit;text-decoration:underline;cursor:pointer;font-weight:900;
+    }
+
+    .date-strip{
+      margin-top:12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
+    }
+    .date-strip::-webkit-scrollbar{display:none}
+    .date-tab{
+      min-width:66px;padding:9px 6px 10px;border-radius:16px;text-align:center;
+      color:var(--muted);border:1px solid transparent;
+      cursor:pointer;transition:all .2s ease;
+    }
+    .date-tab small{
+      display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:4px;
+    }
+    .date-tab strong{
+      display:block;font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;letter-spacing:1px;
+    }
+    .date-tab.active{
+      color:var(--green);
+      background:linear-gradient(180deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
+      border-color:rgba(16,231,116,.16);
+    }
+
+    .search-wrap{padding:12px 14px 8px}
+    .search-box{
+      display:flex;align-items:center;gap:10px;padding:14px 15px;border-radius:18px;
+      border:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+      transition:border-color .2s;
+    }
+    .search-box:focus-within{border-color:rgba(16,231,116,.25)}
+    .search-box svg{width:18px;height:18px;fill:var(--muted2)}
+    .search-box input{
+      flex:1;border:none;outline:none;background:transparent;color:var(--text);font-size:14px;
+    }
+    .search-box input::placeholder{color:var(--muted2)}
+
+    .section-head{
+      padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    }
+    .section-head .label{
+      font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);
+    }
+    .section-head .meta{font-size:12px;color:var(--muted)}
+    .board{padding:0 14px}
+
+    .league-row{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.012));
+      border-radius:18px;padding:14px;
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;
+      transition:transform .15s ease, border-color .2s;
+    }
+    .league-row:active{transform:scale(.985)}
+    .league-row-left{display:flex;align-items:center;gap:12px;min-width:0}
+    .league-emoji{
+      width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+      background:rgba(79,137,255,.08);border:1px solid rgba(79,137,255,.15);
+      font-size:18px;flex-shrink:0;
+    }
+    .league-info{min-width:0}
+    .league-name{
+      font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+    .league-country{
+      margin-top:3px;color:var(--muted);font-size:12px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+    .league-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .fixture-count{
+      min-width:34px;height:34px;padding:0 10px;border-radius:11px;display:grid;place-items:center;
+      background:rgba(255,255,255,.05);color:var(--text);font-weight:800;font-size:14px;
+    }
+    .chevron{color:var(--muted2);font-size:15px}
+
+    .loading,.empty-state,.error-state{
+      text-align:center;color:var(--muted);padding:30px 16px;
+    }
+    .spinner{
+      width:32px;height:32px;border-radius:999px;
+      border:3px solid rgba(255,255,255,.08);
+      border-top-color:var(--green);
+      animation:spin 1s linear infinite;
+      margin:0 auto 10px;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .profile-backdrop,.panel-backdrop,.modal-backdrop{
+      position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:70;display:none;
+    }
+    .profile-backdrop.active,.panel-backdrop.active,.modal-backdrop.active{display:block}
+
+    .profile-menu{
+      position:fixed;top:66px;right:14px;width:220px;z-index:80;border-radius:18px;
+      background:linear-gradient(180deg,#0f141a,#0b1015);border:1px solid var(--line);
+      box-shadow:0 18px 42px rgba(0,0,0,.42);padding:8px;display:none;
+    }
+    .profile-menu.active{display:block}
+    .profile-action{
+      width:100%;border:none;background:transparent;color:var(--text);
+      padding:13px 14px;border-radius:14px;text-align:left;font-size:14px;font-weight:700;
+      cursor:pointer;transition:background .15s;
+    }
+    .profile-action:hover{background:rgba(255,255,255,.03)}
+    .profile-action + .profile-action{margin-top:4px}
+    .profile-action.primary{
+      color:var(--green);background:rgba(16,231,116,.06);border:1px solid rgba(16,231,116,.16);
+    }
+    .profile-action.danger{
+      background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);
+    }
+
+    .panel{
+      position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
+      background:linear-gradient(180deg,#0b0f14,#080b10);
+      border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
+      box-shadow:0 -18px 50px rgba(0,0,0,.46);
+      transform:translateY(106%);transition:transform .32s cubic-bezier(.22,1,.36,1);overflow:hidden;
+    }
+    .panel.active{transform:translateY(0)}
+    /* ACCA slide-panel — same behaviour as .panel */
+    .slide-panel{
+      position:fixed;left:0;right:0;bottom:0;z-index:90;max-height:88vh;
+      background:linear-gradient(180deg,#0b0f14,#080b10);
+      border-top-left-radius:24px;border-top-right-radius:24px;border:1px solid var(--line);
+      box-shadow:0 -18px 50px rgba(0,0,0,.46);
+      transform:translateY(106%);transition:transform .32s cubic-bezier(.22,1,.36,1);overflow:hidden;
+      display:flex;flex-direction:column;
+    }
+    .slide-panel.active{transform:translateY(0)}
+    .slide-panel .panel-list{overflow-y:auto;flex:1;padding-bottom:26px}
+    .panel-handle{width:78px;height:6px;border-radius:999px;background:#3a414e;margin:10px auto 0}
+    .panel-close{
+      position:absolute;top:16px;right:14px;width:46px;height:46px;border:none;border-radius:999px;
+      background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);font-size:26px;
+      cursor:pointer;transition:background .15s;
+    }
+    .panel-close:hover{background:rgba(255,255,255,.06)}
+    .panel-scroll{max-height:calc(88vh - 10px);overflow-y:auto;padding-bottom:26px}
+    .panel-head{padding:16px 16px 14px;border-bottom:1px solid var(--line2)}
+    .panel-kicker{color:var(--muted);font-size:12px;letter-spacing:.12em}
+    .panel-title{margin-top:6px;font-size:22px;font-weight:800;line-height:1.15}
+    .panel-sub{color:var(--muted);font-size:13px;margin-top:4px}
+
+    .league-panel-list{padding:12px 12px 0}
+    .match-row{
+      display:grid;grid-template-columns:58px 1fr 40px;gap:10px;align-items:center;
+      padding:12px;border-radius:16px;background:rgba(255,255,255,.015);
+      border:1px solid var(--line2);margin-bottom:9px;cursor:pointer;
+      transition:transform .12s ease, background .15s;
+    }
+    .match-row:active{transform:scale(.98)}
+    .match-time{color:var(--muted);font-weight:800;font-size:13px;text-align:center}
+    .match-main{min-width:0}
+    .match-team{display:flex;align-items:center;gap:8px;min-width:0}
+    .match-team + .match-team{margin-top:7px}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--green);flex-shrink:0}
+    .dot.away{background:#4b5569}
+    .match-team-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .match-open{
+      width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);
+      background:rgba(255,255,255,.02);color:var(--muted);font-size:18px;
+      transition:background .15s;
+    }
+    .match-locked{opacity:.6}
+    .match-locked .match-open{font-size:14px}
+    .match-locked .pro-badge{display:inline-flex}
+    .pro-badge{
+      display:none;
+      font-size:9px;font-weight:900;letter-spacing:.15em;color:var(--orange);
+      background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.2);
+      padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:middle;
+    }
+
+    .sheet-head{padding:14px 14px 10px}
+    .sheet-league{font-size:12px;color:var(--muted)}
+    .prob-grid{margin-top:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+    .team-prob{text-align:center;min-width:0}
+    .team-prob .name{
+      font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1;letter-spacing:.8px;word-break:break-word;
+    }
+    .team-prob .pct{margin-top:6px;font-family:'Bebas Neue',sans-serif;font-size:18px;line-height:1}
+    .team-prob.home .pct{color:var(--green)}
+    .team-prob.away .pct{color:var(--blue)}
+    .draw-prob{text-align:center;color:var(--muted)}
+    .draw-prob .vs{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
+    .draw-prob .pct{margin-top:5px;font-family:'Bebas Neue',sans-serif;font-size:18px}
+    .draw-prob .lbl{font-size:12px;margin-top:2px}
+    .prob-bar{margin-top:12px;height:12px;border-radius:999px;overflow:hidden;display:flex;background:#161b23}
+    .prob-home{background:var(--green);transition:width .4s ease}
+    .prob-draw{background:var(--orange);transition:width .4s ease}
+    .prob-away{background:var(--blue);transition:width .4s ease}
+
+    /* Game Script Badge */
+    .game-script-badge{
+      margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    }
+    .script-tag{
+      display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:12px;
+      font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+      background:rgba(79,137,255,.1);border:1px solid rgba(79,137,255,.2);color:var(--blue);
+    }
+    .script-desc{font-size:12px;color:var(--muted);line-height:1.4}
+
+    /* Match Profile Pills */
+    .match-profile-pills{
+      margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;
+    }
+    .pill{
+      display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:10px;
+      font-size:11px;font-weight:700;letter-spacing:.06em;
+    }
+    .pill.risk-low{background:rgba(16,231,116,.1);color:var(--green);border:1px solid rgba(16,231,116,.18)}
+    .pill.risk-medium{background:rgba(255,180,0,.1);color:#ffd277;border:1px solid rgba(255,180,0,.18)}
+    .pill.risk-high{background:rgba(255,77,109,.1);color:var(--danger);border:1px solid rgba(255,77,109,.18)}
+    .pill.goals-low{background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--line)}
+    .pill.goals-medium{background:rgba(255,180,0,.08);color:#ffd277;border:1px solid rgba(255,180,0,.15)}
+    .pill.goals-high{background:rgba(79,137,255,.1);color:var(--blue);border:1px solid rgba(79,137,255,.18)}
+    .pill.decided-by{background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--line);font-size:10px}
+
+    .best-pick{
+      margin-top:12px;border:1px solid rgba(16,231,116,.18);
+      background:linear-gradient(135deg,rgba(16,231,116,.10),rgba(16,231,116,.03));
+      border-radius:18px;padding:14px;
+      transition:all .3s ease;
+    }
+    .best-pick .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+    .best-pick-row{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .best-pick-title{
+      font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;letter-spacing:1px;
+    }
+    .best-pick-badge{
+      flex-shrink:0;min-width:88px;text-align:center;padding:12px 10px;border-radius:14px;
+      border:1px solid rgba(16,231,116,.18);background:rgba(16,231,116,.07);
+    }
+    .best-pick-badge .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;color:var(--green)}
+    .best-pick-badge .small{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-top:4px}
+
+    /* Confidence Mini Pills */
+    .confidence-pills{
+      margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;
+    }
+    .conf-pill{
+      padding:4px 8px;border-radius:8px;font-size:10px;font-weight:800;letter-spacing:.06em;
+      background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--muted);
+    }
+    .conf-pill.high{background:rgba(16,231,116,.08);border-color:rgba(16,231,116,.18);color:var(--green)}
+    .conf-pill.strong{background:rgba(79,137,255,.08);border-color:rgba(79,137,255,.18);color:var(--blue)}
+    .conf-pill.low{background:rgba(16,231,116,.06);border-color:rgba(16,231,116,.12);color:var(--green)}
+    .conf-pill.medium{background:rgba(255,180,0,.08);border-color:rgba(255,180,0,.18);color:#ffd277}
+    .conf-pill.weak{background:rgba(255,77,109,.08);border-color:rgba(255,77,109,.18);color:var(--danger)}
+
+    /* Value Bet Badge */
+    .value-badge{
+      display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:10px;
+      font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;
+      background:linear-gradient(135deg,rgba(16,231,116,.15),rgba(79,137,255,.1));
+      border:1px solid rgba(16,231,116,.3);color:var(--green);
+      box-shadow:0 0 16px rgba(16,231,116,.15);
+      animation:valuePulse 2s ease-in-out infinite;
+    }
+    @keyframes valuePulse{
+      0%,100%{box-shadow:0 0 16px rgba(16,231,116,.15)}
+      50%{box-shadow:0 0 24px rgba(16,231,116,.3)}
+    }
+
+    /* Reasons list */
+    .reasons-list{
+      margin-top:10px;padding:0;list-style:none;
+    }
+    .reasons-list li{
+      position:relative;padding:4px 0 4px 16px;font-size:13px;color:#bcc4d1;line-height:1.55;
+    }
+    .reasons-list li::before{
+      content:"";position:absolute;left:0;top:11px;width:6px;height:6px;border-radius:999px;
+      background:var(--green);
+    }
+
+    .tabs{
+      margin-top:12px;display:flex;gap:0;overflow-x:auto;border-top:1px solid var(--line2);
+      border-bottom:1px solid var(--line2);scrollbar-width:none;
+    }
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{
+      flex:1;min-width:82px;padding:13px 8px;text-align:center;color:var(--muted2);font-size:12px;
+      font-weight:700;letter-spacing:.08em;position:relative;cursor:pointer;
+      transition:color .2s;
+    }
+    .tab.active{color:var(--green)}
+    .tab.active::after{
+      content:"";position:absolute;left:14%;right:14%;bottom:0;height:3px;border-radius:999px;background:var(--green);
+    }
+
+    .sheet-section{padding:14px 14px 0;transition:opacity .25s ease}
+    .sheet-label{
+      font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px;
+    }
+    .card{
+      border-radius:18px;border:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+      padding:14px;margin-bottom:12px;
+      transition:transform .15s ease;
+    }
+    .card.primary{
+      border-color:rgba(16,231,116,.18);
+      background:linear-gradient(135deg,rgba(16,231,116,.09),rgba(16,231,116,.03));
+    }
+    .card.rejected{
+      border-color:rgba(255,77,109,.12);
+      background:linear-gradient(135deg,rgba(255,77,109,.04),rgba(255,77,109,.01));
+    }
+    .card h3{
+      margin:0 0 8px;font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;letter-spacing:1px;
+    }
+    .card .sub{color:var(--green);font-size:13px;margin-bottom:10px}
+    .card p{margin:0;color:#bcc4d1;font-size:14px;line-height:1.65}
+
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+    .metric{
+      border:1px solid var(--line);background:rgba(255,255,255,.015);border-radius:14px;padding:12px 8px;text-align:center;
+    }
+    .metric .big{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1}
+    .metric .small{margin-top:6px;font-size:11px;color:var(--muted2);letter-spacing:.14em;text-transform:uppercase}
+    .progress{display:flex;height:10px;overflow:hidden;border-radius:999px;background:#171c24;margin-bottom:12px}
+    .mini-list{display:flex;flex-direction:column;gap:9px}
+    .mini-item{
+      display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line2);
+      border-radius:15px;background:rgba(255,255,255,.013);padding:12px;
+    }
+    .mini-a{font-size:14px;font-weight:700}
+    .mini-b{margin-top:4px;font-size:12px;color:var(--muted)}
+    .score-pill{
+      min-width:54px;height:48px;padding:0 10px;border-radius:14px;background:rgba(79,137,255,.11);
+      color:var(--blue);display:grid;place-items:center;font-size:20px;font-weight:800;
+    }
+
+    .table-wrap{border-radius:16px;border:1px solid var(--line);overflow:auto}
+    .table-wrap table{width:100%;border-collapse:collapse;min-width:560px}
+    .table-wrap th,.table-wrap td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+    .table-wrap th{
+      font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2);background:rgba(255,255,255,.02);
+    }
+    .table-wrap tr.highlight{background:rgba(16,231,116,.08)}
+    .table-wrap tr:last-child td{border-bottom:none}
+
+    .ai-box{border-radius:18px;border:1px solid var(--line);overflow:hidden;background:rgba(255,255,255,.015)}
+    .ai-log{max-height:260px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+    .msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.6}
+    .msg.user{align-self:flex-end;background:rgba(16,231,116,.12);border:1px solid rgba(16,231,116,.18)}
+    .msg.bot{align-self:flex-start;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+    .ai-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+    .ai-input input{
+      flex:1;border:none;outline:none;border-radius:14px;background:#0c1117;color:var(--text);
+      border:1px solid var(--line);padding:12px 14px;font-size:13px;
+    }
+    .ai-input button{
+      border:none;border-radius:14px;background:var(--green);color:#052014;font-weight:900;padding:12px 14px;
+      cursor:pointer;transition:opacity .15s;
+    }
+    .ai-input button:hover{opacity:.85}
+
+    /* AI Lock Overlay */
+    .ai-lock{
+      padding:36px 16px;text-align:center;
+    }
+    .ai-lock .lock-icon{font-size:48px;margin-bottom:14px}
+    .ai-lock .lock-title{font-weight:800;font-size:17px;margin-bottom:8px}
+    .ai-lock .lock-desc{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:22px}
+    .ai-lock .lock-btn{
+      padding:13px 28px;background:var(--green);border:none;border-radius:14px;
+      color:#04180f;font-weight:900;font-size:14px;cursor:pointer;
+      transition:opacity .15s;
+    }
+    .ai-lock .lock-btn:hover{opacity:.85}
+
+    .auth-wrap{
+      min-height:100vh;display:flex;align-items:center;justify-content:center;
+      padding:24px 16px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(16,231,116,.08), transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(79,137,255,.06), transparent 40%),
+        #07090d;
+    }
+    .auth-card{
+      width:100%;max-width:420px;
+      background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:28px;padding:32px 28px;
+      box-shadow:0 32px 80px rgba(0,0,0,.5);
+    }
+    .auth-logo{text-align:center;margin-bottom:28px}
+    .auth-logo img{
+      width:68px;height:68px;border-radius:18px;object-fit:cover;
+      border:1px solid rgba(16,231,116,.2);
+      box-shadow:0 0 30px rgba(16,231,116,.2);
+    }
+    .auth-fallback{
+      width:68px;height:68px;border-radius:18px;margin:0 auto;display:grid;place-items:center;
+      background:rgba(16,231,116,.1);border:1px solid rgba(16,231,116,.2);
+      font-family:'Bebas Neue',sans-serif;color:var(--green);font-size:28px;
+    }
+    .auth-title{
+      margin-top:14px;font-family:'Bebas Neue',sans-serif;font-size:32px;
+      letter-spacing:3px;color:#fff;
+    }
+    .auth-title .green{color:var(--green)}
+    .auth-copy{
+      color:var(--muted);font-size:13px;line-height:1.7;margin-top:6px;
+    }
+    .auth-switch{
+      display:flex;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+      border-radius:16px;padding:4px;margin-bottom:24px;gap:4px;
+    }
+    .auth-tab{
+      flex:1;text-align:center;padding:12px 10px;border-radius:13px;
+      font-weight:700;color:var(--muted);cursor:pointer;font-size:14px;
+      transition:all .15s;
+    }
+    .auth-tab.active{
+      background:linear-gradient(180deg,rgba(16,231,116,.12),rgba(16,231,116,.05));
+      color:var(--green);border:1px solid rgba(16,231,116,.18);
+    }
+    .field{margin-bottom:12px}
+    .field input{
+      width:100%;padding:15px 16px;border-radius:16px;
+      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+      color:var(--text);font-size:15px;outline:none;
+      transition:border-color .15s;
+    }
+    .field input:focus{border-color:rgba(16,231,116,.4);background:rgba(16,231,116,.03)}
+    .field input::placeholder{color:var(--muted2)}
+    .auth-btn{
+      width:100%;padding:16px;border:none;border-radius:16px;
+      background:linear-gradient(135deg,#10e774,#09c864);
+      color:#03150a;font-size:15px;font-weight:900;cursor:pointer;margin-top:6px;
+      box-shadow:0 8px 24px rgba(16,231,116,.25);
+      transition:opacity .15s, transform .1s;
+    }
+    .auth-btn:hover{opacity:.92;transform:translateY(-1px)}
+    .auth-btn:active{transform:translateY(0)}
+    .auth-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .auth-note{
+      text-align:center;color:var(--muted);font-size:12px;line-height:1.8;margin-top:16px;
+    }
+    .auth-msg{
+      text-align:center;color:var(--danger);font-size:13px;margin-top:10px;
+      min-height:18px;font-weight:600;
+    }
+    .auth-divider{
+      display:flex;align-items:center;gap:12px;margin:16px 0;
+    }
+    .auth-divider span{color:var(--muted2);font-size:12px;white-space:nowrap}
+    .auth-divider::before,.auth-divider::after{
+      content:'';flex:1;height:1px;background:rgba(255,255,255,.06);
+    }
+
+    .modal{
+      position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.95);
+      z-index:95;width:min(92vw,430px);border-radius:22px;border:1px solid var(--line);
+      background:linear-gradient(180deg,#0f141a,#0b1015);box-shadow:0 20px 60px rgba(0,0,0,.55);
+      display:none;overflow:hidden;
+      opacity:0;transition:transform .25s cubic-bezier(.22,1,.36,1), opacity .2s;
+    }
+    .modal.active{display:block;transform:translate(-50%,-50%) scale(1);opacity:1}
+    .modal-head{
+      padding:16px 18px;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+    }
+    .modal-title{font-size:18px;font-weight:800}
+    .modal-close{
+      width:34px;height:34px;border:none;border-radius:12px;background:rgba(255,255,255,.03);
+      border:1px solid var(--line);color:var(--muted);font-size:20px;cursor:pointer;
+      transition:background .15s;
+    }
+    .modal-close:hover{background:rgba(255,255,255,.06)}
+    .modal-body{padding:16px 18px;max-height:70vh;overflow-y:auto}
+    .kv{
+      display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:start;margin-bottom:10px;
+    }
+    .kv .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+    .kv .v{font-size:14px;font-weight:700;word-break:break-word}
+    .notice{
+      border:1px solid rgba(255,180,0,.2);background:rgba(255,180,0,.08);color:#ffd277;
+      border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+    }
+    .success{
+      border:1px solid rgba(16,231,116,.2);background:rgba(16,231,116,.08);color:#9df3c3;
+      border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.65;margin-top:10px;
+    }
+    .modal-actions{display:flex;gap:8px;margin-top:14px}
+    .modal-btn{
+      flex:1;border:none;border-radius:14px;padding:13px 14px;font-size:14px;font-weight:800;cursor:pointer;
+      transition:opacity .15s, transform .1s;
+    }
+    .modal-btn:active{transform:scale(.97)}
+    .modal-btn.primary{background:var(--green);color:#072114}
+    .modal-btn.secondary{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line)}
+    .modal-btn.whatsapp{background:#25D366;color:#fff}
+    .modal-btn:disabled{opacity:.5;cursor:not-allowed}
+
+    /* Bank transfer card */
+    .bank-card{
+      border:1px solid rgba(16,231,116,.2);background:rgba(16,231,116,.04);
+      border-radius:18px;padding:16px;margin-bottom:14px;
+    }
+    .bank-row{
+      display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+      border-bottom:1px solid rgba(255,255,255,.04);
+    }
+    .bank-row:last-child{border-bottom:none}
+    .bank-row .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+    .bank-row .value{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+    .copy-btn{
+      padding:4px 10px;border-radius:8px;border:1px solid rgba(16,231,116,.2);
+      background:rgba(16,231,116,.08);color:var(--green);font-size:11px;font-weight:800;
+      cursor:pointer;transition:all .15s;
+    }
+    .copy-btn:hover{background:rgba(16,231,116,.15)}
+    .copy-btn.copied{background:var(--green);color:#04180f}
+    .countdown-timer{
+      text-align:center;padding:8px;font-size:13px;color:var(--orange);font-weight:700;
+      margin-top:6px;
+    }
+    .ref-note{
+      font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px;
+      padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.02);
+      border:1px solid var(--line);
+    }
+
+    /* Upsell modal */
+    .upsell-features{margin:14px 0}
+    .upsell-row{
+      display:flex;align-items:flex-start;gap:10px;padding:8px 0;
+    }
+    .upsell-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+    .upsell-text{font-size:13px;color:#bcc4d1;line-height:1.5}
+    .upsell-text strong{color:var(--text)}
+
+    /* Feature comparison */
+    .feature-compare{
+      border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:12px;
+    }
+    .feature-compare-row{
+      display:grid;grid-template-columns:1fr 60px 60px;gap:0;
+      padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px;
+    }
+    .feature-compare-row:last-child{border-bottom:none}
+    .feature-compare-row.header{
+      font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+      background:rgba(255,255,255,.02);font-size:10px;
+    }
+    .feature-compare-row .check{text-align:center;color:var(--green)}
+    .feature-compare-row .cross{text-align:center;color:var(--muted2)}
+
+    /* Status Colors */
+    .status-badge{
+      display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:800;
+      letter-spacing:.08em;text-transform:uppercase;
+    }
+    .status-badge.premium{background:rgba(16,231,116,.1);color:var(--green);border:1px solid rgba(16,231,116,.2)}
+    .status-badge.trial{background:rgba(255,180,0,.1);color:#ffd277;border:1px solid rgba(255,180,0,.2)}
+    .status-badge.expired{background:rgba(255,77,109,.1);color:var(--danger);border:1px solid rgba(255,77,109,.2)}
+    .acca-nav-btn {
+      background: linear-gradient(135deg, #f0a500, #e06820);
+      border: none;
+      border-radius: 20px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+    }
+    .acca-pick-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .acca-pick-card .acca-match { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+    .acca-pick-card .acca-pick { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .acca-pick-card .acca-conf { font-size: 13px; color: var(--green); }
+    .acca-combined { background: linear-gradient(135deg, rgba(240,165,0,.12), rgba(224,104,32,.12)); border: 1px solid rgba(240,165,0,.3); border-radius: 14px; padding: 16px; margin-bottom: 16px; text-align: center; }
+    .acca-combined .acca-odds-num { font-size: 32px; font-weight: 800; color: #f0a500; }
+    .acca-combined .acca-odds-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .acca-lock-box { text-align: center; padding: 40px 20px; }
+    .acca-lock-box .lock-icon { font-size: 40px; margin-bottom: 12px; }
+    .acca-lock-box .lock-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .acca-lock-box .lock-desc { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; }
+    .acca-lock-box .lock-btn { background: var(--accent); border: none; border-radius: 20px; color: #fff; font-size: 15px; font-weight: 600; padding: 12px 28px; cursor: pointer; }
+    .markdown-body strong { font-weight: 700; }
+    .markdown-body em { font-style: italic; }
+    .markdown-body ul { padding-left: 20px; }
+    .markdown-body li { margin-bottom: 4px; }
+    .markdown-body p { margin-bottom: 8px; }
+    /* ─── Mobile Responsive ─── */
+    @media (max-width: 420px) {
+      /* Shrink brand name so header fits */
+      .brand-name { font-size: 18px; letter-spacing: 1px; }
+      .brand-badge { width: 34px; height: 34px; border-radius: 10px; }
+      .brand-fallback { font-size: 19px; }
+
+      /* Hide LIVE pill text on tiny screens, keep dot only */
+      .live-pill { padding: 7px 9px; font-size: 10px; gap: 5px; }
+      .live-pill::before { width: 7px; height: 7px; }
+
+      /* Smaller ACCA button */
+      .acca-nav-btn { font-size: 11px; padding: 5px 10px; }
+
+      /* Smaller menu button */
+      .menu-btn { width: 36px; height: 36px; font-size: 16px; }
+
+      /* Reduce topbar padding */
+      .topbar-inner { padding: 10px 10px 8px; }
+
+      /* Date strip smaller */
+      .date-tab { padding: 8px 10px; font-size: 11px; }
+      .date-tab .day-num { font-size: 18px; }
+    }
+
+    @media (max-width: 360px) {
+      /* On very small screens hide LIVE entirely */
+      .live-pill { display: none; }
+      .brand-name { font-size: 17px; }
+    }
+  /* ── PWA Install Banner ─────────────────────────────── */
+  #pwaInstallBanner {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: #0f141b;
+    border-top: 1px solid rgba(16,231,116,.25);
+    padding: 14px 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slideUpBanner .35s ease;
+  }
+  #pwaInstallBanner.hidden { display: none !important; }
+  @keyframes slideUpBanner {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+    /* FOMO & Premium Lock Styles */
+    .premium-lock-card{
+      border-radius:18px;border:1px solid rgba(255,180,0,.25);
+      background:linear-gradient(135deg,rgba(255,180,0,.06),rgba(255,77,109,.04));
+      padding:20px 16px;margin-bottom:12px;position:relative;overflow:hidden;
+    }
+    .premium-lock-card::before{
+      content:'';position:absolute;inset:0;
+      backdrop-filter:blur(2px);background:rgba(7,9,13,.6);border-radius:18px;
+      z-index:1;
+    }
+    .premium-lock-card .lock-content{position:relative;z-index:2;text-align:center}
+    .premium-lock-card .lock-icon{font-size:36px;margin-bottom:10px}
+    .premium-lock-card .lock-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:6px}
+    .premium-lock-card .lock-sub{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+    .premium-lock-card .lock-upgrade{
+      display:inline-block;padding:10px 22px;border-radius:12px;
+      background:linear-gradient(135deg,#10e774,#09c864);
+      color:#03150a;font-size:13px;font-weight:900;cursor:pointer;border:none;
+    }
+    .social-proof{
+      display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
+      background:rgba(16,231,116,.04);border:1px solid rgba(16,231,116,.1);
+      margin-bottom:12px;font-size:12px;color:var(--muted);
+    }
+    .social-proof .dot-live{
+      width:7px;height:7px;border-radius:999px;background:var(--green);
+      animation:livePulse 1.5s ease-in-out infinite;flex-shrink:0;
+    }
+    @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .alt-locked{
+      position:relative;overflow:hidden;border-radius:18px;
+    }
+    .alt-locked-overlay{
+      position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;backdrop-filter:blur(4px);background:rgba(7,9,13,.7);
+      border-radius:18px;z-index:2;padding:16px;text-align:center;
+    }
+    .alt-locked-overlay .alt-lock-text{font-size:13px;font-weight:700;color:#fff;margin-bottom:8px}
+    .alt-locked-overlay .alt-lock-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+    .alt-locked-overlay button{
+      padding:8px 18px;border-radius:10px;background:var(--green);
+      color:#03150a;font-size:12px;font-weight:900;border:none;cursor:pointer;
+    }
+  #pwaInstallBanner .pwa-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: #0a0f0d; border: 1px solid rgba(16,231,116,.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  #pwaInstallBanner .pwa-text { flex: 1; }
+  #pwaInstallBanner .pwa-text strong { display: block; font-size: 14px; font-weight: 700; color: #f4f7fb; }
+  #pwaInstallBanner .pwa-text span { font-size: 12px; color: #97a0b2; }
+  #pwaInstallBanner .pwa-install-btn {
+    background: #10e774; border: none; border-radius: 20px;
+    color: #000; font-size: 13px; font-weight: 700;
+    padding: 9px 18px; cursor: pointer; flex-shrink: 0;
+    white-space: nowrap;
+  }
+  #pwaInstallBanner .pwa-dismiss {
+    background: none; border: none; color: #677183;
+    font-size: 18px; cursor: pointer; padding: 4px 6px; flex-shrink: 0;
+  }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div id="authView" class="auth-wrap hidden">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <img id="authLogo" src="/logo.png" alt="ScorePhantom" onerror="this.classList.add('hidden');document.getElementById('authFallback').classList.remove('hidden')">
+        <div id="authFallback" class="auth-fallback hidden">SP</div>
+        <div class="auth-title">SCORE<span class="green">PHANTOM</span></div>
+        <div class="auth-copy">Sharper football reasoning, cleaner match boards, and premium market presentation.</div>
+      </div>
+
+      <div class="auth-switch">
+        <div id="tabSignup" class="auth-tab active">Sign Up</div>
+        <div id="tabLogin" class="auth-tab">Login</div>
+      </div>
+
+      <div class="field">
+        <input id="authEmail" type="email" placeholder="Email address">
+      </div>
+      <div class="field">
+        <input id="authPassword" type="password" placeholder="Password">
+      </div>
+      <div id="confirmField" class="field">
+        <input id="authConfirmPassword" type="password" placeholder="Confirm password">
+      </div>
+
+      <button id="authSubmit" class="auth-btn">Create Free Account</button>
+      <div class="auth-note">Free 3-day trial &bull; Full access to all predictions<br>Then &#8358;3,000/month for continued access</div>
+      <div id="authMsg" class="auth-msg"></div>
+    </div>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <!-- Trial Banner -->
+    <div id="trialBanner" class="trial-banner"></div>
+
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-row">
+          <div class="brand">
+            <div class="brand-badge">
+              <img id="mainLogo" src="/logo.png" alt="ScorePhantom" onerror="this.classList.add('hidden');document.getElementById('logoFallback').classList.remove('hidden')">
+              <div id="logoFallback" class="brand-fallback hidden">SP</div>
+            </div>
+            <div class="brand-name">SCORE<span class="green">PHANTOM</span></div>
+          </div>
+
+          <div class="top-actions">
+            <div class="live-pill">LIVE</div>
+            <button id="accaBtn" class="acca-nav-btn" title="Daily ACCA">⚡ ACCA</button>
+            <button id="menuBtn" class="menu-btn">&#9776;</button>
+          </div>
+        </div>
+
+        <div id="dateStrip" class="date-strip"></div>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 105.02 13.07l4.7 4.71 1.41-1.41-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z"/></svg>
+        <input id="searchInput" type="text" placeholder="Search by team or league">
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div class="label">Fixture Board</div>
+      <div class="meta" id="boardMeta">Top leagues prioritized first</div>
+    </div>
+
+    <div class="board" id="leagueContainer">
+      <div class="loading">
+        <div class="spinner"></div>
+        Loading fixtures...
+      </div>
+    </div>
+  </div>
+
+  <div id="profileBackdrop" class="profile-backdrop"></div>
+  <div id="profileMenu" class="profile-menu">
+    <button id="subscribeBtn" class="profile-action primary">Subscribe</button>
+    <button id="trialBtn" class="profile-action">Trial Status</button>
+    <button id="logoutBtn" class="profile-action danger">Log Out</button>
+  </div>
+
+  <div id="panelBackdrop" class="panel-backdrop"></div>
+
+  <div id="leaguePanel" class="panel">
+    <div class="panel-handle"></div>
+    <button id="leaguePanelClose" class="panel-close">&times;</button>
+    <div class="panel-scroll">
+      <div class="panel-head">
+        <div class="panel-kicker" id="leaguePanelCountry">Country</div>
+        <div class="panel-title" id="leaguePanelTitle">League</div>
+        <div class="panel-sub" id="leaguePanelSub">0 fixtures</div>
+      </div>
+      <div id="leaguePanelList" class="league-panel-list"></div>
+    </div>
+  </div>
+
+  <!-- ACCA Panel -->
+  <div id="accaPanel" class="slide-panel">
+    <div class="panel-header">
+      <button class="panel-back" id="accaBack">&#8592;</button>
+      <div class="panel-title-block">
+        <div class="panel-label">⚡ DAILY ACCA</div>
+        <div id="accaTitle" class="panel-title">Best 5 Picks</div>
+        <div id="accaSub" class="panel-sub">Premium feature</div>
+      </div>
+    </div>
+    <div id="accaContent" class="panel-list" style="padding:16px"></div>
+  </div>
+
+  <div id="matchPanel" class="panel">
+    <div class="panel-handle"></div>
+    <button id="matchPanelClose" class="panel-close">&times;</button>
+    <div class="panel-scroll">
+      <div class="sheet-head">
+        <div id="sheetLeague" class="sheet-league">League</div>
+
+        <div class="prob-grid">
+          <div class="team-prob home">
+            <div id="sheetHomeName" class="name">HOME</div>
+            <div id="sheetHomePct" class="pct">0%</div>
+          </div>
+          <div class="draw-prob">
+            <div class="vs">VS</div>
+            <div id="sheetDrawPct" class="pct">0%</div>
+            <div class="lbl">Draw</div>
+          </div>
+          <div class="team-prob away">
+            <div id="sheetAwayName" class="name">AWAY</div>
+            <div id="sheetAwayPct" class="pct">0%</div>
+          </div>
+        </div>
+
+        <div class="prob-bar">
+          <div id="probHomeBar" class="prob-home" style="width:33%"></div>
+          <div id="probDrawBar" class="prob-draw" style="width:34%"></div>
+          <div id="probAwayBar" class="prob-away" style="width:33%"></div>
+        </div>
+
+        <!-- Game Script + Match Profile -->
+        <div id="gameScriptArea" class="game-script-badge"></div>
+        <div id="matchProfilePills" class="match-profile-pills"></div>
+
+        <div class="best-pick">
+          <div class="eyebrow">Best Pick</div>
+          <div class="best-pick-row">
+            <div id="heroPickTitle" class="best-pick-title">Loading...</div>
+            <div class="best-pick-badge">
+              <div id="heroPickPct" class="big">0%</div>
+              <div class="small">Confidence</div>
+            </div>
+          </div>
+          <div id="heroConfidencePills" class="confidence-pills"></div>
+          <div id="heroValueBadge" style="margin-top:8px"></div>
+          <ul id="heroReasons" class="reasons-list"></ul>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="preview">Preview</div>
+        <div class="tab" data-tab="predictions">Picks</div>
+        <div class="tab" data-tab="form">Form</div>
+        <div class="tab" data-tab="table">Table</div>
+        <div class="tab" data-tab="ai">AI</div>
+      </div>
+
+      <div id="tab-preview" class="sheet-section">
+        <div class="sheet-label">Match Preview</div>
+        <div id="previewBox" class="card">Loading preview...</div>
+      </div>
+
+      <div id="tab-predictions" class="sheet-section hidden">
+        <div class="sheet-label">Recommended Pick</div>
+        <div id="predictionMainCard" class="card primary">
+          <h3 id="predictionMain">Loading...</h3>
+          <div id="predictionMeta" class="sub"></div>
+          <div id="predictionConfPills" class="confidence-pills"></div>
+          <div id="predictionValueBadge" style="margin-top:8px"></div>
+          <ul id="predictionReasons" class="reasons-list"></ul>
+          <p id="predictionReason" style="margin-top:8px">Loading reasoning...</p>
+        </div>
+
+        <div id="oddsEdgeCard" class="hidden"></div>
+
+        <div class="sheet-label">Alternative Pick</div>
+        <div class="card">
+          <h3 id="alternativeMain">Loading...</h3>
+          <div id="alternativeMeta" class="sub"></div>
+          <p id="alternativeReason">Loading...</p>
+        </div>
+
+        <div id="fomoSection" class="hidden"></div>
+
+        <div id="rejectedSection" class="hidden">
+          <div class="sheet-label">Rejected Picks</div>
+          <div id="rejectedList"></div>
+        </div>
+      </div>
+
+      <div id="tab-form" class="sheet-section hidden">
+        <div class="sheet-label">Head To Head</div>
+        <div class="metrics">
+          <div class="metric">
+            <div id="h2hHomeWins" class="big">0</div>
+            <div id="h2hHomeLbl" class="small">Home</div>
+          </div>
+          <div class="metric">
+            <div id="h2hDraws" class="big">0</div>
+            <div class="small">Draws</div>
+          </div>
+          <div class="metric">
+            <div id="h2hAwayWins" class="big">0</div>
+            <div id="h2hAwayLbl" class="small">Away</div>
+          </div>
+        </div>
+
+        <div class="progress">
+          <div id="h2hHomeBar" class="prob-home" style="width:33%"></div>
+          <div id="h2hDrawBar" class="prob-draw" style="width:34%"></div>
+          <div id="h2hAwayBar" class="prob-away" style="width:33%"></div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size:22px">H2H Matches</h3>
+          <div id="h2hList" class="mini-list"></div>
+        </div>
+
+        <div class="card">
+          <h3 id="homeRecentTitle" style="font-size:22px">Home — Recent Results</h3>
+          <div id="homeFormList" class="mini-list"></div>
+        </div>
+
+        <div class="card">
+          <h3 id="awayRecentTitle" style="font-size:22px">Away — Recent Results</h3>
+          <div id="awayFormList" class="mini-list"></div>
+        </div>
+      </div>
+
+      <div id="tab-table" class="sheet-section hidden">
+        <div class="sheet-label">League Table</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Pos</th>
+                <th>Team</th>
+                <th>G</th>
+                <th>W</th>
+                <th>D</th>
+                <th>L</th>
+                <th>Pts</th>
+                <th>Form</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-ai" class="sheet-section hidden">
+        <div class="sheet-label">AI Analysis</div>
+        <div id="aiContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop"></div>
+
+  <!-- Subscribe Modal (OPay Bank Transfer) -->
+  <div id="subscribeModal" class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Subscribe</div>
+      <button class="modal-close" data-close-modal="subscribeModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="subscribeContent" class="loading">
+        <div class="spinner"></div>
+        Preparing payment...
+      </div>
+    </div>
+  </div>
+
+  <!-- Trial Status Modal -->
+  <div id="trialModal" class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Account Status</div>
+      <button class="modal-close" data-close-modal="trialModal">&times;</button>
+    </div>
+    <div class="modal-body" id="trialContent">
+      <div class="loading">
+        <div class="spinner"></div>
+        Loading account status...
+      </div>
+    </div>
+  </div>
+
+  <!-- Premium Upsell Modal -->
+  <div id="upsellModal" class="modal">
+    <div class="modal-head">
+      <div class="modal-title">&#11088; Go Premium</div>
+      <button class="modal-close" data-close-modal="upsellModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:40px;margin-bottom:6px">&#9917;</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:4px">Unlock Full Access</div>
+        <div style="color:var(--muted);font-size:13px">Get every prediction, every match, every day.</div>
+      </div>
+      <div class="upsell-features">
+        <div class="upsell-row"><div class="upsell-icon">&#128273;</div><div class="upsell-text"><strong>All Matches Unlocked</strong> &mdash; Access predictions for every fixture across all leagues</div></div>
+        <div class="upsell-row"><div class="upsell-icon">&#129504;</div><div class="upsell-text"><strong>AI Match Chat</strong> &mdash; Ask our AI anything about any match in real-time</div></div>
+        <div class="upsell-row"><div class="upsell-icon">&#128200;</div><div class="upsell-text"><strong>Value Bet Detection</strong> &mdash; See where the model finds edges over the market</div></div>
+        <div class="upsell-row"><div class="upsell-icon">&#127942;</div><div class="upsell-text"><strong>Game Scripts &amp; Deep Analysis</strong> &mdash; Full prediction reasoning and confidence breakdowns</div></div>
+      </div>
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--green);letter-spacing:2px">&#8358;3,000<span style="font-size:16px;color:var(--muted)">/month</span></div>
+      </div>
+      <div class="modal-actions">
+        <button id="upsellSubscribeBtn" class="modal-btn primary">Subscribe Now</button>
+        <button class="modal-btn secondary" data-close-modal="upsellModal">Maybe Later</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API = '/api';
+  let authToken = localStorage.getItem('sp_token') || '';
+  let currentAuthMode = 'signup';
+  let allFixtures = [];
+  let currentUser = null;
+  let paymentCountdownInterval = null;
+
+  function isActiveSub() {
+    if (!currentUser) return false;
+    if (currentUser.status === 'premium') {
+      return !currentUser.premium_expires_at || new Date(currentUser.premium_expires_at) > new Date();
+    }
+    return false;
+  }
+
+  function isTrialActive() {
+    if (!currentUser) return false;
+    if (currentUser.status === 'trial') {
+      return !currentUser.trial_ends_at || new Date(currentUser.trial_ends_at) > new Date();
+    }
+    return false;
+  }
+
+  function hasAnyAccess() {
+    return isActiveSub() || isTrialActive();
+  }
+
+  // isPremium = alias for isActiveSub (used in FOMO rendering)
+  function isPremium() {
+    return isActiveSub();
+  }
+
+  function markFreeFixtures(fixtures) {
+    const leagueCounts = {};
+    const sorted = [...fixtures].sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
+    for (const f of sorted) {
+      const key = String(f.tournament_id);
+      if (!leagueCounts[key]) leagueCounts[key] = 0;
+      f._isFree = leagueCounts[key] < 2;
+      if (f._isFree) leagueCounts[key]++;
+    }
+    return fixtures;
+  }
+
+  function updateTrialBanner() {
+    const banner = document.getElementById('trialBanner');
+    if (!currentUser || !banner) return;
+
+    banner.className = 'trial-banner';
+
+    if (isActiveSub()) {
+      const exp = currentUser.premium_expires_at ? new Date(currentUser.premium_expires_at) : null;
+      const daysLeft = exp ? Math.max(0, Math.ceil((exp - new Date()) / 86400000)) : '∞';
+      banner.innerHTML = '&#9733; Premium Active &bull; ' + daysLeft + ' days remaining';
+      banner.classList.add('active', 'premium');
+    } else if (isTrialActive()) {
+      const ends = new Date(currentUser.trial_ends_at);
+      const daysLeft = Math.max(0, Math.ceil((ends - new Date()) / 86400000));
+      const _todayKey = new Date().toISOString().slice(0, 10);
+      const _matchesViewed = parseInt(localStorage.getItem('trial_opens_' + _todayKey) || '0', 10);
+      const _counterPart = _matchesViewed > 0 ? ' &bull; ' + _matchesViewed + '/10 today' : '';
+      banner.innerHTML = 'Free Trial &bull; ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left' + _counterPart + ' &bull; <a onclick="openSubscribeModal()">Upgrade</a>';
+      banner.classList.add('active', 'trial');
+    } else {
+      banner.innerHTML = 'Trial Expired &bull; <a onclick="openSubscribeModal()">Subscribe to continue</a>';
+      banner.classList.add('active', 'expired');
+    }
+  }
+
+  function updateMenuBadge() {
+    if (!currentUser) return;
+    const trialBtn2 = document.getElementById('trialBtn');
+    if (!trialBtn2) return;
+    if (isActiveSub()) {
+      trialBtn2.textContent = 'Premium Active';
+      trialBtn2.style.color = 'var(--green)';
+    } else if (isTrialActive()) {
+      const ends = new Date(currentUser.trial_ends_at);
+      const daysLeft = Math.max(0, Math.ceil((ends - new Date()) / 86400000));
+      trialBtn2.textContent = 'Trial: ' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' left';
+      trialBtn2.style.color = '';
+    } else {
+      trialBtn2.textContent = 'Trial Expired';
+      trialBtn2.style.color = 'var(--danger)';
+    }
+  }
+
+  let groupedFixtures = [];
+  let selectedDate = null;
+  let selectedLeague = null;
+  let selectedFixture = null;
+  let lastPredictionData = null;
+
+  const PRIORITY_LEAGUES = [
+    { country: "England", league: "Premier League" },
+    { country: "Spain", league: "LaLiga Santander" },
+    { country: "Spain", league: "La Liga" },
+    { country: "Italy", league: "Serie A" },
+    { country: "Germany", league: "Bundesliga" },
+    { country: "France", league: "Ligue 1" },
+    { country: "Netherlands", league: "Eredivisie" },
+    { country: "Portugal", league: "Primeira Liga" },
+    { country: "Scotland", league: "Championship" },
+    { country: "Scotland", league: "Scottish Premiership" },
+    { country: "Austria", league: "Bundesliga" },
+    { country: "Europe", league: "UEFA Champions League" },
+    { country: "Europe", league: "UEFA Europa League" }
+  ];
+
+  const authView = document.getElementById('authView');
+  const appView = document.getElementById('appView');
+  const tabSignup = document.getElementById('tabSignup');
+  const tabLogin = document.getElementById('tabLogin');
+  const authSubmit = document.getElementById('authSubmit');
+  const authMsg = document.getElementById('authMsg');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authConfirmPassword = document.getElementById('authConfirmPassword');
+  const confirmField = document.getElementById('confirmField');
+
+  const dateStrip = document.getElementById('dateStrip');
+  const leagueContainer = document.getElementById('leagueContainer');
+  const searchInput = document.getElementById('searchInput');
+  const boardMeta = document.getElementById('boardMeta');
+
+  const menuBtn = document.getElementById('menuBtn');
+  const profileBackdrop = document.getElementById('profileBackdrop');
+  const profileMenu = document.getElementById('profileMenu');
+  const subscribeBtn = document.getElementById('subscribeBtn');
+  const trialBtn = document.getElementById('trialBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  const panelBackdrop = document.getElementById('panelBackdrop');
+  const modalBackdrop = document.getElementById('modalBackdrop');
+
+  const leaguePanel = document.getElementById('leaguePanel');
+  const leaguePanelClose = document.getElementById('leaguePanelClose');
+  const leaguePanelTitle = document.getElementById('leaguePanelTitle');
+  const leaguePanelCountry = document.getElementById('leaguePanelCountry');
+  const leaguePanelSub = document.getElementById('leaguePanelSub');
+  const leaguePanelList = document.getElementById('leaguePanelList');
+
+  const matchPanel = document.getElementById('matchPanel');
+  const matchPanelClose = document.getElementById('matchPanelClose');
+
+  const previewBox = document.getElementById('previewBox');
+  const predictionMain = document.getElementById('predictionMain');
+  const predictionMeta = document.getElementById('predictionMeta');
+  const predictionReason = document.getElementById('predictionReason');
+  const alternativeMain = document.getElementById('alternativeMain');
+  const alternativeMeta = document.getElementById('alternativeMeta');
+  const alternativeReason = document.getElementById('alternativeReason');
+
+  const subscribeModal = document.getElementById('subscribeModal');
+  const trialModal = document.getElementById('trialModal');
+  const upsellModal = document.getElementById('upsellModal');
+
+  function safeNum(v, fallback = 0) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function escapeHtml(s = '') {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function getTodayDateString(offset = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function formatDayLabel(offset) {
+    if (offset === -1) return 'YEST';
+    if (offset === 0) return 'TODAY';
+    if (offset === 1) return 'TMR';
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  }
+
+  function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function countryToFlagEmoji(country) {
+    country = country || '';
+    const map = {
+      andorra:'🇦🇩',argentina:'🇦🇷',armenia:'🇦🇲',australia:'🇦🇺',austria:'🇦🇹',
+      belgium:'🇧🇪',brazil:'🇧🇷',bulgaria:'🇧🇬',canada:'🇨🇦',chile:'🇨🇱',
+      china:'🇨🇳',colombia:'🇨🇴',croatia:'🇭🇷',cyprus:'🇨🇾',"czech republic":'🇨🇿',
+      denmark:'🇩🇰',egypt:'🇪🇬',england:'🏴',estonia:'🇪🇪',europe:'🇪🇺',
+      finland:'🇫🇮',france:'🇫🇷',germany:'🇩🇪',greece:'🇬🇷',hungary:'🇭🇺',
+      iceland:'🇮🇸',india:'🇮🇳',indonesia:'🇮🇩',ireland:'🇮🇪',israel:'🇮🇱',
+      italy:'🇮🇹',jamaica:'🇯🇲',japan:'🇯🇵',kazakhstan:'🇰🇿',latvia:'🇱🇻',
+      lithuania:'🇱🇹',mexico:'🇲🇽',morocco:'🇲🇦',netherlands:'🇳🇱',"new zealand":'🇳🇿',
+      nigeria:'🇳🇬',norway:'🇳🇴',paraguay:'🇵🇾',peru:'🇵🇪',poland:'🇵🇱',
+      portugal:'🇵🇹',qatar:'🇶🇦',romania:'🇷🇴',"saudi arabia":'🇸🇦',scotland:'🏴',
+      serbia:'🇷🇸',slovakia:'🇸🇰',slovenia:'🇸🇮',"south africa":'🇿🇦',
+      "south korea":'🇰🇷',spain:'🇪🇸',sweden:'🇸🇪',switzerland:'🇨🇭',
+      turkey:'🇹🇷',ukraine:'🇺🇦',"united states":'🇺🇸',usa:'🇺🇸',
+      uruguay:'🇺🇾',wales:'🏴'
+    };
+    return map[String(country).trim().toLowerCase()] || '🌍';
+  }
+
+  function inferCountryFromLeague(league) {
+    league = league || '';
+    const l = String(league).trim().toLowerCase();
+    if (l === 'serie a') return 'Italy';
+    if (l === 'ligue 1') return 'France';
+    if (l === 'eredivisie') return 'Netherlands';
+    if (l === 'primeira liga') return 'Portugal';
+    if (l === 'super lig') return 'Turkey';
+    if (l === 'la liga' || l === 'laliga santander') return 'Spain';
+    if (l === 'uefa champions league' || l === 'champions league') return 'Europe';
+    if (l === 'uefa europa league') return 'Europe';
+    return '';
+  }
+
+  function displayCountryForGroup(group) {
+    const raw = String(group.country || '').trim();
+    if (raw && raw.toLowerCase() !== 'other') return raw;
+    const inferred = inferCountryFromLeague(group.league);
+    if (inferred) return inferred;
+    return 'Unclassified';
+  }
+
+  function leaguePriority(country, league) {
+    country = country || '';
+    league = league || '';
+    const c = String(country).toLowerCase().trim();
+    const l = String(league).toLowerCase().trim();
+    const idx = PRIORITY_LEAGUES.findIndex(item =>
+      item.country.toLowerCase() === c && item.league.toLowerCase() === l
+    );
+    return idx === -1 ? 999 : idx;
+  }
+
+  async function apiFetch(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (authToken) headers.Authorization = 'Bearer ' + authToken;
+    if (!headers['Content-Type'] && options.method && options.method !== 'GET') {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const res = await fetch(API + path, Object.assign({}, options, { headers: headers }));
+    const raw = await res.text();
+
+    var data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch(e) {
+      data = { error: raw || ('HTTP ' + res.status) };
+    }
+
+    if (!res.ok) throw new Error(data.error || data.detail || ('HTTP ' + res.status));
+    return data;
+  }
+
+  function buildDateTabs() {
+    var offsets = [-1, 0, 1, 2, 3, 4];
+    dateStrip.innerHTML = offsets.map(function(offset) {
+      var date = getTodayDateString(offset);
+      var active = date === selectedDate ? 'active' : '';
+      return '<div class="date-tab ' + active + '" data-date="' + date + '">' +
+        '<small>' + formatDayLabel(offset) + '</small>' +
+        '<strong>' + date.slice(-2) + '</strong>' +
+        '</div>';
+    }).join('');
+
+    dateStrip.querySelectorAll('.date-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        selectedDate = tab.dataset.date;
+        buildDateTabs();
+        loadFixtures();
+      });
+    });
+  }
+
+  function groupByLeague(fixtures) {
+    var groups = new Map();
+
+    fixtures.forEach(function(f) {
+      var tournamentId = String(f.tournament_id || f.tournament_name || 'unknown');
+      var leagueName = f.tournament_name || 'Unknown Competition';
+      var countryName = f.category_name || '';
+      var key = tournamentId + '__' + countryName + '__' + leagueName;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key: key,
+          league: leagueName,
+          country: countryName,
+          tournamentId: tournamentId,
+          fixtures: []
+        });
+      }
+      groups.get(key).fixtures.push(f);
+    });
+
+    return Array.from(groups.values()).sort(function(a, b) {
+      var ac = displayCountryForGroup(a);
+      var bc = displayCountryForGroup(b);
+      var pa = leaguePriority(ac, a.league);
+      var pb = leaguePriority(bc, b.league);
+      if (pa !== pb) return pa - pb;
+      if (ac !== bc) return ac.localeCompare(bc);
+      return a.league.localeCompare(b.league);
+    });
+  }
+
+  async function loadFixtures() {
+    leagueContainer.innerHTML =
+      '<div class="loading"><div class="spinner"></div>Loading fixtures...</div>';
+
+    try {
+      var dateParam = selectedDate || getTodayDateString(0);
+      var data = await apiFetch('/fixtures?limit=2000&date=' + encodeURIComponent(dateParam));
+      allFixtures = markFreeFixtures(Array.isArray(data.fixtures) ? data.fixtures : []);
+      groupedFixtures = groupByLeague(allFixtures);
+      renderHomeLeagues();
+    } catch (err) {
+      leagueContainer.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Failed to load fixtures') + '</div>';
+    }
+  }
+
+  function renderHomeLeagues() {
+    var q = searchInput.value.trim().toLowerCase();
+    var filtered = groupedFixtures;
+
+    if (selectedDate) {
+      filtered = filtered
+        .map(function(group) {
+          return Object.assign({}, group, {
+            fixtures: group.fixtures.filter(function(f) {
+              return String(f.match_date || '').startsWith(selectedDate);
+            })
+          });
+        })
+        .filter(function(group) { return group.fixtures.length > 0; });
+    }
+
+    if (q) {
+      filtered = filtered.filter(function(group) {
+        var displayCountry = displayCountryForGroup(group);
+        var s = (group.league + ' ' + displayCountry).toLowerCase();
+        if (s.includes(q)) return true;
+        return group.fixtures.some(function(f) {
+          return ((f.home_team_name || '') + ' ' + (f.away_team_name || '')).toLowerCase().includes(q);
+        });
+      });
+    }
+
+    boardMeta.textContent = filtered.length + ' leagues';
+
+    if (!filtered.length) {
+      leagueContainer.innerHTML = '<div class="empty-state">No leagues found.</div>';
+      return;
+    }
+
+    leagueContainer.innerHTML = filtered.map(function(group) {
+      var displayCountry = displayCountryForGroup(group);
+      var flag = countryToFlagEmoji(displayCountry);
+
+      return '<div class="league-row" data-league-key="' + escapeHtml(group.key) + '">' +
+        '<div class="league-row-left">' +
+          '<div class="league-emoji">' + flag + '</div>' +
+          '<div class="league-info">' +
+            '<div class="league-name">' + escapeHtml(group.league) + '</div>' +
+            '<div class="league-country">' + escapeHtml(displayCountry) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="league-row-right">' +
+          '<div class="fixture-count">' + group.fixtures.length + '</div>' +
+          '<div class="chevron">&#9654;</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    document.querySelectorAll('.league-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var group = filtered.find(function(g) { return g.key === row.dataset.leagueKey; });
+        if (group) openLeaguePanel(group);
+      });
+    });
+  }
+
+  function openOverlay(panel) {
+    panel.classList.add('active');
+    panelBackdrop.classList.add('active');
+  }
+
+  function closeOverlay(panel) {
+    if (!panel) return;
+    panel.classList.remove('active');
+    var accaPanel = document.getElementById('accaPanel');
+    if (!leaguePanel.classList.contains('active') && !matchPanel.classList.contains('active') && (!accaPanel || !accaPanel.classList.contains('active'))) {
+      panelBackdrop.classList.remove('active');
+    }
+  }
+
+  function openModal(modal) {
+    modal.classList.add('active');
+    modalBackdrop.classList.add('active');
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+  }
+
+  function closeModal(modal) {
+    modal.classList.remove('active');
+    if (!subscribeModal.classList.contains('active') &&
+        !trialModal.classList.contains('active') &&
+        !upsellModal.classList.contains('active')) {
+      modalBackdrop.classList.remove('active');
+    }
+  }
+
+  function openLeaguePanel(group) {
+    selectedLeague = group;
+    var displayCountry = displayCountryForGroup(group);
+
+    leaguePanelCountry.textContent = displayCountry;
+    leaguePanelTitle.textContent = group.league;
+    leaguePanelSub.textContent = group.fixtures.length + ' fixtures';
+
+    var TRIAL_MATCH_LIMIT = 10;
+    leaguePanelList.innerHTML = group.fixtures.map(function(f, idx) {
+      var time = f.match_date
+        ? new Date(f.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+        : '--:--';
+
+      var locked = !hasAnyAccess() && !f._isFree;
+      var trialLocked = false; // daily count enforced on click
+      var isLocked = locked || trialLocked;
+      return '<div class="match-row' + (isLocked ? ' match-locked' : '') + '" data-fixture-id="' + f.id + '" data-trial-locked="' + (trialLocked ? '1' : '0') + '">' +
+        '<div class="match-time">' + time + '</div>' +
+        '<div class="match-main">' +
+          '<div class="match-team">' +
+            '<div class="dot"></div>' +
+            '<div class="match-team-name">' + escapeHtml(f.home_team_name || '') + (trialLocked ? '<span class="pro-badge" style="display:inline-flex">PRO</span>' : (locked ? '<span class="pro-badge" style="display:inline-flex">PRO</span>' : '')) + '</div>' +
+          '</div>' +
+          '<div class="match-team">' +
+            '<div class="dot away"></div>' +
+            '<div class="match-team-name">' + escapeHtml(f.away_team_name || '') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="match-open">' + (isLocked ? '&#128274;' : '&#8594;') + '</div>' +
+      '</div>';
+    }).join('');
+
+    leaguePanelList.querySelectorAll('.match-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var fixture = allFixtures.find(function(f) { return String(f.id) === String(row.dataset.fixtureId); });
+        if (!fixture) return;
+        if (!hasAnyAccess() && !fixture._isFree) {
+          closeOverlay(leaguePanel);
+          openUpsellModal();
+          return;
+        }
+        if (isTrialActive()) {
+          var today = new Date().toISOString().slice(0, 10);
+          var dk = 'trial_opens_' + today;
+          var opens = parseInt(localStorage.getItem(dk) || '0', 10);
+          if (opens >= TRIAL_MATCH_LIMIT) {
+            closeOverlay(leaguePanel);
+            var tom = new Date(); tom.setDate(tom.getDate() + 1);
+            var tomStr = tom.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+            alert('⏳ Daily limit reached!\n\nFree trial users can view 10 matches per day.\n\nCome back tomorrow (' + tomStr + ') or upgrade to Premium for unlimited access.');
+            return;
+          }
+          localStorage.setItem(dk, opens + 1);
+        }
+        openMatchPanel(fixture);
+      });
+    });
+
+    openOverlay(leaguePanel);
+  }
+
+  function openUpsellModal() {
+    openModal(upsellModal);
+  }
+
+  function confPillClass(val) {
+    if (!val) return '';
+    var v = String(val).toLowerCase();
+    if (v === 'high' || v === 'strong' || v === 'low') return v;
+    if (v === 'medium' || v === 'moderate') return 'medium';
+    if (v === 'weak') return 'weak';
+    return '';
+  }
+
+  function riskPillClass(val) {
+    if (!val) return 'risk-medium';
+    var v = String(val).toLowerCase();
+    if (v === 'low') return 'risk-low';
+    if (v === 'high') return 'risk-high';
+    return 'risk-medium';
+  }
+
+  function goalsPillClass(val) {
+    if (!val) return 'goals-medium';
+    var v = String(val).toLowerCase();
+    if (v === 'very high' || v === 'high') return 'goals-high';
+    if (v === 'very low' || v === 'low') return 'goals-low';
+    return 'goals-medium';
+  }
+
+  function formatScriptName(script) {
+    if (!script) return '';
+    return String(script).replace(/_/g, ' ').toUpperCase();
+  }
+
+  function activateMatchTab(tabName) {
+    // Render AI tab content based on subscription
+    if (tabName === 'ai') {
+      var aiContainer = document.getElementById('aiContainer');
+      if (!isActiveSub()) {
+        aiContainer.innerHTML =
+          '<div class="ai-lock">' +
+            '<div class="lock-icon">&#128274;</div>' +
+            '<div class="lock-title">Premium Feature</div>' +
+            '<div class="lock-desc">AI match chat is available to premium subscribers only.<br>Subscribe for unlimited AI-powered match analysis.</div>' +
+            '<button class="lock-btn" onclick="closeOverlay(matchPanel);openSubscribeModal()">Subscribe &mdash; &#8358;3,000/mo</button>' +
+          '</div>';
+      } else {
+        aiContainer.innerHTML =
+          '<div class="ai-box">' +
+            '<div id="aiLog" class="ai-log">' +
+              '<div class="msg bot">Ask about this specific match only.</div>' +
+            '</div>' +
+            '<div class="ai-input">' +
+              '<input id="aiInput" type="text" placeholder="Ask about this match...">' +
+              '<button id="aiSend">Send</button>' +
+            '</div>' +
+          '</div>';
+        document.getElementById('aiSend').addEventListener('click', sendChat);
+        document.getElementById('aiInput').addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') sendChat();
+        });
+      }
+    }
+
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    ['preview','predictions','form','table','ai'].forEach(function(name) {
+      document.getElementById('tab-' + name).classList.toggle('hidden', name !== tabName);
+    });
+  }
+
+  function renderPredictionHero(prediction) {
+    var rec = (prediction && prediction.predictions && prediction.predictions.recommendation) || {};
+    var mr = (prediction && prediction.predictions && prediction.predictions.match_result) || {};
+    var mp = (prediction && prediction.model && prediction.model.matchProfile) || {};
+    var model = (prediction && prediction.model) || {};
+    var homePct = safeNum(mr.home, 0) * 100;
+    var drawPct = safeNum(mr.draw, 0) * 100;
+    var awayPct = safeNum(mr.away, 0) * 100;
+
+    document.getElementById('sheetLeague').textContent =
+      (selectedFixture && selectedFixture.category_name ? selectedFixture.category_name : displayCountryForGroup(selectedLeague || {})) +
+      ' \u2022 ' +
+      (selectedFixture && selectedFixture.tournament_name ? selectedFixture.tournament_name : 'League');
+
+    document.getElementById('sheetHomeName').textContent = (selectedFixture && selectedFixture.home_team_name) || 'HOME';
+    document.getElementById('sheetAwayName').textContent = (selectedFixture && selectedFixture.away_team_name) || 'AWAY';
+    document.getElementById('sheetHomePct').textContent = homePct.toFixed(0) + '%';
+    document.getElementById('sheetDrawPct').textContent = drawPct.toFixed(0) + '%';
+    document.getElementById('sheetAwayPct').textContent = awayPct.toFixed(0) + '%';
+
+    document.getElementById('probHomeBar').style.width = homePct + '%';
+    document.getElementById('probDrawBar').style.width = drawPct + '%';
+    document.getElementById('probAwayBar').style.width = awayPct + '%';
+
+    document.getElementById('heroPickTitle').textContent = rec.pick || 'No Clear Edge';
+    document.getElementById('heroPickPct').textContent =
+      rec.probability != null ? (safeNum(rec.probability, 0) * 100).toFixed(1) + '%' : '0%';
+
+    // Game Script
+    var gsArea = document.getElementById('gameScriptArea');
+    if (mp.script) {
+      gsArea.innerHTML =
+        '<div class="script-tag">&#127918; ' + escapeHtml(formatScriptName(mp.script)) + '</div>' +
+        (mp.script_description ? '<div class="script-desc">' + escapeHtml(mp.script_description) + '</div>' : '');
+    } else {
+      gsArea.innerHTML = '';
+    }
+
+    // Match Profile Pills
+    var pillsArea = document.getElementById('matchProfilePills');
+    var pillsHtml = '';
+    if (mp.riskLevel) {
+      pillsHtml += '<div class="pill ' + riskPillClass(mp.riskLevel) + '">Risk: ' + escapeHtml(mp.riskLevel.toUpperCase()) + '</div>';
+    }
+    if (mp.goalExpectation) {
+      pillsHtml += '<div class="pill ' + goalsPillClass(mp.goalExpectation) + '">Goals: ' + escapeHtml(mp.goalExpectation.toUpperCase()) + '</div>';
+    }
+    if (prediction && prediction.decided_by) {
+      pillsHtml += '<div class="pill decided-by">Decided by: ' + escapeHtml(prediction.decided_by) + '</div>';
+    }
+    pillsArea.innerHTML = pillsHtml;
+
+    // Hero Confidence Pills
+    var cd = rec.confidence_detail || {};
+    var cpHtml = '';
+    if (cd.model_confidence) {
+      cpHtml += '<div class="conf-pill ' + confPillClass(cd.model_confidence) + '">Model: ' + escapeHtml(cd.model_confidence) + '</div>';
+    }
+    if (cd.market_value) {
+      cpHtml += '<div class="conf-pill ' + confPillClass(cd.market_value) + '">Value: ' + escapeHtml(cd.market_value) + '</div>';
+    }
+    if (cd.match_volatility) {
+      cpHtml += '<div class="conf-pill ' + confPillClass(cd.match_volatility) + '">Volatility: ' + escapeHtml(cd.match_volatility) + '</div>';
+    }
+    document.getElementById('heroConfidencePills').innerHTML = cpHtml;
+
+    // Value Bet Badge
+    // Value badge
+    var valueBadge = document.getElementById('heroValueBadge');
+    if (valueBadge) {
+      var vbHtml = '';
+      if (rec.has_value) {
+        vbHtml = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.3);border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;color:#f0a500">🔥 VALUE BET' + (rec.edge != null ? ' +' + rec.edge + '%' : '') + '</span>';
+      } else if (rec.is_value_bet) {
+        var edge = rec.value_edge ? ' (+' + (safeNum(rec.value_edge, 0) * 100).toFixed(1) + '% edge)' : '';
+        vbHtml = '<div class="value-badge">&#128165; VALUE BET' + escapeHtml(edge) + '</div>';
+      }
+      valueBadge.innerHTML = vbHtml;
+    }
+
+    // Hero Reasons
+    var reasons = rec.reasons || [];
+    var hrEl = document.getElementById('heroReasons');
+    if (reasons.length > 0) {
+      hrEl.innerHTML = reasons.map(function(r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('');
+    } else {
+      hrEl.innerHTML = '';
+    }
+  }
+
+  function renderPredictionTab(prediction, explanation) {
+    var rec = (prediction && prediction.predictions && prediction.predictions.recommendation) || {};
+    var rejectedPicks = (prediction && prediction.predictions && prediction.predictions.rejected_picks) || [];
+
+    predictionMain.textContent = rec.pick || 'No Clear Edge';
+    predictionMeta.textContent =
+      (rec.market || 'No Edge') + ' \u2022 ' +
+      (rec.probability != null ? (safeNum(rec.probability, 0) * 100).toFixed(1) + '%' : '0%') +
+      (rec.confidence ? ' \u2022 ' + rec.confidence : '');
+
+    // Confidence pills on picks tab
+    var cd = rec.confidence_detail || {};
+    var cpHtml = '';
+    if (cd.model_confidence) cpHtml += '<div class="conf-pill ' + confPillClass(cd.model_confidence) + '">Model: ' + escapeHtml(cd.model_confidence) + '</div>';
+    if (cd.market_value) cpHtml += '<div class="conf-pill ' + confPillClass(cd.market_value) + '">Value: ' + escapeHtml(cd.market_value) + '</div>';
+    if (cd.match_volatility) cpHtml += '<div class="conf-pill ' + confPillClass(cd.match_volatility) + '">Volatility: ' + escapeHtml(cd.match_volatility) + '</div>';
+    document.getElementById('predictionConfPills').innerHTML = cpHtml;
+
+    // Value badge
+    var pvb = document.getElementById('predictionValueBadge');
+    if (rec.is_value_bet) {
+      var edge = rec.value_edge ? ' (+' + (safeNum(rec.value_edge, 0) * 100).toFixed(1) + '% edge)' : '';
+      pvb.innerHTML = '<div class="value-badge">&#128165; VALUE BET' + escapeHtml(edge) + '</div>';
+    } else {
+      pvb.innerHTML = '';
+    }
+
+    // Reasons
+    var reasons = rec.reasons || (explanation && explanation.reasons) || [];
+    var prEl = document.getElementById('predictionReasons');
+    if (reasons.length > 0) {
+      prEl.innerHTML = reasons.map(function(r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('');
+    } else {
+      prEl.innerHTML = '';
+    }
+
+    predictionReason.textContent =
+      (explanation && explanation.best_pick_reasoning) || rec.rationale || 'No detailed reasoning available.';
+
+    // Odds & Edge display (P2.2 + P2.3)
+    var oddsCard = document.getElementById('oddsEdgeCard');
+    if (oddsCard) {
+      if (rec.market_odds && rec.market_odds > 1) {
+        var edgeColor = (rec.has_value || (rec.edge && parseFloat(rec.edge) > 0)) ? 'var(--green)' : 'var(--danger)';
+        var edgeText = rec.edge != null ? (parseFloat(rec.edge) > 0 ? '+' + rec.edge + '%' : rec.edge + '%') : 'N/A';
+        var edgeLabel = rec.has_value ? '✅ VALUE BET' : '⚠️ NO VALUE';
+        var impliedPct = rec.implied_prob != null ? (safeNum(rec.implied_prob,0)*100).toFixed(1)+'%' : 'N/A';
+        var modelPct = rec.probability != null ? (safeNum(rec.probability,0)*100).toFixed(1)+'%' : 'N/A';
+        oddsCard.innerHTML =
+          '<div class="sheet-label">Value Analysis</div>' +
+          '<div class="card" style="border-color:' + (rec.has_value ? 'rgba(16,231,116,.3)' : 'rgba(255,77,109,.2)') + '">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Pick</td><td style="padding:6px 0;font-weight:700;text-align:right">' + escapeHtml(rec.pick || '') + '</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Model Probability</td><td style="padding:6px 0;font-weight:700;text-align:right;color:var(--green)">' + modelPct + '</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Bookmaker Odds</td><td style="padding:6px 0;font-weight:700;text-align:right">' + safeNum(rec.market_odds,0).toFixed(2) + ' (implied: ' + impliedPct + ')</td></tr>' +
+          '<tr><td style="padding:6px 0;color:var(--muted)">Edge Found</td><td style="padding:6px 0;font-weight:900;text-align:right;color:' + edgeColor + '">' + edgeText + ' — ' + edgeLabel + '</td></tr>' +
+          '</table></div>';
+        oddsCard.classList.remove('hidden');
+      } else {
+        // No bookmaker odds — show model-implied odds (P2.3 enhanced)
+        var mio = prediction && prediction.model_implied_odds;
+        if (mio && mio.source === 'model') {
+          var modelPct2 = rec.probability != null ? (safeNum(rec.probability,0)*100).toFixed(1)+'%' : 'N/A';
+          oddsCard.innerHTML =
+            '<div class="sheet-label">Value Analysis</div>' +
+            '<div class="card" style="border-color:rgba(255,180,0,.25);background:rgba(255,180,0,.04)">' +
+              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">' +
+                '<span style="font-size:11px;background:rgba(255,180,0,.18);color:#f5c400;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.06em">MODEL EST. ODDS</span>' +
+                '<span style="font-size:11px;color:var(--muted)">No bookmaker data — showing model-derived fair odds</span>' +
+              '</div>' +
+              '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+              '<tr><td style="padding:5px 0;color:var(--muted)">Pick</td><td style="padding:5px 0;font-weight:700;text-align:right">' + escapeHtml(rec.pick || '') + '</td></tr>' +
+              '<tr><td style="padding:5px 0;color:var(--muted)">Model Probability</td><td style="padding:5px 0;font-weight:700;text-align:right;color:var(--green)">' + modelPct2 + '</td></tr>' +
+              (mio.home ? '<tr><td style="padding:5px 0;color:var(--muted)">1 (Home Win)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.home).toFixed(2) + '</td></tr>' : '') +
+              (mio.draw ? '<tr><td style="padding:5px 0;color:var(--muted)">X (Draw)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.draw).toFixed(2) + '</td></tr>' : '') +
+              (mio.away ? '<tr><td style="padding:5px 0;color:var(--muted)">2 (Away Win)</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.away).toFixed(2) + '</td></tr>' : '') +
+              (mio.over_2_5 ? '<tr><td style="padding:5px 0;color:var(--muted)">Over 2.5</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.over_2_5).toFixed(2) + '</td></tr>' : '') +
+              (mio.btts_yes ? '<tr><td style="padding:5px 0;color:var(--muted)">BTTS Yes</td><td style="padding:5px 0;font-weight:600;text-align:right;color:#f5c400">' + parseFloat(mio.btts_yes).toFixed(2) + '</td></tr>' : '') +
+              '</table>' +
+              '<p style="font-size:11px;color:var(--muted);margin:8px 0 0">ℹ️ These are fair-value odds computed from our Poisson model (no bookmaker margin). Actual market odds may differ.</p>' +
+            '</div>';
+          oddsCard.classList.remove('hidden');
+        } else {
+          oddsCard.innerHTML =
+            '<div class="sheet-label">Value Analysis</div>' +
+            '<div class="card" style="border-color:rgba(255,255,255,.06)">' +
+            '<p style="font-size:13px;color:var(--muted);margin:0">⚠️ No odds data available for this match — value edge cannot be calculated. Predictions are probability-based only.</p>' +
+            '</div>';
+          oddsCard.classList.remove('hidden');
+        }
+      }
+    }
+
+    if (rec.alternative) {
+      alternativeMain.textContent = rec.alternative;
+      alternativeMeta.textContent =
+        (rec.alternative_market || 'Alternative') +
+        (rec.alternative_probability != null ? ' \u2022 ' + (safeNum(rec.alternative_probability, 0) * 100).toFixed(1) + '%' : '');
+      alternativeReason.textContent =
+        (explanation && explanation.alternative_reasoning) || 'Alternative angle from the model board.';
+    } else {
+      alternativeMain.textContent = 'No Alternative';
+      alternativeMeta.textContent = '';
+      alternativeReason.textContent = 'No alternative angle available.';
+    }
+
+    // FOMO for trial users — premium lock cards (P1 FOMO)
+    var fomoSection = document.getElementById('fomoSection');
+    if (fomoSection) {
+      if (isTrialActive && isTrialActive() && !isPremium()) {
+        var watchers = Math.floor(Math.random() * 18) + 7; // 7-24 premium watchers
+        fomoSection.innerHTML =
+          '<div class="social-proof">' +
+            '<div class="dot-live"></div>' +
+            '<span><strong style="color:var(--green)">' + watchers + ' premium users</strong> are viewing full analysis of this match right now</span>' +
+          '</div>' +
+          '<div class="premium-lock-card">' +
+            '<div style="filter:blur(3px);pointer-events:none;padding:12px;border-radius:14px;background:rgba(16,231,116,.05);border:1px solid rgba(16,231,116,.12);margin-bottom:8px">' +
+              '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.2em;margin-bottom:6px">Value Intelligence</div>' +
+              '<div style="font-size:22px;font-weight:900;color:var(--green);margin-bottom:4px">+12.4% EDGE</div>' +
+              '<div style="font-size:12px;color:#bcc4d1">Bookmaker odds: 2.10 — Model: 73% — Market implied: 47%</div>' +
+            '</div>' +
+            '<div class="lock-content">' +
+              '<div class="lock-icon">🔒</div>' +
+              '<div class="lock-title">Value Edge Detected</div>' +
+              '<div class="lock-sub">The engine found a +12% gap between our model probability and bookmaker odds.<br>Premium users see the full edge breakdown.</div>' +
+              '<button class="lock-upgrade" onclick="openUpsellModal()">Unlock Full Analysis — ₦3,000/mo</button>' +
+            '</div>' +
+          '</div>';
+        fomoSection.classList.remove('hidden');
+      } else {
+        fomoSection.innerHTML = '';
+        fomoSection.classList.add('hidden');
+      }
+    }
+
+    // Rejected picks
+    var rejSection = document.getElementById('rejectedSection');
+    var rejList = document.getElementById('rejectedList');
+    if (rejectedPicks && rejectedPicks.length > 0) {
+      rejSection.classList.remove('hidden');
+      rejList.innerHTML = rejectedPicks.map(function(rp) {
+        return '<div class="card rejected">' +
+          '<h3 style="font-size:18px;color:var(--danger)">' + escapeHtml(rp.pick || 'Unknown') + '</h3>' +
+          '<p style="font-size:13px">' + escapeHtml(rp.reason || 'No reason provided') + '</p>' +
+        '</div>';
+      }).join('');
+    } else {
+      rejSection.classList.add('hidden');
+      rejList.innerHTML = '';
+    }
+  }
+
+  function renderPreviewTab(prediction) {
+    var rec = (prediction && prediction.predictions && prediction.predictions.recommendation) || {};
+    var mp = (prediction && prediction.model && prediction.model.matchProfile) || {};
+    var model = (prediction && prediction.model) || {};
+    var explanation = (prediction && prediction.explanation) || {};
+    var reasons = rec.reasons || explanation.reasons || [];
+    var home = (selectedFixture && selectedFixture.home_team_name) || 'Home';
+    var away = (selectedFixture && selectedFixture.away_team_name) || 'Away';
+
+    var html = '';
+
+    // Match profile info
+    if (mp.script || mp.riskLevel || mp.goalExpectation) {
+      html += '<div class="card">';
+      html += '<h3 style="font-size:20px">Match Profile</h3>';
+      if (mp.script) {
+        html += '<div style="margin-bottom:8px"><span class="script-tag" style="font-size:10px">&#127918; ' + escapeHtml(formatScriptName(mp.script)) + '</span></div>';
+        if (mp.script_description) {
+          html += '<p style="font-size:13px;margin-bottom:8px">' + escapeHtml(mp.script_description) + '</p>';
+        }
+      }
+      var ppHtml = '';
+      if (mp.riskLevel) ppHtml += '<span class="pill ' + riskPillClass(mp.riskLevel) + '">Risk: ' + escapeHtml(mp.riskLevel.toUpperCase()) + '</span> ';
+      if (mp.goalExpectation) ppHtml += '<span class="pill ' + goalsPillClass(mp.goalExpectation) + '">Goals: ' + escapeHtml(mp.goalExpectation.toUpperCase()) + '</span>';
+      if (ppHtml) html += '<div style="margin-top:6px">' + ppHtml + '</div>';
+      html += '</div>';
+    }
+
+    // Expected Goals
+    if (model.lambdaHome != null || model.expectedTotalGoals != null) {
+      html += '<div class="card">';
+      html += '<h3 style="font-size:20px">Expected Goals</h3>';
+      html += '<div class="metrics">';
+      html += '<div class="metric"><div class="big">' + safeNum(model.lambdaHome, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(home) + '</div></div>';
+      html += '<div class="metric"><div class="big">' + safeNum(model.lambdaAway, 0).toFixed(1) + '</div><div class="small">' + escapeHtml(away) + '</div></div>';
+      html += '<div class="metric"><div class="big" style="color:var(--green)">' + safeNum(model.expectedTotalGoals, 0).toFixed(1) + '</div><div class="small">Total</div></div>';
+      html += '</div></div>';
+    }
+
+    // Why this pick
+    if (reasons.length > 0 || explanation.value_insight) {
+      html += '<div class="card primary">';
+      html += '<h3 style="font-size:20px">Why This Pick</h3>';
+      if (reasons.length > 0) {
+        html += '<ul class="reasons-list">' + reasons.map(function(r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul>';
+      }
+      if (explanation.value_insight) {
+        html += '<div style="margin-top:10px;padding:10px;border-radius:12px;background:rgba(79,137,255,.06);border:1px solid rgba(79,137,255,.12);font-size:13px;color:#bcc4d1">' +
+          '&#128161; ' + escapeHtml(explanation.value_insight) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Fallback text summary
+    var table = (prediction && prediction.features && prediction.features.tableContext) || {};
+    html += '<div class="card"><p>' +
+      escapeHtml(home) + ' vs ' + escapeHtml(away) + '. ' +
+      escapeHtml(rec.pick || 'No Clear Edge') + ' is the official match angle. ' +
+      'Expected total goals: ' + safeNum(model.expectedTotalGoals, 0).toFixed(2) + '. ' +
+      (function() {
+        var pg = Math.round(safeNum(table.points_gap, 0));
+        var mg = Math.round(safeNum(table.momentum_gap, 0));
+        var pgText = pg > 0 ? pg + ' pts ahead' : (pg < 0 ? Math.abs(pg) + ' pts behind' : 'level on points');
+        var mgText = mg > 0 ? 'Home side has stronger recent momentum' : (mg < 0 ? 'Away side has stronger recent momentum' : 'Equal momentum between sides');
+        return 'Table context: ' + pgText + ', ' + mgText + '.';
+      })() +
+    '</p></div>';
+
+    previewBox.innerHTML = html;
+  }
+
+  function h2hWinSplit(h2hList) {
+    var home = (selectedFixture && selectedFixture.home_team_name) || '';
+    var away = (selectedFixture && selectedFixture.away_team_name) || '';
+
+    var homeWins = 0;
+    var awayWins = 0;
+    var draws = 0;
+
+    (h2hList || []).slice(0, 6).forEach(function(match) {
+      var score = String(match.score || '');
+      var parts = score.split('-').map(function(n) { return parseInt(n, 10); });
+      if (parts.length < 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return;
+
+      var listedHome = String(match.home || '').toLowerCase();
+      var isHomePerspective =
+        listedHome.includes(home.toLowerCase().split(' ')[0]) ||
+        !listedHome.includes(away.toLowerCase().split(' ')[0]);
+
+      var hg = isHomePerspective ? parts[0] : parts[1];
+      var ag = isHomePerspective ? parts[1] : parts[0];
+
+      if (hg > ag) homeWins++;
+      else if (ag > hg) awayWins++;
+      else draws++;
+    });
+
+    var total = homeWins + awayWins + draws || 1;
+    return { homeWins: homeWins, awayWins: awayWins, draws: draws, total: total };
+  }
+
+  function renderFormTab(data) {
+    var h2h = Array.isArray(data && data.meta && data.meta.h2h) ? data.meta.h2h : [];
+    var homeForm = Array.isArray(data && data.meta && data.meta.homeForm) ? data.meta.homeForm : [];
+    var awayForm = Array.isArray(data && data.meta && data.meta.awayForm) ? data.meta.awayForm : [];
+    var split = h2hWinSplit(h2h);
+
+    document.getElementById('h2hHomeWins').textContent = split.homeWins;
+    document.getElementById('h2hDraws').textContent = split.draws;
+    document.getElementById('h2hAwayWins').textContent = split.awayWins;
+    document.getElementById('h2hHomeLbl').textContent = (selectedFixture && selectedFixture.home_team_name) || 'Home';
+    document.getElementById('h2hAwayLbl').textContent = (selectedFixture && selectedFixture.away_team_name) || 'Away';
+
+    document.getElementById('h2hHomeBar').style.width = split.total ? ((split.homeWins / split.total) * 100) + '%' : '33%';
+    document.getElementById('h2hDrawBar').style.width = split.total ? ((split.draws / split.total) * 100) + '%' : '34%';
+    document.getElementById('h2hAwayBar').style.width = split.total ? ((split.awayWins / split.total) * 100) + '%' : '33%';
+
+    var renderMiniList = function(items, limit, emptyMsg) {
+      if (!items.length) return '<div class="empty-state">' + (emptyMsg || 'No data available') + '</div>';
+      return items.slice(0, limit || 5).map(function(m) {
+        var compLabel = m.competition ? '<span style="font-size:10px;color:#888;margin-left:6px;">' + escapeHtml(m.competition) + '</span>' : '';
+        return '<div class="mini-item">' +
+          '<div>' +
+            '<div class="mini-a">' + escapeHtml(m.home || '') + compLabel + '</div>' +
+            '<div class="mini-b">vs ' + escapeHtml(m.away || '') + ' &bull; ' + escapeHtml(m.date || '') + '</div>' +
+          '</div>' +
+          '<div class="score-pill">' + escapeHtml(m.score || '-') + '</div>' +
+        '</div>';
+      }).join('');
+    };
+
+    document.getElementById('h2hList').innerHTML = renderMiniList(h2h, 6, 'No previous H2H meetings found');
+    document.getElementById('homeRecentTitle').textContent = ((selectedFixture && selectedFixture.home_team_name) || 'Home') + ' \u2014 Recent Results';
+    document.getElementById('awayRecentTitle').textContent = ((selectedFixture && selectedFixture.away_team_name) || 'Away') + ' \u2014 Recent Results';
+    document.getElementById('homeFormList').innerHTML = renderMiniList(homeForm);
+    document.getElementById('awayFormList').innerHTML = renderMiniList(awayForm);
+  }
+
+  function computeFormBadgesHtml(formMatches, teamNameRaw) {
+    var teamName = String(teamNameRaw || '').toLowerCase();
+    var firstWord = teamName.split(' ')[0];
+    var results = [];
+    (formMatches || []).slice(0, 5).forEach(function(m) {
+      var score = String(m.score || '');
+      var parts = score.split('-').map(function(n) { return parseInt(n, 10); });
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) { results.push('?'); return; }
+      var homeTeam = String(m.home || '').toLowerCase();
+      var isHome = homeTeam.includes(firstWord) && firstWord.length > 2;
+      var scored = isHome ? parts[0] : parts[1];
+      var conceded = isHome ? parts[1] : parts[0];
+      if (scored > conceded) results.push('W');
+      else if (scored === conceded) results.push('D');
+      else results.push('L');
+    });
+    if (!results.length) return '<span style="color:#666">—</span>';
+    return results.map(function(r) {
+      var color = r === 'W' ? '#4faf6e' : (r === 'D' ? '#f0a500' : (r === 'L' ? '#e05c5c' : '#666'));
+      var bg = r === 'W' ? 'rgba(79,175,110,.15)' : (r === 'D' ? 'rgba(240,165,0,.15)' : (r === 'L' ? 'rgba(224,92,92,.15)' : 'transparent'));
+      return '<span style="display:inline-block;width:18px;height:18px;border-radius:4px;font-size:11px;font-weight:700;line-height:18px;text-align:center;color:' + color + ';background:' + bg + ';margin:1px">' + r + '</span>';
+    }).join('');
+  }
+
+  function renderTableTab(data) {
+    var standings = Array.isArray(data && data.meta && data.meta.standings) ? data.meta.standings : [];
+    var home = selectedFixture && selectedFixture.home_team_name;
+    var away = selectedFixture && selectedFixture.away_team_name;
+    var homeForm = Array.isArray(data && data.meta && data.meta.homeForm) ? data.meta.homeForm : [];
+    var awayForm = Array.isArray(data && data.meta && data.meta.awayForm) ? data.meta.awayForm : [];
+
+    // Detect if standings have multiple groups
+    var hasGroups = standings.some(function(r) { return r.group; });
+
+    var html = '';
+    if (hasGroups) {
+      // Group the rows by group name, preserving order
+      var groupOrder = [];
+      var groupMap = {};
+      standings.forEach(function(row) {
+        var g = row.group || 'Group';
+        if (!groupMap[g]) { groupMap[g] = []; groupOrder.push(g); }
+        groupMap[g].push(row);
+      });
+
+      groupOrder.forEach(function(groupName) {
+        var groupRows = groupMap[groupName];
+        // Check if home or away team is in this group
+        var isRelevant = groupRows.some(function(r) { return r.team === home || r.team === away; });
+        // Group header
+        html += '<tr><td colspan="8" style="background:#1a2a1a;color:#4caf50;font-weight:700;font-size:11px;letter-spacing:1px;padding:6px 10px;border-bottom:1px solid #2a3a2a;">' +
+          escapeHtml(groupName) + (isRelevant ? ' ★' : '') + '</td></tr>';
+        groupRows.forEach(function(row) {
+          var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
+          var formHtml;
+          if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
+          else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
+          else formHtml = '<span style="color:#666">—</span>';
+          html += '<tr class="' + highlight + '">' +
+            '<td>' + (row.position != null ? row.position : '') + '</td>' +
+            '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
+            '<td>' + (row.played || 0) + '</td>' +
+            '<td>' + (row.wins || 0) + '</td>' +
+            '<td>' + (row.draws || 0) + '</td>' +
+            '<td>' + (row.losses || 0) + '</td>' +
+            '<td><strong>' + (row.points || 0) + '</strong></td>' +
+            '<td>' + formHtml + '</td>' +
+          '</tr>';
+        });
+      });
+    } else {
+      // Single group / regular league — render flat
+      html = standings.map(function(row) {
+        var highlight = (row.team === home || row.team === away) ? 'highlight' : '';
+        var formHtml;
+        if (row.team === home) formHtml = computeFormBadgesHtml(homeForm, home);
+        else if (row.team === away) formHtml = computeFormBadgesHtml(awayForm, away);
+        else formHtml = '<span style="color:#666">—</span>';
+        return '<tr class="' + highlight + '">' +
+          '<td>' + (row.position != null ? row.position : '') + '</td>' +
+          '<td>' + escapeHtml(row.team != null ? row.team : '') + '</td>' +
+          '<td>' + (row.played || 0) + '</td>' +
+          '<td>' + (row.wins || 0) + '</td>' +
+          '<td>' + (row.draws || 0) + '</td>' +
+          '<td>' + (row.losses || 0) + '</td>' +
+          '<td><strong>' + (row.points || 0) + '</strong></td>' +
+          '<td>' + formHtml + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    document.getElementById('tableBody').innerHTML =
+      html || '<tr><td colspan="8">No table data</td></tr>';
+  }
+
+  async function loadPrediction(fixtureId) {
+    var prediction;
+    if (isActiveSub()) {
+      // Premium users get full explanation
+      prediction = await apiFetch('/predict/' + fixtureId + '/explain');
+    } else {
+      // Trial users get basic prediction
+      prediction = await apiFetch('/predict/' + fixtureId);
+    }
+    lastPredictionData = prediction;
+    renderPredictionHero(prediction);
+    renderPredictionTab(prediction, prediction.explanation || {});
+    renderPreviewTab(prediction);
+    renderFormTab(prediction);
+    renderTableTab(prediction);
+  }
+
+  async function openMatchPanel(fixture) {
+    selectedFixture = fixture;
+    lastPredictionData = null;
+    activateMatchTab('preview');
+
+    previewBox.innerHTML = '<div class="loading"><div class="spinner"></div>Loading preview...</div>';
+    predictionMain.textContent = 'Loading...';
+    predictionMeta.textContent = '';
+    predictionReason.textContent = 'Loading reasoning...';
+    document.getElementById('predictionConfPills').innerHTML = '';
+    document.getElementById('predictionValueBadge').innerHTML = '';
+    document.getElementById('predictionReasons').innerHTML = '';
+    alternativeMain.textContent = 'Loading...';
+    alternativeMeta.textContent = '';
+    alternativeReason.textContent = 'Loading...';
+    var fomoEl = document.getElementById('fomoSection');
+    if (fomoEl) { fomoEl.innerHTML = ''; fomoEl.classList.add('hidden'); }
+    var oddsEl = document.getElementById('oddsEdgeCard');
+    if (oddsEl) { oddsEl.innerHTML = ''; oddsEl.classList.add('hidden'); }
+    document.getElementById('rejectedSection').classList.add('hidden');
+    document.getElementById('h2hList').innerHTML = '';
+    document.getElementById('homeFormList').innerHTML = '';
+    document.getElementById('awayFormList').innerHTML = '';
+    document.getElementById('tableBody').innerHTML = '';
+    document.getElementById('gameScriptArea').innerHTML = '';
+    document.getElementById('matchProfilePills').innerHTML = '';
+    document.getElementById('heroConfidencePills').innerHTML = '';
+    document.getElementById('heroValueBadge').innerHTML = '';
+    document.getElementById('heroReasons').innerHTML = '';
+
+    openOverlay(matchPanel);
+
+    try {
+      await loadPrediction(fixture.id);
+    } catch (err) {
+      previewBox.innerHTML = '<div class="error-state">Failed to load match.</div>';
+      predictionMain.textContent = 'Failed';
+      predictionReason.textContent = err.message || 'Prediction failed.';
+    }
+  }
+
+  function setAuthMode(mode) {
+    currentAuthMode = mode;
+    tabSignup.classList.toggle('active', mode === 'signup');
+    tabLogin.classList.toggle('active', mode === 'login');
+    confirmField.classList.toggle('hidden', mode !== 'signup');
+    authSubmit.textContent = mode === 'signup' ? 'Create Free Account' : 'Login';
+    authMsg.textContent = '';
+  }
+
+  async function submitAuth() {
+    authMsg.textContent = '';
+
+    var email = authEmail.value.trim();
+    var password = authPassword.value.trim();
+    var confirmPassword = authConfirmPassword.value.trim();
+
+    if (!email || !password || (currentAuthMode === 'signup' && !confirmPassword)) {
+      authMsg.textContent = 'Complete all required fields.';
+      return;
+    }
+
+    if (currentAuthMode === 'signup' && password !== confirmPassword) {
+      authMsg.textContent = 'Passwords do not match.';
+      return;
+    }
+
+    if (currentAuthMode === 'signup' && password.length < 6) {
+      authMsg.textContent = 'Password must be at least 6 characters.';
+      return;
+    }
+
+    authSubmit.disabled = true;
+    authSubmit.textContent = currentAuthMode === 'signup' ? 'Creating...' : 'Logging in...';
+
+    try {
+      var path = currentAuthMode === 'signup' ? '/auth/signup' : '/auth/login';
+      var data = await apiFetch(path, {
+        method: 'POST',
+        body: JSON.stringify({ email: email, password: password })
+      });
+
+      authToken = data.token;
+      localStorage.setItem('sp_token', authToken);
+      showApp();
+    } catch (err) {
+      authMsg.textContent = err.message || 'Authentication failed';
+    } finally {
+      authSubmit.disabled = false;
+      authSubmit.textContent = currentAuthMode === 'signup' ? 'Create Free Account' : 'Login';
+    }
+  }
+
+  async function checkAuth() {
+    if (!authToken) {
+      showAuth();
+      return false;
+    }
+
+    try {
+      await apiFetch('/auth/me');
+      showApp();
+      return true;
+    } catch(e) {
+      localStorage.removeItem('sp_token');
+      authToken = '';
+      showAuth();
+      return false;
+    }
+  }
+
+  async function showApp() {
+    authView.classList.add('hidden');
+    appView.classList.remove('hidden');
+    buildDateTabs();
+    try {
+      currentUser = await apiFetch('/auth/me');
+      updateMenuBadge();
+      updateTrialBanner();
+    } catch(e) {
+      console.warn('Could not fetch user:', e.message);
+    }
+    await loadFixtures();
+  }
+
+  function showAuth() {
+    appView.classList.add('hidden');
+    authView.classList.remove('hidden');
+  }
+
+  // --- OPay Bank Transfer Subscribe Modal ---
+  async function openSubscribeModal() {
+    openModal(subscribeModal);
+    var box = document.getElementById('subscribeContent');
+    box.innerHTML = '<div class="loading"><div class="spinner"></div>Preparing payment...</div>';
+
+    if (paymentCountdownInterval) {
+      clearInterval(paymentCountdownInterval);
+      paymentCountdownInterval = null;
+    }
+
+    try {
+      var payData = await apiFetch('/auth/payment/request', { method: 'POST' });
+
+      var userEmail = (currentUser && currentUser.email) || '';
+      var reference = payData.reference || '';
+      var bankDetails = payData.bank_details || {};
+      var expiresAt = payData.expiresAt ? new Date(payData.expiresAt) : null;
+
+      var whatsappUrl = payData.whatsapp_link || ('https://wa.me/2348117024699?text=' +
+        encodeURIComponent('Hi ScorePhantom! I just made payment. Reference: ' + reference + ' Email: ' + userEmail));
+
+      box.innerHTML =
+        '<div class="bank-card">' +
+          '<div class="bank-row"><div class="label">Bank</div><div class="value">' + escapeHtml(bankDetails.bank_name || 'OPay') + '</div></div>' +
+          '<div class="bank-row"><div class="label">Account Number</div><div class="value"><span id="acctNum">' + escapeHtml(bankDetails.account_number || '') + '</span> <button id="copyAcctBtn" class="copy-btn">COPY</button></div></div>' +
+          '<div class="bank-row"><div class="label">Account Name</div><div class="value">' + escapeHtml(bankDetails.account_name || '') + '</div></div>' +
+          '<div class="bank-row"><div class="label">Amount</div><div class="value" style="color:var(--green)">' + escapeHtml(bankDetails.amount || '₦3,000') + '</div></div>' +
+          '<div class="bank-row"><div class="label">Reference</div><div class="value" style="font-size:13px;word-break:break-all">' + escapeHtml(reference) + '</div></div>' +
+        '</div>' +
+        '<div class="ref-note">&#9888;&#65039; Please use the reference above as your transfer narration/description so we can identify your payment.</div>' +
+        (expiresAt ? '<div id="payCountdown" class="countdown-timer"></div>' : '') +
+        '<div class="modal-actions" style="flex-direction:column;gap:8px">' +
+          '<button id="iHavePaidBtn" class="modal-btn whatsapp" style="flex:none;width:100%">&#9989; I Have Paid &mdash; Confirm via WhatsApp</button>' +
+          '<button id="cancelPayBtn" class="modal-btn secondary" style="flex:none;width:100%">Cancel</button>' +
+        '</div>';
+
+      // Copy button
+      document.getElementById('copyAcctBtn').addEventListener('click', function() {
+        var acctNum = document.getElementById('acctNum').textContent;
+        navigator.clipboard.writeText(acctNum).then(function() {
+          var btn = document.getElementById('copyAcctBtn');
+          btn.textContent = 'COPIED!';
+          btn.classList.add('copied');
+          setTimeout(function() {
+            btn.textContent = 'COPY';
+            btn.classList.remove('copied');
+          }, 2000);
+        }).catch(function() {
+          // Fallback
+          var ta = document.createElement('textarea');
+          ta.value = acctNum;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          var btn = document.getElementById('copyAcctBtn');
+          btn.textContent = 'COPIED!';
+          btn.classList.add('copied');
+          setTimeout(function() {
+            btn.textContent = 'COPY';
+            btn.classList.remove('copied');
+          }, 2000);
+        });
+      });
+
+      // I Have Paid button
+      document.getElementById('iHavePaidBtn').addEventListener('click', function() {
+        window.open(whatsappUrl, '_blank');
+      });
+
+      // Cancel
+      document.getElementById('cancelPayBtn').addEventListener('click', function() {
+        if (paymentCountdownInterval) {
+          clearInterval(paymentCountdownInterval);
+          paymentCountdownInterval = null;
+        }
+        closeModal(subscribeModal);
+      });
+
+      // Countdown timer
+      if (expiresAt) {
+        function updateCountdown() {
+          var now = new Date();
+          var diff = expiresAt - now;
+          var el = document.getElementById('payCountdown');
+          if (!el) {
+            clearInterval(paymentCountdownInterval);
+            return;
+          }
+          if (diff <= 0) {
+            el.innerHTML = '&#9888; Payment window expired. Please try again.';
+            el.style.color = 'var(--danger)';
+            clearInterval(paymentCountdownInterval);
+            return;
+          }
+          var mins = Math.floor(diff / 60000);
+          var secs = Math.floor((diff % 60000) / 1000);
+          el.innerHTML = '&#9200; Expires in ' + mins + ':' + String(secs).padStart(2, '0');
+        }
+        updateCountdown();
+        paymentCountdownInterval = setInterval(updateCountdown, 1000);
+      }
+
+    } catch (err) {
+      box.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Failed to initialize payment') + '</div>' +
+        '<div class="modal-actions"><button class="modal-btn secondary" onclick="closeModal(subscribeModal)">Close</button></div>';
+    }
+  }
+
+  // --- Enhanced Trial Status Modal ---
+  async function openTrialModal() {
+    openModal(trialModal);
+    var box = document.getElementById('trialContent');
+    box.innerHTML = '<div class="loading"><div class="spinner"></div>Loading account status...</div>';
+
+    try {
+      var me = await apiFetch('/auth/me');
+      var statusClass = 'expired';
+      if (me.status === 'premium') statusClass = 'premium';
+      else if (me.status === 'trial') statusClass = 'trial';
+
+      var statusDisplay = (me.status || '-').toUpperCase();
+      var daysInfo = '';
+
+      if (me.status === 'trial' && me.trial_ends_at) {
+        var trialEnds = new Date(me.trial_ends_at);
+        var daysLeft = Math.max(0, Math.ceil((trialEnds - new Date()) / 86400000));
+        daysInfo = '<div class="kv"><div class="k">Days Left</div><div class="v">' + daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + '</div></div>';
+      }
+
+      if (me.status === 'premium' && me.premium_expires_at) {
+        daysInfo = '<div class="kv"><div class="k">Premium Until</div><div class="v">' + escapeHtml(formatDateTime(me.premium_expires_at)) + '</div></div>';
+      }
+
+      box.innerHTML =
+        '<div class="kv"><div class="k">Email</div><div class="v">' + escapeHtml(me.email || '-') + '</div></div>' +
+        '<div class="kv"><div class="k">Status</div><div class="v"><span class="status-badge ' + statusClass + '">' + escapeHtml(statusDisplay) + '</span></div></div>' +
+        daysInfo +
+        '<div class="feature-compare">' +
+          '<div class="feature-compare-row header"><div>Feature</div><div style="text-align:center">Trial</div><div style="text-align:center">Pro</div></div>' +
+          '<div class="feature-compare-row"><div>Match Predictions</div><div class="cross">2/league</div><div class="check">&#10003; All</div></div>' +
+          '<div class="feature-compare-row"><div>AI Match Chat</div><div class="cross">&#10007;</div><div class="check">&#10003;</div></div>' +
+          '<div class="feature-compare-row"><div>Value Bet Detection</div><div class="cross">&#10007;</div><div class="check">&#10003;</div></div>' +
+          '<div class="feature-compare-row"><div>Game Scripts</div><div class="check">&#10003;</div><div class="check">&#10003;</div></div>' +
+          '<div class="feature-compare-row"><div>H2H &amp; Form Data</div><div class="check">&#10003;</div><div class="check">&#10003;</div></div>' +
+          '<div class="feature-compare-row"><div>League Tables</div><div class="check">&#10003;</div><div class="check">&#10003;</div></div>' +
+        '</div>' +
+        '<div class="modal-actions" style="margin-top:16px">' +
+          '<button id="trialOpenSubscribeBtn" class="modal-btn primary">Subscribe &mdash; &#8358;3,000/mo</button>' +
+          '<button class="modal-btn secondary" id="trialCloseBtn">Close</button>' +
+        '</div>';
+
+      document.getElementById('trialOpenSubscribeBtn').addEventListener('click', function() {
+        closeModal(trialModal);
+        openSubscribeModal();
+      });
+
+      document.getElementById('trialCloseBtn').addEventListener('click', function() {
+        closeModal(trialModal);
+      });
+
+    } catch (err) {
+      box.innerHTML = '<div class="error-state">' + escapeHtml(err.message || 'Failed to load account status') + '</div>';
+    }
+  }
+
+  async function loadAccaTab() {
+    var accaContent = document.getElementById('accaContent');
+    if (!accaContent) return;
+
+    if (!isActiveSub()) {
+      accaContent.innerHTML =
+        '<div class="acca-lock-box">' +
+          '<div class="lock-icon">&#9889;</div>' +
+          '<div class="lock-title">Premium Feature</div>' +
+          '<div class="lock-desc">The Daily ACCA shows our 5 highest-confidence picks of the day, compiled automatically. Subscribe for full access.</div>' +
+          '<button class="lock-btn" onclick="closeOverlay(document.getElementById(\'accaPanel\'));openSubscribeModal()">Subscribe &mdash; &#8358;3,000/mo</button>' +
+        '</div>';
+      return;
+    }
+
+    accaContent.innerHTML = '<div class="loading"><div class="spinner"></div>Loading Daily ACCA...</div>';
+
+    try {
+      var data = await apiFetch('/acca/daily');
+      if (!data || !data.picks || !data.picks.length) {
+        accaContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">No ACCA available yet. Check back once more matches have been processed today.</div>';
+        return;
+      }
+
+      var html = '';
+
+      if (data.combined_odds) {
+        var oddsLabel = data.odds_are_estimated
+          ? 'Est. Combined Odds (' + data.picks.length + ' legs) — update when odds confirmed'
+          : 'Combined Odds (' + data.picks.length + ' legs)';
+        html += '<div class="acca-combined">' +
+          '<div class="acca-odds-num">x' + parseFloat(data.combined_odds).toFixed(2) + '</div>' +
+          '<div class="acca-odds-label">' + oddsLabel + '</div>' +
+        '</div>';
+      } else {
+        html += '<div style="text-align:center;padding:10px 0 16px;font-size:13px;color:var(--text-muted)">🎯 ' + data.picks.length + ' best picks today</div>';
+      }
+
+      data.picks.forEach(function(pick, i) {
+        var conf = pick.confidence != null ? (pick.confidence * 100).toFixed(0) + '%' : '';
+        html += '<div class="acca-pick-card">' +
+          '<div class="acca-match">' + escapeHtml(pick.home || '') + ' vs ' + escapeHtml(pick.away || '') + (pick.league ? ' · ' + escapeHtml(pick.league) : '') + '</div>' +
+          '<div class="acca-pick">' + (i + 1) + '. ' + escapeHtml(pick.pick || '') + '</div>' +
+          (conf ? '<div class="acca-conf">&#10003; ' + conf + ' confidence' + (pick.odds ? ' · Odds: ' + parseFloat(pick.odds).toFixed(2) : '') + '</div>' : '') +
+          (pick.reason ? '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">' + escapeHtml(pick.reason) + '</div>' : '') +
+        '</div>';
+      });
+
+      // Copy Tips button
+      html += '<button id="copyTipsBtn" style="width:100%;margin:14px 0 8px;padding:13px;background:var(--green);border:none;border-radius:14px;color:#000;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.3px">📋 Copy Tips</button>';
+
+      if (data.disclaimer) {
+        html += '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px 0">' + escapeHtml(data.disclaimer) + '</div>';
+      }
+
+      accaContent.innerHTML = html;
+
+      // Wire up Copy Tips
+      var copyBtn = document.getElementById('copyTipsBtn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+          var lines = ['⚡ SCOREPHANTOM DAILY ACCA\n'];
+          data.picks.forEach(function(p, i) {
+            var conf = p.confidence != null ? (p.confidence * 100).toFixed(0) + '%' : '';
+            var odds = p.odds && p.odds > 1 ? ' @ ' + parseFloat(p.odds).toFixed(2) : '';
+            lines.push((i+1) + '. ' + (p.home||'') + ' vs ' + (p.away||''));
+            lines.push('   Pick: ' + (p.pick||'') + odds + (conf ? '  (' + conf + ')' : ''));
+            if (p.reason) lines.push('   ' + p.reason);
+          });
+          if (data.combined_odds) {
+            lines.push('\nCombined' + (data.odds_are_estimated ? ' (est.)' : '') + ': x' + parseFloat(data.combined_odds).toFixed(2));
+          }
+          lines.push('\nscorephantom.com — bet responsibly 🎯');
+          var text = lines.join('\n');
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+              copyBtn.textContent = '✅ Copied!';
+              setTimeout(function() { copyBtn.textContent = '📋 Copy Tips'; }, 2000);
+            });
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+            document.body.removeChild(ta);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(function() { copyBtn.textContent = '📋 Copy Tips'; }, 2000);
+          }
+        });
+      }
+    } catch (err) {
+      accaContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">Failed to load ACCA: ' + escapeHtml(err.message || 'Unknown error') + '</div>';
+    }
+
+    // Load yesterday's picks below today's
+    try {
+      var yData = await apiFetch('/acca/yesterday');
+      if (yData && yData.picks && yData.picks.length) {
+        var yDate = yData.date ? new Date(yData.date + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : 'Yesterday';
+        var yHtml = '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">' +
+          '<div style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;margin-bottom:12px">&#128197; YESTERDAY&#39;S PICKS (' + yDate + ')</div>';
+        yData.picks.forEach(function(p, i) {
+          var conf = p.confidence != null ? ' <span style="color:var(--green);font-size:12px">(' + (p.confidence * 100).toFixed(0) + '%)</span>' : '';
+          yHtml += '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">' + escapeHtml(p.home || '') + ' vs ' + escapeHtml(p.away || '') + '</div>' +
+            '<div style="font-size:14px;font-weight:600">' + (i + 1) + '. ' + escapeHtml(p.pick || '') + conf + '</div>' +
+          '</div>';
+        });
+        yHtml += '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:10px 0 4px">&#128202; For transparency — results posted once verified</div></div>';
+        accaContent.innerHTML += yHtml;
+      }
+    } catch (e) { /* yesterday picks optional */ }
+  }
+
+  async function sendChat() {
+    var aiInput = document.getElementById('aiInput');
+    var aiLog = document.getElementById('aiLog');
+    if (!aiInput || !aiLog) return;
+    var message = aiInput.value.trim();
+    if (!message || !selectedFixture) return;
+
+    aiLog.innerHTML += '<div class="msg user">' + escapeHtml(message) + '</div>';
+    aiInput.value = '';
+    aiLog.scrollTop = aiLog.scrollHeight;
+
+    try {
+      var data = await apiFetch('/predict/' + selectedFixture.id + '/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: message, history: [] })
+      });
+      aiLog.innerHTML += '<div class="msg bot markdown-body">' + (typeof marked !== 'undefined' ? marked.parse(data.reply || '') : escapeHtml(data.reply || 'No reply')) + '</div>';
+    } catch(e) {
+      aiLog.innerHTML += '<div class="msg bot">AI analysis unavailable.</div>';
+    }
+
+    aiLog.scrollTop = aiLog.scrollHeight;
+  }
+
+  // --- Event Listeners ---
+  tabSignup.addEventListener('click', function() { setAuthMode('signup'); });
+  tabLogin.addEventListener('click', function() { setAuthMode('login'); });
+  authSubmit.addEventListener('click', submitAuth);
+  searchInput.addEventListener('input', renderHomeLeagues);
+
+  menuBtn.addEventListener('click', function() {
+    profileMenu.classList.toggle('active');
+    profileBackdrop.classList.toggle('active');
+  });
+
+  profileBackdrop.addEventListener('click', function() {
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+  });
+
+  var accaBtn = document.getElementById('accaBtn');
+  if (accaBtn) {
+    accaBtn.addEventListener('click', function() {
+      openOverlay(document.getElementById('accaPanel'));
+      loadAccaTab();
+    });
+  }
+  var accaBack = document.getElementById('accaBack');
+  if (accaBack) {
+    accaBack.addEventListener('click', function() {
+      closeOverlay(document.getElementById('accaPanel'));
+    });
+  }
+  subscribeBtn.addEventListener('click', openSubscribeModal);
+  trialBtn.addEventListener('click', openTrialModal);
+
+  logoutBtn.addEventListener('click', function() {
+    localStorage.removeItem('sp_token');
+    authToken = '';
+    profileMenu.classList.remove('active');
+    profileBackdrop.classList.remove('active');
+    window.location.href = '/';
+  });
+
+  leaguePanelClose.addEventListener('click', function() { closeOverlay(leaguePanel); });
+  matchPanelClose.addEventListener('click', function() { closeOverlay(matchPanel); });
+  panelBackdrop.addEventListener('click', function() {
+    closeOverlay(leaguePanel);
+    closeOverlay(matchPanel);
+    closeOverlay(document.getElementById('accaPanel'));
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      closeModal(document.getElementById(btn.getAttribute('data-close-modal')));
+    });
+  });
+
+  // Upsell subscribe button
+  document.getElementById('upsellSubscribeBtn').addEventListener('click', function() {
+    closeModal(upsellModal);
+    openSubscribeModal();
+  });
+
+  modalBackdrop.addEventListener('click', function() {
+    closeModal(subscribeModal);
+    closeModal(trialModal);
+    closeModal(upsellModal);
+  });
+
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() { activateMatchTab(tab.dataset.tab); });
+  });
+
+  selectedDate = getTodayDateString(0);
+
+  (async function boot() {
+    await checkAuth();
+  })();
+</script>
+
+<!-- PWA Install Banner -->
+<div id="pwaInstallBanner" class="hidden">
+  <div class="pwa-icon">⚡</div>
+  <div class="pwa-text">
+    <strong>Install ScorePhantom</strong>
+    <span>Add to home screen for instant access</span>
+  </div>
+  <button class="pwa-install-btn" id="pwaInstallBtn">Install</button>
+  <button class="pwa-dismiss" id="pwaDismissBtn" aria-label="Dismiss">✕</button>
+</div>
+
+<script>
+// ── Service Worker Registration ───────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function() {});
+  });
+}
+
+// ── PWA Install Prompt ────────────────────────────────────────────────────
+(function() {
+  var deferredPrompt = null;
+  var banner = document.getElementById('pwaInstallBanner');
+  var installBtn = document.getElementById('pwaInstallBtn');
+  var dismissBtn = document.getElementById('pwaDismissBtn');
+
+  // Don't show if dismissed in the past 7 days
+  var dismissed = localStorage.getItem('pwa_dismissed');
+  if (dismissed && Date.now() - parseInt(dismissed) < 7 * 86400000) return;
+
+  // Capture the beforeinstallprompt event
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (banner) {
+      banner.classList.remove('hidden');
+    }
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', function() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function() {
+        deferredPrompt = null;
+        if (banner) banner.classList.add('hidden');
+      });
+    });
+  }
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', function() {
+      if (banner) banner.classList.add('hidden');
+      localStorage.setItem('pwa_dismissed', Date.now().toString());
+    });
+  }
+
+  // Show "Add to Home Screen" hint for iOS (no beforeinstallprompt support)
+  var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isInStandalone = window.navigator.standalone === true;
+  if (isIos && !isInStandalone && !dismissed && banner) {
+    // Replace the install button with iOS-specific instructions
+    if (installBtn) {
+      installBtn.textContent = 'How?';
+      installBtn.addEventListener('click', function() {
+        alert('Tap the Share button in Safari (square with arrow), then tap "Add to Home Screen".');
+      });
+    }
+    banner.classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+import db from '../config/database.js'; const r = await db.execute({ sql: 'SELECT match_date FROM fixtures LIMIT 5', args: [] }); for(const row of r.rows) console.log(JSON.stringify(row.match_date)); console.log('Today:', new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'})); process.exit(0);
