@@ -367,10 +367,9 @@ export default function Login() {
                   </div>
                   <div className="p-3 rounded-xl bg-white/4 border border-primary/10 text-xs space-y-1.5">
                     <p className="text-white/50 font-semibold uppercase tracking-wider text-[9px] mb-2">Free trial includes</p>
-                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>5 predictions per day</div>
-                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Match Predictions tab</div>
-                    <div className="flex items-center gap-2 text-white/30"><span className="text-white/20 mr-1">✗</span>Stats, ACCA, PhantomChat — Premium</div>
-                    <div className="flex items-center gap-2 text-white/30"><span className="text-white/20 mr-1">✗</span>Top Picks + value bets — Premium</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Full Premium Access for 3 Days</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Top Picks, ACCA, Stats & PhantomChat</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-orange-500 font-bold mr-1">!</span>Limit: 5 Match Predictions per day</div>
                   </div>
                   <AnimatePresence>
                     {generalError && (

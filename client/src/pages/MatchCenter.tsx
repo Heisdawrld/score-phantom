@@ -87,12 +87,20 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
     </div>
   );
 
-  if (error || !data) return (
-    <div className="text-center py-12 text-white/30">
-      <p className="text-4xl mb-3">🔮</p>
-      <p>Prediction not available</p>
-    </div>
-  );
+  if (error || !data) {
+    const errorMsg = error instanceof Error ? error.message : "Prediction not available";
+    return (
+      <div className="text-center py-12 text-white/30 px-6">
+        <p className="text-4xl mb-3">🔮</p>
+        <p className="text-sm font-medium">{errorMsg}</p>
+        {errorMsg.toLowerCase().includes("trial") && (
+          <button onClick={() => setLocation("/paywall")} className="mt-6 px-6 py-2.5 bg-primary/10 text-primary font-bold rounded-xl text-sm border border-primary/20 hover:bg-primary/20 transition-colors">
+            Get Premium Access
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const rec = (data as any)?.predictions?.recommendation || {};
   const conf = Math.round((rec.probability || 0) * 100);

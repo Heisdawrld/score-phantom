@@ -45,7 +45,7 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
         }
       }
     }
-    const apiErr: any = new Error(errorData.error || errorData.message || 'An error occurred');
+    const apiErr: any = new Error(errorData.message || errorData.error || 'An error occurred');
     apiErr.status = response.status; // always attach HTTP status so callers can skip retry on 401
     // Preserve the structured code so callers can react to specific error types
     if (errorData.code) apiErr.code = errorData.code;
