@@ -614,8 +614,8 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 //   ?mode=safe   (default) — 3 picks, all >= 75%, low volatility, stable markets
 //   ?mode=value             — 4–5 picks, >= 70%, allows 1 moderate risk pick
 router.get("/acca", requirePremiumAccess, async (req, res) => {
-  // ACCA is premium-only — block trial users
-  if (!req.access.subscription_active) {
+  // ACCA requires full access — subscription OR active trial
+  if (!req.access.has_full_access) {
     return res.status(403).json({
       error: 'ACCA is a premium feature. Upgrade to access accumulator picks.',
       code: 'subscription_required',
@@ -693,9 +693,9 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       rows.push(...(retryPool.rows || []));
     }
 
-    // Build ACCA using the intelligent builder
+    // Build ACCA using the intelligent builder (async — must be awaited)
     const { buildAcca } = await import('../engine/buildAcca.js');
-    const acca = buildAcca(rows, 'value');
+    const acca = await buildAcca(rows, mode);
 
     return res.json({
       ...acca,

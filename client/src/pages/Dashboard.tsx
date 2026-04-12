@@ -722,7 +722,7 @@ export default function Dashboard() {
 
   const leagues = Object.entries(groupedFixtures).sort(([, a]: any, [, b]: any) => a.label.localeCompare(b.label));
   const allFixtures = data?.fixtures || [];
-  const displayName = user?.email ? user.email.split("@")[0] : "User";
+  const displayName = (user as any)?.username || (user?.email ? user.email.split('@')[0] : 'User');
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
