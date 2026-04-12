@@ -715,12 +715,12 @@ export default function Dashboard() {
       );
     }
     return filtered.reduce((acc: any, fixture) => {
-      // Group by tournament_id + category_name so "Premier League (England)" and
-      // "Premier League (Nigeria)" are always separate groups.
-      const categoryName = (fixture.category_name || '').trim();
+      // Group by tournament_id — this is the stable unique key per competition.
+      // category_name is used only for the display label, not the group key.
       const groupId = fixture.tournament_id
-        ? `${fixture.tournament_id}::${categoryName}`
+        ? String(fixture.tournament_id)
         : (fixture.tournament_name || 'Other Competitions');
+      const categoryName = (fixture.category_name || '').trim();
       if (!acc[groupId]) {
         acc[groupId] = {
           label: getTournamentLabel(fixture.tournament_name || 'Other Competitions', categoryName),
