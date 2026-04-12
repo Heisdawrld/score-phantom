@@ -68,16 +68,27 @@ const TOURNAMENT_COUNTRY: Record<string, string> = {
 /**
  * Build a display label for a tournament group.
  * Uses category_name (country) from the fixture — already stored in the DB.
- * Falls back to the hardcoded ID map only if category_name is missing.
  * Format: "Premier League · England" or just "Premier League"
+ *
+ * Safety: some fixtures have a venue/stadium in category_name (e.g. "Selhurst Park").
+ * We filter those out by checking for venue-like keywords.
  */
+const VENUE_KEYWORDS = ['park', 'stadium', 'arena', 'ground', 'road', 'lane', 'parc', 'stade', 'estadio', 'field', 'dome'];
+function looksLikeVenue(s: string): boolean {
+  const lower = s.toLowerCase();
+  return VENUE_KEYWORDS.some(kw => lower.includes(kw));
+}
 function getTournamentLabel(tournamentName: string, categoryName?: string | null): string {
   if (!tournamentName) return 'Other Competitions';
   const country = (categoryName || '').trim();
-  if (!country || country.toLowerCase() === 'other' || country.toLowerCase() === tournamentName.toLowerCase()) {
+  if (
+    !country ||
+    country.toLowerCase() === 'other' ||
+    country.toLowerCase() === tournamentName.toLowerCase() ||
+    looksLikeVenue(country)
+  ) {
     return tournamentName;
   }
-  // Avoid "Premier League · Premier League" (when country IS the tournament name)
   return `${tournamentName} · ${country}`;
 }
 

@@ -53,13 +53,11 @@ function getCompetitionName(f) {
 
 function getCompetitionCountry(f) {
   return (
-    f.country?.name ||
     f.competition?.country ||
+    f.country?.name ||
     f.country ||
     f.competition_country ||
-    f.location ||
-    f.region ||
-    ''
+    '' // never use f.location or f.region — those are venue/stadium names
   );
 }
 

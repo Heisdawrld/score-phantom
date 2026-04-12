@@ -17,6 +17,7 @@ import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
 import { refreshAccuracyCache } from "./storage/accuracyCache.js";
+import { bulkFillLogos, ensureTeamLogosTable } from "./services/apiFootballLogos.js";
 
 dotenv.config();
 
@@ -310,6 +311,11 @@ app.listen(PORT, async () => {
 
   await autoSeed();
 
+  // Init team_logos table for API-Football logo caching
+  await ensureTeamLogosTable().catch(e => console.warn('[TeamLogos] Table init failed:', e.message));
+  // Fill any missing logos immediately on startup (max 10 API calls)
+  bulkFillLogos({ maxNewLookups: 10 }).catch(e => console.warn('[TeamLogos] Startup fill failed:', e.message));
+
   // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
   // This ensures all fixtures for the week get enriched on startup
   console.log('[AutoEnrich] Starting full startup enrichment pass...');
@@ -418,6 +424,29 @@ app.listen(PORT, async () => {
     console.log(`[ResultChecker] Next check in ~${hrs}h`);
   }
   scheduleNextResultCheck();
+
+  // ── Daily logo fill: 3 AM Lagos time ─────────────────────────────────────
+  function scheduleNextLogoFill() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const next3AM = new Date(lagosNow);
+    next3AM.setDate(next3AM.getDate() + (lagosNow.getHours() >= 3 ? 1 : 0));
+    next3AM.setHours(3, 0, 0, 0);
+    const ms = next3AM - lagosNow;
+    setTimeout(async () => {
+      console.log('[TeamLogos] Nightly logo fill triggered');
+      try {
+        const r = await bulkFillLogos({ maxNewLookups: 10 });
+        console.log(`[TeamLogos] Done — ${r.filled} new logos, ${r.updated} fixtures updated`);
+      } catch (err) {
+        console.error('[TeamLogos] Nightly fill failed:', err.message);
+      }
+      scheduleNextLogoFill();
+    }, ms);
+    const hrs = Math.round(ms / 3600000);
+    console.log(`[TeamLogos] Next logo fill in ~${hrs}h`);
+  }
+  scheduleNextLogoFill();
 
   // Run result checker every 3h during the day to catch todays results as they finish
   setInterval(async () => {
