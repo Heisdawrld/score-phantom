@@ -101,11 +101,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function SmartRoot() {
   const { data: user, isLoading } = useAuth();
-  if (isLoading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-    </div>
-  );
+
+  // Show landing page immediately — don't block on the auth check.
+  // Once auth resolves, swap to Dashboard if the user is logged in.
+  // This eliminates the cold-start spinner that made the landing look broken.
+  if (isLoading) return <Landing />;
   if (!user) return <Landing />;
   return <Dashboard />;
 }
