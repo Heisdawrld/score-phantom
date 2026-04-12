@@ -65,11 +65,20 @@ const TOURNAMENT_COUNTRY: Record<string, string> = {
   '4': 'Brazil', '24': 'Brazil B', '95': 'Brazil Ser.B',
 };
 
-function getTournamentLabel(tournamentName: string, tournamentId: string | number | null | undefined): string {
-  if (!tournamentId) return tournamentName;
-  const country = TOURNAMENT_COUNTRY[String(tournamentId)];
-  if (country) return tournamentName + ' (' + country + ')';
-  return tournamentName;
+/**
+ * Build a display label for a tournament group.
+ * Uses category_name (country) from the fixture — already stored in the DB.
+ * Falls back to the hardcoded ID map only if category_name is missing.
+ * Format: "Premier League · England" or just "Premier League"
+ */
+function getTournamentLabel(tournamentName: string, categoryName?: string | null): string {
+  if (!tournamentName) return 'Other Competitions';
+  const country = (categoryName || '').trim();
+  if (!country || country.toLowerCase() === 'other' || country.toLowerCase() === tournamentName.toLowerCase()) {
+    return tournamentName;
+  }
+  // Avoid "Premier League · Premier League" (when country IS the tournament name)
+  return `${tournamentName} · ${country}`;
 }
 
 function fifaToEmoji(fifaCode: string): string {
@@ -706,8 +715,18 @@ export default function Dashboard() {
       );
     }
     return filtered.reduce((acc: any, fixture) => {
-      const groupId = fixture.tournament_id ? String(fixture.tournament_id) : (fixture.tournament_name || "Other Competitions");
-      if (!acc[groupId]) acc[groupId] = { label: getTournamentLabel(fixture.tournament_name || "Other Competitions", fixture.tournament_id), fixtures: [] };
+      // Group by tournament_id + category_name so "Premier League (England)" and
+      // "Premier League (Nigeria)" are always separate groups.
+      const categoryName = (fixture.category_name || '').trim();
+      const groupId = fixture.tournament_id
+        ? `${fixture.tournament_id}::${categoryName}`
+        : (fixture.tournament_name || 'Other Competitions');
+      if (!acc[groupId]) {
+        acc[groupId] = {
+          label: getTournamentLabel(fixture.tournament_name || 'Other Competitions', categoryName),
+          fixtures: [],
+        };
+      }
       acc[groupId].fixtures.push(fixture);
       return acc;
     }, {});

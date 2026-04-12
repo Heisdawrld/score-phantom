@@ -624,7 +624,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
   }
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const mode = req.query.mode === 'safe' ? 'safe' : 'value';
+    const mode = req.query.mode === 'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
     const pool = await db.execute({

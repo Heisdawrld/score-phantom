@@ -123,38 +123,81 @@ function computeRiskLevelFromRow(row) {
 
 // ── League prestige weights ───────────────────────────────────────────────────
 
-const LEAGUE_PRESTIGE = {
-  'UEFA Champions League':    1.0,
-  'Premier League':           1.0,
-  'La Liga':                  1.0,
-  'Bundesliga':               1.0,
-  'Serie A':                  1.0,
-  'Ligue 1':                  1.0,
-  'UEFA Europa League':       0.95,
-  'Championship':             0.85,
-  'Eredivisie':               0.85,
-  'Primeira Liga':            0.85,
-  'Scottish Premiership':     0.80,
-  'Jupiler Pro League':       0.80,
-  'Super Lig':                0.80,
-  'Brasileirao':              0.80,
-  'Liga MX':                  0.80,
-  'MLS':                      0.75,
-  'EFL League One':           0.75,
-  'EFL League Two':           0.70,
-  'Liga Nacional':            0.70,
-  'USL Championship':         0.60,
-  'K-League':                 0.60,
-  'J. League':                0.60,
-  'J. League 2':              0.55,
+// Leagues that get a guaranteed LOW prestige regardless of name matching.
+// Prevents e.g. "Nigeria Premier League" matching "Premier League" = 1.0.
+const LOW_PRESTIGE_OVERRIDE = new Set([
+  'ghana premier league', 'nigeria premier league', 'ethiopia premier league',
+  'rwanda premier league', 'uganda premier league', 'liberia premier league',
+  'gambia premier league', 'zambia super league', 'south sudan premier league',
+  'eswatini premier league', 'tanzania premier league', 'malawi premier league',
+  'bangladesh premier league', 'cambodia premier league', 'tajikistan premier league',
+  'turkmenistan premier league', 'iraq premier league', 'bahrain premier league',
+  'jamaica premier league', 'moldova national division',
+]);
+
+// Country-qualified prestige map — exact tournament names as they come from LiveScore
+const LEAGUE_PRESTIGE_EXACT = {
+  'premier league': 1.0,              // England only (matched after LOW_PRESTIGE_OVERRIDE check)
+  'la liga': 1.0,
+  'bundesliga': 1.0,
+  'serie a': 1.0,
+  'ligue 1': 1.0,
+  'uefa champions league': 1.0,
+  'uefa europa league': 0.95,
+  'uefa conference league': 0.90,
+  'championship': 0.85,              // English Championship
+  'eredivisie': 0.85,
+  'primeira liga': 0.85,
+  'scottish premiership': 0.80,
+  'jupiler pro league': 0.80,
+  'super lig': 0.80,
+  'brasileirao serie a': 0.82,
+  'seria a brasileira': 0.82,
+  'liga mx': 0.80,
+  'mls': 0.75,
+  'serie b': 0.72,
+  'efl league one': 0.72,
+  'efl league two': 0.68,
+  'liga professional': 0.68,
+  'k league 1': 0.70,
+  'k league 2': 0.62,
+  'j1 league': 0.72,
+  'j2 league': 0.62,
+  'saudi pro league': 0.78,
+  'uae pro league': 0.72,
+  'superliga': 0.75,
+  'ekstraklasa': 0.72,
+  'allsvenskan': 0.72,
+  'tippeligaen': 0.70,
+  'premiership': 0.70,
 };
 
 function getLeaguePrestige(tournamentName) {
   if (!tournamentName) return 0.50;
-  const t = String(tournamentName).toLowerCase();
-  for (const [league, weight] of Object.entries(LEAGUE_PRESTIGE)) {
-    if (t.includes(league.toLowerCase())) return weight;
+  const t = String(tournamentName).trim().toLowerCase();
+
+  // Step 1: Hard floor for known obscure leagues (ignores any name-match below)
+  if (LOW_PRESTIGE_OVERRIDE.has(t)) return 0.45;
+
+  // Step 2: Exact match from our prestige table
+  if (LEAGUE_PRESTIGE_EXACT[t] !== undefined) return LEAGUE_PRESTIGE_EXACT[t];
+
+  // Step 3: Guarded substring match — only for unambiguous names
+  // Explicitly skip generic words that appear in many leagues across countries
+  const AMBIGUOUS_SUBSTRINGS = ['premier league', 'primera division', 'primera liga', 'division 1', 'league 1', 'liga 1'];
+  for (const name of AMBIGUOUS_SUBSTRINGS) {
+    if (t === name) { // only exact match allowed for ambiguous names
+      return LEAGUE_PRESTIGE_EXACT[name] ?? 0.50;
+    }
   }
+
+  // Step 4: Safe substring for unambiguous unique league names
+  for (const [league, weight] of Object.entries(LEAGUE_PRESTIGE_EXACT)) {
+    if (AMBIGUOUS_SUBSTRINGS.includes(league)) continue; // skip ambiguous ones
+    if (t.includes(league)) return weight;
+  }
+
+  // Step 5: Heuristic fallback — unknown league
   return 0.50;
 }
 
