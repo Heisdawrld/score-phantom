@@ -198,36 +198,59 @@ export async function fetchStandings(competitionId) {
     const data = await get('/competitions/table.json', { competition_id: competitionId });
 
     const stages = data.data?.stages || [];
-    const rows = [];
+    if (!stages.length) return [];
 
+    // Find the group with the most teams (almost always the main league table).
+    // Multi-stage competitions (UCL, WCQ) have many small groups that cause duplication.
+    let bestGroup = null;
+    let bestCount = 0;
     for (const stage of stages) {
       for (const group of (stage.groups || [])) {
-        for (const r of (group.standings || [])) {
-          const won   = Number(r.won   || 0);
-          const drawn = Number(r.drawn || 0);
-          const lost  = Number(r.lost  || 0);
-          const played = Number(r.matches || r.played || (won + drawn + lost));
-
-          rows.push({
-            position:     Number(r.rank || r.position || 0),
-            team:         r.team?.name || r.name || '',
-            played,
-            wins:         won,
-            draws:        drawn,
-            losses:       lost,
-            goalsFor:     Number(r.goals_scored || r.goals_for || r.gf || 0),
-            goalsAgainst: Number(r.goals_conceded || r.goals_against || r.ga || 0),
-            goalDiff:     Number(r.goal_diff || r.goal_difference || r.gd || 0),
-            points:       Number(r.points || r.pts || 0),
-            form:         r.recent_form || r.form || '',
-            group:        group.name || null,
-          });
-        }
+        const count = (group.standings || []).length;
+        if (count > bestCount) { bestCount = count; bestGroup = group; }
       }
     }
 
-    // Sort by position
-    return rows.sort((a, b) => a.position - b.position);
+    // Use dominant group for standard leagues (>=8 teams), all groups for tournaments
+    const sourceGroups = bestCount >= 8
+      ? [bestGroup]
+      : stages.flatMap(s => s.groups || []);
+
+    const rows = [];
+    for (const group of sourceGroups) {
+      for (const r of (group?.standings || [])) {
+        const won    = Number(r.won   || 0);
+        const drawn  = Number(r.drawn || 0);
+        const lost   = Number(r.lost  || 0);
+        const played = Number(r.matches || r.played || (won + drawn + lost));
+        rows.push({
+          position:     Number(r.rank || r.position || 0),
+          team:         r.team?.name || r.name || '',
+          played,
+          wins:         won,
+          draws:        drawn,
+          losses:       lost,
+          goalsFor:     Number(r.goals_scored || r.goals_for || r.gf || 0),
+          goalsAgainst: Number(r.goals_conceded || r.goals_against || r.ga || 0),
+          goalDiff:     Number(r.goal_diff || r.goal_difference || r.gd || 0),
+          points:       Number(r.points || r.pts || 0),
+          form:         r.recent_form || r.form || '',
+          group:        group?.name || null,
+        });
+      }
+    }
+
+    // Deduplicate by team name — keep entry with highest points
+    const seen = new Map();
+    for (const row of rows) {
+      const key = (row.team || '').toLowerCase().trim();
+      if (!key) continue;
+      if (!seen.has(key) || row.points > seen.get(key).points) seen.set(key, row);
+    }
+
+    return Array.from(seen.values())
+      .sort((a, b) => a.position !== b.position ? a.position - b.position : b.points - a.points);
+
   } catch (err) {
     console.error('[LiveScore] Standings failed:', err.message);
     return [];
@@ -235,6 +258,7 @@ export async function fetchStandings(competitionId) {
 }
 
 // ── Live matches ──────────────────────────────────────────────────────────────
+
 // Endpoint: /matches/live.json
 export async function fetchLiveMatches() {
   try {

@@ -72,33 +72,25 @@ async function fetchLogoFromApi(teamName, countryHint = '') {
     const results = res.data?.response || [];
     if (!results.length) return null;
 
-    // Step 1: exact name + country match (most reliable)
+    // Step 1: exact name + country match (gold standard)
     if (countryHint) {
       const countryLower = countryHint.toLowerCase();
-      const exactCountry = results.find(r =>
+      const best = results.find(r =>
         r.team?.name?.toLowerCase() === teamName.toLowerCase() &&
         r.team?.country?.toLowerCase() === countryLower
       );
-      if (exactCountry) return exactCountry.team.logo || null;
-
-      // Step 2: any result matching country, even if name is slightly off
-      const anyCountry = results.find(r =>
-        r.team?.country?.toLowerCase() === countryLower
-      );
-      if (anyCountry) return anyCountry.team.logo || null;
+      if (best) return best.team.logo || null;
     }
 
-    // Step 3: exact name match across any country
+    // Step 2: exact name match (any country)
     const exact = results.find(r =>
       r.team?.name?.toLowerCase() === teamName.toLowerCase()
     );
     if (exact) return exact.team.logo || null;
 
-    // Step 4: only take first result if there's exactly 1 result (unambiguous)
-    // If there are multiple results and no country hint, skip — risk of wrong logo
-    if (results.length === 1) return results[0].team?.logo || null;
-
-    return null; // ambiguous — better no logo than wrong logo
+    // Step 3: take first result — API search is generally reliable enough
+    // Better to show a close logo than a letter avatar for most teams
+    return results[0].team?.logo || null;
   } catch (err) {
     console.warn(`[ApiFootballLogos] Fetch failed for "${teamName}":`, err.message);
     return null;
