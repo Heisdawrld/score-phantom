@@ -56,9 +56,9 @@ async function cacheLogo(teamName, logoUrl) {
 /**
  * Search API-Football for a team by name.
  * Returns the best-matching logo URL, or null if not found.
- * Uses only 1 API call per unique team name.
+ * Uses countryHint to disambiguate teams with the same name in different countries.
  */
-async function fetchLogoFromApi(teamName) {
+async function fetchLogoFromApi(teamName, countryHint = '') {
   if (!API_KEY) {
     console.warn('[ApiFootballLogos] APIFOOTBALL_KEY not set — skipping logo fetch');
     return null;
@@ -72,12 +72,33 @@ async function fetchLogoFromApi(teamName) {
     const results = res.data?.response || [];
     if (!results.length) return null;
 
-    // Pick best match: exact name first, then first result
+    // Step 1: exact name + country match (most reliable)
+    if (countryHint) {
+      const countryLower = countryHint.toLowerCase();
+      const exactCountry = results.find(r =>
+        r.team?.name?.toLowerCase() === teamName.toLowerCase() &&
+        r.team?.country?.toLowerCase() === countryLower
+      );
+      if (exactCountry) return exactCountry.team.logo || null;
+
+      // Step 2: any result matching country, even if name is slightly off
+      const anyCountry = results.find(r =>
+        r.team?.country?.toLowerCase() === countryLower
+      );
+      if (anyCountry) return anyCountry.team.logo || null;
+    }
+
+    // Step 3: exact name match across any country
     const exact = results.find(r =>
       r.team?.name?.toLowerCase() === teamName.toLowerCase()
     );
-    const best = exact || results[0];
-    return best?.team?.logo || null;
+    if (exact) return exact.team.logo || null;
+
+    // Step 4: only take first result if there's exactly 1 result (unambiguous)
+    // If there are multiple results and no country hint, skip — risk of wrong logo
+    if (results.length === 1) return results[0].team?.logo || null;
+
+    return null; // ambiguous — better no logo than wrong logo
   } catch (err) {
     console.warn(`[ApiFootballLogos] Fetch failed for "${teamName}":`, err.message);
     return null;
@@ -89,9 +110,10 @@ async function fetchLogoFromApi(teamName) {
 /**
  * Get a logo URL for a team. Checks cache first, falls back to API.
  * @param {string} teamName
+ * @param {string} countryHint  - country name to disambiguate (e.g. 'England')
  * @param {boolean} allowApiCall - set false to cache-only (no quota spend)
  */
-export async function resolveTeamLogo(teamName, allowApiCall = true) {
+export async function resolveTeamLogo(teamName, countryHint = '', allowApiCall = true) {
   if (!teamName) return null;
   await ensureTeamLogosTable();
 
@@ -100,8 +122,8 @@ export async function resolveTeamLogo(teamName, allowApiCall = true) {
 
   if (!allowApiCall) return null; // don't burn quota
 
-  // Not cached — call API, store result
-  const logoUrl = await fetchLogoFromApi(teamName);
+  // Not cached — call API with country hint, store result
+  const logoUrl = await fetchLogoFromApi(teamName, countryHint);
   await cacheLogo(teamName, logoUrl);
   return logoUrl;
 }
@@ -120,9 +142,9 @@ export async function bulkFillLogos({ maxNewLookups = 10, log = console.log } = 
     return { filled: 0, skipped: 0 };
   }
 
-  // Fetch fixtures missing at least one logo
+  // Fetch fixtures missing at least one logo, include category_name for country context
   const r = await db.execute(`
-    SELECT DISTINCT id, home_team_name, away_team_name, home_team_logo, away_team_logo
+    SELECT DISTINCT id, home_team_name, away_team_name, home_team_logo, away_team_logo, category_name
     FROM fixtures
     WHERE (home_team_logo IS NULL OR home_team_logo = '')
        OR (away_team_logo IS NULL OR away_team_logo = '')
@@ -138,6 +160,17 @@ export async function bulkFillLogos({ maxNewLookups = 10, log = console.log } = 
   }
 
   // Filter to only those NOT already cached
+  // Build team→country map for disambiguation
+  const VENUE_KEYWORDS_CHECK = (s) => ['park','stadium','arena','ground','road','lane'].some(k => s.toLowerCase().includes(k));
+  const teamCountry = new Map();
+  for (const f of fixtures) {
+    const country = (f.category_name || '').trim();
+    if (country && !VENUE_KEYWORDS_CHECK(country)) {
+      if (!teamCountry.has(f.home_team_name)) teamCountry.set(f.home_team_name, country);
+      if (!teamCountry.has(f.away_team_name)) teamCountry.set(f.away_team_name, country);
+    }
+  }
+
   const toFetch = [];
   for (const name of needsLookup) {
     const cached = await getCachedLogo(name);
@@ -149,7 +182,8 @@ export async function bulkFillLogos({ maxNewLookups = 10, log = console.log } = 
 
   let filled = 0;
   for (const teamName of toFetch) {
-    const logoUrl = await fetchLogoFromApi(teamName);
+    const country = teamCountry.get(teamName) || '';
+    const logoUrl = await fetchLogoFromApi(teamName, country);
     await cacheLogo(teamName, logoUrl);
     if (logoUrl) filled++;
     // Small delay to respect rate limits (30 req/min)
