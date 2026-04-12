@@ -313,8 +313,6 @@ app.listen(PORT, async () => {
 
   // Init team_logos table for API-Football logo caching
   await ensureTeamLogosTable().catch(e => console.warn('[TeamLogos] Table init failed:', e.message));
-  // Fill any missing logos immediately on startup (max 10 API calls)
-  bulkFillLogos({ maxNewLookups: 10 }).catch(e => console.warn('[TeamLogos] Startup fill failed:', e.message));
 
   // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
   // This ensures all fixtures for the week get enriched on startup
@@ -325,7 +323,12 @@ app.listen(PORT, async () => {
       console.log('[PredRunner] Enrichment done — pre-generating predictions...');
       return autoBuildPredictions({ limit: 100 });
     })
-    .catch((err) => console.error("[AutoEnrich/PredRunner] startup error:", err.message));
+    .then(() => {
+      // Fill logos AFTER fixtures are seeded + enriched — now there's data to work with
+      console.log('[TeamLogos] Running post-seed logo fill...');
+      return bulkFillLogos({ maxNewLookups: 15 });
+    })
+    .catch((err) => console.error('[AutoEnrich/PredRunner/Logos] startup error:', err.message));
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
   setTimeout(async () => {
     try {

@@ -83,8 +83,21 @@ function EdgeBadge({ label }: { label?: string }) {
 
 function RiskBadge({ level }: { level?: string }) {
   if (!level) return null;
-  const map: Record<string, string> = { SAFE: "text-emerald-400", MODERATE: "text-orange-400", AGGRESSIVE: "text-red-400" };
-  return <span className={cn("text-[10px] font-semibold uppercase tracking-wide", map[level] ?? "text-muted-foreground")}>{level} RISK</span>;
+  const labels: Record<string, string> = {
+    SAFE: 'Stable',
+    MODERATE: 'Calculated',
+    AGGRESSIVE: 'High Variance',
+    VOLATILE: 'High Variance',
+  };
+  const colors: Record<string, string> = {
+    SAFE: 'text-emerald-400',
+    MODERATE: 'text-blue-400',
+    AGGRESSIVE: 'text-amber-400',
+    VOLATILE: 'text-amber-400',
+  };
+  const display = labels[level] ?? level;
+  const color = colors[level] ?? 'text-muted-foreground';
+  return <span className={cn('text-[10px] font-semibold uppercase tracking-wide', color)}>{display}</span>;
 }
 
 // ─── Odds Display ─────────────────────────────────────────────────────────────

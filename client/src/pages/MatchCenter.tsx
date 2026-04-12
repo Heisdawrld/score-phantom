@@ -42,11 +42,17 @@ const TABS = [
   { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
 ];
 
+const RISK_LABELS: Record<string, string> = {
+  SAFE: 'Stable',
+  MODERATE: 'Calculated',
+  AGGRESSIVE: 'High Variance',
+  VOLATILE: 'High Variance',
+};
 function riskColor(r: string) {
-  const l = (r || "").toLowerCase();
-  if (l.includes("safe") || l.includes("low")) return "text-primary";
-  if (l.includes("aggressive") || l.includes("high")) return "text-red-400";
-  return "text-amber-400";
+  const l = (r || '').toUpperCase();
+  if (l === 'SAFE') return 'text-primary';
+  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
+  return 'text-blue-400';
 }
 
 // ── Prediction Tab ──────────────────────────────────────────────────────────
@@ -304,8 +310,8 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
                 </div>
               )}
               <div className={cn("shrink-0 rounded-xl px-3 py-2 text-center min-w-[70px]", riskLabel === "SAFE" ? "bg-primary/[0.06] border border-primary/20" : "bg-white/[0.03] border border-white/[0.06]")}>
-                <p className={cn("text-[10px] font-black uppercase", riskColor(riskLabel))}>{riskLabel}</p>
-                <p className="text-[8px] text-white/25 uppercase">Risk</p>
+                <p className={cn("text-[10px] font-black uppercase", riskColor(riskLabel))}>{RISK_LABELS[riskLabel] ?? riskLabel}</p>
+                <p className="text-[8px] text-white/25 uppercase">Consistency</p>
               </div>
             </div>
           )}

@@ -32,15 +32,16 @@ const BLOCKED_MARKETS = new Set([
   'home_over_05',
   'away_over_05',
   'under_45',
-  'draw',          // draws are high-variance, kill accas
+  'home_under_15',   // team-goal unders — confusing and niche
+  'away_under_15',   // team-goal unders — confusing and niche
+  'btts_no',         // defensive, kills ACCA appeal
+  'draw',            // draws are high-variance, kill accas
 ]);
 
 /** Under-family markets — tracked separately for diversity cap */
 const UNDER_MARKETS = new Set([
   'under_25',
   'under_35',
-  'home_under_15',
-  'away_under_15',
 ]);
 
 /**
@@ -416,15 +417,21 @@ export async function buildAcca(rows, mode = 'safe') {
     scriptCounts[pick.scriptCat] = catCount + 1;
   }
 
-  // ── Step 3: Validate final set — ensure at least 1 result/attacking pick ───
-  const hasResultPick = selected.some(p => {
-    const m = (p.best_pick_market || '').toLowerCase();
-    return m === 'home_win' || m === 'away_win' || m === 'double_chance_home' ||
-           m === 'double_chance_away' || m === 'btts_yes' || m.includes('over');
-  });
+  // ── Step 3: Hard validate — must have at least 1 attacking/result pick ────
+  const ATTACKING_MARKETS = new Set(['home_win','away_win','double_chance_home','double_chance_away','dnb_home','dnb_away','btts_yes','over_15','over_25']);
+  const hasResultPick = selected.some(p => ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
 
   if (!hasResultPick && selected.length >= 2) {
-    console.log('[ACCA] Warning: all defensive picks — no result/attacking market. Consider loosening filters.');
+    // All picks are unders — not acceptable for an ACCA. Return empty.
+    console.log('[ACCA] Rejected: zero attacking/result picks in final set. All defensive — not a good ACCA.');
+    return {
+      accaType:           null,
+      totalMatches:       0,
+      combinedConfidence: 0,
+      riskLevel:          null,
+      picks:              [],
+      message:            'No ACCA available today — qualifying matches did not produce a balanced mixed pick set.',
+    };
   }
 
   if (selected.length < targetMin) {
