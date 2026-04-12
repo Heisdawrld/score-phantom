@@ -7,7 +7,7 @@
  * No ProtectedRoute, no shared auth state.
  */
 import React, { useState, useEffect, useCallback } from "react";
-import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X } from "lucide-react";
+import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X, Activity } from "lucide-react";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = "";
@@ -163,8 +163,10 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
-  const [tab, setTab] = useState<"overview" | "users" | "payments" | "partners" | "system">("overview");
+  const [tab, setTab] = useState<"overview" | "users" | "payments" | "partners" | "system" | "engine">("overview");
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [engineStats, setEngineStats] = useState<any>(null);
+  const [engineLoading, setEngineLoading] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -337,10 +339,19 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     } catch (e: any) { flash(false, e.message); }
   };
 
+  const loadEngineStats = useCallback(async () => {
+    setEngineLoading(true);
+    try {
+      const r = await call("/api/admin/engine-stats");
+      setEngineStats(r);
+    } catch { } finally { setEngineLoading(false); }
+  }, [call]);
+
   useEffect(() => { loadOverview(); }, [loadOverview]);
   useEffect(() => { if (tab === "users") loadUsers(); }, [tab, loadUsers]);
   useEffect(() => { if (tab === "payments") loadPayments(); }, [tab, loadPayments]);
   useEffect(() => { if (tab === "partners") { loadPartners(); setSelectedPartner(null); setCommissions([]); setSelectedCommIds(new Set()); } }, [tab, loadPartners]);
+  useEffect(() => { if (tab === "engine") loadEngineStats(); }, [tab, loadEngineStats]);
 
   const run = async (fn: () => Promise<any>, msg: string) => {
     try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
@@ -388,6 +399,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     { id: "payments",  label: "Payments",  icon: CreditCard },
     { id: "partners",  label: "Partners",  icon: UserPlus },
     { id: "system",    label: "System",    icon: Settings },
+    { id: "engine",    label: "Engine",    icon: Activity },
   ] as const;
 
   return (
@@ -969,6 +981,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 <p className="text-xs text-gray-500">Clear cached predictions so the engine rebuilds fresh picks.</p>
                 <button onClick={() => { run(() => call("/api/admin/rebuild-track-record", { method: "POST", body: JSON.stringify({ days: 30 }) }), "Track Record rebuild started — building predictions + evaluating results for last 30 days. This may take 2-3 minutes."); }} className="w-full bg-primary/10 border border-primary/30 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">🔄 Rebuild Track Record (last 30 days)</button>
                 <button onClick={() => { if(confirm("Clear ALL prediction_outcomes? This resets track record.")) run(() => call("/api/admin/clear-track-record", { method: "POST" }), "Track record cleared"); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-red-400 border border-red-500/20">🗑️ Clear Track Record (reset outcomes)</button>
+                <button onClick={() => { if(confirm("Clean ghost voids (void predictions without scores)? This fixes inflated void stats.")) run(() => call("/api/admin/clean-ghost-voids", { method: "POST" }), "Ghost voids cleaned"); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-primary border border-primary/20">🧹 Clean Ghost Voids</button>
                 <button onClick={() => run(() => call("/api/admin/clear-prediction-cache", { method: "POST" }), "Prediction cache cleared — engine will re-run fresh")}
                   className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
                   Clear Prediction Cache
@@ -1005,6 +1018,90 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                 </button>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* ── ENGINE ── */}
+        {tab === "engine" && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-black text-white flex items-center justify-between">
+               Engine Telemetry (30 Days)
+               <button onClick={loadEngineStats} className="text-xs font-bold text-gray-500 hover:text-white px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-2">
+                 <RefreshCw size={14} className={engineLoading ? "animate-spin" : ""} /> Refresh
+               </button>
+            </h2>
+
+            {engineLoading && !engineStats ? (
+               <div className="flex justify-center p-12 text-gray-500"><Loader2 className="w-8 h-8 animate-spin" /></div>
+            ) : engineStats ? (
+               <div className="space-y-6">
+                  {/* Overview Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                     <StatCard label="Live Picks" value={engineStats.overview?.total_predictions || 0} sub="Evaluated records" />
+                     <StatCard label="Win Rate" value={`${engineStats.overview?.total_predictions ? ((engineStats.overview.wins / (engineStats.overview.wins + engineStats.overview.losses)) * 100).toFixed(1) : 0}%`} color="text-primary" />
+                     <StatCard label="True Voids" value={engineStats.overview?.true_voids || 0} color="text-amber-400" sub="Scores found, outcome void" />
+                     <StatCard label="Ghost Voids" value={engineStats.overview?.ghost_voids || 0} color="text-red-400" sub="Score missing (inflating void rate)" />
+                  </div>
+
+                  {/* Market Performance */}
+                  <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
+                     <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-widest text-gray-400">Market Calibration</h3>
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm text-gray-300 whitespace-nowrap">
+                           <thead>
+                              <tr className="border-b border-white/[0.05]">
+                                 <th className="py-2.5 px-4 font-bold text-white">Market</th>
+                                 <th className="py-2.5 px-4 font-bold text-white text-right">Volume</th>
+                                 <th className="py-2.5 px-4 font-bold text-white text-right">Hits</th>
+                                 <th className="py-2.5 px-4 font-bold text-white text-right">Misses</th>
+                                 <th className="py-2.5 px-4 font-bold text-white text-right">Win Rate</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              {engineStats.markets?.map((m: any) => {
+                                 const settled = m.wins + m.losses;
+                                 const rate = settled > 0 ? ((m.wins / settled) * 100).toFixed(1) : "0.0";
+                                 return (
+                                    <tr key={m.market} className="border-b border-white/[0.02] hover:bg-white/[0.02]">
+                                       <td className="py-2.5 px-4"><span className="bg-primary/10 text-primary font-bold px-2 py-0.5 rounded text-xs">{m.market}</span></td>
+                                       <td className="py-2.5 px-4 text-right font-mono text-xs">{m.total}</td>
+                                       <td className="py-2.5 px-4 text-right text-primary font-mono text-xs">{m.wins}</td>
+                                       <td className="py-2.5 px-4 text-right text-red-400 font-mono text-xs">{m.losses}</td>
+                                       <td className="py-2.5 px-4 text-right font-bold text-white">{rate}%</td>
+                                    </tr>
+                                 );
+                              })}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+
+                  {/* Confidence Buckets */}
+                  <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
+                     <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-widest text-gray-400">Probability Engine Calibration</h3>
+                     <div className="flex gap-2 mb-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /> Calibrated (Close to expectations)</span>
+                     </div>
+                     <div className="space-y-3">
+                        {engineStats.calibration?.map((b: any) => {
+                           const rate = (b.wins / b.total) * 100;
+                           const diff = Math.abs(rate - b.bucket_min);
+                           return (
+                              <div key={b.bucket_min} className="flex items-center gap-3">
+                                 <div className="w-16 font-mono text-xs text-right text-gray-400">{b.bucket_min}% - {b.bucket_min + 9}%</div>
+                                 <div className="flex-1 h-3 bg-white/[0.05] rounded-full overflow-hidden flex">
+                                    <div style={{ width: `${rate}%` }} className={`h-full ${diff < 15 ? 'bg-primary' : 'bg-orange-500'}`} />
+                                 </div>
+                                 <div className="w-12 text-right font-bold text-xs text-white">{rate.toFixed(1)}%</div>
+                              </div>
+                           );
+                        })}
+                     </div>
+                  </div>
+               </div>
+            ) : (
+               <div className="p-4 text-center text-red-400 text-sm bg-red-500/10 rounded-xl">Failed to load engine stats.</div>
+            )}
           </div>
         )}
       </div>

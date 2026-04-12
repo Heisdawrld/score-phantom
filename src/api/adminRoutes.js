@@ -554,6 +554,62 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /clean-ghost-voids — remove void prediction_outcomes that have no scores
+router.post("/clean-ghost-voids", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.execute("DELETE FROM prediction_outcomes WHERE outcome = 'void' AND home_score IS NULL");
+    return res.json({ success: true, deleted: r.rowsAffected });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /engine-stats — Admin dashboard metrics for prediction engine
+router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const stats = await db.execute(`
+      SELECT
+        COUNT(*) as total_predictions,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
+        SUM(CASE WHEN outcome = 'void' AND home_score IS NOT NULL THEN 1 ELSE 0 END) as true_voids,
+        SUM(CASE WHEN outcome = 'void' AND home_score IS NULL THEN 1 ELSE 0 END) as ghost_voids
+      FROM prediction_outcomes
+      WHERE DATE(created_at) >= DATE('now', '-30 days')
+    `);
+    
+    const markets = await db.execute(`
+      SELECT predicted_market as market,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses
+      FROM prediction_outcomes
+      WHERE DATE(created_at) >= DATE('now', '-30 days') AND outcome IN ('win', 'loss', 'correct', 'wrong')
+      GROUP BY predicted_market
+      ORDER BY total DESC
+    `);
+    
+    const calibration = await db.execute(`
+      SELECT 
+        CAST(predicted_probability * 10 AS INTEGER) * 10 as bucket_min,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins
+      FROM prediction_outcomes
+      WHERE outcome IN ('win', 'loss', 'correct', 'wrong') AND predicted_probability > 0
+      GROUP BY bucket_min
+      ORDER BY bucket_min DESC
+    `);
+    
+    return res.json({ 
+      overview: stats.rows?.[0] || {},
+      markets: markets.rows || [],
+      calibration: calibration.rows || []
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // FAST: Get all football leagues from odds-api.io
 router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
   try {

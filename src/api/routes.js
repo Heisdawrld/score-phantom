@@ -249,6 +249,20 @@ router.get("/access", requireAuth, (req, res) => {
   });
 });
 
+// ─── GET /payments/history — return user's checkout history ──────────────────
+router.get("/payments/history", requireAuth, async (req, res) => {
+  try {
+    const results = await db.execute({
+      sql: "SELECT id, reference, amount, amount_currency, status, channel, flw_transaction_id, paid_at, created_at FROM payments WHERE user_id = ? ORDER BY created_at DESC",
+      args: [req.user.id]
+    });
+    res.json({ history: results.rows || [] });
+  } catch (err) {
+    console.error("[BillingHistory]", err.message);
+    res.status(500).json({ error: "Failed to load payment history" });
+  }
+});
+
 // ─── GET /fixtures — auth required ──────────────────────────────────────────
 router.get("/fixtures", requireAuth, async (req, res) => {
   try {
@@ -835,7 +849,7 @@ router.get("/track-record", requireAuth, async (req, res) => {
               SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
               SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
             FROM prediction_outcomes
-            WHERE DATE(created_at) >= ?
+            WHERE DATE(created_at) >= ? AND (outcome IN ('win', 'loss', 'correct', 'wrong', 'pending') OR (outcome = 'void' AND home_score IS NOT NULL))
             GROUP BY predicted_market
             ORDER BY total_picks DESC`,
       args: [startISO],
@@ -913,7 +927,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
               predicted_market, predicted_selection, full_score, outcome,
               predicted_probability, created_at
             FROM prediction_outcomes
-            WHERE DATE(created_at) >= ?
+            WHERE DATE(created_at) >= ? AND (outcome IN ('win', 'loss', 'correct', 'wrong', 'pending') OR (outcome = 'void' AND home_score IS NOT NULL))
             ORDER BY created_at DESC
             LIMIT ?`,
       args: [startISO, limit],
@@ -1026,7 +1040,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
              p.best_pick_score, p.confidence_model, p.confidence_volatility,
              p.explanation_json, p.backup_picks_json,
-             f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
+             f.tournament_name, f.match_date, f.enrichment_status, f.data_quality,
+             f.home_team_logo, f.away_team_logo
       FROM predictions_v2 p
       JOIN fixtures f ON f.id = p.fixture_id
       WHERE ${dateFilter}
@@ -1128,6 +1143,10 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       return {
         fixtureId:   row.fixture_id,
         match:       `${row.home_team} vs ${row.away_team}`,
+        homeTeam:    row.home_team,
+        awayTeam:    row.away_team,
+        homeLogo:    row.home_team_logo,
+        awayLogo:    row.away_team_logo,
         market:      row.best_pick_market,
         pick:        row.best_pick_selection,
         probability: parseFloat((prob * 100).toFixed(1)),

@@ -54,6 +54,7 @@ import Matches from "@/pages/Matches";
 import MatchCenter from "@/pages/MatchCenter";
 import Profile from "@/pages/Profile";
 import PaymentBilling from "@/pages/PaymentBilling";
+import BillingHistory from "@/pages/BillingHistory";
 import Settings from "@/pages/Settings";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
@@ -149,6 +150,7 @@ function Router() {
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/billing" component={() => <ProtectedRoute component={PaymentBilling} />} />
+      <Route path="/billing/history" component={() => <ProtectedRoute component={BillingHistory} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/" component={SmartRoot} />
       <Route component={SmartRoot} />

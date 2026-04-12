@@ -92,36 +92,23 @@ export default function PaymentBilling() {
         >
            <h3 className="text-[11px] font-black text-white/30 uppercase tracking-[0.2em] ml-2 mb-3">Subscription Settings</h3>
            
-           {isPremium && (
-             <div className="glass-card rounded-2xl p-5 flex items-center justify-between">
-                <div>
-                   <p className="text-sm font-bold text-white">Cancel Subscription</p>
-                   <p className="text-xs text-white/40 mt-0.5">Stop auto-renewal for your premium plan.</p>
-                </div>
-                {/* As there is no backend cancellation endpoint currently known, we direct to support or stub it */}
-                <button className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/60 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/10 transition-all text-xs font-bold">
-                   Cancel Plan
-                </button>
-             </div>
-           )}
 
-           <div className="glass-card rounded-2xl p-5 flex items-center justify-between opacity-50 cursor-not-allowed">
+
+           <div className="glass-card rounded-2xl p-5 flex items-center justify-between">
               <div>
                  <p className="text-sm font-bold text-white">Payment Methods</p>
-                 <p className="text-xs text-white/40 mt-0.5">Manage your saved cards (Powered by Flutterwave).</p>
+                 <p className="text-xs text-white/40 mt-0.5">Secure payments via Flutterwave.</p>
               </div>
-              <button disabled className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/40 text-xs font-bold">
-                 Manage
-              </button>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-primary/50 text-right">No card data<br/>stored on servers</span>
            </div>
            
-           <div className="glass-card rounded-2xl p-5 flex items-center justify-between opacity-50 cursor-not-allowed">
+           <div className="glass-card rounded-2xl p-5 flex items-center justify-between">
               <div>
                  <p className="text-sm font-bold text-white">Billing History</p>
-                 <p className="text-xs text-white/40 mt-0.5">View and download your past invoices.</p>
+                 <p className="text-xs text-white/40 mt-0.5">View your past subscription payments.</p>
               </div>
-              <button disabled className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/40 text-xs font-bold">
-                 View All
+              <button onClick={() => setLocation('/billing/history')} className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold">
+                 View Latest
               </button>
            </div>
         </motion.div>

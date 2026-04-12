@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -139,9 +139,21 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
         <SpiralWatermark />
         <div className="relative p-5">
           {/* Header */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-primary text-sm">🎯</span>
-            <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
+          <div className="flex items-center justify-between mb-3">
+             <div className="flex items-center gap-2">
+               <span className="text-primary text-sm">🎯</span>
+               <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
+             </div>
+             <button title="Share Pick" onClick={() => {
+                if (navigator.share) {
+                   navigator.share({
+                      title: "ScorePhantom Edge",
+                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${conf}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
+                   }).catch(()=>{});
+                }
+             }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
+                <Share2 size={14} className="text-white/50 hover:text-white" />
+             </button>
           </div>
 
           {/* Badges row */}

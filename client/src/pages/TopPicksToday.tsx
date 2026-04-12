@@ -14,6 +14,10 @@ import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBa
 interface Pick {
   fixtureId: string;
   match: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeLogo?: string;
+  awayLogo?: string;
   market: string;
   pick: string;
   probability: number;
@@ -25,6 +29,14 @@ interface Pick {
   enrichment?: string;
   dataQuality?: string;
   factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
+}
+
+function TeamLogo({ src, name, size = "md" }: { src?: string | null; name: string; size?: "sm" | "md" | "lg" }) {
+  const [err, setErr] = useState(false);
+  const sizeMap = { sm: "w-5 h-5", md: "w-8 h-8", lg: "w-10 h-10" };
+  const textSize = { sm: "text-[7px]", md: "text-[9px]", lg: "text-[11px]" };
+  if (src && !err) return <img src={src} alt={name} onError={() => setErr(true)} className={`${sizeMap[size]} rounded-full object-contain bg-white/5 border border-white/10 shrink-0`} loading='lazy' />;
+  return <div className={`${sizeMap[size]} rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 ${textSize[size]} font-bold text-primary`}>{name.slice(0, 2).toUpperCase()}</div>;
 }
 
 function formatMarket(key: string): string {
@@ -242,7 +254,11 @@ export default function TopPicksToday() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-sm text-white leading-tight truncate">{pick.match}</h3>
+                          <div className="flex items-center gap-2 mb-1.5 overflow-hidden pr-2">
+                             {pick.homeTeam && pick.homeLogo && <TeamLogo src={pick.homeLogo} name={pick.homeTeam} size="sm" />}
+                             <h3 className="font-bold text-sm text-white leading-tight truncate">{pick.match}</h3>
+                             {pick.awayTeam && pick.awayLogo && <TeamLogo src={pick.awayLogo} name={pick.awayTeam} size="sm" />}
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {pick.tournament && (
                               <span className="text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-white/35 uppercase">

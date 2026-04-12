@@ -1,4 +1,5 @@
 import { useAuth, useLogout } from '@/hooks/use-auth';
+import { useNotifications } from '@/hooks/use-notifications';
 import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
 import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle, Check, X, Edit2 } from 'lucide-react';
@@ -14,6 +15,7 @@ export default function Settings() {
   const logout = useLogout();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { permission, enableNotifications } = useNotifications();
   
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -145,7 +147,7 @@ export default function Settings() {
            <div>
               <h3 className="text-[11px] font-black text-white/30 uppercase tracking-[0.2em] ml-2 mb-3">App Preferences</h3>
               <div className="glass-card rounded-3xl overflow-hidden divide-y divide-white/[0.05]">
-                 <div className="p-4 sm:p-5 flex items-center justify-between opacity-60">
+                 <div className="p-4 sm:p-5 flex items-center justify-between opacity-80">
                     <div className="flex items-center gap-3">
                        <div className="w-9 h-9 rounded-xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center shrink-0">
                          <Bell className="w-4 h-4 text-white/70" />
@@ -155,10 +157,18 @@ export default function Settings() {
                           <p className="text-xs text-white/40 mt-0.5">Get alerts for match predictions.</p>
                        </div>
                     </div>
-                    {/* Fake Toggle */}
-                    <div className="w-12 h-6 rounded-full bg-white/[0.1] relative">
-                       <div className="w-4 h-4 rounded-full bg-white/40 absolute left-1 top-1" />
-                    </div>
+                    <button
+                      onClick={async () => {
+                         if (permission === 'granted') {
+                            toast({ title: 'Notifications already active', description: 'To disable, change browser site settings.', variant: 'destructive' });
+                         } else {
+                            await enableNotifications();
+                         }
+                      }}
+                      className={`w-12 h-6 rounded-full relative transition-colors ${permission === 'granted' ? 'bg-primary' : 'bg-white/[0.1]'}`}
+                    >
+                       <div className={`w-4 h-4 rounded-full absolute top-1 transition-all ${permission === 'granted' ? 'bg-black right-1' : 'bg-white/40 left-1'}`} />
+                    </button>
                  </div>
                  
                  <div className="p-4 sm:p-5 flex items-center justify-between opacity-60">

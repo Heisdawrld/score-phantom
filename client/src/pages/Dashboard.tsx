@@ -688,6 +688,7 @@ export default function Dashboard() {
   });
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment") === "success");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites">("all");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
@@ -724,6 +725,18 @@ export default function Dashboard() {
         f.away_team_name.toLowerCase().includes(q) ||
         (f.tournament_name && f.tournament_name.toLowerCase().includes(q))
       );
+    }
+    if (activeGroupTab === "favorites") {
+      try {
+        const favs = JSON.parse((user as any)?.league_favorites || "[]");
+        if (Array.isArray(favs) && favs.length > 0) {
+           filtered = filtered.filter(f => favs.includes(f.tournament_name));
+        } else {
+           filtered = [];
+        }
+      } catch (e) {
+         filtered = [];
+      }
     }
     return filtered.reduce((acc: any, fixture) => {
       // Group by tournament_id — this is the stable unique key per competition.
@@ -879,8 +892,12 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* ── Search ── */}
-        <div className="relative">
+        {/* ── Tabs & Search ── */}
+        <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4">
+          <button onClick={() => setActiveGroupTab("all")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All Matches</button>
+          <button onClick={() => setActiveGroupTab("favorites")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
+        </div>
+        <div className="relative mt-2">
           <Search className="absolute left-4 top-3.5 h-4 w-4 text-white/25" />
           <Input
             placeholder="Search teams or leagues..."
