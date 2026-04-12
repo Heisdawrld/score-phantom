@@ -1,18 +1,55 @@
 import { useAuth, useLogout } from '@/hooks/use-auth';
 import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
-import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle, Check, X, Edit2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import { fetchApi } from '@/lib/api';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading } = useAuth();
   const logout = useLogout();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   if (isLoading) return <div className="min-h-screen bg-background" />;
 
   const email = (user as any)?.email || "";
-  const initial = email ? email.charAt(0).toUpperCase() : "?";
+  const username = (user as any)?.username || "";
+  const displayUsername = username || (email ? email.split("@")[0] : "User");
+  const initial = displayUsername.charAt(0).toUpperCase();
+
+  const handleSaveUsername = async () => {
+    if (!newUsername.trim()) return setIsEditingUsername(false);
+    if (newUsername.trim() === username) return setIsEditingUsername(false);
+    
+    setIsSaving(true);
+    try {
+      await fetchApi('/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ username: newUsername.trim() }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Username updated", description: "Your username has been saved." });
+      setIsEditingUsername(false);
+    } catch (err: any) {
+      toast({ 
+        title: "Update failed", 
+        description: err.message || "Could not update username", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   return (
     <div className='min-h-screen bg-background pb-20'>
@@ -36,14 +73,64 @@ export default function Settings() {
         <motion.div 
           initial={{ opacity: 0, y: 16 }} 
           animate={{ opacity: 1, y: 0 }} 
-          className="flex items-center gap-4 p-5 rounded-[2rem] glass-card mb-8"
+          className="flex flex-col gap-4 p-5 rounded-[2rem] glass-card mb-8"
         >
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-xl font-black text-primary shrink-0">
-            {initial}
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-xl font-black text-primary shrink-0">
+              {initial}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white mb-0.5">Primary Email</p>
+              <p className="text-xs text-white/50 truncate font-mono">{email}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white mb-0.5">Primary Email</p>
-            <p className="text-xs text-white/50 truncate font-mono">{email}</p>
+
+          <div className="h-px w-full bg-white/[0.05]" />
+
+          <div className="flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white mb-1">Username</p>
+              {isEditingUsername ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    placeholder="Enter new username"
+                    className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary/50"
+                    autoFocus
+                    disabled={isSaving}
+                  />
+                  <button 
+                    onClick={handleSaveUsername} 
+                    disabled={isSaving}
+                    className="p-1.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button 
+                    onClick={() => setIsEditingUsername(false)} 
+                    disabled={isSaving}
+                    className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-white/70 font-medium">@{displayUsername}</p>
+                  <button 
+                    onClick={() => {
+                      setNewUsername(displayUsername);
+                      setIsEditingUsername(true);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20"
+                  >
+                    <Edit2 size={12} /> Edit
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </motion.div>
 

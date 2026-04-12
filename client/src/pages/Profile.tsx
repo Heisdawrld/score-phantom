@@ -30,8 +30,9 @@ export default function Profile() {
   const isExpired = (user as any)?.access_status === "expired";
 
   const email = (user as any)?.email || "";
-  const dn = email.split("@")[0] || "User";
-  const ini = dn.slice(0, 2).toUpperCase();
+  const username = (user as any)?.username || "";
+  const dn = username || email.split("@")[0] || "User";
+  const ini = dn.charAt(0).toUpperCase();
 
   const trialEnd = (user as any)?.trial_ends_at ? new Date((user as any).trial_ends_at) : null;
   const premEnd = (user as any)?.subscription_expires_at ? new Date((user as any).subscription_expires_at) : null;

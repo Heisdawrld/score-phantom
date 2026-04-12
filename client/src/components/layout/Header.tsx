@@ -60,9 +60,8 @@ export function Header() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const initials = user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : "SP";
+  const displayUsername = (user as any)?.username || (user?.email ? user.email.split("@")[0] : "SP");
+  const initials = displayUsername.slice(0, 2).toUpperCase();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.04] bg-background/80 backdrop-blur-2xl">
@@ -147,7 +146,8 @@ export function Header() {
                           {initials}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-black text-white truncate">{user.email}</p>
+                          <p className="text-sm font-black text-white truncate">{(user as any)?.username ? `@${(user as any).username}` : user.email}</p>
+                          {(user as any)?.username && <p className="text-[10px] text-white/30 truncate">{user.email}</p>}
                           <div className="mt-1.5">
                             <PlanBadge status={user.access_status || "trial"} />
                           </div>

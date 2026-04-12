@@ -83,6 +83,7 @@ export async function initUsersTable() {
     ["referred_by_user_id",       "ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER"],
     ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
     ["partner_id",                "ALTER TABLE users ADD COLUMN partner_id INTEGER"],
+    ["username",                  "ALTER TABLE users ADD COLUMN username TEXT UNIQUE"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
@@ -198,6 +199,7 @@ function publicUser(user) {
   return {
     id:                    user.id,
     email:                 user.email,
+    username:              user.username,
     status:                user.status,
     trial_ends_at:         user.trial_ends_at,
     premium_expires_at:    user.premium_expires_at,
@@ -741,7 +743,7 @@ router.post("/login", authLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE id = ? LIMIT 1`,
       args: [req.user.id],
     });
     const user = result.rows?.[0];
@@ -762,6 +764,37 @@ router.get("/me", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[Me]", err);
     return res.status(500).json({ error: "Failed to load account" });
+  }
+});
+
+router.put("/profile", requireAuth, async (req, res) => {
+  try {
+    const { username } = req.body || {};
+    if (!username || String(username).trim().length < 3) {
+      return res.status(400).json({ error: "Username must be at least 3 characters" });
+    }
+    const normalized = String(username).trim();
+    if (!/^[a-zA-Z0-9_]+$/.test(normalized)) {
+      return res.status(400).json({ error: "Username can only contain letters, numbers, and underscores" });
+    }
+
+    const existing = await db.execute({ sql: "SELECT id FROM users WHERE username = ? COLLATE NOCASE LIMIT 1", args: [normalized] });
+    if ((existing.rows || []).length > 0 && existing.rows[0].id !== req.user.id) {
+       return res.status(400).json({ error: "Username is already taken" });
+    }
+
+    await db.execute({
+      sql: "UPDATE users SET username = ? WHERE id = ?",
+      args: [normalized, req.user.id]
+    });
+
+    return res.json({ success: true, username: normalized });
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ error: "Username is already taken" });
+    }
+    console.error("[ProfileUpdate]", err);
+    return res.status(500).json({ error: "Failed to update profile" });
   }
 });
 

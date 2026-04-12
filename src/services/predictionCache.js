@@ -83,6 +83,9 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
       wins,
       draws,
       losses,
+      won: wins,
+      drawn: draws,
+      lost: losses,
       points: Number(r.points || 0),
     };
   });
