@@ -11,12 +11,12 @@
 
 // ── Market rules ──────────────────────────────────────────────────────────────
 
-/** Markets always allowed in ACCA — stable, low-variance outcomes. */
+/**
+ * Markets always allowed in ACCA — stable, low-variance outcomes.
+ * NOTE: Unders intentionally removed from here so they go through the
+ * diversity/cap system instead of bypassing it entirely.
+ */
 const ALWAYS_ALLOWED = new Set([
-  'under_35',
-  'under_25',
-  'home_under_15',
-  'away_under_15',
   'double_chance_home',
   'double_chance_away',
   'dnb_home',
@@ -33,19 +33,25 @@ const BLOCKED_MARKETS = new Set([
   'draw',          // draws are high-variance, kill accas
 ]);
 
+/** Under-family markets — tracked separately for diversity cap */
+const UNDER_MARKETS = new Set([
+  'under_25',
+  'under_35',
+  'home_under_15',
+  'away_under_15',
+]);
+
 /**
  * Determine if a market is eligible for ACCA inclusion.
- *
- * @param {string} marketKey
- * @param {string} volatility  - 'low' | 'medium' | 'high'
- * @param {number} probability - 0–1
- * @returns {boolean}
  */
 function isAccaEligibleMarket(marketKey, volatility, probability) {
   const mk = (marketKey || '').toLowerCase();
 
   if (BLOCKED_MARKETS.has(mk)) return false;
   if (ALWAYS_ALLOWED.has(mk)) return true;
+
+  // Under markets — require decent probability and non-high volatility
+  if (UNDER_MARKETS.has(mk)) return probability >= 0.62 && volatility !== 'high';
 
   // Home/Away win
   if (mk === 'home_win' || mk === 'away_win') return probability >= 0.65;
@@ -69,10 +75,6 @@ function isAccaEligibleMarket(marketKey, volatility, probability) {
 
 // ── Script pattern categorization ────────────────────────────────────────────
 
-/**
- * Group match scripts into three diversity buckets.
- * We want max 2 of the same bucket in one ACCA.
- */
 function categorizeScript(scriptPrimary) {
   const s = (scriptPrimary || '').toLowerCase();
   if (s.includes('dominant')) return 'dominance';
@@ -105,66 +107,21 @@ function volatilityBonus(volatility) {
 
 // ── Risk level from stored DB fields ─────────────────────────────────────────
 
-/**
- * Compute risk level from stored prediction data.
- * Used when riskLevel is not already persisted (older cached predictions).
- */
 function computeRiskLevelFromRow(row) {
   const prob       = parseFloat(row.best_pick_probability || 0);
   const volatility = (row.confidence_volatility || 'medium').toLowerCase();
   const marketKey  = (row.best_pick_market || '').toLowerCase();
-  const isStable   = ALWAYS_ALLOWED.has(marketKey);
+  const isStable   = ALWAYS_ALLOWED.has(marketKey) || UNDER_MARKETS.has(marketKey);
 
-  // Generous risk tiers - most high-prob picks should qualify
   if (prob >= 0.70 && volatility === 'low') return 'SAFE';
   if (prob >= 0.65 && volatility !== 'high') return 'SAFE';
   if (prob >= 0.60) return 'MODERATE';
   return 'AGGRESSIVE';
 }
 
-// ── ACCA scoring formula ──────────────────────────────────────────────────────
+// ── League prestige weights ───────────────────────────────────────────────────
 
-/**
- * Score a candidate pick for ACCA inclusion.
- *
- * IMPROVED: Weights historical accuracy more heavily than raw probability.
- * score = (probability × 0.35) + (data_quality_weight × 0.15) + (low_volatility_bonus × 0.15) 
- *         + (historical_accuracy × 0.25) + (prestige × 0.10)
- */
-function scoreAccaCandidate(row) {
-  const prob     = parseFloat(row.best_pick_probability || 0);
-  const dqWeight = dataQualityWeight(row.data_quality, row.enrichment_status);
-  const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
-  const prestige = getLeaguePrestige(row.tournament_name);
-  const mk       = (row.best_pick_market || '').toLowerCase();
-  
-  // IMPROVED: Historical accuracy weight (if available from backtesting)
-  // Use the confidence_model field as a proxy for proven accuracy (0-1)
-  let historicalAccuracy = parseFloat(row.confidence_model || 0);
-  if (historicalAccuracy < 0.50) historicalAccuracy = 0; // filter out low-accuracy picks
-  
-  // Diversity: mild penalty on Unders, bonus for clean wins
-  const diversityMult = mk.includes('under') ? 0.72 : (mk === 'home_win' || mk === 'away_win') ? 1.08 : mk.includes('over') ? 0.95 : 1.0;
-  
-  return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
-}
-
-// ── Main ACCA builder ─────────────────────────────────────────────────────────
-
-/**
- * Build an ACCA from a pool of today's qualifying predictions.
- *
- * @param {object[]} rows  - rows from predictions_v2 JOIN fixtures (must include
- *                           best_pick_market, best_pick_probability, confidence_volatility,
- *                           no_safe_pick, enrichment_status, data_quality, tournament_name,
- *                           script_primary, fixture_id, home_team, away_team, match_date)
- * @param {string}   mode  - 'safe' | 'value'
- * @returns {object}        ACCA result
- */
-
-// ── League prestige weights ───────────────────────────────────────────────────────────────
 const LEAGUE_PRESTIGE = {
-  // Tier 1 — everyone bets these (1.0)
   'UEFA Champions League':    1.0,
   'Premier League':           1.0,
   'La Liga':                  1.0,
@@ -172,7 +129,6 @@ const LEAGUE_PRESTIGE = {
   'Serie A':                  1.0,
   'Ligue 1':                  1.0,
   'UEFA Europa League':       0.95,
-  // Tier 2 — popular (0.85)
   'Championship':             0.85,
   'Eredivisie':               0.85,
   'Primeira Liga':            0.85,
@@ -185,7 +141,6 @@ const LEAGUE_PRESTIGE = {
   'EFL League One':           0.75,
   'EFL League Two':           0.70,
   'Liga Nacional':            0.70,
-  // Tier 3 — niche (0.60)
   'USL Championship':         0.60,
   'K-League':                 0.60,
   'J. League':                0.60,
@@ -198,28 +153,117 @@ function getLeaguePrestige(tournamentName) {
   for (const [league, weight] of Object.entries(LEAGUE_PRESTIGE)) {
     if (t.includes(league.toLowerCase())) return weight;
   }
-  // Default for unknown leagues
   return 0.50;
 }
 
+// ── ACCA scoring formula ──────────────────────────────────────────────────────
+
+function scoreAccaCandidate(row) {
+  const prob     = parseFloat(row.best_pick_probability || 0);
+  const dqWeight = dataQualityWeight(row.data_quality, row.enrichment_status);
+  const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
+  const prestige = getLeaguePrestige(row.tournament_name);
+  const mk       = (row.best_pick_market || '').toLowerCase();
+
+  let historicalAccuracy = parseFloat(row.confidence_model || 0);
+  if (historicalAccuracy < 0.50) historicalAccuracy = 0;
+
+  // Diversity multipliers — unders penalised more to prevent stacking
+  let diversityMult;
+  if (UNDER_MARKETS.has(mk)) {
+    diversityMult = 0.55; // was 0.72 — reduced to discourage stacking
+  } else if (mk === 'home_win' || mk === 'away_win') {
+    diversityMult = 1.08; // result picks rewarded
+  } else if (mk.includes('over')) {
+    diversityMult = 0.95;
+  } else if (mk === 'double_chance_home' || mk === 'double_chance_away') {
+    diversityMult = 1.02; // slight bonus for DC as it's a result pick
+  } else {
+    diversityMult = 1.0;
+  }
+
+  return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
+}
+
+// ── Odds resolver — maps any marketKey to the correct odds column ─────────────
+
+/**
+ * Resolve the single decimal odds value for a given pick from the DB row.
+ * Now covers ALL markets, not just home/away/draw.
+ */
+function resolvePickOdds(row) {
+  const mk  = (row.best_pick_market || '').toLowerCase();
+  const sel = (row.best_pick_selection || '').toLowerCase();
+
+  // Match result
+  if (mk === 'home_win')          return parseFloat(row.odds_home || row.home || 0) || null;
+  if (mk === 'away_win')          return parseFloat(row.odds_away || row.away || 0) || null;
+  if (mk === 'draw')              return parseFloat(row.odds_draw || row.draw || 0) || null;
+
+  // DNB
+  if (mk === 'dnb_home')          return parseFloat(row.odds_home || row.home || 0) || null;
+  if (mk === 'dnb_away')          return parseFloat(row.odds_away || row.away || 0) || null;
+
+  // Double Chance
+  if (mk === 'double_chance_home') return parseFloat(row.odds_dc_home_draw || row.dc_home_draw || 0) || null;
+  if (mk === 'double_chance_away') return parseFloat(row.odds_dc_away_draw || row.dc_away_draw || 0) || null;
+
+  // BTTS
+  if (mk === 'btts_yes')          return parseFloat(row.odds_btts_yes || row.btts_yes || 0) || null;
+  if (mk === 'btts_no')           return parseFloat(row.odds_btts_no  || row.btts_no  || 0) || null;
+
+  // Over/Under — parse from over_under JSON blob if present
+  if (mk === 'over_25' || (mk === 'over_under' && sel.includes('over'))) {
+    const ou = safeParseJson(row.over_under);
+    return parseFloat(ou?.over_2_5 || ou?.over25 || row.odds_over_25 || 0) || null;
+  }
+  if (mk === 'under_25' || (mk === 'over_under' && sel.includes('under'))) {
+    const ou = safeParseJson(row.over_under);
+    return parseFloat(ou?.under_2_5 || ou?.under25 || row.odds_under_25 || 0) || null;
+  }
+  if (mk === 'over_15') {
+    const ou = safeParseJson(row.over_under);
+    return parseFloat(ou?.over_1_5 || ou?.over15 || row.odds_over_15 || 0) || null;
+  }
+  if (mk === 'under_35') {
+    const ou = safeParseJson(row.over_under);
+    return parseFloat(ou?.under_3_5 || ou?.under35 || row.odds_under_35 || 0) || null;
+  }
+
+  return null;
+}
+
+function safeParseJson(val) {
+  if (!val) return {};
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return {}; }
+}
+
+// ── Main ACCA builder ─────────────────────────────────────────────────────────
+
 export function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
-  // IMPROVED: Stricter thresholds for SAFE mode — historical accuracy matters more
-  const minProb = 0.50;  // increased from 0.62
-  const minAccuracy = isSafeMode ? 0.50 : 0.35;  // NEW: require proven historical accuracy
-  const targetMin   = 3;  // always need at least 3
-  const targetMax = 5;  // SAFE mode: max 3 picks (stricter)
-  const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];  // VALUE: no AGGRESSIVE
-  const maxModerate = isSafeMode ? 1 : 2;  // stricter for SAFE
+  const minProb     = 0.50;
+  const targetMin   = 3;    // won't output below this
+  const targetMax   = 5;    // always aim for 5, never exceed
+  const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];
+  const maxModerate = isSafeMode ? 1 : 2;
+  const maxUnders   = isSafeMode ? 1 : 2;
+
+  // ── Quality gates — best leagues with enough stats only ─────────────────
+  // 0.65 = Championship / Eredivisie tier and above (see LEAGUE_PRESTIGE table)
+  // 0.60 = includes some lower-tier leagues — use 0.65 for SAFE, 0.55 for VALUE
+  const MIN_LEAGUE_PRESTIGE = isSafeMode ? 0.65 : 0.55;
+  // Only include fixtures with decent data completeness (avoid thin-data upsets)
+  const MIN_DATA_SCORE      = isSafeMode ? 0.50 : 0.40;
 
   // ── Step 1: Filter eligible candidates ────────────────────────────────────
   const candidates = rows
     .filter(row => {
       if (row.no_safe_pick) return false;
-      const prob     = parseFloat(row.best_pick_probability || 0);
-      const vol      = (row.confidence_volatility || 'medium').toLowerCase();
+      const prob      = parseFloat(row.best_pick_probability || 0);
+      const vol       = (row.confidence_volatility || 'medium').toLowerCase();
       const marketKey = row.best_pick_market || '';
-      const historicalAccuracy = parseFloat(row.confidence_model || 0);
 
       if (prob < minProb) return false;
       if (!isAccaEligibleMarket(marketKey, vol, prob)) return false;
@@ -229,19 +273,33 @@ export function buildAcca(rows, mode = 'safe') {
 
       // SAFE mode: block high volatility entirely
       if (isSafeMode && vol === 'high') return false;
-      
-      // NEW: Historical accuracy gate — picks must have proven track record
-      // historicalAccuracy filter removed (confidence_model is text not float)
+
+      // ── League quality gate — prefer best leagues ────────────────────────
+      const prestige = getLeaguePrestige(row.tournament_name);
+      if (prestige < MIN_LEAGUE_PRESTIGE) return false;
+
+      // ── Data quality gate — need enough stats to make the pick reliable ──
+      const dataScore = parseFloat(row.data_completeness_score ||
+                                    row.best_pick_score || 0);
+      // If column isn't available (older rows), allow through — don't block on missing col
+      // Only block if we have an explicit low value
+      if (dataScore > 0 && dataScore < MIN_DATA_SCORE) return false;
 
       return true;
     })
     .map(row => ({
       ...row,
+      _prestige:  getLeaguePrestige(row.tournament_name),
       riskLevel:  computeRiskLevelFromRow(row),
       accaScore:  scoreAccaCandidate(row),
       scriptCat:  categorizeScript(row.script_primary),
     }))
-    .sort((a, b) => b.accaScore - a.accaScore);  // best first
+    // Sort: ACCA score desc, with prestige as secondary tiebreaker
+    .sort((a, b) => {
+      const scoreDiff = b.accaScore - a.accaScore;
+      if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
+      return b._prestige - a._prestige; // prefer higher prestige league on ties
+    });
 
   if (candidates.length < targetMin) {
     return {
@@ -256,17 +314,18 @@ export function buildAcca(rows, mode = 'safe') {
 
   // ── Step 2: Correlation-aware selection ───────────────────────────────────
   const selected     = [];
-  const usedLeagues  = new Map(); // tournamentName → count
-  const scriptCounts = {};        // scriptCat → count
-  let   defensiveCount = 0; // track Under + BTTS-No + Team-Under picks for diversity
+  const usedLeagues  = new Map();
+  const scriptCounts = {};
+  let   underCount   = 0;   // hard counter for Under markets
   let   moderateUsed = 0;
 
   for (const pick of candidates) {
     if (selected.length >= targetMax) break;
 
     const tournament = pick.tournament_name || 'Unknown';
+    const mk_        = (pick.best_pick_market || '').toLowerCase();
 
-    // Correlation rule: max 1 fixture per league in SAFE mode, max 2 in VALUE
+    // Correlation rule: max 2 per league in SAFE mode, max 3 in VALUE
     const leagueCount = usedLeagues.get(tournament) || 0;
     const leagueMax   = isSafeMode ? 2 : 3;
     if (leagueCount >= leagueMax) continue;
@@ -275,32 +334,38 @@ export function buildAcca(rows, mode = 'safe') {
     const catCount = scriptCounts[pick.scriptCat] || 0;
     if (catCount >= 3) continue;
 
-    // VALUE mode: max 1 MODERATE pick
+    // VALUE mode: max 1–2 MODERATE picks
     if (pick.riskLevel === 'MODERATE') {
       if (moderateUsed >= maxModerate) continue;
       moderateUsed++;
     }
 
-    // Diversity: max 1 Under per SAFE ACCA, max 2 per VALUE ACCA
-    // Diversity: max 1 defensive pick (Under + BTTS-No + NOT-to-Score combined)
-    const mk_ = (pick.best_pick_market||'').toLowerCase();
-    const sel_ = (pick.best_pick_selection||'').toLowerCase();
-    const isDefensive = mk_.includes('under') || mk_ === 'btts_no' || sel_.includes('not to score') || sel_.includes('no btts');
-    if (isDefensive && defensiveCount >= 1) continue;
+    // ── Hard Under cap — prevents stacking ──────────────────────────────────
+    if (UNDER_MARKETS.has(mk_)) {
+      if (underCount >= maxUnders) continue;
+    }
+
     // Min odds filter: skip picks where odds < 1.05 (no perceived value)
-    const pickOdds_ = parseFloat(pick.odds_home || pick.odds_away || 0);
-    if (pickOdds_ > 0 && pickOdds_ < 1.05) continue;
+    const pickOdds_ = resolvePickOdds(pick);
+    if (pickOdds_ && pickOdds_ < 1.05) continue;
 
     selected.push(pick);
-    if (isDefensive) defensiveCount++;
+
+    if (UNDER_MARKETS.has(mk_)) underCount++;
     usedLeagues.set(tournament, leagueCount + 1);
     scriptCounts[pick.scriptCat] = catCount + 1;
   }
 
-  // ── Step 3: Validate final set ────────────────────────────────────────────
-  // Ensure at least 1 attacking/result pick for variety
-  const hasAttackingPick = selected.some(p => { const m=(p.best_pick_market||'').toLowerCase(); return m==='home_win'||m==='away_win'||m.includes('over')||m==='btts_yes'||m==='double_chance_home'||m==='double_chance_away'; });
-  if (!hasAttackingPick && selected.length >= 2) console.log('[ACCA] Warning: all defensive picks');
+  // ── Step 3: Validate final set — ensure at least 1 result/attacking pick ───
+  const hasResultPick = selected.some(p => {
+    const m = (p.best_pick_market || '').toLowerCase();
+    return m === 'home_win' || m === 'away_win' || m === 'double_chance_home' ||
+           m === 'double_chance_away' || m === 'btts_yes' || m.includes('over');
+  });
+
+  if (!hasResultPick && selected.length >= 2) {
+    console.log('[ACCA] Warning: all defensive picks — no result/attacking market. Consider loosening filters.');
+  }
 
   if (selected.length < targetMin) {
     return {
@@ -309,14 +374,11 @@ export function buildAcca(rows, mode = 'safe') {
       combinedConfidence: 0,
       riskLevel:          null,
       picks:              [],
-      message:            `Correlation filter reduced picks below minimum (have ${selected.length}, need ${targetMin})`,
+      message:            `Correlation/diversity filter reduced picks below minimum (have ${selected.length}, need ${targetMin})`,
     };
   }
 
-  // ── Step 4: Final validation — allow up to 1 medium volatility in SAFE mode
-  // (removed hard rejection - was causing SAFE ACCA to always fail)
-
-  // ── Step 5: Compute combined probability ──────────────────────────────────
+  // ── Step 4: Compute combined probability ──────────────────────────────────
   const combinedProb = selected.reduce(
     (acc, p) => acc * parseFloat(p.best_pick_probability || 0), 1
   );
@@ -327,27 +389,34 @@ export function buildAcca(rows, mode = 'safe') {
       ? 'HIGH'
       : 'MEDIUM';
 
-  // ── Step 6: Format output ─────────────────────────────────────────────────
+  // ── Step 5: Format output ─────────────────────────────────────────────────
   return {
     accaType:           isSafeMode ? 'SAFE ACCA' : 'VALUE ACCA',
     totalMatches:       selected.length,
     combinedConfidence: parseFloat((combinedProb * 100).toFixed(1)),
     riskLevel:          overallRisk,
-    picks: selected.map(p => ({
-      fixtureId:        p.fixture_id,
-      homeTeam:         p.home_team,
-      awayTeam:         p.away_team,
-      match:            `${p.home_team} vs ${p.away_team}`,
-      tournament:       p.tournament_name || '',
-      matchDate:        p.match_date,
-      market:           p.best_pick_market,
-      selection:        p.best_pick_selection,
-      probability:      parseFloat((parseFloat(p.best_pick_probability || 0) * 100).toFixed(1)),
-      riskLevel:        p.riskLevel,
-      enrichmentStatus: p.enrichment_status,
-      dataQuality: p.data_quality,
-      pickOdds: p.best_pick_market === 'home_win' ? (p.odds_home||null) : p.best_pick_market === 'away_win' ? (p.odds_away||null) : p.best_pick_market === 'draw' ? (p.odds_draw||null) : null,
-      oddsHome: p.odds_home||null, oddsAway: p.odds_away||null, oddsDraw: p.odds_draw||null,
-    })),
+    picks: selected.map(p => {
+      const resolvedOdds = resolvePickOdds(p);
+      return {
+        fixtureId:        p.fixture_id,
+        homeTeam:         p.home_team,
+        awayTeam:         p.away_team,
+        match:            `${p.home_team} vs ${p.away_team}`,
+        tournament:       p.tournament_name || '',
+        matchDate:        p.match_date,
+        market:           p.best_pick_market,
+        selection:        p.best_pick_selection,
+        probability:      parseFloat((parseFloat(p.best_pick_probability || 0) * 100).toFixed(1)),
+        riskLevel:        p.riskLevel,
+        enrichmentStatus: p.enrichment_status,
+        dataQuality:      p.data_quality,
+        // Resolved odds for the actual pick (all markets covered)
+        pickOdds:         resolvedOdds,
+        // Raw odds columns for display
+        oddsHome: parseFloat(p.odds_home || p.home || 0) || null,
+        oddsAway: parseFloat(p.odds_away || p.away || 0) || null,
+        oddsDraw: parseFloat(p.odds_draw || p.draw || 0) || null,
+      };
+    }),
   };
 }

@@ -51,6 +51,13 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
     const minGap  = hasOdds ? 0.018 : 0.012;
     const gap     = safeNum(top.finalScore, 0) - safeNum(ranked[1].finalScore, 0);
     if (gap < minGap) {
+      // ── Rescue: both top picks are genuinely strong — trust the top one ──────
+      // Two strong picks near-tied is NOT the same as no picks.
+      const secondProb = safeNum(ranked[1].modelProbability, 0);
+      if (topProb >= 0.68 && secondProb >= 0.68) {
+        console.log('[selectBestPickOrAbstain] Both top picks strong (' + (topProb*100).toFixed(1) + '% + ' + (secondProb*100).toFixed(1) + '%) — picking top despite small gap=' + gap.toFixed(4));
+        return { bestPick: annotate(top, fv, script), backupPicks: ranked.slice(1,3).map(p=>annotate(p,fv,script)), noSafePick: false, noSafePickReason: null, layer2OverrideApplied: false, abstainCode: null };
+      }
       // E. Layer 2 override can rescue a close call
       if (options.layer2Override) {
         const shiftPp = ((options.layer2ShiftPp ?? 0) * 100).toFixed(1);
@@ -72,8 +79,10 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
   }
 
   // D. Edge label gate — reject if bookmaker strongly disagrees
+  // Skip this gate when odds data is unavailable — can't penalise missing data.
   const annotatedTop = annotate(top, fv, script);
-  if (annotatedTop.edgeLabel === 'NO EDGE') {
+  const hasAnyOdds = ranked.some(c => c.edge != null && c.edge !== 0);
+  if (hasAnyOdds && annotatedTop.edgeLabel === 'NO EDGE') {
     return abstain('Best pick has NO EDGE — bookmaker implied probability too high vs model', 'NO_EDGE');
   }
 

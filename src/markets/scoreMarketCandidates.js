@@ -5,49 +5,63 @@ import { safeNum, clamp } from '../utils/math.js';
  */
 const SCRIPT_MARKET_FIT = {
   dominant_home_pressure: {
-    home_win: 0.9,
-    home_over_15: 0.85,
-    win_either_half_home: 0.8,
-    away_under_15: 0.75,
-    home_over_25: 0.6,
-    double_chance_home: 0.55,
-    btts_no: 0.5,
+    home_win:             0.92,
+    dnb_home:             0.85, // 1-0 wins are dominant-home — DNB protects draw risk cleanly
+    home_over_15:         0.85,
+    win_either_half_home: 0.80,
+    away_under_15:        0.78, // away team stifled → they won't score
+    double_chance_home:   0.72,
+    under_25:             0.68, // dominant teams often win by 1, keeping it tight
+    btts_no:              0.65, // home keeps clean sheet when controlling
+    home_over_25:         0.60,
+    home_over_15:         0.85,
   },
   dominant_away_pressure: {
-    away_win: 0.9,
-    away_over_15: 0.85,
-    win_either_half_away: 0.8,
-    home_under_15: 0.75,
-    away_over_25: 0.6,
-    double_chance_away: 0.55,
+    away_win:             0.92,
+    dnb_away:             0.85,
+    away_over_15:         0.85,
+    win_either_half_away: 0.80,
+    home_under_15:        0.78,
+    double_chance_away:   0.72,
+    under_25:             0.68,
+    btts_no:              0.65,
+    away_over_25:         0.60,
   },
   open_end_to_end: {
-    btts_yes: 0.9,
-    over_25: 0.85,
-    over_35: 0.7,
-    home_over_05: 0.7,
-    away_over_05: 0.7,
-    over_15: 0.65,
-    home_over_15: 0.6,
-    away_over_15: 0.6,
+    btts_yes:             0.92,
+    over_25:              0.88,
+    over_35:              0.72,
+    home_over_05:         0.70,
+    away_over_05:         0.70,
+    over_15:              0.65,
+    home_over_15:         0.62,
+    away_over_15:         0.62,
+    // Penalised markets — under/no are wrong here; let pruning handle it via low fit
+    under_25:             0.15,
+    btts_no:              0.15,
   },
   balanced_high_event: {
-    over_25: 0.85,
-    btts_yes: 0.8,
-    over_15: 0.75,
-    home_over_15: 0.65,
-    away_over_15: 0.65,
+    over_25:              0.85,
+    btts_yes:             0.82,
+    over_15:              0.75,
+    home_over_15:         0.65,
+    away_over_15:         0.65,
+    under_25:             0.30, // possible but not ideal
   },
   tight_low_event: {
-    under_25: 0.9,
-    btts_no: 0.85,
-    under_35: 0.7,
-    away_under_15: 0.7,
-    home_under_15: 0.7,
-    under_15: 0.6,
+    under_25:             0.92,
+    btts_no:              0.88,
+    under_35:             0.75,
+    away_under_15:        0.72,
+    home_under_15:        0.72,
+    dnb_home:             0.65, // draw protection fits tight games
+    dnb_away:             0.65,
+    double_chance_home:   0.60,
+    double_chance_away:   0.60,
   },
-  chaotic_unreliable: {}, // all get default 0.1
+  chaotic_unreliable: {}, // all get CHAOTIC_TACTICAL_FIT = 0.15
 };
+
 
 const DEFAULT_TACTICAL_FIT = 0.4;
 const CHAOTIC_TACTICAL_FIT = 0.15;

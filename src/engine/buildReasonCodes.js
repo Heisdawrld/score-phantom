@@ -1,10 +1,100 @@
 import { safeNum } from '../utils/math.js';
 
+// ── Market family helpers ─────────────────────────────────────────────────────
+
+function isResultPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk === 'home_win' || mk === 'away_win' || mk === 'draw' ||
+         mk === 'double_chance_home' || mk === 'double_chance_away' ||
+         mk === 'dnb_home' || mk === 'dnb_away';
+}
+
+function isGoalsPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('over') || mk.includes('under');
+}
+
+function isUnderPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('under');
+}
+
+function isOverPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('over');
+}
+
+function isBttsPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('btts');
+}
+
+function isHomePick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('home');
+}
+
+function isAwayPick(marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+  return mk.includes('away');
+}
+
+// ── Code conflict check — returns true if the code CONTRADICTS the pick ───────
+
+function contradictsPick(code, marketKey) {
+  const mk = (marketKey || '').toLowerCase();
+
+  if (isUnderPick(mk)) {
+    // Unders are killed by codes that signal high scoring
+    return ['home_scoring_rate_strong', 'both_teams_high_scoring_tendency',
+            'btts_profile_high', 'h2h_high_scoring_history', 'projected_open_game'].includes(code);
+  }
+
+  if (isOverPick(mk)) {
+    // Overs are killed by codes that signal low scoring
+    return ['both_teams_low_scoring_tendency', 'btts_profile_low',
+            'h2h_low_scoring_history', 'h2h_historically_under',
+            'low_event_profile', 'home_defense_strong',
+            'away_struggles_to_score_away'].includes(code);
+  }
+
+  if (mk === 'btts_yes') {
+    return ['btts_profile_low', 'home_defense_strong', 'away_struggles_to_score_away',
+            'away_failed_to_score_often', 'home_failed_to_score_often',
+            'both_teams_low_scoring_tendency', 'low_event_profile'].includes(code);
+  }
+
+  if (mk === 'btts_no') {
+    return ['btts_profile_high', 'h2h_btts_rate_high', 'both_teams_high_scoring_tendency',
+            'projected_open_game'].includes(code);
+  }
+
+  if (mk === 'home_win' || mk === 'dnb_home' || mk === 'double_chance_home') {
+    return ['away_strength_advantage', 'strong_away_form', 'projected_away_control',
+            'poor_away_venue_record'].includes(code);
+  }
+
+  if (mk === 'away_win' || mk === 'dnb_away' || mk === 'double_chance_away') {
+    return ['home_strength_gap_high', 'home_form_strong', 'projected_home_control',
+            'strong_home_venue_record'].includes(code);
+  }
+
+  return false;
+}
+
 /**
  * Build a rich, match-specific set of reason codes.
- * Each fixture should produce unique, relevant reasons.
+ *
+ * Now receives bestPickMarketKey so it can:
+ *   1. Prioritise codes that SUPPORT the pick
+ *   2. Exclude codes that CONTRADICT the pick (they'd confuse users)
+ *   3. Always include warnings (chaos, upset risk, low data)
+ *
+ * @param {object} featureVector
+ * @param {object} scriptOutput
+ * @param {string|null} bestPickMarketKey - the winning pick's marketKey (e.g. 'under_25', 'home_win')
  */
-export function buildReasonCodes(featureVector, scriptOutput) {
+export function buildReasonCodes(featureVector, scriptOutput, bestPickMarketKey = null) {
   const fv = featureVector || {};
   const script = scriptOutput || {};
   const primary = script.primary || '';
@@ -32,8 +122,6 @@ export function buildReasonCodes(featureVector, scriptOutput) {
   const chaosScore = safeNum(fv.matchChaosScore, 0.5);
   const upsetRisk = safeNum(fv.upsetRiskScore, 0.5);
   const dataCompleteness = safeNum(fv.dataCompletenessScore, 0.5);
-  const homePosition = fv.homePosition;
-  const awayPosition = fv.awayPosition;
   const homeContext = fv.homeContext || 'midtable';
   const awayContext = fv.awayContext || 'midtable';
   const homeHomeGoalsFor = fv.homeHomeGoalsFor;
@@ -98,16 +186,30 @@ export function buildReasonCodes(featureVector, scriptOutput) {
   if (homeHomeWinRate != null && homeHomeWinRate > 0.65) codes.push('strong_home_venue_record');
   if (awayAwayWinRate != null && awayAwayWinRate < 0.15) codes.push('poor_away_venue_record');
 
-  // ── Volatility / data ─────────────────────────────────────────────────────
-  if (chaosScore > 0.60) codes.push('high_volatility_warning');
-  if (upsetRisk > 0.65) codes.push('upset_risk_elevated');
-  if (dataCompleteness < 0.4) codes.push('low_data_quality');
+  // ── Volatility / data (warnings — always included regardless of pick) ─────
+  const warningCodes = [];
+  if (chaosScore > 0.60) warningCodes.push('high_volatility_warning');
+  if (upsetRisk > 0.65) warningCodes.push('upset_risk_elevated');
+  if (dataCompleteness < 0.4) warningCodes.push('low_data_quality');
 
-  // ── Return top 4 most relevant codes (prioritise match-specific ones) ─────
-  // De-duplicate and take max 4
+  // ── Filter and rank codes for the best pick ───────────────────────────────
   const unique = [...new Set(codes)];
-  // Prefer non-generic codes first
-  const specific = unique.filter(c => !['home_strength_gap_high','away_defense_weak_away'].includes(c));
-  const generic = unique.filter(c => ['home_strength_gap_high','away_defense_weak_away'].includes(c));
-  return [...specific, ...generic].slice(0, 4);
+
+  if (!bestPickMarketKey) {
+    // No pick info available — return top 4 as before
+    const specific = unique.filter(c => !['home_strength_gap_high', 'away_defense_weak_away'].includes(c));
+    const generic  = unique.filter(c => ['home_strength_gap_high', 'away_defense_weak_away'].includes(c));
+    return [...specific, ...generic, ...warningCodes].slice(0, 4);
+  }
+
+  // Separate codes into: supporting, neutral, contradicting
+  const supporting    = unique.filter(c => !contradictsPick(c, bestPickMarketKey));
+  const contradicting = unique.filter(c =>  contradictsPick(c, bestPickMarketKey));
+
+  // Build final list: warnings always included, supporting prioritised,
+  // contradicting fully suppressed from the headline reasons
+  const ranked = [...supporting, ...warningCodes];
+
+  // De-duplicate and take top 4
+  return [...new Set(ranked)].slice(0, 4);
 }

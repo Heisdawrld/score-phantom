@@ -11,7 +11,8 @@ import { logRecommendedMarket } from "../storage/marketTracking.js";
 export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection }) {
   const { bestPick, backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
   const confidence = buildConfidenceProfile(bestPick, features);
-  const reasonCodes = buildReasonCodes(features, script);
+  // Pass bestPick.marketKey so reasons are filtered to support the chosen pick
+  const reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
   const result = {
     fixtureId,
     homeTeam: homeTeamName,
