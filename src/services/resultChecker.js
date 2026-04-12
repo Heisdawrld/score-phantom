@@ -102,9 +102,18 @@ export async function checkResults(dateStr) {
     const hk = (fix.home_team_name || '').toLowerCase().trim();
     const ak = (fix.away_team_name || '').toLowerCase().trim();
     const score = scoreMap[fid] || nameMap[hk + ':' + ak] || nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] || null;
-    const outcome = score ? evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name) : 'void';
+
+    // ── Key fix: if no score found, SKIP — don't write void ──────────────────
+    // Writing void when the score is simply missing inflates the void count.
+    // Only evaluate (and write void) when we have a confirmed final score.
+    if (!score) {
+      outcomes.skipped++;
+      continue;
+    }
+
+    const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     try {
-      await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"),datetime("now"))', args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score ? score.home : null, score ? score.away : null, score ? score.home + '-' + score.away : null, outcome] });
+      await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"),datetime("now"))', args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score.home, score.away, score.home + '-' + score.away, outcome] });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;
     } catch (e) { console.error('[ResultChecker] DB error for', fid, ':', e.message); }
@@ -112,6 +121,7 @@ export async function checkResults(dateStr) {
   console.log('[ResultChecker] Done for ' + date + ':', outcomes);
   return { checked: fixtures.length, date, outcomes };
 }
+
 
 export async function backfillResults(daysBack = 7) {
   const results = [];
