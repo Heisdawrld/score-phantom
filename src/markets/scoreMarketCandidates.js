@@ -1,4 +1,5 @@
 import { safeNum, clamp } from '../utils/math.js';
+import { getHistoricalAccuracyScore } from '../storage/accuracyCache.js';
 
 /**
  * Script-market binding: tactical fit scores per script
@@ -123,25 +124,31 @@ function getBadMarketPenalty(candidate, featureVector) {
 /**
  * Score each market candidate.
  *
- * REBALANCED FORMULA (v2.1):
+ * REBALANCED FORMULA (v2.5.0 — self-learning):
  * finalScore =
- *   0.28 * modelConfidenceScore  (reduced from 0.34)
- * + 0.28 * edgeScore
- * + 0.26 * tacticalFitScore      (increased from 0.18)
- * + 0.12 * dataSupportScore
- * + 0.06 * formMomentumScore     (NEW)
+ *   0.25 * modelConfidenceScore
+ * + 0.25 * edgeScore
+ * + 0.24 * tacticalFitScore
+ * + 0.10 * dataSupportScore
+ * + 0.08 * historicalAccuracyScore (NEW — engine learns from own win/loss record)
+ * + 0.08 * formMomentumScore
  * - 0.22 * volatilityPenalty
  * - 0.14 * badMarketPenalty
  * - 0.08 * repetitionPenalty
- * - 0.05 * diversityPenalty      (NEW)
+ * - 0.05 * diversityPenalty
+ *
+ * historicalAccuracyScore: 0 = engine consistently wrong on this combo
+ *                           0.5 = no data yet (neutral, same as before)
+ *                           1.0 = engine consistently right on this combo
  *
  * @param {MarketCandidate[]} candidates
  * @param {object} scriptOutput
  * @param {object} featureVector - flat feature vector
  * @param {object} recentMarkets - { markets: {[key]: count}, marketTypes: {[type]: count} }
+ * @param {object|null} accuracyCache - from getAccuracyCache(), or null (no adjustment)
  * @returns {MarketCandidate[]} with finalScore populated
  */
-export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}) {
+export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}, accuracyCache = null) {
   const fv = featureVector || {};
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
   const volatilityPenalty = clamp(safeNum(fv.matchChaosScore, 0.5), 0, 1);
@@ -188,12 +195,21 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let diversityBonus = 0;
     if (typeCount === 0) diversityBonus = 0.03;
 
+    // Historical accuracy score — how well has the engine done with this market+script?
+    // 0.5 = no data yet (neutral). 1.0 = consistently correct. 0.0 = consistently wrong.
+    const historicalAccuracyScore = getHistoricalAccuracyScore(
+      candidate.marketKey,
+      scriptOutput?.primary || null,
+      accuracyCache
+    );
+
     const finalScore =
-      0.28 * modelConfidenceScore +
-      0.28 * Math.max(0, edgeScore) +
-      0.26 * tacticalFitScore +
-      0.12 * dataSupportScore +
-      0.06 * formMomentumScore +
+      0.25 * modelConfidenceScore +
+      0.25 * Math.max(0, edgeScore) +
+      0.24 * tacticalFitScore +
+      0.10 * dataSupportScore +
+      0.08 * historicalAccuracyScore +
+      0.08 * formMomentumScore +
       diversityBonus -
       0.22 * volatilityPenalty -
       0.14 * badMarketPenalty -
@@ -202,12 +218,13 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
 
     return {
       ...candidate,
-      tacticalFitScore: parseFloat(tacticalFitScore.toFixed(3)),
-      badMarketPenalty: parseFloat(badMarketPenalty.toFixed(3)),
-      repetitionPenalty: parseFloat(repetitionPenalty.toFixed(3)),
-      diversityPenalty: parseFloat(diversityPenalty.toFixed(3)),
-      formMomentumScore: parseFloat(formMomentumScore.toFixed(3)),
-      finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
+      tacticalFitScore:        parseFloat(tacticalFitScore.toFixed(3)),
+      badMarketPenalty:        parseFloat(badMarketPenalty.toFixed(3)),
+      repetitionPenalty:       parseFloat(repetitionPenalty.toFixed(3)),
+      diversityPenalty:        parseFloat(diversityPenalty.toFixed(3)),
+      formMomentumScore:       parseFloat(formMomentumScore.toFixed(3)),
+      historicalAccuracyScore: parseFloat(historicalAccuracyScore.toFixed(3)),
+      finalScore:              parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
     };
   });
 }

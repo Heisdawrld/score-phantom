@@ -2,12 +2,14 @@
  * buildAcca.js
  *
  * Intelligent ACCA construction engine.
- * Builds low-correlation, controlled-risk accumulators — NOT a simple probability stack.
+ * Builds low-correlation, controlled-risk accumulators.
  *
  * Two modes:
- *   SAFE  — 3 picks, all >= 75%, low volatility only, stable markets only
+ *   SAFE  — 3–5 picks, all >= 75%, low volatility only, stable markets, top leagues
  *   VALUE — 4–5 picks, >= 70%, allows 1 MODERATE risk pick
  */
+import { getAccuracyCache, getHistoricalAccuracyScore } from '../storage/accuracyCache.js';
+
 
 // ── Market rules ──────────────────────────────────────────────────────────────
 
@@ -158,31 +160,43 @@ function getLeaguePrestige(tournamentName) {
 
 // ── ACCA scoring formula ──────────────────────────────────────────────────────
 
-function scoreAccaCandidate(row) {
+/**
+ * Score an ACCA candidate. Higher = better pick for the accumulator.
+ * Now reads real historical win rate from the accuracy cache.
+ */
+function scoreAccaCandidate(row, accuracyCache = null) {
   const prob     = parseFloat(row.best_pick_probability || 0);
   const dqWeight = dataQualityWeight(row.data_quality, row.enrichment_status);
   const volBonus = volatilityBonus((row.confidence_volatility || 'medium').toLowerCase());
   const prestige = getLeaguePrestige(row.tournament_name);
   const mk       = (row.best_pick_market || '').toLowerCase();
+  const script   = (row.script_primary || '').toLowerCase();
 
-  let historicalAccuracy = parseFloat(row.confidence_model || 0);
-  if (historicalAccuracy < 0.50) historicalAccuracy = 0;
+  // Real historical accuracy from the accuracy cache (0–1, 0.5 = neutral/no data)
+  const histAccuracy = getHistoricalAccuracyScore(mk, script, accuracyCache);
 
   // Diversity multipliers — unders penalised more to prevent stacking
   let diversityMult;
   if (UNDER_MARKETS.has(mk)) {
-    diversityMult = 0.55; // was 0.72 — reduced to discourage stacking
+    diversityMult = 0.55;
   } else if (mk === 'home_win' || mk === 'away_win') {
-    diversityMult = 1.08; // result picks rewarded
+    diversityMult = 1.08;
   } else if (mk.includes('over')) {
     diversityMult = 0.95;
   } else if (mk === 'double_chance_home' || mk === 'double_chance_away') {
-    diversityMult = 1.02; // slight bonus for DC as it's a result pick
+    diversityMult = 1.02;
   } else {
     diversityMult = 1.0;
   }
 
-  return ((prob * 0.35) + (dqWeight * 0.15) + (volBonus * 0.15) + (historicalAccuracy * 0.25) + (prestige * 0.10)) * diversityMult;
+  // Formula: probability + data quality + volatility + historical accuracy + prestige
+  return (
+    (prob       * 0.35) +
+    (dqWeight   * 0.15) +
+    (volBonus   * 0.15) +
+    (histAccuracy * 0.25) +  // replaces broken confidence_model text heuristic
+    (prestige   * 0.10)
+  ) * diversityMult;
 }
 
 // ── Odds resolver — maps any marketKey to the correct odds column ─────────────
@@ -241,7 +255,7 @@ function safeParseJson(val) {
 
 // ── Main ACCA builder ─────────────────────────────────────────────────────────
 
-export function buildAcca(rows, mode = 'safe') {
+export async function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
   const minProb     = 0.50;
   const targetMin   = 3;    // won't output below this
@@ -256,6 +270,9 @@ export function buildAcca(rows, mode = 'safe') {
   const MIN_LEAGUE_PRESTIGE = isSafeMode ? 0.65 : 0.55;
   // Only include fixtures with decent data completeness (avoid thin-data upsets)
   const MIN_DATA_SCORE      = isSafeMode ? 0.50 : 0.40;
+
+  // Fetch accuracy cache once — used to score all candidates with real win rate data
+  const accuracyCache = await getAccuracyCache().catch(() => null);
 
   // ── Step 1: Filter eligible candidates ────────────────────────────────────
   const candidates = rows
@@ -291,7 +308,7 @@ export function buildAcca(rows, mode = 'safe') {
       ...row,
       _prestige:  getLeaguePrestige(row.tournament_name),
       riskLevel:  computeRiskLevelFromRow(row),
-      accaScore:  scoreAccaCandidate(row),
+      accaScore:  scoreAccaCandidate(row, accuracyCache),
       scriptCat:  categorizeScript(row.script_primary),
     }))
     // Sort: ACCA score desc, with prestige as secondary tiebreaker

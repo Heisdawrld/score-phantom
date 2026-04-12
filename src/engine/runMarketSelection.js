@@ -7,6 +7,7 @@ import { getRecentMarkets } from '../storage/marketTracking.js';
 import { assessMatchPredictability } from './assessMatchPredictability.js';
 import { pruneWeakCandidates } from './pruneWeakCandidates.js';
 import { selectBestPickOrAbstain } from './selectBestPickOrAbstain.js';
+import { getAccuracyCache } from '../storage/accuracyCache.js';
 
 /**
  * Stage 3 — Market selection pipeline (gate-first architecture).
@@ -44,10 +45,14 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
   }
 
   // ── Stage 3b: Build + score candidates ─────────────────────────────────────
-  const candidates        = buildMarketCandidates(calibratedProbs, odds);
+  const candidates         = buildMarketCandidates(calibratedProbs, odds);
   const candidatesWithEdge = computeImpliedProbabilities(candidates, odds);
-  const recentMarkets     = await getRecentMarkets(fixtureId, 24);
-  const scored            = scoreMarketCandidates(candidatesWithEdge, script, features, recentMarkets);
+  const recentMarkets      = await getRecentMarkets(fixtureId, 24);
+
+  // Fetch accuracy cache (non-blocking — null = neutral, engine unaffected)
+  const accuracyCache = await getAccuracyCache().catch(() => null);
+
+  const scored = scoreMarketCandidates(candidatesWithEdge, script, features, recentMarkets, accuracyCache);
 
   // ── Stage 3c: Prune weak candidates (new — before ranking) ─────────────────
   const pruned = pruneWeakCandidates(scored);

@@ -16,6 +16,7 @@ import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js
 import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
+import { refreshAccuracyCache } from "./storage/accuracyCache.js";
 
 dotenv.config();
 
@@ -405,6 +406,9 @@ app.listen(PORT, async () => {
       try {
         const r = await checkResults(); // defaults to yesterday
         console.log(`[ResultChecker] Checked ${r.checked} predictions — W:${r.outcomes?.wins} L:${r.outcomes?.losses} V:${r.outcomes?.voids}`);
+        // Refresh accuracy cache so the engine learns from last night's results
+        await refreshAccuracyCache();
+        console.log('[AccuracyCache] Refreshed after daily result check');
       } catch (err) {
         console.error('[ResultChecker] Failed:', err.message);
       }
@@ -418,12 +422,16 @@ app.listen(PORT, async () => {
   // Run result checker every 3h during the day to catch todays results as they finish
   setInterval(async () => {
     try {
-      const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const today     = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
       const yesterday = new Date(Date.now() - 86400000).toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
       const r1 = await checkResults(today);
       console.log("[ResultChecker] 3h check (today):", r1.outcomes);
       const r2 = await checkResults(yesterday);
-      if (r2.outcomes?.updated > 0) console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
+      if (r2.outcomes?.updated > 0) {
+        console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
+        // New results came in — refresh accuracy cache
+        await refreshAccuracyCache().catch(() => {});
+      }
     } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
   }, 3 * 60 * 60 * 1000);
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
