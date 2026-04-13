@@ -25,6 +25,66 @@ import {
   normaliseStandingsRow,
 } from '../services/bsd.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
+import db from '../config/database.js';
+
+// ── Local Database Form Fallbacks ─────────────────────────────────────────────
+
+async function fetchLocalTeamForm(teamName) {
+  try {
+    const res = await db.execute({
+      sql: `SELECT home_team_name, away_team_name, home_score, away_score, match_date, tournament_name, id 
+            FROM fixtures 
+            WHERE match_status IN ('FT', 'AET', 'PEN') 
+            AND (home_team_name = ? OR away_team_name = ?) 
+            ORDER BY match_date DESC LIMIT 15`,
+      args: [teamName, teamName]
+    });
+    return (res.rows || []).map(r => ({
+      home: r.home_team_name,
+      away: r.away_team_name,
+      score: r.home_score + '-' + r.away_score,
+      date: r.match_date,
+      competition: r.tournament_name,
+      _localId: r.id
+    }));
+  } catch { return []; }
+}
+
+async function fetchLocalH2H(homeName, awayName) {
+  try {
+    const res = await db.execute({
+      sql: `SELECT home_team_name, away_team_name, home_score, away_score, match_date, tournament_name, id 
+            FROM fixtures 
+            WHERE match_status IN ('FT', 'AET', 'PEN') 
+            AND ((home_team_name = ? AND away_team_name = ?) OR (home_team_name = ? AND away_team_name = ?))
+            ORDER BY match_date DESC LIMIT 10`,
+      args: [homeName, awayName, awayName, homeName]
+    });
+    return (res.rows || []).map(r => ({
+      home: r.home_team_name,
+      away: r.away_team_name,
+      score: r.home_score + '-' + r.away_score,
+      date: r.match_date,
+      competition: r.tournament_name,
+      _localId: r.id
+    }));
+  } catch { return []; }
+}
+
+function mergeForm(apiForm, localForm) {
+  const merged = [...(apiForm || []), ...(localForm || [])];
+  const unique = [];
+  const seen = new Set();
+  for (const m of merged) {
+    if (!m.date) continue;
+    const key = m.date.substring(0, 10) + '_' + m.home;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(m);
+    }
+  }
+  return unique.sort((a,b) => new Date(b.date) - new Date(a.date));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -236,20 +296,29 @@ export async function fetchAndStoreEnrichment(fixture) {
 
   // Step 1: Team form PRIMARY (up to 15 finished matches) + H2H + Standings
   // BSD team endpoint: filter by team name, status=finished
-  const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
+  const bsdHome = await fetchTeamRecentEvents(fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
     console.warn("[enrichmentService] Home form failed:", e.message); return [];
   });
   await sleep(300);
-  const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
+  const bsdAway = await fetchTeamRecentEvents(fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
     console.warn("[enrichmentService] Away form failed:", e.message); return [];
   });
   await sleep(300);
 
-  // H2H derived client-side: intersect home + away event histories
-  const h2hRaw = await deriveH2H(fixture.home_team_name, fixture.away_team_name).catch((e) => {
+  // Self-Healing Local DB Fallback (Builds long-term history naturally)
+  const localHome = await fetchLocalTeamForm(fixture.home_team_name);
+  const localAway = await fetchLocalTeamForm(fixture.away_team_name);
+  
+  const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 15);
+  const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 15);
+
+  // H2H derived client-side + Local DB H2H Intersect
+  const bsdH2h = await deriveH2H(fixture.home_team_name, fixture.away_team_name).catch((e) => {
     console.warn("[enrichmentService] H2H derivation failed:", e.message);
     return [];
   });
+  const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
+  const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 5);
   const h2hData = { h2h: h2hRaw, homeForm: [], awayForm: [] };
   await sleep(300);
 
