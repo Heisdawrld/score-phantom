@@ -146,8 +146,8 @@ export async function fetchStandings(leagueId) {
   if (!leagueId) return [];
   const data = await bsdFetch(`/leagues/${leagueId}/standings/`);
   if (!data) return [];
-  // BSD returns standings directly as the response body (not paginated)
-  return Array.isArray(data) ? data : (data.results || []);
+  // BSD returns standings under the "standings" key or as a direct array
+  return Array.isArray(data) ? data : (data.standings || data.results || []);
 }
 
 // ── Events (Fixtures) ─────────────────────────────────────────────────────────
