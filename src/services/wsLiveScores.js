@@ -4,6 +4,8 @@ import db from '../config/database.js';
 import { fetchLiveMatches } from './bsd.js';
 
 const sseClients = new Set();
+let pollTimer = null;
+let isConnected = false;
 
 export function addSseClient(res) {
   sseClients.add(res);
