@@ -191,23 +191,26 @@ export async function fetchEventDetail(eventId) {
   return await bsdFetch(`/events/${eventId}/`);
 }
 
-/**
- * Fetch recent finished events for a team.
- * Used for: home form, away form.
- * BSD supports partial team name match via ?team=
- *
- * @param {string} teamName - team name (partial match OK)
- * @param {number} n - max results to return
- */
 export async function fetchTeamRecentEvents(teamName, n = 15) {
   if (!teamName) return [];
+
+  // BSD requires date_from to query historical data, otherwise it defaults to a narrow window.
+  const dTo = new Date();
+  const dFrom = new Date(dTo.getTime() - 365 * 24 * 60 * 60 * 1000); // 1 year ago
+  const dateFrom = dFrom.toISOString().slice(0, 10);
+  const dateTo = dTo.toISOString().slice(0, 10);
 
   const results = await bsdFetchAll('/events/', {
     team: teamName,
     status: 'finished',
+    date_from: dateFrom,
+    date_to: dateTo,
   });
 
-  return (results || []).slice(0, n);
+  // Ensure results are sorted descending (newest first) before slicing
+  const sorted = (results || []).sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
+
+  return sorted.slice(0, n);
 }
 
 // ── H2H derivation (client-side — BSD has no /h2h/ endpoint) ─────────────────
