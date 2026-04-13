@@ -17,7 +17,8 @@ import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
 import { refreshAccuracyCache } from "./storage/accuracyCache.js";
-import { bulkFillLogos, ensureTeamLogosTable } from "./services/apiFootballLogos.js";
+// Team logos are now served via BSD URL template — no API calls or caching needed
+// e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
 dotenv.config();
 
@@ -100,8 +101,8 @@ app.get("*", (req, res) => {
 
 async function autoSeed() {
   try {
-    if (!process.env.LIVESCORE_API_KEY) {
-      console.warn("[AutoSeed] No LIVESCORE_API_KEY set — skipping seed.");
+    if (!process.env.BSD_API_KEY) {
+      console.warn("[AutoSeed] No BSD_API_KEY set — skipping seed.");
       return;
     }
 
@@ -291,7 +292,7 @@ app.use(errorHandler);
 app.listen(PORT, async () => {
   console.log("ScorePhantom running on port " + PORT);
   startLiveScoreWatcher();
-  console.log("[Live] LiveScore watcher started");
+  console.log("[Live] BSD live score watcher started");
   await initUsersTable();
   await initPredictionsTable();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
@@ -311,9 +312,6 @@ app.listen(PORT, async () => {
 
   await autoSeed();
 
-  // Init team_logos table for API-Football logo caching
-  await ensureTeamLogosTable().catch(e => console.warn('[TeamLogos] Table init failed:', e.message));
-
   // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
   // This ensures all fixtures for the week get enriched on startup
   console.log('[AutoEnrich] Starting full startup enrichment pass...');
@@ -323,12 +321,7 @@ app.listen(PORT, async () => {
       console.log('[PredRunner] Enrichment done — pre-generating predictions...');
       return autoBuildPredictions({ limit: 100 });
     })
-    .then(() => {
-      // Fill logos AFTER fixtures are seeded + enriched — now there's data to work with
-      console.log('[TeamLogos] Running post-seed logo fill...');
-      return bulkFillLogos({ maxNewLookups: 15 });
-    })
-    .catch((err) => console.error('[AutoEnrich/PredRunner/Logos] startup error:', err.message));
+    .catch((err) => console.error('[AutoEnrich/PredRunner] startup error:', err.message));
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
   setTimeout(async () => {
     try {
@@ -428,28 +421,7 @@ app.listen(PORT, async () => {
   }
   scheduleNextResultCheck();
 
-  // ── Daily logo fill: 3 AM Lagos time ─────────────────────────────────────
-  function scheduleNextLogoFill() {
-    const now = new Date();
-    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
-    const next3AM = new Date(lagosNow);
-    next3AM.setDate(next3AM.getDate() + (lagosNow.getHours() >= 3 ? 1 : 0));
-    next3AM.setHours(3, 0, 0, 0);
-    const ms = next3AM - lagosNow;
-    setTimeout(async () => {
-      console.log('[TeamLogos] Nightly logo fill triggered');
-      try {
-        const r = await bulkFillLogos({ maxNewLookups: 10 });
-        console.log(`[TeamLogos] Done — ${r.filled} new logos, ${r.updated} fixtures updated`);
-      } catch (err) {
-        console.error('[TeamLogos] Nightly fill failed:', err.message);
-      }
-      scheduleNextLogoFill();
-    }, ms);
-    const hrs = Math.round(ms / 3600000);
-    console.log(`[TeamLogos] Next logo fill in ~${hrs}h`);
-  }
-  scheduleNextLogoFill();
+  // Team logos now served via BSD URL template — no scheduled fill needed.
 
   // Run result checker every 3h during the day to catch todays results as they finish
   setInterval(async () => {

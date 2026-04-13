@@ -396,23 +396,12 @@ router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
   return res.json({ pending: pending.length, fixtures: pending.map(f => ({ id: f.fixture_id, home: f.home_team, away: f.away_team, market: f.best_pick_market, selection: f.best_pick_selection })) });
 });
 
-// ── POST /clear-odds-cache — wipe league odds cache so slugs re-fetch ─────────
+// ── POST /clear-odds-cache — wipe fixture odds so they re-fetch on next seed ────
 router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
-  try {
-    const r = await db.execute("DELETE FROM odds_league_cache");
-    console.log('[Admin] Odds league cache cleared');
-    return res.json({ success: true, message: "Odds league cache cleared — fresh odds will be fetched on next prediction" });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /clear-fixture-odds — wipe per-fixture odds so they re-fetch ─────────
-router.post("/clear-fixture-odds", adminLimiter, requireAdmin, async (req, res) => {
   try {
     await db.execute("DELETE FROM fixture_odds");
     console.log('[Admin] Fixture odds cache cleared');
-    return res.json({ success: true, message: "Fixture odds cleared — all matches will re-fetch fresh odds" });
+    return res.json({ success: true, message: "Fixture odds cleared — will re-populate on next seed from BSD" });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -448,7 +437,7 @@ router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, r
   }
 });
 
-// ── POST /reseed — re-seed today's fixtures from LiveScore ────────────────────
+// ── POST /reseed — re-seed today's fixtures from BSD ──────────────────────────────────
 router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const date = req.body?.date || new Date().toISOString().slice(0, 10);
@@ -484,18 +473,18 @@ router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
 router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const [total, enriched, withOdds, predictions, leagueCache, fixtureOdds] = await Promise.all([
+    const [total, enriched, withOdds, predictions, fixtureOdds] = await Promise.all([
       db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ?", args: [`${today}%`] }),
       db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND enriched = 1", args: [`${today}%`] }),
       db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND odds_home IS NOT NULL", args: [`${today}%`] }),
       db.execute("SELECT COUNT(*) as c FROM predictions_v2"),
-      db.execute("SELECT COUNT(*) as c FROM odds_league_cache"),
       db.execute("SELECT COUNT(*) as c FROM fixture_odds"),
     ]);
     return res.json({
       today,
+      dataProvider: 'BSD (Bzzoiro Sports Data)',
       fixtures: { total: Number(total.rows[0].c), enriched: Number(enriched.rows[0].c), withOdds: Number(withOdds.rows[0].c) },
-      cache: { predictions: Number(predictions.rows[0].c), leagueSlugs: Number(leagueCache.rows[0].c), fixtureOdds: Number(fixtureOdds.rows[0].c) },
+      cache: { predictions: Number(predictions.rows[0].c), fixtureOdds: Number(fixtureOdds.rows[0].c) },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -610,163 +599,52 @@ router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
   }
 });
 
-// FAST: Get all football leagues from odds-api.io
+// FAST: Get all BSD leagues
 router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
-    const url = `https://api.odds-api.io/v3/leagues?apiKey=${ODDS_API_KEY}&sport=football`;
-    const r = await fetch(url);
-    const d = await r.json();
-    const leagues = Array.isArray(d) ? d : (d.data || d.leagues || []);
-    return res.json({ count: leagues.length, leagues });
+    const { fetchLeagues } = await import('../services/bsd.js');
+    const leagues = await fetchLeagues();
+    return res.json({ count: leagues.length, provider: 'BSD', leagues });
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
 
-// COMPREHENSIVE SLUG AUDIT - tests all slugs from today's EXACT_MAP
+// BSD health check — replaces the old slug audit
 router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
-    const ODDS_API_BASE = 'https://api.odds-api.io/v3';
-    
-    const slugsToTest = [
-    "argentina-copa-argentina",
-    "argentina-primera-b",
-    "argentina-primera-nacional",
-    "argentina-torneo-federal-a",
-    "armenia-first-league",
-    "australia-nsw-league-one",
-    "australia-queensland-npl",
-    "bosnia-and-herzegovina-prva-liga-fbih",
-    "brazil-copa-do-nordeste",
-    "brazil-serie-a",
-    "bulgaria-vtora-liga",
-    "burkina-faso-premiere-division",
-    "cameroon-elite-one",
-    "chile-primera-b",
-    "colombia-primera-a-apertura",
-    "croatia-druga-nl",
-    "czechia-msfl",
-    "denmark-2nd-division",
-    "dr-congo-linafoot",
-    "ghana-division-one",
-    "ghana-premier-league",
-    "greece-super-league-2",
-    "guatemala-liga-nacional-clausura",
-    "iceland-cup",
-    "iceland-super-cup",
-    "international-clubs-club-friendly-games",
-    "international-int-friendly-games",
-    "iran-azadegan-league",
-    "italy-serie-c-group-a",
-    "italy-serie-c-group-b",
-    "italy-serie-c-group-c",
-    "jamaica-premier-league",
-    "japan-jleague-2",
-    "kenya-super-league",
-    "mexico-liga-de-expansion-mx-clausura",
-    "nigeria-premier-league",
-    "panama-liga-panamena-de-futbol-clausura",
-    "paraguay-division-de-honor-apertura",
-    "peru-segunda-division",
-    "philippines-pfl",
-    "poland-i-liga",
-    "portugal-liga-3",
-    "portugal-segunda-liga",
-    "republic-of-korea-k3-league",
-    "russia-fnl",
-    "russia-fnl-2",
-    "slovenia-2-liga",
-    "south-korea-k-league-2",
-    "spain-segunda-division",
-    "spain-segunda-federacion",
-    "spain-super-cup",
-    "switzerland-1-liga-promotion",
-    "trinidad-and-tobago-tt-premier-league",
-    "tunisia-ligue-2",
-    "turkiye-1-lig",
-    "uruguay-primera-division",
-    "uruguay-segunda-division",
-    "usa-usl-championship",
-    "usa-usl-league-one",
-    "venezuela-segunda-division",
-    "wales-cymru-premier",
-    "turkey-tff-1-lig",
-    "russia-1-liga",
-    "south-korea-k-league-2",
-    "south-korea-k3-league",
-    "bosnia-hercegovina-prva-liga",
-    "portugal-liga-portugal-2",
-    "switzerland-promotion-league"
-];
-    
-    const working = [], broken = [], errored = [];
-    
-    for (const slug of slugsToTest) {
-      try {
-        const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=3`;
-        const r = await fetch(url);
-        const d = await r.json();
-        const arr = Array.isArray(d) ? d : (d.data || []);
-        if (arr.length > 0) {
-          working.push({ slug, events: arr.length, sample: arr[0].home + ' vs ' + arr[0].away });
-        } else {
-          broken.push(slug);
-        }
-      } catch(e) { errored.push({ slug, error: e.message }); }
-    }
-    
+    const { fetchLeagues, fetchFixturesByDate } = await import('../services/bsd.js');
+    const leagues = await fetchLeagues();
+    const today = new Date().toISOString().slice(0, 10);
+    const todayEvents = await fetchFixturesByDate(today);
     return res.json({
-      tested: slugsToTest.length, working: working.length, broken: broken.length,
-      workingSlugs: working,
-      brokenSlugs: broken,
-      erroredSlugs: errored
+      provider: 'BSD (Bzzoiro Sports Data)',
+      status: leagues.length > 0 ? 'OK' : 'ERROR',
+      leaguesAvailable: leagues.length,
+      todayEvents: todayEvents.length,
+      sampleLeagues: leagues.slice(0, 10).map(l => ({ id: l.id, name: l.name, country: l.country })),
+      sampleEvents: todayEvents.slice(0, 5).map(e => ({ id: e.id, home: e.home_team, away: e.away_team, league: e.league?.name })),
     });
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });
 
-// Debug odds for a specific fixture
+// Debug odds for a specific fixture (reads from fixture_odds table, seeded by BSD)
 router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
   const { fixtureId } = req.params;
   try {
     const f = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[fixtureId] });
     const fixture = f.rows?.[0];
     if (!fixture) return res.json({ error: 'fixture not found' });
-    
-    const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
-    const ODDS_API_BASE = 'https://api.odds-api.io/v3';
-    const meta = fixture.meta ? JSON.parse(fixture.meta) : {};
-    const tournamentName = fixture.tournament_name || meta.tournament_name || '';
-    const countryName = fixture.category_name || '';
-    
-    // Build slug manually
-    const slugKey = `${countryName}|${tournamentName}`;
-    
-    // Try fetching directly
-    const testSlugs = [
-      tournamentName.toLowerCase().replace(/[^a-z0-9]+/g,'-'),
-      `${countryName}-${tournamentName}`.toLowerCase().replace(/[^a-z0-9]+/g,'-'),
-    ];
-    
-    const results = {};
-    for (const slug of testSlugs) {
-      const url = `${ODDS_API_BASE}/events?apiKey=${ODDS_API_KEY}&sport=football&league=${encodeURIComponent(slug)}&limit=5`;
-      try {
-        const r = await fetch(url);
-        const d = await r.json();
-        const arr = Array.isArray(d) ? d : (d.data || []);
-        results[slug] = { count: arr.length, sample: arr.slice(0,2).map(e=>({home:e.home,away:e.away,date:e.date})) };
-      } catch(e) { results[slug] = { error: e.message }; }
-    }
-    
-    // Also check league cache
-    const cached = await db.execute({ sql: 'SELECT league_slug, fetched_at, length(events_json) as size FROM odds_league_cache', args:[] });
-    
+
+    const o = await db.execute({ sql: 'SELECT * FROM fixture_odds WHERE fixture_id=? LIMIT 1', args:[fixtureId] });
+    const odds = o.rows?.[0] || null;
+
     return res.json({
-      fixture: { id: fixture.id, home: fixture.home_team_name, away: fixture.away_team_name, tournament: tournamentName, country: countryName, slugKey },
-      apiKeySet: !!ODDS_API_KEY,
-      apiKeyPrefix: ODDS_API_KEY.slice(0,8),
-      testSlugs: results,
-      leagueCache: cached.rows
+      provider: 'BSD',
+      fixture: { id: fixture.id, home: fixture.home_team_name, away: fixture.away_team_name, tournament: fixture.tournament_name, country: fixture.category_name },
+      odds: odds || 'No odds available for this fixture',
+      logoUrls: {
+        home: fixture.home_team_logo || 'none',
+        away: fixture.away_team_logo || 'none',
+      },
     });
   } catch(err) { return res.status(500).json({ error: err.message }); }
 });

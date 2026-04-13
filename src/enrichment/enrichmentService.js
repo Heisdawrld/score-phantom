@@ -14,14 +14,16 @@
  */
 
 import {
-  fetchH2H,
+  deriveH2H,
   extractFormFromStandings,
-  fetchTeamForm,
+  fetchTeamRecentEvents,
   fetchStandings,
-  fetchMatchLineups,
-  fetchMatchStats,
-  fetchMatchEvents,
-} from '../services/livescore.js';
+  fetchPredictedLineup,
+  fetchEventDetail,
+  normaliseBsdLineup,
+  normaliseEventToForm,
+  normaliseStandingsRow,
+} from '../services/bsd.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -232,25 +234,31 @@ export async function fetchAndStoreEnrichment(fixture) {
   }
   console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
 
-  // Step 1: Team form PRIMARY (up to 23 completed matches) + H2H + Standings
-  // Team endpoint is primary: gives 23 matches vs 6 from standings
-  const homeFormRaw = await fetchTeamForm(fixture.home_team_id, 15).catch((e) => {
+  // Step 1: Team form PRIMARY (up to 15 finished matches) + H2H + Standings
+  // BSD team endpoint: filter by team name, status=finished
+  const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
     console.warn("[enrichmentService] Home form failed:", e.message); return [];
   });
   await sleep(300);
-  const awayFormRaw = await fetchTeamForm(fixture.away_team_id, 15).catch((e) => {
+  const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
     console.warn("[enrichmentService] Away form failed:", e.message); return [];
   });
   await sleep(300);
-  const h2hData = await fetchH2H(fixture.home_team_id, fixture.away_team_id).catch((e) => {
-    console.warn("[enrichmentService] H2H failed:", e.message);
-    return { h2h: [], homeForm: [], awayForm: [] };
+
+  // H2H derived client-side: intersect home + away event histories
+  const h2hRaw = await deriveH2H(fixture.home_team_name, fixture.away_team_name).catch((e) => {
+    console.warn("[enrichmentService] H2H derivation failed:", e.message);
+    return [];
   });
+  const h2hData = { h2h: h2hRaw, homeForm: [], awayForm: [] };
   await sleep(300);
-  // Standings for league table context (position, points) - also fallback form
-  const standings = await fetchStandings(fixture.tournament_id).catch((e) => {
+
+  // Standings — BSD uses league.id stored as tournament_id
+  const standingsRaw = await fetchStandings(fixture.tournament_id).catch((e) => {
     console.warn("[enrichmentService] Standings failed:", e.message); return [];
   });
+  const standings = (standingsRaw || []).map(normaliseStandingsRow);
+
   // If team endpoint gave thin data, top up from standings form (free)
   const homeFormFallback = homeFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
   const awayFormFallback = awayFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
@@ -323,9 +331,11 @@ export async function fetchAndStoreEnrichment(fixture) {
   // ── Step 5: Optional lineup (non-blocking, typically only near kickoff) ────
   let lineupModifier = null;
   try {
-    const matchId = fixture.match_id || fixture.id;
-    const rawLineup = await fetchMatchLineups(matchId);
-    lineupModifier = parseLineupModifier(rawLineup);
+    // BSD predicted-lineup uses api_id (external), not internal id
+    const matchApiId = fixture.bsd_event_api_id || fixture.match_id;
+    const rawLineup = await fetchPredictedLineup(matchApiId);
+    const normLineup = normaliseBsdLineup(rawLineup);
+    lineupModifier = parseLineupModifier(normLineup);
     if (lineupModifier) {
       console.log(`[enrichmentService] Lineup available for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
     }
@@ -337,12 +347,14 @@ export async function fetchAndStoreEnrichment(fixture) {
   let matchStats = null;
   let matchEvents = null;
   try {
+    // BSD: single event detail call gives us stats, incidents, xG, shotmap
     const matchId = fixture.match_id || fixture.id;
-    [matchStats, matchEvents] = await Promise.all([
-      fetchMatchStats(matchId).catch(() => null),
-      fetchMatchEvents(matchId).catch(() => null),
-    ]);
-    if (matchStats) console.log('[enrichmentService] Match stats available for fixture ' + matchId);
+    const eventDetail = await fetchEventDetail(matchId).catch(() => null);
+    if (eventDetail) {
+      matchStats = eventDetail.live_stats || null;
+      matchEvents = eventDetail.incidents || null;
+      console.log('[enrichmentService] Event detail available for fixture ' + matchId);
+    }
   } catch {
     // Stats not available pre-match — expected
   }

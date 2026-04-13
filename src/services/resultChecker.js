@@ -1,6 +1,6 @@
-// resultChecker.js - Checks match results using SportAPI fixture date endpoint
+// resultChecker.js — Checks match results using BSD (Bzzoiro Sports Data)
 import db from '../config/database.js';
-import { fetchFixturesByDate } from './sportapi.js';
+import { fetchFixturesByDate } from './bsd.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -49,19 +49,23 @@ export async function checkResults(dateStr) {
   let apiFixtures = [];
   try {
     apiFixtures = await fetchFixturesByDate(date);
-    console.log('[ResultChecker] SportAPI returned', apiFixtures.length, 'fixtures for', date);
+    console.log('[ResultChecker] BSD returned', apiFixtures.length, 'events for', date);
   } catch (err) {
     apiFailed = true;
-    console.warn('[ResultChecker] API fetch failed, using DB scores only:', err.message);
+    console.warn('[ResultChecker] BSD fetch failed, using DB scores only:', err.message);
   }
   const scoreMap = {};
   const nameMap = {};
   for (const f of apiFixtures) {
-    if ((f.match_status === 'FT' || f.match_status === 'AET' || f.match_status === 'Pen') && f.home_score != null) {
+    // BSD uses status='finished' and id (not match_id)
+    const isFinal = f.status === 'finished' || f.match_status === 'FT' || f.match_status === 'AET';
+    const hScore  = f.home_score ?? f.home_score_ht ?? null;
+    if (isFinal && hScore != null) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };
-      scoreMap[f.match_id] = s;
-      const hk = (f.home_team_name || '').toLowerCase().trim();
-      const ak = (f.away_team_name || '').toLowerCase().trim();
+      const fid = String(f.id || f.match_id);
+      scoreMap[fid] = s;
+      const hk = (f.home_team || f.home_team_name || '').toLowerCase().trim();
+      const ak = (f.away_team || f.away_team_name || '').toLowerCase().trim();
       if (hk && ak) { nameMap[hk + ':' + ak] = s; nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s; }
     }
   }

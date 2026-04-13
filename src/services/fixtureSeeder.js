@@ -1,6 +1,10 @@
-// fixtureSeeder.js - Seeds fixtures from SportAPI.ai (replaces LiveScore)
+// fixtureSeeder.js — Seeds fixtures from BSD (Bzzoiro Sports Data)
 import db from '../config/database.js';
-import { fetchFixturesByDate } from './livescore.js';
+import {
+  fetchFixturesByDate,
+  normaliseBsdEventToFixture,
+  extractOddsFromEvent,
+} from './bsd.js';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -31,30 +35,79 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
     await db.execute('DELETE FROM teams');
     await db.execute('DELETE FROM tournaments');
   }
-  const allFixtures = [];
+  const allBsdEvents = [];
   const now = new Date();
   for (let i = startOffset; i <= startOffset + days; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const fixtures = await fetchFixturesByDate(dateStr);
-    log('[Seeder] ' + dateStr + ': ' + fixtures.length + ' fixtures');
-    allFixtures.push(...fixtures);
+    const events = await fetchFixturesByDate(dateStr);
+    log('[Seeder] ' + dateStr + ': ' + events.length + ' events from BSD');
+    allBsdEvents.push(...events);
     await sleep(400);
   }
-  log('[Seeder] Total: ' + allFixtures.length + ' fixtures. Inserting...');
-  let inserted = 0, failed = 0;
-  for (const f of allFixtures) {
+
+  log('[Seeder] Total: ' + allBsdEvents.length + ' events. Normalising + inserting...');
+  let inserted = 0, failed = 0, oddsWritten = 0;
+
+  for (const event of allBsdEvents) {
     try {
+      const f = normaliseBsdEventToFixture(event);
+      if (!f) continue;
+
       await db.batch([
-        { sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)', args: [f.home_team_id, f.home_team_name, f.home_team_name.substring(0, 3).toUpperCase()] },
-        { sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)', args: [f.away_team_id, f.away_team_name, f.away_team_name.substring(0, 3).toUpperCase()] },
-        { sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)', args: [f.tournament_id, f.tournament_name, f.category_name, ''] },
-        { sql: "INSERT OR IGNORE INTO fixtures (id, home_team_id, away_team_id, tournament_id, home_team_name, away_team_name, tournament_name, category_name, match_date, match_url, match_status, home_score, away_score, home_team_logo, away_team_logo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [f.match_id, f.home_team_id, f.away_team_id, f.tournament_id, f.home_team_name, f.away_team_name, f.tournament_name, f.category_name, f.match_date, f.match_url, f.match_status || "NS", f.home_score ?? null, f.away_score ?? null, f.home_team_logo || "", f.away_team_logo || ""] },
+        {
+          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          args: [f.home_team_id, f.home_team_name, f.home_team_name.substring(0, 3).toUpperCase()],
+        },
+        {
+          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          args: [f.away_team_id, f.away_team_name, f.away_team_name.substring(0, 3).toUpperCase()],
+        },
+        {
+          sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
+          args: [f.tournament_id, f.tournament_name, f.category_name, ''],
+        },
+        {
+          sql: `INSERT OR IGNORE INTO fixtures
+                  (id, home_team_id, away_team_id, tournament_id,
+                   home_team_name, away_team_name, tournament_name, category_name,
+                   match_date, match_url, match_status, home_score, away_score,
+                   home_team_logo, away_team_logo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            f.match_id, f.home_team_id, f.away_team_id, f.tournament_id,
+            f.home_team_name, f.away_team_name, f.tournament_name, f.category_name,
+            f.match_date, f.match_url, f.match_status, f.home_score ?? null, f.away_score ?? null,
+            f.home_team_logo || '', f.away_team_logo || '',
+          ],
+        },
       ]);
+
+      // Write odds extracted directly from BSD event response
+      const odds = extractOddsFromEvent(event, f.match_id);
+      if (odds.home || odds.draw || odds.away) {
+        try {
+          await db.execute({
+            sql: `INSERT OR REPLACE INTO fixture_odds
+                    (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              odds.fixture_id, odds.home, odds.draw, odds.away,
+              odds.btts_yes, odds.btts_no, odds.over_under,
+            ],
+          });
+          oddsWritten++;
+        } catch (_) {}
+      }
+
       inserted++;
-    } catch (_) { failed++; }
+    } catch (err) {
+      console.error('[Seeder] Failed to insert event:', err.message);
+      failed++;
+    }
   }
-  log('[Seeder] Done! Inserted: ' + inserted + ' | Failed: ' + failed);
-  return { inserted, failed, total: allFixtures.length };
+
+  log(`[Seeder] Done! Inserted: ${inserted} | Odds written: ${oddsWritten} | Failed: ${failed}`);
+  return { inserted, failed, oddsWritten, total: allBsdEvents.length };
 }

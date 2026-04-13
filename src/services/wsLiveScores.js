@@ -1,7 +1,7 @@
 import { broadcastPush, saveNotification } from './pushService.js';
-// wsLiveScores.js - SportAPI WebSocket client + SSE push to frontend
+// wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
-import { fetchLiveMatches } from './livescore.js';
+import { fetchLiveMatches } from './bsd.js';
 
 const sseClients = new Set();
 
@@ -68,8 +68,28 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore) {
   broadcastPush({ title: pushTitle, body: pushBody, data: pushData, url: '/results' }).catch(()=>{});
   saveNotification({ userId: null, type: 'match_result', title: pushTitle, body: pushBody, data: pushData }).catch(()=>{});
 }
-let pollTimer = null; let isConnected = false;
-async function pollLiveScores() { try { const matches = await fetchLiveMatches(); if (matches.length > 0) { if (!isConnected) { isConnected = true; } for (const m of matches) { const parts = String(m.score || '0 - 0').replace(/ /g,'').split('-'); const hs = parseInt(parts[0]||'0',10)||0; const as2 = parseInt(parts[1]||'0',10)||0; const fid = m.fixture_id||m.match_id; await handleScoreUpdate({fixture_id:fid,home_score:hs,away_score:as2,status:m.status||'LIVE',minute:m.minute||null}).catch(()=>{}); } } } catch(err) { console.warn('[Live] Poll error:',err.message); } }
-export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting LiveScore polling (60s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 60000); isConnected = true; }
+async function pollLiveScores() {
+  try {
+    const matches = await fetchLiveMatches();
+    if (matches.length > 0) {
+      if (!isConnected) isConnected = true;
+      for (const m of matches) {
+        // BSD live event fields: id, home_score, away_score, current_minute, status
+        const fid = String(m.id || '');
+        if (!fid) continue;
+        await handleScoreUpdate({
+          fixture_id: fid,
+          home_score: m.home_score ?? 0,
+          away_score: m.away_score ?? 0,
+          status:     m.status === 'finished' ? 'FT' : 'LIVE',
+          minute:     m.current_minute || null,
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[Live] BSD poll error:', err.message);
+  }
+}
+export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting BSD live polling (60s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 60000); isConnected = true; }
 export function getLiveStatus() { return { connected: isConnected, sseClients: sseClients.size }; }
 export function stopLiveScoreWatcher() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } isConnected = false; }
