@@ -1009,10 +1009,8 @@ router.post("/webhook/flutterwave", async (req, res) => {
       return res.sendStatus(401);
     }
 
-    res.sendStatus(200);
-
     const event = req.body;
-    if (event.event !== 'charge.completed') return;
+    if (event.event !== 'charge.completed') return res.sendStatus(200);
 
     const charge   = event.data;
     const txRef    = charge?.tx_ref;
@@ -1023,11 +1021,11 @@ router.post("/webhook/flutterwave", async (req, res) => {
 
     if (status !== 'successful') {
       console.log('[FLW Webhook] status=' + status + ' — skipping');
-      return;
+      return res.sendStatus(200);
     }
     if (currency !== 'NGN' || amount !== PLAN_AMOUNT_NGN) {
       console.warn('[FLW Webhook] Amount/currency mismatch:', amount, currency);
-      return;
+      return res.sendStatus(200);
     }
 
     const paymentResult = await db.execute({
@@ -1035,13 +1033,14 @@ router.post("/webhook/flutterwave", async (req, res) => {
       args: [String(txRef || '').trim()],
     });
     const payment = paymentResult.rows?.[0];
-    if (!payment) { console.warn('[FLW Webhook] No record for tx_ref:', txRef); return; }
-    if (payment.status === 'verified') { console.log('[FLW Webhook] Already verified:', txRef); return; }
+    if (!payment) { console.warn('[FLW Webhook] No record for tx_ref:', txRef); return res.sendStatus(200); }
+    if (payment.status === 'verified') { console.log('[FLW Webhook] Already verified:', txRef); return res.sendStatus(200); }
 
     // Double-verify
     const verified = await verifyTransaction(txId);
     if (verified?.status !== 'successful' || Number(verified?.amount) !== PLAN_AMOUNT_NGN) {
-      console.warn('[FLW Webhook] Re-verification failed for tx:', txId); return;
+      console.warn('[FLW Webhook] Re-verification failed for tx:', txId);
+      return res.sendStatus(200);
     }
 
     await activatePremium(payment.user_id, String(txId), String(txRef));
@@ -1050,8 +1049,11 @@ router.post("/webhook/flutterwave", async (req, res) => {
     // Create referral commission if applicable (first verified payment only)
     const _pmtId2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(txRef||"")] });
     await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId2.rows?.[0]?.id || null, String(txRef||""));
+    
+    res.sendStatus(200);
   } catch (err) {
     console.error('[FLW Webhook Error]', err.message);
+    res.sendStatus(500);
   }
 });
 

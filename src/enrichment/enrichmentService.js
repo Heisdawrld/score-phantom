@@ -14,7 +14,7 @@
  */
 
 import {
-  deriveH2H,
+  fetchH2H,
   extractFormFromStandings,
   fetchTeamRecentEvents,
   fetchStandings,
@@ -296,14 +296,17 @@ export async function fetchAndStoreEnrichment(fixture) {
 
   // Step 1: Team form PRIMARY (up to 15 finished matches) + H2H + Standings
   // BSD team endpoint: filter by team name, status=finished
-  const bsdHome = await fetchTeamRecentEvents(fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
-    console.warn("[enrichmentService] Home form failed:", e.message); return [];
-  });
-  await sleep(300);
-  const bsdAway = await fetchTeamRecentEvents(fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
-    console.warn("[enrichmentService] Away form failed:", e.message); return [];
-  });
-  await sleep(300);
+  const [bsdHome, bsdAway, bsdH2h] = await Promise.all([
+    fetchTeamRecentEvents(fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
+      console.warn("[enrichmentService] Home form failed:", e.message); return [];
+    }),
+    fetchTeamRecentEvents(fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
+      console.warn("[enrichmentService] Away form failed:", e.message); return [];
+    }),
+    fetchH2H(fixture.home_team_name, fixture.away_team_name, 10).catch((e) => {
+      console.warn("[enrichmentService] H2H failed:", e.message); return [];
+    })
+  ]);
 
   // Self-Healing Local DB Fallback (Builds long-term history naturally)
   const localHome = await fetchLocalTeamForm(fixture.home_team_name);
@@ -311,12 +314,6 @@ export async function fetchAndStoreEnrichment(fixture) {
   
   const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 15);
   const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 15);
-
-  // H2H derived client-side + Local DB H2H Intersect
-  const bsdH2h = await deriveH2H(fixture.home_team_name, fixture.away_team_name).catch((e) => {
-    console.warn("[enrichmentService] H2H derivation failed:", e.message);
-    return [];
-  });
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
   const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 5);
   const h2hData = { h2h: h2hRaw, homeForm: [], awayForm: [] };

@@ -44,7 +44,16 @@ async function handleScoreUpdate(msg) {
     if (!fixtureId) return;
     await db.execute({ sql: 'UPDATE fixtures SET home_score = ?, away_score = ?, match_status = ?, live_minute = ? WHERE id = ?', args: [msg.home_score, msg.away_score, msg.status || 'LIVE', msg.minute || null, fixtureId] });
     if (msg.home_score !== null && msg.away_score !== null) notifyMatchSubscribers(fixtureId, '', '', msg.home_score, msg.away_score, msg.minute).catch(()=>{});
-    broadcast({ type: 'score_update', fixture_id: fixtureId, home_score: msg.home_score, away_score: msg.away_score, status: msg.status, minute: msg.minute });
+    broadcast({ 
+      type: 'score_update', 
+      fixture_id: fixtureId, 
+      home_score: msg.home_score, 
+      away_score: msg.away_score, 
+      status: msg.status, 
+      minute: msg.minute,
+      incidents: msg.incidents,
+      live_stats: msg.live_stats
+    });
     if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
       setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score).catch(() => {}), 5000);
     }
@@ -89,6 +98,8 @@ async function pollLiveScores() {
           away_score: m.away_score ?? 0,
           status:     m.status === 'finished' ? 'FT' : 'LIVE',
           minute:     m.current_minute || null,
+          incidents:  m.incidents || [],
+          live_stats: m.live_stats || null
         }).catch(() => {});
       }
     }

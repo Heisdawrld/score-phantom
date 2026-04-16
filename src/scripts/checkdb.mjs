@@ -1,2 +1,21 @@
-import db from '../config/database.js'; const r = await db.execute({ sql: 'SELECT match_date, COUNT(*) as c FROM fixtures GROUP BY DATE(match_date) ORDER BY match_date', args: [] }); for(const row of r.rows) console.log(row.match_date?.substring(0,10), row.c); const tot = await db.execute('SELECT COUNT(*) as c FROM fixtures'); console.log('TOTAL:', tot.rows[0].c); process.exit(0);
-import db from '../config/database.js'; const r = await db.execute({ sql: 'SELECT match_date FROM fixtures LIMIT 5', args: [] }); for(const row of r.rows) console.log(JSON.stringify(row.match_date)); const today = new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}); console.log('Today ISO:', today); process.exit(0);
+import db from '../config/database.js';
+try {
+  const tot = await db.execute('SELECT COUNT(*) as c FROM fixtures');
+  console.log('TOTAL FIXTURES:', tot.rows[0].c);
+  
+  const today = new Date().toISOString().slice(0,10);
+  const future = await db.execute({ 
+    sql: 'SELECT id, match_date, home_team_name, away_team_name, enriched FROM fixtures WHERE match_date >= ? ORDER BY match_date ASC LIMIT 5', 
+    args: [today] 
+  });
+  console.log('Future fixtures:');
+  for(const row of future.rows) {
+    console.log(`${row.id} | ${row.match_date} | ${row.home_team_name} vs ${row.away_team_name} | Enriched: ${row.enriched}`);
+  }
+
+  const enr = await db.execute('SELECT COUNT(*) as c FROM fixtures WHERE enriched = 1');
+  console.log('ENRICHED FIXTURES:', enr.rows[0].c);
+} catch (err) {
+  console.error('DB Check Failed:', err.message);
+}
+process.exit(0);

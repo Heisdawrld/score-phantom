@@ -213,35 +213,28 @@ export async function fetchTeamRecentEvents(teamName, n = 15) {
   return sorted.slice(0, n);
 }
 
-// ── H2H derivation (client-side — BSD has no /h2h/ endpoint) ─────────────────
+// ── H2H (Bzzoiro /h2h/ endpoint) ──────────────────────────────────────────
 
 /**
- * Derive H2H records from both teams' recent event history.
- * Fetches last 30 finished matches for each team, then finds matches
- * where BOTH teams appear.
+ * Fetch H2H records for two teams.
+ * BSD /h2h/ endpoint takes team1 and team2 (internal IDs or names).
  *
- * @param {string} homeTeamName
- * @param {string} awayTeamName
- * @returns {Array} H2H matches in enrichmentService format
+ * @param {string|number} team1 - home team id or name
+ * @param {string|number} team2 - away team id or name
+ * @param {number} n - max results to return
  */
-export async function deriveH2H(homeTeamName, awayTeamName) {
-  if (!homeTeamName || !awayTeamName) return [];
+export async function fetchH2H(team1, team2, n = 10) {
+  if (!team1 || !team2) return [];
 
-  // Fetch in parallel
-  const [homeEvents, awayEvents] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, 30),
-    fetchTeamRecentEvents(awayTeamName, 30),
-  ]);
+  // BSD /h2h/ takes team1 and team2 params
+  const data = await bsdFetch('/h2h/', {
+    team1: team1,
+    team2: team2,
+    limit: n
+  });
 
-  // Build a set of event IDs from the away team's matches for fast lookup
-  const awayEventIds = new Set((awayEvents || []).map(e => e.id));
-
-  // Filter home team's events to those that also appear in away team's history
-  const h2hEvents = (homeEvents || []).filter(e => awayEventIds.has(e.id));
-
-  // Normalise to the format enrichmentService expects:
-  // { home, away, score, date, competition }
-  return h2hEvents.slice(0, 10).map(e => normaliseEventToForm(e));
+  const results = data?.results || data || [];
+  return results.slice(0, n).map(e => normaliseEventToForm(e));
 }
 
 // ── Live Scores ────────────────────────────────────────────────────────────────

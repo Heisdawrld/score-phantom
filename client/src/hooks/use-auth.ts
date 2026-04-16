@@ -101,7 +101,7 @@ export function useInitPayment() {
 export function useRequestPayment() {
   return useMutation({
     mutationFn: async () => {
-      return fetchApi("/auth/payment/request", { method: "POST" });
+      return fetchApi("/auth/payment/initialize", { method: "POST" });
     },
   });
 }
