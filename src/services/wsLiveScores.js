@@ -59,7 +59,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore) {
   const f = fix.rows?.[0];
   if (!f) return;
   const outcome = evaluatePrediction(row.best_pick_market, row.best_pick_selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
-  await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"),datetime("now"))', args: [fixtureId, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, row.best_pick_market, row.best_pick_selection, parseFloat(row.best_pick_probability || 0), row.confidence_model || '', homeScore, awayScore, homeScore + '-' + awayScore, outcome] });
+  await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime(\'now\'),datetime(\'now\'))', args: [fixtureId, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, row.best_pick_market, row.best_pick_selection, parseFloat(row.best_pick_probability || 0), row.confidence_model || '', homeScore, awayScore, homeScore + '-' + awayScore, outcome] });
   console.log('[WS] Auto-result: ' + f.home_team_name + ' vs ' + f.away_team_name + ' -> ' + outcome + ' (' + homeScore + '-' + awayScore + ')');
   // Send push notification for win/loss result
   const isWin = outcome === 'win' || outcome === 'correct';
