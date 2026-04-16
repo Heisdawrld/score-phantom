@@ -193,12 +193,13 @@ export async function fetchEventDetail(eventId) {
   return await bsdFetch(`/events/${eventId}/`);
 }
 
-export async function fetchTeamRecentEvents(team, n = 15) {
+export async function fetchTeamRecentEvents(team, n = 15, opts = {}) {
   if (!team) return [];
 
   // BSD requires date_from to query historical data, otherwise it defaults to a narrow window.
   const dTo = new Date();
-  const dFrom = new Date(dTo.getTime() - 365 * 24 * 60 * 60 * 1000); // 1 year ago
+  const yearsBack = Number(opts.yearsBack ?? 1);
+  const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
   const dateFrom = dFrom.toISOString().slice(0, 10);
   const dateTo = dTo.toISOString().slice(0, 10);
 
@@ -248,14 +249,13 @@ export async function fetchH2H(team1, team2, n = 10) {
 
   const results = data?.results || data || [];
   
-  // If native H2H returns too few results (BSD history may be limited),
-  // fallback to manual derivation from recent events to find more.
-  if (results.length < 2) {
-    const manual = await deriveH2H(team1, team2);
-    if (manual.length > results.length) return manual.slice(0, n);
-  }
+  let mapped = results.slice(0, n).map(e => normaliseEventToForm(e)).filter(Boolean);
 
-  return results.slice(0, n).map(e => normaliseEventToForm(e));
+  if (mapped.length >= Math.min(5, n)) return mapped;
+
+  const manual = await deriveH2H(team1, team2, { target: Math.min(10, n) });
+  if (manual.length > mapped.length) mapped = manual.slice(0, n);
+  return mapped;
 }
 
 /**
@@ -267,24 +267,37 @@ export async function fetchH2H(team1, team2, n = 10) {
  * @param {string} awayTeamName
  * @returns {Array} H2H matches in enrichmentService format
  */
-export async function deriveH2H(homeTeamName, awayTeamName) {
+export async function deriveH2H(homeTeamName, awayTeamName, opts = {}) {
   if (!homeTeamName || !awayTeamName) return [];
 
-  // Fetch in parallel
-  const [homeEvents, awayEvents] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, 30),
-    fetchTeamRecentEvents(awayTeamName, 30),
+  const target = Number(opts.target ?? 10);
+
+  const firstPassCount = Math.max(50, target * 8);
+  const [homeEvents1, awayEvents1] = await Promise.all([
+    fetchTeamRecentEvents(homeTeamName, firstPassCount, { yearsBack: 2 }),
+    fetchTeamRecentEvents(awayTeamName, firstPassCount, { yearsBack: 2 }),
+  ]);
+
+  const aIds1 = new Set((awayEvents1 || []).map(e => e.id));
+  const h2h1 = (homeEvents1 || []).filter(e => aIds1.has(e.id));
+  const h2h1Norm = h2h1.map(e => normaliseEventToForm(e)).filter(Boolean);
+  if (h2h1Norm.length >= Math.min(5, target)) return h2h1Norm.slice(0, target);
+
+  const deepCount = Math.max(200, target * 20);
+  const [homeEvents2, awayEvents2] = await Promise.all([
+    fetchTeamRecentEvents(homeTeamName, deepCount, { yearsBack: 10 }),
+    fetchTeamRecentEvents(awayTeamName, deepCount, { yearsBack: 10 }),
   ]);
 
   // Build a set of event IDs from the away team's matches for fast lookup
-  const awayEventIds = new Set((awayEvents || []).map(e => e.id));
+  const awayEventIds = new Set((awayEvents2 || []).map(e => e.id));
 
   // Filter home team's events to those that also appear in away team's history
-  const h2hEvents = (homeEvents || []).filter(e => awayEventIds.has(e.id));
+  const h2hEvents = (homeEvents2 || []).filter(e => awayEventIds.has(e.id));
 
   // Normalise to the format enrichmentService expects:
   // { home, away, score, date, competition }
-  return h2hEvents.slice(0, 10).map(e => normaliseEventToForm(e));
+  return h2hEvents.slice(0, target).map(e => normaliseEventToForm(e)).filter(Boolean);
 }
 
 // ── Live Scores ────────────────────────────────────────────────────────────────
