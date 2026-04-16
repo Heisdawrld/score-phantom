@@ -136,6 +136,14 @@ export async function fetchLeagues() {
   return data?.results || [];
 }
 
+export async function fetchSeasons({ leagueId, current } = {}) {
+  const params = {};
+  if (leagueId !== undefined && leagueId !== null && String(leagueId).trim() !== '') params.league = leagueId;
+  if (current !== undefined && current !== null) params.current = current ? 'true' : 'false';
+  const results = await bsdFetchAll('/seasons/', params);
+  return results || [];
+}
+
 /**
  * Get a league's current standings.
  * BSD leagueId is the internal `id` (not api_id).
@@ -181,6 +189,14 @@ export async function fetchFixturesByRange(dateFrom, dateTo) {
     date_from: dateFrom,
     date_to: dateTo,
   });
+  return results || [];
+}
+
+export async function fetchFixturesBySeason(seasonId, { status } = {}) {
+  if (!seasonId) return [];
+  const params = { season: seasonId };
+  if (status) params.status = status;
+  const results = await bsdFetchAll('/events/', params);
   return results || [];
 }
 

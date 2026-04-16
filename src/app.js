@@ -381,7 +381,16 @@ app.listen(PORT, async () => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 3);
         const cutoffStr = cutoff.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-        await db.execute({ sql: "DELETE FROM fixtures WHERE match_date < ?", args: [`${cutoffStr}T00:00:00`] });
+        await db.execute({
+          sql: `
+            DELETE FROM fixtures
+            WHERE match_date < ?
+              AND (match_status IS NULL OR match_status NOT IN ('FT','AET','PEN'))
+              AND id NOT IN (SELECT fixture_id FROM predictions_v2)
+              AND id NOT IN (SELECT fixture_id FROM prediction_outcomes)
+          `,
+          args: [`${cutoffStr}T00:00:00`],
+        });
         console.log(`[DailySeed] Cleaned up fixtures before ${cutoffStr}`);
         await autoEnrich();
       } catch (err) {
