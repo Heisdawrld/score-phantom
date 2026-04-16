@@ -1327,7 +1327,7 @@ router.get("/digest-preferences", requireAuth, async (req, res) => {
 
 // ─── ANTI-ABUSE: Trial limit bypass prevention ────────────────────────────────
 // Middleware for preventing exploit of trial limits via rapid requests
-export function createTrialLimitGuard(trialDailyLimit = 5) {
+export function createTrialLimitGuard(trialDailyLimit = 15) {
   return async (req, res, next) => {
     // Only check trial users on prediction routes
     if (!req.user || !req.path.includes('/predict')) return next();
