@@ -1122,7 +1122,12 @@ router.post("/admin/verify-payment", adminLimiter, requireAdminSecret, async (re
 
     const { expiryISO, subscriptionCode } = await activatePremium(targetUserId, null, reference || `MANUAL_${targetUserId}_${Date.now()}`);
 
-    try { const _pm = await db.execute({ sql: "SELECT id, amount FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", args: [Number(targetUserId)] }); await createReferralCommission(Number(targetUserId), Number(_pm.rows?.[0]?.amount)||3000, _pm.rows?.[0]?.id||null, String(reference||"")); } catch(ce) { console.error("[AdminVerify] Commission:", ce.message); }
+    try { 
+      const _pm = await db.execute({ sql: "SELECT id, amount FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", args: [Number(targetUserId)] }); 
+      const amount = _pm.rows?.[0]?.amount != null ? Number(_pm.rows?.[0]?.amount) : 3000;
+      await createReferralCommission(Number(targetUserId), amount, _pm.rows?.[0]?.id||null, String(reference||"")); 
+    } catch(ce) { console.error("[AdminVerify] Commission:", ce.message); }
+    return res.json({ success: true, message: "Payment verified successfully" });
   } catch (err) {
     console.error("[Admin Verify]", err);
     return res.status(500).json({ error: "Failed to verify payment" });
@@ -1164,7 +1169,11 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
     // Ensure payment record exists for tracking
     await db.execute({ sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
     const { expiryISO } = await activatePremium(user.id, null, ref);
-    try { const _pm2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] }); await createReferralCommission(Number(user.id), 3000, _pm2.rows?.[0]?.id||null, ref); } catch(ce) { console.error("[AdminUpgrade] Commission:", ce.message); }
+    try { 
+      const _pm2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] }); 
+      await createReferralCommission(Number(user.id), 0, _pm2.rows?.[0]?.id||null, ref); 
+    } catch(ce) { console.error("[AdminUpgrade] Commission:", ce.message); }
+    return res.json({ success: true, message: "User upgraded successfully" });
   } catch (err) {
     console.error("[Admin Upgrade]", err);
     return res.status(500).json({ error: "Failed to upgrade user" });

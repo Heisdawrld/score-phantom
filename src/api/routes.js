@@ -158,7 +158,7 @@ async function decrementDailyCount(userId, today) {
 // ─── Middleware: requireAdmin ──────────────────────────────────────────────────
 // Verifies JWT and checks if user is admin (by email).
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   const auth = req.headers.authorization || "";
   try {
     const token = auth.split(" ")[1];
@@ -166,6 +166,11 @@ function requireAdmin(req, res, next) {
     if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL) {
       return res.status(403).json({ error: "Forbidden" });
     }
+    
+    // Explicit Database Lock: Verify token creator is still in DB and not deleted/revoked
+    const result = await db.execute({ sql: "SELECT id, status FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] });
+    if (!result.rows?.[0]) return res.status(403).json({ error: "Admin revoked" });
+    
     req.user = decoded;
     next();
   } catch {
@@ -1322,10 +1327,8 @@ router.get("/digest-preferences", requireAuth, async (req, res) => {
 
 // ─── ANTI-ABUSE: Trial limit bypass prevention ────────────────────────────────
 // Middleware for preventing exploit of trial limits via rapid requests
-const TRIAL_LIMIT_STORE = new Map(); // { userId: { count, lastReset } }
-
 export function createTrialLimitGuard(trialDailyLimit = 5) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Only check trial users on prediction routes
     if (!req.user || !req.path.includes('/predict')) return next();
 
@@ -1335,37 +1338,28 @@ export function createTrialLimitGuard(trialDailyLimit = 5) {
     // Skip if trial expired or no access
     if (!req.access?.has_full_access) return next();
 
-    const userId = req.user.id;
-    const now = Date.now();
-    const reset = TRIAL_LIMIT_STORE.get(userId) || { count: 0, lastReset: now };
-
-    // Reset counter at midnight (UTC)
-    const lastMidnight = new Date(now).setUTCHours(0, 0, 0, 0);
-    if (reset.lastReset < lastMidnight) {
-      reset.count = 0;
-      reset.lastReset = now;
-    }
-
-    reset.count++;
-    TRIAL_LIMIT_STORE.set(userId, reset);
-
-    // Log every prediction for audit
-    console.log(`[TrialLimit] User ${userId}: ${reset.count}/${trialDailyLimit} predictions today`);
-
-    // Block if exceeded
-    if (reset.count > trialDailyLimit) {
-      console.warn(`[TrialLimit] BLOCKED: User ${userId} exceeded daily limit`);
-      return res.status(429).json({
-        error: "Daily prediction limit reached. Upgrade to premium for unlimited access.",
-        code: "trial_limit_exceeded",
-        used: reset.count,
-        limit: trialDailyLimit,
-        resetAt: new Date(lastMidnight + 24 * 60 * 60 * 1000).toISOString(),
-        access: buildAccessPayload(req.access),
+    try {
+      const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const r = await db.execute({
+        sql: "SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?",
+        args: [req.user.id, today]
       });
-    }
+      const currentCount = Number(r.rows?.[0]?.count || 0);
 
-    next();
+      if (currentCount >= trialDailyLimit) {
+        return res.status(429).json({
+          error: "Daily prediction limit reached. Upgrade to premium for unlimited access.",
+          code: "trial_limit_exceeded",
+          used: currentCount,
+          limit: trialDailyLimit,
+          access: buildAccessPayload(req.access),
+        });
+      }
+      next();
+    } catch (err) {
+      console.error("[TrialGuard]", err);
+      return res.status(500).json({ error: "Failed to verify access limit" });
+    }
   };
 }
 

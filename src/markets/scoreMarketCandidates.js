@@ -15,7 +15,6 @@ const SCRIPT_MARKET_FIT = {
     under_25:             0.68, // dominant teams often win by 1, keeping it tight
     btts_no:              0.65, // home keeps clean sheet when controlling
     home_over_25:         0.60,
-    home_over_15:         0.85,
   },
   dominant_away_pressure: {
     away_win:             0.92,
@@ -169,7 +168,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const badMarketPenalty = getBadMarketPenalty(candidate, featureVector);
 
     // Form/momentum score: reward picks that align with recent team performance
-    const homePointsLast5 = safeNum(fv.homePointsLast5, 6);
+    const homePointsLast5 = safeNum(fv.homePointsLast5, 5);
     const awayPointsLast5 = safeNum(fv.awayPointsLast5, 5);
     const formGap = (homePointsLast5 - awayPointsLast5) / 15; // normalize to -1 to 1
     
@@ -178,6 +177,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     if (marketKey.includes('home') && formGap > 0.2) formMomentumScore = 0.6;
     else if (marketKey.includes('away') && formGap < -0.2) formMomentumScore = 0.6;
     else if (marketKey.includes('draw') && Math.abs(formGap) < 0.15) formMomentumScore = 0.5;
+    else if (marketKey.includes('over') || marketKey.includes('under') || marketKey.includes('btts')) formMomentumScore = 0.5;
     else formMomentumScore = 0.3;
 
     // Repetition penalty: how often has this specific market been used recently
@@ -205,7 +205,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
 
     const finalScore =
       0.25 * modelConfidenceScore +
-      0.25 * Math.max(0, edgeScore) +
+      0.25 * edgeScore +
       0.24 * tacticalFitScore +
       0.10 * dataSupportScore +
       0.08 * historicalAccuracyScore +

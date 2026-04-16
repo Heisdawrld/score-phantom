@@ -52,8 +52,13 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
     ['over15',  'under15'],
     ['over25',  'under25'],
     ['over35',  'under35'],
-    ['over_0_5', 'under_0_5'],
     ['bttsYes', 'bttsNo'],
+    ['homeOver05', 'homeUnder05'],
+    ['awayOver05', 'awayUnder05'],
+    ['homeOver15', 'homeUnder15'],
+    ['awayOver15', 'awayUnder15'],
+    ['homeOver25', 'homeUnder25'],
+    ['awayOver25', 'awayUnder25']
   ];
   for (const [overKey, underKey] of pairs) {
     if (cal[overKey] != null) {

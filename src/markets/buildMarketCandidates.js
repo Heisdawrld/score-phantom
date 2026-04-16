@@ -17,6 +17,7 @@ const MARKET_DEFINITIONS = [
   { marketKey: 'over_15',            selection: 'Over 1.5 Goals',       probKey: 'over15' },
   { marketKey: 'over_25',            selection: 'Over 2.5 Goals',       probKey: 'over25' },
   { marketKey: 'over_35',            selection: 'Over 3.5 Goals',       probKey: 'over35' },
+  { marketKey: 'under_15',           selection: 'Under 1.5 Goals',      probKey: 'under15' },
   { marketKey: 'under_25',           selection: 'Under 2.5 Goals',      probKey: 'under25' },
   { marketKey: 'under_35',           selection: 'Under 3.5 Goals',      probKey: 'under35' },
   { marketKey: 'btts_yes',           selection: 'BTTS Yes',             probKey: 'bttsYes' },

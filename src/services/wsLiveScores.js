@@ -8,6 +8,10 @@ let pollTimer = null;
 let isConnected = false;
 
 export function addSseClient(res) {
+  if (sseClients.size >= 250) {
+    res.status(429).json({ error: "Too many active live streams. Please try again later." });
+    return;
+  }
   sseClients.add(res);
   res.on('close', () => sseClients.delete(res));
 }

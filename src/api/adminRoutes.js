@@ -503,7 +503,9 @@ router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res)
     const expiryISO = expiry.toISOString();
     await db.execute({ sql: "UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?", args: [new Date().toISOString(), ref] });
     await db.execute({ sql: "UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ? WHERE id = ?", args: [expiryISO, expiryISO, payment.user_id] });
-    try { await createReferralCommission(Number(payment.user_id), Number(payment.amount)||3000, payment.id||null, ref); } catch(ce) { console.error("[VerifyPmt] Commission error:", ce.message); }
+    const amount = payment.amount != null ? Number(payment.amount) : 3000;
+    try { await createReferralCommission(Number(payment.user_id), amount, payment.id||null, ref); } catch(ce) { console.error("[VerifyPmt] Commission error:", ce.message); }
+    return res.json({ success: true, message: "Payment verified successfully" });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
