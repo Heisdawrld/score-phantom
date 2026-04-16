@@ -430,8 +430,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         <p className="text-white font-black text-xl mb-2">{isExpiredBlock ? "⏰ Trial Expired" : "🔒 Out of Predictions"}</p>
                         <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
                           {isExpiredBlock
-                            ? "Your 3-day free trial has ended. Every prediction is right there — upgrade to unlock full access."
-                            : "You've used your 3 free predictions today. The full analysis is right there — upgrade for unlimited access."}
+                            ? "Your 7-day free trial has ended. Every prediction is right there — upgrade to unlock full access."
+                            : "You've used your 15 free predictions today. The full analysis is right there — upgrade for unlimited access."}
                         </p>
                       </div>
                       <div className="space-y-2 w-full max-w-[260px]">
@@ -512,7 +512,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           <p className="text-white font-black text-xl mb-2">{isLimitHit ? "🔒 Out of Predictions" : "🔒 Premium Required"}</p>
                           <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
                             {isLimitHit
-                              ? "You've used your 3 free predictions today. Come back tomorrow or upgrade for unlimited access."
+                              ? "You've used your 15 free predictions today. Come back tomorrow or upgrade for unlimited access."
                               : "Unlock unlimited predictions, ACCA builder, Top Picks, League Favorites, and full match analysis."}
                           </p>
                         </div>
