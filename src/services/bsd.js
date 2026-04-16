@@ -50,7 +50,9 @@ async function bsdFetch(path, params = {}, { cacheable = true } = {}) {
   }
 
   try {
-    const res = await fetch(url.toString(), {
+    const fullUrl = url.toString();
+    // console.log(`[BSD] Fetching: ${fullUrl}`);
+    const res = await fetch(fullUrl, {
       headers: { Authorization: `Token ${BSD_API_KEY}` },
       signal: AbortSignal.timeout(12000), // 12s timeout
     });
@@ -191,8 +193,8 @@ export async function fetchEventDetail(eventId) {
   return await bsdFetch(`/events/${eventId}/`);
 }
 
-export async function fetchTeamRecentEvents(teamName, n = 15) {
-  if (!teamName) return [];
+export async function fetchTeamRecentEvents(team, n = 15) {
+  if (!team) return [];
 
   // BSD requires date_from to query historical data, otherwise it defaults to a narrow window.
   const dTo = new Date();
@@ -200,12 +202,20 @@ export async function fetchTeamRecentEvents(teamName, n = 15) {
   const dateFrom = dFrom.toISOString().slice(0, 10);
   const dateTo = dTo.toISOString().slice(0, 10);
 
-  const results = await bsdFetchAll('/events/', {
-    team: teamName,
+  const params = {
     status: 'finished',
     date_from: dateFrom,
     date_to: dateTo,
-  });
+  };
+
+  // If team is a number (or string that is a number), it's likely an ID
+  if (!isNaN(team) && String(team).trim() !== '') {
+    params.team_id = team;
+  } else {
+    params.team = team;
+  }
+
+  const results = await bsdFetchAll('/events/', params);
 
   // Ensure results are sorted descending (newest first) before slicing
   const sorted = (results || []).sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
@@ -227,14 +237,54 @@ export async function fetchH2H(team1, team2, n = 10) {
   if (!team1 || !team2) return [];
 
   // BSD /h2h/ takes team1 and team2 params
-  const data = await bsdFetch('/h2h/', {
-    team1: team1,
-    team2: team2,
-    limit: n
-  });
+  const params = { limit: n };
+  if (!isNaN(team1) && String(team1).trim() !== '') params.team1_id = team1;
+  else params.team1 = team1;
+  
+  if (!isNaN(team2) && String(team2).trim() !== '') params.team2_id = team2;
+  else params.team2 = team2;
+
+  const data = await bsdFetch('/h2h/', params);
 
   const results = data?.results || data || [];
+  
+  // If native H2H returns too few results (BSD history may be limited),
+  // fallback to manual derivation from recent events to find more.
+  if (results.length < 2) {
+    const manual = await deriveH2H(team1, team2);
+    if (manual.length > results.length) return manual.slice(0, n);
+  }
+
   return results.slice(0, n).map(e => normaliseEventToForm(e));
+}
+
+/**
+ * Derive H2H records from both teams' recent event history.
+ * Fetches last 30 finished matches for each team, then finds matches
+ * where BOTH teams appear.
+ *
+ * @param {string} homeTeamName
+ * @param {string} awayTeamName
+ * @returns {Array} H2H matches in enrichmentService format
+ */
+export async function deriveH2H(homeTeamName, awayTeamName) {
+  if (!homeTeamName || !awayTeamName) return [];
+
+  // Fetch in parallel
+  const [homeEvents, awayEvents] = await Promise.all([
+    fetchTeamRecentEvents(homeTeamName, 30),
+    fetchTeamRecentEvents(awayTeamName, 30),
+  ]);
+
+  // Build a set of event IDs from the away team's matches for fast lookup
+  const awayEventIds = new Set((awayEvents || []).map(e => e.id));
+
+  // Filter home team's events to those that also appear in away team's history
+  const h2hEvents = (homeEvents || []).filter(e => awayEventIds.has(e.id));
+
+  // Normalise to the format enrichmentService expects:
+  // { home, away, score, date, competition }
+  return h2hEvents.slice(0, 10).map(e => normaliseEventToForm(e));
 }
 
 // ── Live Scores ────────────────────────────────────────────────────────────────
