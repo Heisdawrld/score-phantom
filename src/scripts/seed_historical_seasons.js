@@ -58,6 +58,16 @@ async function ensureTables() {
       UNIQUE(fixture_id, type)
     )
   `);
+
+  const cols = [
+      "ALTER TABLE historical_matches ADD COLUMN competition TEXT",
+      "ALTER TABLE historical_matches ADD COLUMN xg_home REAL",
+      "ALTER TABLE historical_matches ADD COLUMN xg_away REAL",
+      "ALTER TABLE historical_matches ADD COLUMN btts BOOLEAN"
+  ];
+  for (const c of cols) {
+      try { await db.execute(c); } catch(e) {}
+  }
 }
 
 async function runSeeder() {
@@ -125,14 +135,16 @@ async function runSeeder() {
                             league.name,
                             match.home_score,
                             match.away_score,
-                            match.live_stats?.xg?.home || null,
-                            match.live_stats?.xg?.away || null,
+                            match.actual_home_xg || null,
+                            match.actual_away_xg || null,
                             (match.home_score > 0 && match.away_score > 0) ? 1 : 0
                         ]
                     });
                     inserted++;
                 } catch (e) {
-                    // Ignore constraint errors
+                    if (!e.message.includes('UNIQUE constraint')) {
+                        console.error('Insert error:', e.message);
+                    }
                 }
             }
             totalInserted += inserted;
