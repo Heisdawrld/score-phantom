@@ -322,8 +322,8 @@ export function normaliseBsdEventToFixture(event) {
   const awayTeamObj = event.away_team_obj || {};
   const eventDate   = event.event_date || '';
 
-  // Generate a stable match_date string (YYYY-MM-DD)
-  const matchDate = eventDate ? eventDate.substring(0, 10) : '';
+  // Preserve full ISO timestamp to fix the 1:00 AM WAT timezone bug
+  const matchDate = eventDate || '';
 
   // BSD internal id is our primary fixture key
   const matchId      = String(event.id);
@@ -373,6 +373,11 @@ export function normaliseBsdEventToFixture(event) {
     odds_home: event.odds_home ?? null,
     odds_draw: event.odds_draw ?? null,
     odds_away: event.odds_away ?? null,
+    odds_dc_home_draw: event.odds_home && event.odds_draw ? parseFloat(((event.odds_home * event.odds_draw) / (event.odds_home + event.odds_draw)).toFixed(2)) : null,
+    odds_dc_away_draw: event.odds_away && event.odds_draw ? parseFloat(((event.odds_away * event.odds_draw) / (event.odds_away + event.odds_draw)).toFixed(2)) : null,
+    odds_dc_home_away: event.odds_home && event.odds_away ? parseFloat(((event.odds_home * event.odds_away) / (event.odds_home + event.odds_away)).toFixed(2)) : null,
+    odds_dnb_home: event.odds_home && event.odds_draw ? parseFloat((event.odds_home * (1 - 1/event.odds_draw)).toFixed(2)) : null,
+    odds_dnb_away: event.odds_away && event.odds_draw ? parseFloat((event.odds_away * (1 - 1/event.odds_draw)).toFixed(2)) : null,
     odds_over_15: event.odds_over_15 ?? null,
     odds_over_25: event.odds_over_25 ?? null,
     odds_over_35: event.odds_over_35 ?? null,

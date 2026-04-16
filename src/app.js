@@ -333,15 +333,15 @@ app.listen(PORT, async () => {
     } catch (err) { console.error("[ResultChecker] Startup backfill failed:", err.message); }
   }, 30000);
 
-  // Re-run enrichment every 1 hour, then immediately pre-generate predictions
+  // Continuous enrichment pipeline: Every 15 minutes, aggressively prefetch data
   setInterval(async () => {
     try {
-      await autoEnrich();
-      await autoBuildPredictions({ limit: 100 });
+      await autoEnrich({ limit: 200 });
+      await autoBuildPredictions({ limit: 200 });
     } catch (err) {
       console.error("[AutoEnrich/PredRunner] scheduled error:", err.message);
     }
-  }, 60 * 60 * 1000); // every 1 hour
+  }, 15 * 60 * 1000); // every 15 minutes
 
   // Re-seed fixtures daily at midnight Lagos time
   function scheduleNextMidnightSeed() {
