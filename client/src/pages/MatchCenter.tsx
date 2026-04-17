@@ -580,8 +580,9 @@ function LeagueTab({ d }: any) {
 // ── Pitch Tab ────────────────────────────────────────────────────────────────
 function PitchTab({ matchData }: any) {
   const events = matchData?.meta?.matchEvents || [];
-  const homeStats = matchData?.meta?.homeStats;
-  const awayStats = matchData?.meta?.awayStats;
+  const matchStats = matchData?.meta?.matchStats || {};
+  const momentum = matchStats.momentum || matchData?.meta?.momentum || [];
+  const shotmap = matchStats.shotmap || matchData?.meta?.shotmap || [];
   
   return (
     <div className="flex flex-col gap-4">
@@ -592,8 +593,8 @@ function PitchTab({ matchData }: any) {
           {/* Central zero line */}
           <div className="absolute left-0 right-0 top-1/2 h-px bg-white/10" />
           
-          {matchData?.meta?.momentum && matchData.meta.momentum.length > 0 ? (
-            matchData.meta.momentum.map((m: any, i: number) => {
+          {momentum && momentum.length > 0 ? (
+            momentum.map((m: any, i: number) => {
               const height = Math.min(Math.abs(m.value), 100);
               const isHome = m.value > 0;
               return (
@@ -643,8 +644,8 @@ function PitchTab({ matchData }: any) {
           </div>
 
           {/* Plot shots */}
-          {matchData?.meta?.shotmap && matchData.meta.shotmap.length > 0 ? (
-            matchData.meta.shotmap.map((shot: any, i: number) => {
+          {shotmap && shotmap.length > 0 ? (
+            shotmap.map((shot: any, i: number) => {
               if (!shot.pos || shot.pos.x == null || shot.pos.y == null) return null;
               
               // Normalize coordinates assuming 0-100 scale. Home attacks right (0-100), Away attacks left (100-0)

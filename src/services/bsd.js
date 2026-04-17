@@ -90,8 +90,7 @@ async function bsdFetchAll(path, params = {}) {
 
     // Stop if we have all results or no next page
     if (!data.next || allResults.length >= (totalCount || 0)) break;
-    // Safety cap: never fetch more than 10 pages in one call
-    if (page >= 10) break;
+    // Removed strict 10-page safety cap to allow deep historical fetching
     page++;
   }
 
@@ -288,10 +287,10 @@ export async function deriveH2H(homeTeamName, awayTeamName, opts = {}) {
 
   const target = Number(opts.target ?? 10);
 
-  const firstPassCount = Math.max(50, target * 8);
+  const firstPassCount = Math.max(100, target * 10); // increased from 50
   const [homeEvents1, awayEvents1] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, firstPassCount, { yearsBack: 2 }),
-    fetchTeamRecentEvents(awayTeamName, firstPassCount, { yearsBack: 2 }),
+    fetchTeamRecentEvents(homeTeamName, firstPassCount, { yearsBack: 3 }), // increased from 2
+    fetchTeamRecentEvents(awayTeamName, firstPassCount, { yearsBack: 3 }),
   ]);
 
   const aIds1 = new Set((awayEvents1 || []).map(e => e.id));
@@ -299,10 +298,10 @@ export async function deriveH2H(homeTeamName, awayTeamName, opts = {}) {
   const h2h1Norm = h2h1.map(e => normaliseEventToForm(e)).filter(Boolean);
   if (h2h1Norm.length >= Math.min(5, target)) return h2h1Norm.slice(0, target);
 
-  const deepCount = Math.max(200, target * 20);
+  const deepCount = Math.max(300, target * 25); // increased from 200
   const [homeEvents2, awayEvents2] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, deepCount, { yearsBack: 10 }),
-    fetchTeamRecentEvents(awayTeamName, deepCount, { yearsBack: 10 }),
+    fetchTeamRecentEvents(homeTeamName, deepCount, { yearsBack: 15 }), // increased from 10
+    fetchTeamRecentEvents(awayTeamName, deepCount, { yearsBack: 15 }),
   ]);
 
   // Build a set of event IDs from the away team's matches for fast lookup
