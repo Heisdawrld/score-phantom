@@ -185,7 +185,7 @@ export default function TopPicksToday() {
         )}
 
         {/* ── Filter Tabs ── */}
-        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4">
+        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4 touch-pan-x overscroll-x-contain">
           {[
             { key: "all" as FilterMode, label: "All Picks" },
             { key: "elite" as FilterMode, label: "Elite" },

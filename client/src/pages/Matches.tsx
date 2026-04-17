@@ -51,7 +51,7 @@ export default function Matches() {
       <div className="sticky top-0 z-20 bg-[#090d13]/95 backdrop-blur-xl border-b border-white/5">
         <div className="px-4 pt-4 pb-2">
           <h1 className="text-xl font-black text-white tracking-wide mb-3">Matches</h1>
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x overscroll-x-contain">
             {dates.map(d => (
               <button key={d.iso} onClick={()=>setSelectedDate(d.iso)}
                 className={cn("shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all",

@@ -660,9 +660,11 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     const pool = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away
+                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away,
+                   fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
+            LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
             WHERE f.match_date LIKE ?
               AND p.best_pick_selection IS NOT NULL
               AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
@@ -710,9 +712,11 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
                      p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                      p.best_pick_score, p.confidence_model, p.confidence_volatility,
                      p.script_primary, p.no_safe_pick,
-                     f.tournament_name, f.match_date, f.enrichment_status, f.data_quality
+                     f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away,
+                     fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
               FROM predictions_v2 p
               JOIN fixtures f ON f.id = p.fixture_id
+              LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
               WHERE f.match_date LIKE ?
                 AND p.best_pick_selection IS NOT NULL
                 AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')

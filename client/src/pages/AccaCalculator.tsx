@@ -50,7 +50,10 @@ export default function DailyAcca() {
 
   const picks = data?.picks || [];
   const combinedOdds = picks.reduce((acc: number, p: any) => {
-    const o = p.pickOdds || p.oddsHome || p.oddsAway || (100 / Math.max(p.probability, 1));
+    // If the API returned valid odds for this specific market, use them.
+    // Otherwise, mathematically imply the true odds from the model's probability, 
+    // applying a standard 5% bookmaker margin (0.95).
+    const o = p.pickOdds || (100 / Math.max(p.probability, 1)) * 0.95;
     return acc * parseFloat(o);
   }, 1);
   const potentialReturn = stake * combinedOdds;
@@ -172,8 +175,8 @@ export default function DailyAcca() {
             {/* ── ACCA Picks ── */}
             <div className='space-y-2'>
               {picks.map((pick: any, i: number) => {
-                const realOdds = pick.pickOdds || pick.oddsHome || pick.oddsAway;
-                const oddsFmt = realOdds ? parseFloat(realOdds).toFixed(2) : (100 / Math.max(pick.probability, 1)).toFixed(2);
+                const o = pick.pickOdds || (100 / Math.max(pick.probability, 1)) * 0.95;
+                const oddsFmt = parseFloat(o).toFixed(2);
                 const prob = pick.probability || 0;
 
                 return (

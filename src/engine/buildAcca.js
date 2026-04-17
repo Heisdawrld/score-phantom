@@ -262,9 +262,21 @@ function resolvePickOdds(row) {
   if (mk === 'dnb_home')          return parseFloat(row.odds_home || row.home || 0) || null;
   if (mk === 'dnb_away')          return parseFloat(row.odds_away || row.away || 0) || null;
 
-  // Double Chance
-  if (mk === 'double_chance_home') return parseFloat(row.odds_dc_home_draw || row.dc_home_draw || 0) || null;
-  if (mk === 'double_chance_away') return parseFloat(row.odds_dc_away_draw || row.dc_away_draw || 0) || null;
+  // Double Chance (Mathematically derived from 1X2 if explicit DC is missing, applying a 5% bookmaker margin)
+  if (mk === 'double_chance_home') {
+    if (row.odds_dc_home_draw || row.dc_home_draw) return parseFloat(row.odds_dc_home_draw || row.dc_home_draw);
+    const h = parseFloat(row.odds_home || row.home);
+    const d = parseFloat(row.odds_draw || row.draw);
+    if (h && d) return (1 / (1/h + 1/d)) * 0.95;
+    return null;
+  }
+  if (mk === 'double_chance_away') {
+    if (row.odds_dc_away_draw || row.dc_away_draw) return parseFloat(row.odds_dc_away_draw || row.dc_away_draw);
+    const a = parseFloat(row.odds_away || row.away);
+    const d = parseFloat(row.odds_draw || row.draw);
+    if (a && d) return (1 / (1/a + 1/d)) * 0.95;
+    return null;
+  }
 
   // BTTS
   if (mk === 'btts_yes')          return parseFloat(row.odds_btts_yes || row.btts_yes || 0) || null;

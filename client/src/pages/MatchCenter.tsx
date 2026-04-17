@@ -312,9 +312,9 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
           )}
 
           {/* ── BOTTOM STAT STRIP ── */}
-          {model && (
-            <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar">
-              <div className="shrink-0 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2 text-center min-w-[70px]">
+            {model && (
+              <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar touch-pan-x overscroll-x-contain">
+                <div className="shrink-0 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2 text-center min-w-[70px]">
                 <p className="text-sm font-black text-white tabular-nums">{model.totalXg?.toFixed(1)}</p>
                 <p className="text-[8px] text-white/25 uppercase">xG</p>
               </div>
@@ -857,14 +857,14 @@ export default function MatchCenter() {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["/api/matches", fixtureId],
-    queryFn: () => fetchApi("/matches/" + fixtureId),
-    staleTime: 3 * 60 * 1000,
-    enabled: !!fixtureId,
-  });
+      queryKey: ["/api/matches", fixtureId],
+      queryFn: () => fetchApi("/matches/" + fixtureId),
+      staleTime: 30 * 1000,
+      enabled: !!fixtureId,
+    });
   const d = data as any;
   const fix = d?.fixture || {};
-  const isLive = ["LIVE", "HT", "1H", "2H"].includes(fix.match_status || "");
+  const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(fix.match_status || "");
   const isFT = ["FT", "AET", "Pen"].includes(fix.match_status || "");
   const matchTime = fix.match_date
     ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })

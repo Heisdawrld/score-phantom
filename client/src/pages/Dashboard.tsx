@@ -391,7 +391,7 @@ function UpcomingFixtures({ fixtures, onSelect }: { fixtures: any[]; onSelect: (
           ‖ Upcoming Fixtures
         </span>
       </div>
-      <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 snap-x">
+      <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain">
         {upcoming.map((f: any) => {
           const time = toWAT(f.match_date);
           const homeName = f.home_team_name || "Home";
@@ -697,7 +697,7 @@ export default function Dashboard() {
   });
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment") === "success");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites">("all");
+  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live">("all");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
@@ -735,7 +735,9 @@ export default function Dashboard() {
         (f.tournament_name && f.tournament_name.toLowerCase().includes(q))
       );
     }
-    if (activeGroupTab === "favorites") {
+    if (activeGroupTab === "live") {
+      filtered = filtered.filter(f => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(f.match_status || ''));
+    } else if (activeGroupTab === "favorites") {
       try {
         const favs = JSON.parse((user as any)?.league_favorites || "[]");
         if (Array.isArray(favs) && favs.length > 0) {
@@ -879,7 +881,7 @@ export default function Dashboard() {
         <QuickActions
           onTopPicks={() => setLocation("/picks")}
           onAcca={() => setLocation("/acca")}
-          onLive={() => { setSelectedDate(dates[0]); }}
+          onLive={() => { setSelectedDate(dates[0]); setActiveGroupTab("live"); }}
           onValueBets={() => setLocation("/picks")}
         />
 
@@ -898,7 +900,7 @@ export default function Dashboard() {
         <UpcomingFixtures fixtures={allFixtures} onSelect={handleSelectFixture} />
 
         {/* ── Date Strip ── */}
-        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 snap-x">
+        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 touch-pan-x overscroll-x-contain">
           {dates.map((date) => {
             const isSelected = isSameDay(date, selectedDate);
             return (
@@ -920,10 +922,11 @@ export default function Dashboard() {
         </div>
 
         {/* ── Tabs & Search ── */}
-        <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4">
-          <button onClick={() => setActiveGroupTab("all")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All Matches</button>
-          <button onClick={() => setActiveGroupTab("favorites")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
-        </div>
+          <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4">
+            <button onClick={() => setActiveGroupTab("all")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
+            <button onClick={() => setActiveGroupTab("live")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
+            <button onClick={() => setActiveGroupTab("favorites")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
+          </div>
         <div className="relative mt-2">
           <Search className="absolute left-4 top-3.5 h-4 w-4 text-white/25" />
           <Input
