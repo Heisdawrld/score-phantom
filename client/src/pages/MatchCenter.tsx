@@ -949,14 +949,13 @@ export default function MatchCenter() {
         </div>
 
         {/* ── TABS ── */}
-        <div className="flex border-b border-white/[0.06]">
+        <div className="flex border-b border-white/[0.06] overflow-x-auto scrollbar-hide snap-x">
           {TABS.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setTab(key)}
-              className={cn("flex items-center gap-1.5 px-3 py-3 text-sm font-bold transition-all border-b-2 -mb-px flex-1 justify-center",
+              className={cn("flex items-center gap-1.5 px-4 py-3 text-sm font-bold transition-all border-b-2 -mb-px shrink-0 whitespace-nowrap snap-start",
                 tab === key ? "text-primary border-primary" : "text-white/30 border-transparent hover:text-white/50")}>
               <Icon size={13} />
-              <span className="hidden sm:inline">{label}</span>
-              <span className="sm:hidden text-[11px]">{label === "PhantomChat" ? "Chat" : label}</span>
+              <span>{label}</span>
             </button>
           ))}
         </div>
