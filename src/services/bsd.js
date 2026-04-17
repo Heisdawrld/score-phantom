@@ -235,9 +235,10 @@ export async function fetchEventDetail(eventId) {
 export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
   if (!team) return [];
 
-  // BSD requires date_from to query historical data, otherwise it defaults to a narrow window.
   const dTo = new Date();
-  const yearsBack = Number(opts.yearsBack ?? 1);
+  // Never look back more than 1 year for form events.
+  // Using large lookbacks (like 15 years) causes massive multi-page fetches that hang the API.
+  const yearsBack = 1;
   const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
   const dateFrom = dFrom.toISOString().slice(0, 10);
   const dateTo = dTo.toISOString().slice(0, 10);
@@ -257,7 +258,10 @@ export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
     teamSearchText = String(team).trim().toLowerCase();
   }
 
-  const results = await bsdFetchAll('/events/', params);
+  // We use bsdFetch instead of bsdFetchAll to only grab the first page
+  // The API sorts descending, so the first page naturally has the most recent games.
+  const data = await bsdFetch('/events/', params);
+  const results = data?.results || data || [];
 
   // POST-FETCH QUARANTINE FILTER
   // BSD ignores the 'team' text parameter and returns a global dump.
