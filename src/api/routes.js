@@ -136,6 +136,27 @@ async function getTodayCount(userId) {
   }
 }
 
+async function incrementAndCheckDailyCount(userId, limit) {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const result = await db.execute({
+      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
+            ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1
+            RETURNING count`,
+      args: [userId, today],
+    });
+    const newCount = result.rows[0].count;
+    if (newCount > limit) {
+      // Revert the increment since they hit the limit
+      await decrementDailyCount(userId, today);
+      return { allowed: false, today };
+    }
+    return { allowed: true, today };
+  } catch {
+    return { allowed: false, today: null };
+  }
+}
+
 async function incrementDailyCount(userId, today) {
   try {
     await db.execute({
@@ -395,29 +416,27 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
     // Trial users: enforce daily predictions cap (TRIAL_DAILY_LIMIT)
-    let trialToday = null; // declared here so it's in scope for increment below
-    if (!req.access.subscription_active) {
-      if (!req.access.has_full_access) {
-        return res.status(403).json({
-          error: "Subscription required",
-          code: "subscription_required",
-          access: buildAccessPayload(req.access),
-        });
+      let trialToday = null; // declared here so it's in scope for increment below
+      if (!req.access.subscription_active) {
+        if (!req.access.has_full_access) {
+          return res.status(403).json({
+            error: "Subscription required",
+            code: "subscription_required",
+            access: buildAccessPayload(req.access),
+          });
+        }
+        // has_full_access but not subscription = trial
+        const check = await incrementAndCheckDailyCount(req.user.id, TRIAL_DAILY_LIMIT);
+        trialToday = check.today;
+        if (!check.allowed) {
+          return res.status(429).json({
+            error: "Daily limit reached",
+            code: "daily_limit_reached",
+            message: `Free trial allows ${TRIAL_DAILY_LIMIT} predictions per day. Come back tomorrow!`,
+            access: buildAccessPayload(req.access),
+          });
+        }
       }
-      // has_full_access but not subscription = trial
-      const { count, today } = await getTodayCount(req.user.id);
-      trialToday = today; // save for use after prediction
-      if (count >= TRIAL_DAILY_LIMIT) {
-        return res.status(429).json({
-          error: "Daily limit reached",
-          code: "daily_limit_reached",
-          message: `Free trial allows ${TRIAL_DAILY_LIMIT} predictions per day. Come back tomorrow!`,
-          access: buildAccessPayload(req.access),
-        });
-      }
-      // Increment BEFORE running prediction to prevent race conditions
-      await incrementDailyCount(req.user.id, trialToday);
-    }
 
     const fixtureId = req.params.fixtureId;
 
