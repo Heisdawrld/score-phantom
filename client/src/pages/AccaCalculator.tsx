@@ -107,8 +107,8 @@ export default function DailyAcca() {
         ) : picks.length === 0 ? (
           <div className='text-center py-16'>
             <Zap className='w-12 h-12 text-white/15 mx-auto mb-4' />
-            <p className='text-white/50 font-semibold'>{data?.message || 'No ACCA picks available yet.'}</p>
-            <p className='text-white/25 text-sm mt-2'>Predictions are being built — check back in a few minutes.</p>
+            <p className='text-white/50 font-semibold'>No ACCA picks available yet.</p>
+            <p className='text-white/25 text-sm mt-2'>Predictions are being built or there aren't enough high-confidence matches today. Check back later.</p>
           </div>
         ) : (
           <div className='space-y-4'>

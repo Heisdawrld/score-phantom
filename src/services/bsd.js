@@ -209,7 +209,7 @@ export async function fetchEventDetail(eventId) {
   return await bsdFetch(`/events/${eventId}/`);
 }
 
-export async function fetchTeamRecentEvents(team, n = 15, opts = {}) {
+export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
   if (!team) return [];
 
   // BSD requires date_from to query historical data, otherwise it defaults to a narrow window.
@@ -250,7 +250,7 @@ export async function fetchTeamRecentEvents(team, n = 15, opts = {}) {
  * @param {string|number} team2 - away team id or name
  * @param {number} n - max results to return
  */
-export async function fetchH2H(team1, team2, n = 10) {
+export async function fetchH2H(team1, team2, n = 20) {
   if (!team1 || !team2) return [];
 
   // BSD /h2h/ takes team1 and team2 params

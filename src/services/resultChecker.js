@@ -26,8 +26,9 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
     if (sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
   }
   if (mkt.includes('double chance')) {
-    if (sel.includes('home') || sel.includes('1') || isHomePick) return homeScore >= awayScore ? 'win' : 'loss';
-    if (sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore >= homeScore ? 'win' : 'loss';
+    if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
+    if (sel.includes('1x') || sel.includes('home or draw') || sel.includes('home') || sel.includes('1') || isHomePick) return homeScore >= awayScore ? 'win' : 'loss';
+    if (sel.includes('x2') || sel.includes('draw or away') || sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore >= homeScore ? 'win' : 'loss';
     return homeScore >= awayScore ? 'win' : 'loss';
   }
   if (mkt.includes('draw no bet') || mkt.includes('dnb')) {

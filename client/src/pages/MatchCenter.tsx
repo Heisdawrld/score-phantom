@@ -38,6 +38,7 @@ function SpiralWatermark() {
 const TABS = [
   { key: "Prediction", label: "Prediction", Icon: Target },
   { key: "Stats", label: "Stats", Icon: BarChart2 },
+  { key: "Pitch", label: "Pitch", Icon: Target },
   { key: "League", label: "League", Icon: Trophy },
   { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
 ];
@@ -266,26 +267,28 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
           )}
 
           {/* ── ODDS DISPLAY ── */}
-          {(odds || oddsData?.home) && (
+          {oddsData && (odds || oddsData?.home) && (
             <div className="mt-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">SportyBet Odds</p>
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                <div className="rounded-xl p-3 text-center bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[9px] text-white/30 mb-1">Odds</p>
-                  <p className="text-lg font-black text-white">{odds || "-"}</p>
+              {odds && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="rounded-xl p-3 text-center bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[9px] text-white/30 mb-1">Odds</p>
+                    <p className="text-lg font-black text-white">{odds || "-"}</p>
+                  </div>
+                  <div className="rounded-xl p-3 text-center bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[9px] text-white/30 mb-1">Implied</p>
+                    <p className="text-lg font-black text-white">{impliedPct ?? "-"}%</p>
+                  </div>
+                  <div className={cn("rounded-xl p-3 text-center", hasValue ? "bg-primary" : "bg-white/[0.03] border border-white/[0.06]")}>
+                    <p className={cn("text-[9px] mb-1", hasValue ? "text-black/50" : "text-white/30")}>Value</p>
+                    <p className={cn("text-xl font-black", hasValue ? "text-black" : "text-white/20")}>
+                      {hasValue ? "✓" : "✗"}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-xl p-3 text-center bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[9px] text-white/30 mb-1">Implied</p>
-                  <p className="text-lg font-black text-white">{impliedPct ?? "-"}%</p>
-                </div>
-                <div className={cn("rounded-xl p-3 text-center", hasValue ? "bg-primary" : "bg-white/[0.03] border border-white/[0.06]")}>
-                  <p className={cn("text-[9px] mb-1", hasValue ? "text-black/50" : "text-white/30")}>Value</p>
-                  <p className={cn("text-xl font-black", hasValue ? "text-black" : "text-white/20")}>
-                    {hasValue ? "✓" : "✗"}
-                  </p>
-                </div>
-              </div>
-              {hasValue && (
+              )}
+              {hasValue && odds && (
                 <div className="flex items-center gap-1.5 mb-3">
                   <TrendingUp size={12} className="text-primary" />
                   <p className="text-[11px] text-primary font-semibold">Value bet — bookmaker underpricing this outcome</p>
@@ -574,6 +577,112 @@ function LeagueTab({ d }: any) {
   );
 }
 
+// ── Pitch Tab ────────────────────────────────────────────────────────────────
+function PitchTab({ matchData }: any) {
+  const events = matchData?.meta?.matchEvents || [];
+  const homeStats = matchData?.meta?.homeStats;
+  const awayStats = matchData?.meta?.awayStats;
+  
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── LIVE MOMENTUM ── */}
+      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Live Match Momentum</p>
+        <div className="h-32 flex items-end gap-1 relative overflow-hidden border-b border-white/10">
+          {/* Central zero line */}
+          <div className="absolute left-0 right-0 top-1/2 h-px bg-white/10" />
+          
+          {matchData?.meta?.momentum && matchData.meta.momentum.length > 0 ? (
+            matchData.meta.momentum.map((m: any, i: number) => {
+              const height = Math.min(Math.abs(m.value), 100);
+              const isHome = m.value > 0;
+              return (
+                <div key={i} className="flex-1 flex flex-col justify-end h-full relative group">
+                  <div 
+                    className={cn("w-full transition-all duration-300", isHome ? "bg-primary" : "bg-blue-500")}
+                    style={{ 
+                      height: `${height/2}%`,
+                      position: 'absolute',
+                      top: isHome ? `${50 - height/2}%` : '50%'
+                    }}
+                  />
+                </div>
+              );
+            })
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-white/30 font-medium">
+              Momentum data not available for this match
+            </div>
+          )}
+        </div>
+        <div className="flex justify-between mt-2 text-[9px] text-white/30 font-bold uppercase">
+          <span className="text-primary">{matchData?.fixture?.home_team_name}</span>
+          <span className="text-blue-500">{matchData?.fixture?.away_team_name}</span>
+        </div>
+      </div>
+
+      {/* ── SPATIAL SHOTMAP ── */}
+      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Spatial Shotmap</p>
+          <div className="flex gap-2">
+            <span className="flex items-center gap-1 text-[9px] text-white/40 font-bold"><div className="w-2 h-2 rounded-full bg-primary" /> Goal</span>
+            <span className="flex items-center gap-1 text-[9px] text-white/40 font-bold"><div className="w-2 h-2 rounded-full bg-white/20" /> Miss</span>
+          </div>
+        </div>
+        
+        {/* Pitch container */}
+        <div className="relative aspect-[1.5] w-full rounded-xl border border-white/20 bg-green-950/20 overflow-hidden">
+          {/* Pitch lines */}
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-white -translate-x-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-16 h-16 rounded-full border border-white -translate-x-1/2 -translate-y-1/2" />
+            {/* Penalty boxes */}
+            <div className="absolute top-1/4 bottom-1/4 left-0 w-1/6 border border-l-0 border-white" />
+            <div className="absolute top-1/4 bottom-1/4 right-0 w-1/6 border border-r-0 border-white" />
+          </div>
+
+          {/* Plot shots */}
+          {matchData?.meta?.shotmap && matchData.meta.shotmap.length > 0 ? (
+            matchData.meta.shotmap.map((shot: any, i: number) => {
+              if (!shot.pos || shot.pos.x == null || shot.pos.y == null) return null;
+              
+              // Normalize coordinates assuming 0-100 scale. Home attacks right (0-100), Away attacks left (100-0)
+              const x = shot.home ? shot.pos.x : 100 - shot.pos.x;
+              const y = shot.home ? shot.pos.y : 100 - shot.pos.y;
+              
+              const isGoal = shot.type === 'goal';
+              const size = Math.max(4, Math.min(12, (shot.xg || 0.1) * 20)); // Size based on xG
+
+              return (
+                <div 
+                  key={i}
+                  className={cn(
+                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 shadow-lg transition-transform hover:scale-150 cursor-pointer",
+                    isGoal ? (shot.home ? "bg-primary border border-white" : "bg-blue-500 border border-white") : "bg-white/20"
+                  )}
+                  style={{ 
+                    left: `${x}%`, 
+                    top: `${y}%`,
+                    width: `${size}px`,
+                    height: `${size}px`
+                  }}
+                  title={`${shot.home ? 'Home' : 'Away'} ${isGoal ? 'Goal' : 'Shot'} - xG: ${shot.xg?.toFixed(2)}`}
+                />
+              );
+            })
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
+               <Target className="w-8 h-8 text-white/10 mb-2" />
+               <p className="text-xs text-white/30 font-medium">Shotmap data will appear here during the match</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── PhantomChat Tab ─────────────────────────────────────────────────────────
 
 function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
@@ -681,6 +790,12 @@ export default function MatchCenter() {
   const { data: user } = useAuth();
   const isPremium = (user as any)?.has_access;
   const [tab, setTab] = useState("Prediction");
+
+  // Scroll to top when MatchCenter loads
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const { data, isLoading } = useQuery({
     queryKey: ["/api/matches", fixtureId],
     queryFn: () => fetchApi("/matches/" + fixtureId),
@@ -788,6 +903,7 @@ export default function MatchCenter() {
               transition={{ duration: 0.15 }}>
               {tab === "Prediction" && <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />}
               {tab === "Stats" && <StatsTab d={d} />}
+              {tab === "Pitch" && <PitchTab matchData={d} />}
               {tab === "League" && <LeagueTab d={d} />}
               {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />}
             </motion.div>

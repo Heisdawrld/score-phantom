@@ -9,9 +9,11 @@ let isConnected = false;
 
 export function addSseClient(res) {
   if (sseClients.size >= 250) {
-    res.status(429).json({ error: "Too many active live streams. Please try again later." });
+    res.write(`event: error\ndata: {"error":"Max connections reached"}\n\n`);
+    res.end();
     return;
   }
+  res.write(`data: {"connected":true,"count":${sseClients.size + 1}}\n\n`);
   sseClients.add(res);
   res.on('close', () => sseClients.delete(res));
 }

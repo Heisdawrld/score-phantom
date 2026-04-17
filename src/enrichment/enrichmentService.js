@@ -36,7 +36,7 @@ async function fetchLocalTeamForm(teamName) {
             FROM fixtures 
             WHERE match_status IN ('FT', 'AET', 'PEN') 
             AND (home_team_name = ? OR away_team_name = ?) 
-            ORDER BY match_date DESC LIMIT 15`,
+            ORDER BY match_date DESC LIMIT 50`,
       args: [teamName, teamName]
     });
     return (res.rows || []).map(r => ({
@@ -57,7 +57,7 @@ async function fetchLocalH2H(homeName, awayName) {
             FROM fixtures 
             WHERE match_status IN ('FT', 'AET', 'PEN') 
             AND ((home_team_name = ? AND away_team_name = ?) OR (home_team_name = ? AND away_team_name = ?))
-            ORDER BY match_date DESC LIMIT 10`,
+            ORDER BY match_date DESC LIMIT 20`,
       args: [homeName, awayName, awayName, homeName]
     });
     return (res.rows || []).map(r => ({
@@ -104,7 +104,7 @@ const NON_DOMESTIC_KEYWORDS = [
   'friendly', 'test match', 'pre-season',
 ];
 
-function filterRelevantForm(form, teamName, max = 15) {
+export function filterRelevantForm(form = [], teamName, max = 50) {
   if (!form?.length) return [];
 
   // Team filter
@@ -312,10 +312,10 @@ export async function fetchAndStoreEnrichment(fixture) {
   const localHome = await fetchLocalTeamForm(fixture.home_team_name);
   const localAway = await fetchLocalTeamForm(fixture.away_team_name);
   
-  const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 15);
-  const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 15);
+  const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 50);
+  const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 50);
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
-  const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 5);
+  const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 20);
   const h2hData = { h2h: h2hRaw, homeForm: [], awayForm: [] };
   await sleep(300);
 
@@ -381,8 +381,8 @@ export async function fetchAndStoreEnrichment(fixture) {
 
 
 
-  const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 15);
-  const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 15);
+  const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 50);
+  const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 50);
 
   // ── Step 3 (renumbered): Build team profiles from form data ────────────────
   // Premium match stats (shots/possession) are not fetched — API plan required.
