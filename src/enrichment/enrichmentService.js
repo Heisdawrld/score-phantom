@@ -304,27 +304,17 @@ export async function fetchAndStoreEnrichment(fixture) {
   console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
 
   // Step 1: Team form PRIMARY (up to 15 finished matches) + H2H + Standings
-  // BSD team endpoint: filter by team ID where possible, status=finished
-  const [bsdHome, bsdAway, bsdH2h] = await Promise.all([
-    fetchTeamRecentEvents(fixture.home_team_id || fixture.home_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
-      console.warn("[enrichmentService] Home form failed:", e.message); return [];
-    }),
-    fetchTeamRecentEvents(fixture.away_team_id || fixture.away_team_name, 15).then(evts => evts.map(normaliseEventToForm)).catch((e) => {
-      console.warn("[enrichmentService] Away form failed:", e.message); return [];
-    }),
-    fetchH2H(fixture.home_team_id || fixture.home_team_name, fixture.away_team_id || fixture.away_team_name, 10).catch((e) => {
-      console.warn("[enrichmentService] H2H failed:", e.message); return [];
-    })
-  ]);
-
-  // ── 1. Local Database Form & H2H (No live API to avoid cross-contamination) ──
+  // We completely bypass Bzzoiro for historical form and H2H to avoid rate limits.
+  // The daily_vacuum script handles populating the local DB.
+  
+  // ── 1. Local Database Form & H2H (100% self-sufficient) ──
   const localHome = await fetchLocalTeamForm(fixture.home_team_name);
   const localAway = await fetchLocalTeamForm(fixture.away_team_name);
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
   
-  const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 50);
-  const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 50);
-  const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 20);
+  const homeFormRaw = localHome;
+  const awayFormRaw = localAway;
+  const h2hRaw = localH2h;
   const h2hData = { h2h: h2hRaw, homeForm: homeFormRaw, awayForm: awayFormRaw };
   await sleep(300);
 
