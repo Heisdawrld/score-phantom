@@ -225,17 +225,33 @@ export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
     date_to: dateTo,
   };
 
+  let teamSearchText = '';
   // If team is a number (or string that is a number), it's likely an ID
   if (!isNaN(team) && String(team).trim() !== '') {
     params.team_id = team;
   } else {
     params.team = team;
+    teamSearchText = String(team).trim().toLowerCase();
   }
 
   const results = await bsdFetchAll('/events/', params);
 
+  // POST-FETCH QUARANTINE FILTER
+  // BSD ignores the 'team' text parameter and returns a global dump.
+  // We must manually filter the results to ensure they actually contain the requested team.
+  let filteredResults = results || [];
+  if (teamSearchText && teamSearchText.length > 2) {
+    const searchTokens = teamSearchText.split(' ').filter(t => t.length > 2);
+    filteredResults = filteredResults.filter(e => {
+      const h = String(e.home_team || '').toLowerCase();
+      const a = String(e.away_team || '').toLowerCase();
+      // Require at least one significant word from the team name to appear in home or away
+      return searchTokens.some(token => h.includes(token) || a.includes(token));
+    });
+  }
+
   // Ensure results are sorted descending (newest first) before slicing
-  const sorted = (results || []).sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
+  const sorted = filteredResults.sort((a, b) => new Date(b.event_date) - new Date(a.event_date));
 
   return sorted.slice(0, n);
 }
