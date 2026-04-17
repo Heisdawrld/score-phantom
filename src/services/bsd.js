@@ -76,7 +76,7 @@ async function bsdFetch(path, params = {}, { cacheable = true } = {}) {
  * Paginate through all results for an endpoint.
  * BSD returns { count, next, results } — we collect all pages.
  */
-async function bsdFetchAll(path, params = {}) {
+export async function bsdFetchAll(path, params = {}) {
   const allResults = [];
   let page = 1;
   let totalCount = null;
