@@ -83,14 +83,15 @@ async function bsdFetchAll(path, params = {}) {
 
   while (true) {
     const data = await bsdFetch(path, { ...params, page }, { cacheable: false });
-    if (!data || !Array.isArray(data.results)) break;
+    if (!data || !Array.isArray(data.results) || data.results.length === 0) break;
 
     allResults.push(...data.results);
     if (totalCount === null) totalCount = data.count;
 
     // Stop if we have all results or no next page
     if (!data.next || allResults.length >= (totalCount || 0)) break;
-    // Removed strict 10-page safety cap to allow deep historical fetching
+    // Restored safety cap to prevent infinite empty pages on massive broad queries (like "San Lorenzo")
+    if (page >= 50) break;
     page++;
   }
 
