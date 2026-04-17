@@ -375,9 +375,9 @@ function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
 // ── Stats Tab ───────────────────────────────────────────────────────────────
 
 function StatsTab({ d }: any) {
-  const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) ? d.meta.h2h : [];
-  const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) ? d.meta.homeForm : [];
-  const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) ? d.meta.awayForm : [];
+  const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length ? d.meta.h2h : [];
+  const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length ? d.meta.homeForm : [];
+  const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length ? d.meta.awayForm : [];
   const fix = d?.fixture || {};
   const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
   const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
