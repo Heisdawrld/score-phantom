@@ -306,10 +306,6 @@ export async function fetchH2H(team1, team2, n = 20) {
   
   let mapped = results.slice(0, n).map(e => normaliseEventToForm(e)).filter(Boolean);
 
-  if (mapped.length >= Math.min(5, n)) return mapped;
-
-  const manual = await deriveH2H(team1, team2, { target: Math.min(10, n) });
-  if (manual.length > mapped.length) mapped = manual.slice(0, n);
   return mapped;
 }
 

@@ -27,7 +27,7 @@ function formatAccaMarket(key: string): string {
 export default function DailyAcca() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === 'active' || (user as any)?.subscription_active;
+  const isPremium = user?.access_status === 'active' || (user as any)?.subscription_active || (user as any)?.has_access;
   const [stake, setStake] = useState(1000);
 
   const { data, isLoading, error, refetch } = useQuery({

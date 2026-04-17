@@ -6,7 +6,7 @@ import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter } from "lucide-react";
+import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -75,8 +75,7 @@ const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.has_access;
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
   const savedScrollRef = useRef(0);
@@ -109,7 +108,31 @@ export default function TopPicksToday() {
     return true;
   });
 
-  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
+  if (authLoading) return <div className="min-h-screen bg-background" />;
+
+  if (!isPremium) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="max-w-3xl mx-auto px-4 py-12">
+          <div className="glass-card rounded-2xl p-8 text-center border-orange-500/20 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent pointer-events-none" />
+            <Lock className="w-12 h-12 text-orange-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-black mb-2">Premium Feature</h2>
+            <p className="text-white/60 mb-6 max-w-md mx-auto text-sm leading-relaxed">
+              Top Picks provides our highest confidence predictions mathematically ranked across all leagues.
+            </p>
+            <button
+              onClick={() => setLocation("/paywall")}
+              className="w-full sm:w-auto bg-primary text-black font-bold py-3 px-8 rounded-xl"
+            >
+              Upgrade to Premium
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const avgConf = allPicks.length > 0
     ? (allPicks.reduce((s, p) => s + p.confidence, 0) / allPicks.length).toFixed(0)

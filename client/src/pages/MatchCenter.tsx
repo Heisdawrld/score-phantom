@@ -39,6 +39,7 @@ const TABS = [
   { key: "Prediction", label: "Prediction", Icon: Target },
   { key: "Stats", label: "Stats", Icon: BarChart2 },
   { key: "Pitch", label: "Pitch", Icon: Target },
+  { key: "Lineups", label: "Lineups", Icon: Users },
   { key: "League", label: "League", Icon: Trophy },
   { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
 ];
@@ -633,14 +634,29 @@ function PitchTab({ matchData }: any) {
         </div>
         
         {/* Pitch container */}
-        <div className="relative aspect-[1.5] w-full rounded-xl border border-white/20 bg-green-950/20 overflow-hidden">
+        <div className="relative aspect-[1.5] w-full rounded-xl border border-white/20 bg-[#1e4a2d] overflow-hidden">
           {/* Pitch lines */}
-          <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <div className="absolute inset-0 opacity-30 pointer-events-none">
+            {/* Center line and circle */}
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-white -translate-x-1/2" />
-            <div className="absolute top-1/2 left-1/2 w-16 h-16 rounded-full border border-white -translate-x-1/2 -translate-y-1/2" />
-            {/* Penalty boxes */}
-            <div className="absolute top-1/4 bottom-1/4 left-0 w-1/6 border border-l-0 border-white" />
-            <div className="absolute top-1/4 bottom-1/4 right-0 w-1/6 border border-r-0 border-white" />
+            <div className="absolute top-1/2 left-1/2 w-[20%] aspect-square rounded-full border border-white -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-1 h-1 rounded-full bg-white -translate-x-1/2 -translate-y-1/2" />
+            
+            {/* Home Penalty Box (Left) */}
+            <div className="absolute top-[20%] bottom-[20%] left-0 w-[18%] border border-l-0 border-white" />
+            <div className="absolute top-[35%] bottom-[35%] left-0 w-[6%] border border-l-0 border-white" />
+            <div className="absolute top-1/2 left-[12%] w-1 h-1 rounded-full bg-white -translate-y-1/2" />
+            
+            {/* Away Penalty Box (Right) */}
+            <div className="absolute top-[20%] bottom-[20%] right-0 w-[18%] border border-r-0 border-white" />
+            <div className="absolute top-[35%] bottom-[35%] right-0 w-[6%] border border-r-0 border-white" />
+            <div className="absolute top-1/2 right-[12%] w-1 h-1 rounded-full bg-white -translate-y-1/2" />
+            
+            {/* Corner Arcs */}
+            <div className="absolute top-0 left-0 w-4 h-4 border-b border-r border-white rounded-br-full" />
+            <div className="absolute bottom-0 left-0 w-4 h-4 border-t border-r border-white rounded-tr-full" />
+            <div className="absolute top-0 right-0 w-4 h-4 border-b border-l border-white rounded-bl-full" />
+            <div className="absolute bottom-0 right-0 w-4 h-4 border-t border-l border-white rounded-tl-full" />
           </div>
 
           {/* Plot shots */}
@@ -648,19 +664,19 @@ function PitchTab({ matchData }: any) {
             shotmap.map((shot: any, i: number) => {
               if (!shot.pos || shot.pos.x == null || shot.pos.y == null) return null;
               
-              // Normalize coordinates assuming 0-100 scale. Home attacks right (0-100), Away attacks left (100-0)
+              // Normalize coordinates (0-100 scale). BSD gives x=0 at home goal, x=100 at away goal
               const x = shot.home ? shot.pos.x : 100 - shot.pos.x;
               const y = shot.home ? shot.pos.y : 100 - shot.pos.y;
               
               const isGoal = shot.type === 'goal';
-              const size = Math.max(4, Math.min(12, (shot.xg || 0.1) * 20)); // Size based on xG
+              const size = Math.max(6, Math.min(16, (shot.xg || 0.1) * 30)); // Size based on xG
 
               return (
                 <div 
                   key={i}
                   className={cn(
-                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 shadow-lg transition-transform hover:scale-150 cursor-pointer",
-                    isGoal ? (shot.home ? "bg-primary border border-white" : "bg-blue-500 border border-white") : "bg-white/20"
+                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 shadow-lg transition-transform hover:scale-150 cursor-pointer z-10",
+                    isGoal ? (shot.home ? "bg-primary border-2 border-white" : "bg-blue-500 border-2 border-white") : (shot.home ? "bg-primary/50 border border-primary/80" : "bg-blue-500/50 border border-blue-500/80")
                   )}
                   style={{ 
                     left: `${x}%`, 
@@ -673,12 +689,63 @@ function PitchTab({ matchData }: any) {
               );
             })
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-               <Target className="w-8 h-8 text-white/10 mb-2" />
-               <p className="text-xs text-white/30 font-medium">Shotmap data will appear here during the match</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 z-20 bg-black/40">
+               <Target className="w-8 h-8 text-white/40 mb-2" />
+               <p className="text-xs text-white/60 font-medium">Shotmap data will appear here during the match</p>
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Lineups Tab ───────────────────────────────────────────────────────────────
+function LineupsTab({ matchData }: any) {
+  const lineups = matchData?.meta?.lineups || [];
+  const hasLineups = lineups.length > 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Starting XIs & Formations</p>
+        </div>
+        
+        {hasLineups ? (
+          <div className="space-y-4">
+             {/* We can build a visual pitch here later, for now we list them */}
+             <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-xs font-bold text-primary mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.home_team_name}</h3>
+                  <ul className="space-y-1">
+                    {lineups.filter((l: any) => l.is_home).map((l: any, i: number) => (
+                      <li key={i} className="text-xs text-white/80 flex justify-between">
+                        <span>{l.player_name}</span>
+                        <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-blue-500 mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.away_team_name}</h3>
+                  <ul className="space-y-1">
+                    {lineups.filter((l: any) => !l.is_home).map((l: any, i: number) => (
+                      <li key={i} className="text-xs text-white/80 flex justify-between">
+                        <span>{l.player_name}</span>
+                        <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+             </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-center p-8 bg-black/20 rounded-xl">
+             <Users className="w-8 h-8 text-white/10 mb-2" />
+             <p className="text-xs text-white/30 font-medium">Lineups will be available closer to kick-off</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -789,7 +856,7 @@ export default function MatchCenter() {
   const fixtureId = params.id;
   const [, setLocation] = useLocation();
   const { data: user } = useAuth();
-  const isPremium = (user as any)?.has_access;
+  const isPremium = (user as any)?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.has_access;
   const [tab, setTab] = useState("Prediction");
 
   // Scroll to top when MatchCenter loads
@@ -856,7 +923,14 @@ export default function MatchCenter() {
                 <span className="text-3xl font-black text-white tabular-nums">
                   {fix.home_score ?? 0} - {fix.away_score ?? 0}
                 </span>
-                {isLive && <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full animate-pulse mt-1">● LIVE</span>}
+                {isLive && (
+                  <div className="flex flex-col items-center mt-1 gap-1">
+                    <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full animate-pulse">● LIVE {fix.live_minute ? `${fix.live_minute}'` : ''}</span>
+                    {d?.meta?.matchStats?.home_xg_live != null && (
+                      <span className="text-[10px] text-white/50 font-medium">xG: {d.meta.matchStats.home_xg_live.toFixed(2)} - {d.meta.matchStats.away_xg_live?.toFixed(2) ?? 0}</span>
+                    )}
+                  </div>
+                )}
                 {isFT && <span className="text-xs font-bold text-white/25 bg-white/[0.04] px-2 py-0.5 rounded-full mt-1">FT</span>}
               </>
             ) : (
@@ -905,6 +979,7 @@ export default function MatchCenter() {
               {tab === "Prediction" && <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />}
               {tab === "Stats" && <StatsTab d={d} />}
               {tab === "Pitch" && <PitchTab matchData={d} />}
+              {tab === "Lineups" && <LineupsTab matchData={d} />}
               {tab === "League" && <LeagueTab d={d} />}
               {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />}
             </motion.div>

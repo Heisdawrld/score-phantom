@@ -307,15 +307,21 @@ export async function fetchAndStoreEnrichment(fixture) {
   // We completely bypass Bzzoiro for historical form and H2H to avoid rate limits.
   // The daily_vacuum script handles populating the local DB.
   
-  // ── 1. Local Database Form & H2H (100% self-sufficient) ──
+  // ── 1. API Form & H2H (Primary) ──
+  const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_id);
+  const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_id);
+  const h2hRaw = await fetchH2H(fixture.home_team_id, fixture.away_team_id);
+
+  // ── 1b. Local Database Fallback (Secondary) ──
   const localHome = await fetchLocalTeamForm(fixture.home_team_name);
   const localAway = await fetchLocalTeamForm(fixture.away_team_name);
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
-  
-  const homeFormRaw = localHome;
-  const awayFormRaw = localAway;
-  const h2hRaw = localH2h;
-  const h2hData = { h2h: h2hRaw, homeForm: homeFormRaw, awayForm: awayFormRaw };
+
+  const homeFormMergedApi = mergeForm(homeFormRaw, localHome);
+  const awayFormMergedApi = mergeForm(awayFormRaw, localAway);
+  const h2hMergedApi = mergeForm(h2hRaw, localH2h);
+
+  const h2hData = { h2h: h2hMergedApi, homeForm: homeFormMergedApi, awayForm: awayFormMergedApi };
   await sleep(300);
 
   // ── 2. Standings (Still needed for basic league context) ──
@@ -325,11 +331,11 @@ export async function fetchAndStoreEnrichment(fixture) {
   const standings = (standingsRaw || []).map(normaliseStandingsRow);
 
   // If team endpoint gave thin data, top up from standings form (free)
-  const homeFormFallback = homeFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
-  const awayFormFallback = awayFormRaw.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
+  const homeFormFallback = homeFormMergedApi.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
+  const awayFormFallback = awayFormMergedApi.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
   // Step 2: Use best source
-  const homeFormMerged = homeFormRaw.length >= homeFormFallback.length ? homeFormRaw : homeFormFallback;
-  const awayFormMerged = awayFormRaw.length >= awayFormFallback.length ? awayFormRaw : awayFormFallback;
+  const homeFormMerged = homeFormMergedApi.length >= homeFormFallback.length ? homeFormMergedApi : homeFormFallback;
+  const awayFormMerged = awayFormMergedApi.length >= awayFormFallback.length ? awayFormMergedApi : awayFormFallback;
 
   const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 50);
   const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 50);
