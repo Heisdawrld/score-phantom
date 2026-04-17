@@ -130,6 +130,18 @@ async function runSchema() {
       try { await db.execute(sql); } catch (_) {}
     }
   }
+
+  const histTableInfo = await db.execute(`PRAGMA table_info(historical_matches)`);
+  const histColMigrations = [
+    ["home_xg", "ALTER TABLE historical_matches ADD COLUMN home_xg REAL"],
+    ["away_xg", "ALTER TABLE historical_matches ADD COLUMN away_xg REAL"],
+  ];
+  for (const [col, sql] of histColMigrations) {
+    const exists = histTableInfo.rows.some((c) => c.name === col);
+    if (!exists) {
+      try { await db.execute(sql); } catch (_) {}
+    }
+  }
 }
 
 await runSchema();

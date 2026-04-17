@@ -14,12 +14,25 @@ function poisson(lambda, k) {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
-function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 8) {
+function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 8, rho = -0.15) {
   const matrix = [];
   for (let h = 0; h <= maxGoals; h++) {
     matrix[h] = [];
     for (let a = 0; a <= maxGoals; a++) {
-      matrix[h][a] = poisson(lambdaHome, h) * poisson(lambdaAway, a);
+      let prob = poisson(lambdaHome, h) * poisson(lambdaAway, a);
+      
+      // Dixon-Coles adjustment for low-scoring matches
+      if (h === 0 && a === 0) {
+        prob *= (1 - lambdaHome * lambdaAway * rho);
+      } else if (h === 0 && a === 1) {
+        prob *= (1 + lambdaHome * rho);
+      } else if (h === 1 && a === 0) {
+        prob *= (1 + lambdaAway * rho);
+      } else if (h === 1 && a === 1) {
+        prob *= (1 - rho);
+      }
+      
+      matrix[h][a] = Math.max(0, prob); // Ensure no negative probabilities
     }
   }
   return matrix;
@@ -1199,13 +1212,43 @@ export async function predict(fixtureId, homeTeamName, awayTeamName, meta = {}, 
   const homeMotivMult = getMotivationMultiplier(tableContext, true);
   const awayMotivMult = getMotivationMultiplier(tableContext, false);
 
+  // Lineup Modifier - Small bounded adjustments based on ChatGPT's feedback
+  function getLineupMultiplier(lineupFeatures, isHome) {
+    if (!lineupFeatures || !lineupFeatures.hasLineup) return 1.0;
+    
+    let multiplier = 1.0;
+    const isComplete = isHome ? lineupFeatures.homeLineupComplete : lineupFeatures.awayLineupComplete;
+    const opponentHasKeeper = isHome ? lineupFeatures.awayHasKeeper : lineupFeatures.homeHasKeeper;
+    
+    // Missing Keeper logic: Boost the OPPONENT'S expectation slightly.
+    if (opponentHasKeeper === false) {
+        multiplier += 0.06; // Small boost to this team's attack if opponent is missing keeper
+    }
+    
+    const attackers = isHome ? lineupFeatures.homeAttackerCount : lineupFeatures.awayAttackerCount;
+    
+    if (attackers !== null) {
+        // Normal attack count is usually 2-4
+        if (attackers <= 1) {
+            multiplier -= isComplete ? 0.05 : 0.02; // Small drop (-5% or -2%)
+        } else if (attackers >= 4) {
+            multiplier += isComplete ? 0.03 : 0.01; // Small boost
+        }
+    }
+    
+    return multiplier;
+  }
+  
+  const homeLineupMult = getLineupMultiplier(features.lineupFeatures, true);
+  const awayLineupMult = getLineupMultiplier(features.lineupFeatures, false);
+
   lambdaHome = clamp(
-    (lambdaHome + Math.max(0, tableNudge) + Math.max(0, momentumNudge) + Math.max(0, streakNudge)) * homeMotivMult,
+    (lambdaHome + Math.max(0, tableNudge) + Math.max(0, momentumNudge) + Math.max(0, streakNudge)) * homeMotivMult * homeLineupMult,
     0.35,
     4.5
   );
   lambdaAway = clamp(
-    (lambdaAway + Math.max(0, -tableNudge) + Math.max(0, -momentumNudge) + Math.max(0, -streakNudge)) * awayMotivMult,
+    (lambdaAway + Math.max(0, -tableNudge) + Math.max(0, -momentumNudge) + Math.max(0, -streakNudge)) * awayMotivMult * awayLineupMult,
     0.25,
     4.2
   );

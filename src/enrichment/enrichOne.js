@@ -25,6 +25,8 @@ function normalizeMatch(match) {
     score: match?.score || null,
     date: match?.date || null,
     competition: match?.competition || null,
+    home_xg: match?.home_xg || null,
+    away_xg: match?.away_xg || null,
   };
 }
 
@@ -57,8 +59,9 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
           INSERT INTO historical_matches (
             fixture_id, type, date,
             home_team, away_team,
-            home_goals, away_goals
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            home_goals, away_goals,
+            home_xg, away_xg
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         args: [
           fixtureId,
@@ -68,6 +71,8 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
           normalized.away,
           home,
           away,
+          normalized.home_xg,
+          normalized.away_xg
         ],
       });
     }

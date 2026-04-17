@@ -374,6 +374,9 @@ export function normaliseEventToForm(event) {
     score,
     date:        event.event_date || '',
     competition: event.league?.name || '',
+    // Extract true historical xG from the event if available
+    home_xg:     event.live_stats?.expected_goals?.home ?? null,
+    away_xg:     event.live_stats?.expected_goals?.away ?? null,
     // Keep BSD extras for future use
     _bsdId:      event.id,
     _bsdApiId:   event.api_id,

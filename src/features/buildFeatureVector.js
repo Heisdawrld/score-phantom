@@ -147,6 +147,8 @@ function extractLineupModifiers(lineupModifier) {
       awayLineupComplete: null,
       homeAttackerCount: null,
       awayAttackerCount: null,
+      homeHasKeeper: null,
+      awayHasKeeper: null,
     };
   }
   return {
@@ -155,6 +157,8 @@ function extractLineupModifiers(lineupModifier) {
     awayLineupComplete: lineupModifier.awayLineupConfirmed || false,
     homeAttackerCount: lineupModifier.homeAttackers || null,
     awayAttackerCount: lineupModifier.awayAttackers || null,
+    homeHasKeeper: lineupModifier.homeHasKeeper ?? true,
+    awayHasKeeper: lineupModifier.awayHasKeeper ?? true,
   };
 }
 

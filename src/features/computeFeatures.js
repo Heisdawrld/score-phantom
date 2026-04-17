@@ -145,6 +145,8 @@ function teamGoals(matches, teamName) {
           ...m,
           scored: safeNum(m.home_goals, null),
           conceded: safeNum(m.away_goals, null),
+          xgFor: m.home_xg !== undefined && m.home_xg !== null ? safeNum(m.home_xg, null) : null,
+          xgAgainst: m.away_xg !== undefined && m.away_xg !== null ? safeNum(m.away_xg, null) : null,
           isHome: true,
         };
       }
@@ -153,6 +155,8 @@ function teamGoals(matches, teamName) {
           ...m,
           scored: safeNum(m.away_goals, null),
           conceded: safeNum(m.home_goals, null),
+          xgFor: m.away_xg !== undefined && m.away_xg !== null ? safeNum(m.away_xg, null) : null,
+          xgAgainst: m.home_xg !== undefined && m.home_xg !== null ? safeNum(m.home_xg, null) : null,
           isHome: false,
         };
       }
@@ -205,11 +209,28 @@ function buildTeamFeatures(teamMatches, rawMatches, teamName, standingsMap) {
 
   const formPoints = weightedFormPoints(teamMatches, teamName, standingsMap);
 
+  const xgForList = teamMatches.filter(m => m.xgFor !== null);
+  const xgAgainstList = teamMatches.filter(m => m.xgAgainst !== null);
+
+  const weightedXgFor = xgForList.length >= 3 ? weightedAvg(
+    xgForList,
+    (g) => g.xgFor,
+    (g, idx) => combinedWeight(g, idx, teamName, standingsMap)
+  ) : null;
+
+  const weightedXgAgainst = xgAgainstList.length >= 3 ? weightedAvg(
+    xgAgainstList,
+    (g) => g.xgAgainst,
+    (g, idx) => combinedWeight(g, idx, teamName, standingsMap)
+  ) : null;
+
   return {
     matches_available: rawMatches.length,
     avg_scored: weightedScored,
     avg_conceded: weightedConceded,
     avg_total_goals: weightedTotalGoals,
+    avg_xg_for: weightedXgFor,
+    avg_xg_against: weightedXgAgainst,
 
     over_0_5_rate: weightedRate(rawMatches, (m) => safeNum(m.home_goals) + safeNum(m.away_goals) > 0, (m, idx) => combinedWeight(m, idx, teamName, standingsMap)),
     over_1_5_rate: weightedRate(rawMatches, (m) => safeNum(m.home_goals) + safeNum(m.away_goals) > 1, (m, idx) => combinedWeight(m, idx, teamName, standingsMap)),
@@ -419,6 +440,12 @@ export async function computeFeatures(fixtureId, homeTeamName, awayTeamName) {
       (safeNum(awayFeatures.avg_conceded, 1.1) * 0.40);
   }
 
+  // Blend with xG if available (60% xG, 40% goals)
+  if (homeFeatures.avg_xg_for !== null && awayFeatures.avg_xg_against !== null) {
+    const xgExpectedHome = (homeFeatures.avg_xg_for * 0.60) + (awayFeatures.avg_xg_against * 0.40);
+    expectedHomeGoals = (xgExpectedHome * 0.60) + (expectedHomeGoals * 0.40);
+  }
+
   let expectedAwayGoals;
   if (awayTeamAwayScored !== null && homeAtHomeConceded !== null) {
     // Best case: full venue split on both sides
@@ -434,6 +461,12 @@ export async function computeFeatures(fixtureId, homeTeamName, awayTeamName) {
     expectedAwayGoals =
       (safeNum(awayFeatures.avg_scored, 1.0) * 0.60) +
       (safeNum(homeFeatures.avg_conceded, 1.1) * 0.40);
+  }
+
+  // Blend with xG if available (60% xG, 40% goals)
+  if (awayFeatures.avg_xg_for !== null && homeFeatures.avg_xg_against !== null) {
+    const xgExpectedAway = (awayFeatures.avg_xg_for * 0.60) + (homeFeatures.avg_xg_against * 0.40);
+    expectedAwayGoals = (xgExpectedAway * 0.60) + (expectedAwayGoals * 0.40);
   }
 
   // Standings + momentum nudges
