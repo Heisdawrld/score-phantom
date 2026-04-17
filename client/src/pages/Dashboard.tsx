@@ -530,8 +530,24 @@ function LeagueGroup({
   tournament: string; fixtures: any[]; onSelectFixture: (id: string) => void; defaultOpen: boolean; isPremium: boolean;
 }) {
   const countryFlag = fixtures[0]?.country_flag ? fifaToEmoji(fixtures[0].country_flag) : '';
-  const [open, setOpen] = useState(defaultOpen);
+  
+  // Use session storage to remember if the user expanded this league
+  const storageKey = `league-expanded-${tournament}`;
+  const [open, setOpen] = useState(() => {
+    const saved = sessionStorage.getItem(storageKey);
+    if (saved !== null) return saved === 'true';
+    return defaultOpen;
+  });
+
   const [notified, setNotified] = useState<Record<string, boolean>>({});
+
+  const handleToggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      sessionStorage.setItem(storageKey, String(next));
+      return next;
+    });
+  };
 
   async function toggleNotify(e: React.MouseEvent, fixtureId: string) {
     e.stopPropagation();
@@ -545,7 +561,7 @@ function LeagueGroup({
 
   return (
     <div className='space-y-1.5'>
-      <button className='w-full flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-all' onClick={() => setOpen(o => !o)}>
+      <button className='w-full flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-all' onClick={handleToggle}>
         <span className='text-base leading-none mr-0.5'>{countryFlag}</span>
         <div className='w-0.5 h-3.5 bg-primary/60 rounded-full shrink-0' />
         <h3 className='text-[11px] font-black tracking-widest text-white/60 flex-1 text-left uppercase'>{tournament}</h3>
@@ -758,7 +774,25 @@ export default function Dashboard() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  const handleSelectFixture = (id: string) => setLocation("/matches/" + id);
+  const handleSelectFixture = (id: string) => {
+    // Save scroll position before leaving
+    sessionStorage.setItem("sp_dash_scroll", String(window.scrollY));
+    setLocation("/matches/" + id);
+  };
+  
+  // Restore scroll position after fixtures load
+  useEffect(() => {
+    if (!fixturesLoading) {
+      const savedScroll = sessionStorage.getItem("sp_dash_scroll");
+      if (savedScroll) {
+        // Use a tiny timeout to ensure DOM is fully painted
+        setTimeout(() => {
+          window.scrollTo({ top: parseInt(savedScroll), behavior: 'instant' });
+          sessionStorage.removeItem("sp_dash_scroll");
+        }, 50);
+      }
+    }
+  }, [fixturesLoading, data]);
   const handlePredictionError = (code: string) => {
     if (code === "daily_limit_reached") setDailyLimitHit(true);
   };
