@@ -12,7 +12,7 @@ export async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {
     const today = dateFilter || new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     const pending = await db.execute({
-      sql: `SELECT id, home_team_name, away_team_name, match_date
+      sql: `SELECT *
             FROM fixtures
             WHERE enriched = 0 AND match_date >= ?
             ORDER BY match_date ASC
