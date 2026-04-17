@@ -108,6 +108,14 @@ export function computeFormDerivedBoosts(fv) {
     homeMatchesAvailable,
     awayMatchesAvailable,
 
+    // Expected Goals (xG)
+    homeAvgXgFor,
+    awayAvgXgFor,
+
+    // Lineup Modifiers
+    homeAttackers,
+    awayAttackers,
+
     // Data quality
     dataCompletenessScore,
   } = fv;
@@ -137,10 +145,21 @@ export function computeFormDerivedBoosts(fv) {
     0.07
   );
 
+  // Signal 4: xG Luck Regression
+  // If actual goals are significantly higher than expected goals, team is lucky and gets a penalty.
+  // If actual goals are lower than xG, team is underperforming and gets a boost.
+  const homeLuckDiff = homeAvgXgFor != null && homeAvgScored != null 
+    ? homeAvgScored - homeAvgXgFor 
+    : 0;
+  // Negative scale because positive luck diff (scoring > xg) deserves a penalty
+  const homeLuckRegression = boostContrib(
+    homeLuckDiff, 1.0, -0.40, 0.10 
+  );
+
   let homeAttackBoost = 0;
   if (homeQScale > 0) {
     homeAttackBoost = clamp(
-      homeGoalsScoredBoost + homeConsistencyBoost + homeBttsSignal,
+      homeGoalsScoredBoost + homeConsistencyBoost + homeBttsSignal + homeLuckRegression,
       -0.20, 0.20
     ) * homeQScale;
   }
@@ -164,10 +183,17 @@ export function computeFormDerivedBoosts(fv) {
     0.07
   );
 
+  const awayLuckDiff = awayAvgXgFor != null && awayAvgScored != null 
+    ? awayAvgScored - awayAvgXgFor 
+    : 0;
+  const awayLuckRegression = boostContrib(
+    awayLuckDiff, 1.0, -0.40, 0.10 
+  );
+
   let awayAttackBoost = 0;
   if (awayQScale > 0) {
     awayAttackBoost = clamp(
-      awayGoalsScoredBoost + awayConsistencyBoost + awayBttsSignal,
+      awayGoalsScoredBoost + awayConsistencyBoost + awayBttsSignal + awayLuckRegression,
       -0.20, 0.20
     ) * awayQScale;
   }
@@ -193,8 +219,14 @@ export function computeFormDerivedBoosts(fv) {
   // ── Compose final boosts ──────────────────────────────────────────────────
   // homeXg = how well home attacks (homeAttackBoost) + how leaky away defense is (awayDefLeaky)
   // awayXg = how well away attacks (awayAttackBoost) + how leaky home defense is (homeDefLeaky)
-  const homeXgBoost = clamp(homeAttackBoost + awayDefLeaky, -0.20, 0.20);
-  const awayXgBoost = clamp(awayAttackBoost + homeDefLeaky, -0.20, 0.20);
+  
+  // Apply Lineup Penalties (if starting attackers are unusually low)
+  // We assume a normal starting lineup has at least 2 attackers.
+  const homeLineupPenalty = homeAttackers != null && homeAttackers < 2 ? -0.05 : 0;
+  const awayLineupPenalty = awayAttackers != null && awayAttackers < 2 ? -0.05 : 0;
+
+  const homeXgBoost = clamp(homeAttackBoost + awayDefLeaky + homeLineupPenalty, -0.20, 0.20);
+  const awayXgBoost = clamp(awayAttackBoost + homeDefLeaky + awayLineupPenalty, -0.20, 0.20);
 
   return {
     homeXgBoost,
@@ -211,6 +243,10 @@ export function computeFormDerivedBoosts(fv) {
       awayConsistencyBoost:+awayConsistencyBoost.toFixed(4),
       homeBttsSignal:      +homeBttsSignal.toFixed(4),
       awayBttsSignal:      +awayBttsSignal.toFixed(4),
+      homeLuckRegression:  +homeLuckRegression.toFixed(4),
+      awayLuckRegression:  +awayLuckRegression.toFixed(4),
+      homeLineupPenalty:   +homeLineupPenalty.toFixed(4),
+      awayLineupPenalty:   +awayLineupPenalty.toFixed(4),
       homeQScale,
       awayQScale,
       dataSource: 'form-derived',

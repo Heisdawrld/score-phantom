@@ -78,6 +78,12 @@ function flattenFeatureVector(fv) {
     homeAvgConceded,
     awayAvgScored,
     awayAvgConceded,
+    
+    // Expected Goals (xG) form averages
+    homeAvgXgFor: safeNum(hf.avg_xg_for, null),
+    homeAvgXgAgainst: safeNum(hf.avg_xg_against, null),
+    awayAvgXgFor: safeNum(af.avg_xg_for, null),
+    awayAvgXgAgainst: safeNum(af.avg_xg_against, null),
 
     homeWinRate: safeNum(hf.win_rate, 0.4),
     awayWinRate: safeNum(af.win_rate, 0.35),
@@ -164,6 +170,8 @@ function flattenFeatureVector(fv) {
     hasLineupData: fv.lineupFeatures?.hasLineup === true,
     homeLineupComplete: fv.lineupFeatures?.homeLineupComplete || false,
     awayLineupComplete: fv.lineupFeatures?.awayLineupComplete || false,
+    homeAttackers: safeNum(fv.lineupFeatures?.homeAttackers, null),
+    awayAttackers: safeNum(fv.lineupFeatures?.awayAttackers, null),
 
     // Enrichment completeness
     enrichmentCompleteness: fv.enrichmentCompleteness?.score ?? null,

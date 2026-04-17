@@ -25,8 +25,26 @@ function recencyWeight(match, idx) {
 
 function teamGoals(matches, teamName) {
   return matches.map(m => {
-    if (fuzzyTeamMatch(m.home_team, teamName)) return { ...m, scored: safeNum(m.home_goals, null), conceded: safeNum(m.away_goals, null), isHome: true };
-    if (fuzzyTeamMatch(m.away_team, teamName)) return { ...m, scored: safeNum(m.away_goals, null), conceded: safeNum(m.home_goals, null), isHome: false };
+    if (fuzzyTeamMatch(m.home_team, teamName)) {
+      return { 
+        ...m, 
+        scored: safeNum(m.home_goals, null), 
+        conceded: safeNum(m.away_goals, null), 
+        xgFor: safeNum(m.home_xg, null),
+        xgAgainst: safeNum(m.away_xg, null),
+        isHome: true 
+      };
+    }
+    if (fuzzyTeamMatch(m.away_team, teamName)) {
+      return { 
+        ...m, 
+        scored: safeNum(m.away_goals, null), 
+        conceded: safeNum(m.home_goals, null), 
+        xgFor: safeNum(m.away_xg, null),
+        xgAgainst: safeNum(m.home_xg, null),
+        isHome: false 
+      };
+    }
     return null;
   }).filter(Boolean);
 }
@@ -70,6 +88,8 @@ export function computeFormFeatures(formMatches, teamName, standingsMap = new Ma
     pointsLast10: ptsLast10,
     avg_scored: weightedAvg(tg, g => g.scored, wFn),
     avg_conceded: weightedAvg(tg, g => g.conceded, wFn),
+    avg_xg_for: weightedAvg(tg, g => g.xgFor, wFn),
+    avg_xg_against: weightedAvg(tg, g => g.xgAgainst, wFn),
     avg_total_goals: weightedAvg(formMatches, m => safeNum(m.home_goals, 0) + safeNum(m.away_goals, 0), wFn),
     goalsScoredAvg5: avg(last5.map(m => m.scored)),
     goalsConcededAvg5: avg(last5.map(m => m.conceded)),
