@@ -93,6 +93,15 @@ function sleep(ms) {
 }
 
 /**
+ * Ensures team match forms are not leaked across fixtures due to scope pollution
+ * by forcing deep copies before returning.
+ */
+function cloneForm(form) {
+  if (!form || !Array.isArray(form)) return [];
+  return form.map(f => ({ ...f }));
+}
+
+/**
  * Filter form matches to those relevant to the team in domestic competitions.
  */
 const NON_DOMESTIC_KEYWORDS = [
@@ -316,7 +325,7 @@ export async function fetchAndStoreEnrichment(fixture) {
   const homeFormRaw = mergeForm(bsdHome, localHome).slice(0, 50);
   const awayFormRaw = mergeForm(bsdAway, localAway).slice(0, 50);
   const h2hRaw = mergeForm(bsdH2h, localH2h).slice(0, 20);
-  const h2hData = { h2h: h2hRaw, homeForm: [], awayForm: [] };
+  const h2hData = { h2h: h2hRaw, homeForm: homeFormRaw, awayForm: awayFormRaw };
   await sleep(300);
 
   // ── 2. Standings (Still needed for basic league context) ──
@@ -397,9 +406,9 @@ export async function fetchAndStoreEnrichment(fixture) {
 
   // ── Step 7: Assemble enrichment bundle ────────────────────────────────────
   return {
-    h2h: h2hData.h2h,
-    homeForm,
-    awayForm,
+    h2h: cloneForm(h2hData.h2h),
+    homeForm: cloneForm(homeForm),
+    awayForm: cloneForm(awayForm),
     standings,
     homeMomentum,
     awayMomentum,
