@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { fetchApi } from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -21,7 +22,23 @@ export default function Settings() {
   const [newUsername, setNewUsername] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
-  if (isLoading) return <div className="min-h-screen bg-background" />;
+  if (isLoading) return (
+    <div className='min-h-screen bg-background pb-20'>
+      <Header />
+      <div className='max-w-2xl mx-auto px-4 pt-6 space-y-8'>
+        <div className='flex items-center gap-3'>
+          <Skeleton className='w-9 h-9 rounded-xl' />
+          <div>
+            <Skeleton className='w-40 h-6 mb-2' />
+            <Skeleton className='w-32 h-3' />
+          </div>
+        </div>
+        <Skeleton className='w-full h-32 rounded-[2rem]' />
+        <Skeleton className='w-full h-48 rounded-[2rem]' />
+        <Skeleton className='w-full h-14 rounded-2xl' />
+      </div>
+    </div>
+  );
 
   const email = (user as any)?.email || "";
   const username = (user as any)?.username || "";

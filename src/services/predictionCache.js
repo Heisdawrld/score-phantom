@@ -190,10 +190,6 @@ export async function ensureFixtureData(fixtureId) {
 // ── Cache storage helpers ─────────────────────────────────────────────────────
 
 async function savePredictionToCache(fixtureId, prediction, engineResult) {
-  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT` }); } catch (_) {}
-  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN best_pick_score REAL` }); } catch (_) {}
-  try { await db.execute({ sql: `ALTER TABLE predictions_v2 ADD COLUMN confidence_model TEXT` }); } catch (_) {}
-
   const rec = prediction || {};
   const bestPick = rec.predictions?.recommendation;
   const gameScript = rec.gameScript || {};

@@ -7,13 +7,10 @@ import { motion } from "framer-motion";
 import { Search, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { TeamLogo } from "@/components/TeamLogo";
+
 function toWAT(d: string) {
   try { return new Date(d).toLocaleTimeString("en-NG",{timeZone:"Africa/Lagos",hour:"2-digit",minute:"2-digit",hour12:false}); } catch { return ""; }
-}
-function TeamLogo({ src, name }: { src?: string; name: string }) {
-  const [err, setErr] = useState(false);
-  if (src && !err) return <img src={src} alt={name} onError={()=>setErr(true)} className="w-7 h-7 rounded-full object-contain bg-white/5 border border-white/10 shrink-0" loading="lazy"/>;
-  return <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{name.slice(0,2).toUpperCase()}</div>;
 }
 function getDates() {
   const dates = [];
