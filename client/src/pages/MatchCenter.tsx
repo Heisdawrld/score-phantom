@@ -702,8 +702,10 @@ function PitchTab({ matchData }: any) {
 
 // ── Lineups Tab ───────────────────────────────────────────────────────────────
 function LineupsTab({ matchData }: any) {
-  const lineups = matchData?.meta?.lineups || [];
-  const hasLineups = lineups.length > 0;
+  // Bzzoiro API returns lineups grouped by side: { home: { players: [...] }, away: { players: [...] } }
+  const homeLineup = matchData?.meta?.lineups?.home?.players || [];
+  const awayLineup = matchData?.meta?.lineups?.away?.players || [];
+  const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -714,12 +716,11 @@ function LineupsTab({ matchData }: any) {
         
         {hasLineups ? (
           <div className="space-y-4">
-             {/* We can build a visual pitch here later, for now we list them */}
              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h3 className="text-xs font-bold text-primary mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.home_team_name}</h3>
                   <ul className="space-y-1">
-                    {lineups.filter((l: any) => l.is_home).map((l: any, i: number) => (
+                    {homeLineup.map((l: any, i: number) => (
                       <li key={i} className="text-xs text-white/80 flex justify-between">
                         <span>{l.player_name}</span>
                         <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
@@ -730,7 +731,7 @@ function LineupsTab({ matchData }: any) {
                 <div>
                   <h3 className="text-xs font-bold text-blue-500 mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.away_team_name}</h3>
                   <ul className="space-y-1">
-                    {lineups.filter((l: any) => !l.is_home).map((l: any, i: number) => (
+                    {awayLineup.map((l: any, i: number) => (
                       <li key={i} className="text-xs text-white/80 flex justify-between">
                         <span>{l.player_name}</span>
                         <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
@@ -856,7 +857,7 @@ export default function MatchCenter() {
   const fixtureId = params.id;
   const [, setLocation] = useLocation();
   const { data: user } = useAuth();
-  const isPremium = (user as any)?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.has_access;
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.has_access;
   const [tab, setTab] = useState("Prediction");
 
   // Scroll to top when MatchCenter loads
@@ -927,7 +928,7 @@ export default function MatchCenter() {
                   <div className="flex flex-col items-center mt-1 gap-1">
                     <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full animate-pulse">● LIVE {fix.live_minute ? `${fix.live_minute}'` : ''}</span>
                     {d?.meta?.matchStats?.home_xg_live != null && (
-                      <span className="text-[10px] text-white/50 font-medium">xG: {d.meta.matchStats.home_xg_live.toFixed(2)} - {d.meta.matchStats.away_xg_live?.toFixed(2) ?? 0}</span>
+                      <span className="text-[10px] text-white/50 font-medium">xG: {Number(d.meta.matchStats.home_xg_live).toFixed(2)} - {Number(d.meta.matchStats.away_xg_live ?? 0).toFixed(2)}</span>
                     )}
                   </div>
                 )}
