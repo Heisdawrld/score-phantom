@@ -30,7 +30,11 @@ function _cacheSet(key, data) {
 
 // ── Core fetch wrapper ─────────────────────────────────────────────────────────
 
-async function bsdFetch(path, params = {}, { cacheable = true } = {}) {
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function bsdFetch(path, params = {}, { cacheable = true, retries = 3, backoffMs = 2000 } = {}) {
   if (!BSD_API_KEY) {
     console.error('[BSD] BSD_API_KEY is not set — all API calls will fail');
     return null;
@@ -49,27 +53,46 @@ async function bsdFetch(path, params = {}, { cacheable = true } = {}) {
     if (cached) return cached;
   }
 
-  try {
-    const fullUrl = url.toString();
-    // console.log(`[BSD] Fetching: ${fullUrl}`);
-    const res = await fetch(fullUrl, {
-      headers: { Authorization: `Token ${BSD_API_KEY}` },
-      signal: AbortSignal.timeout(12000), // 12s timeout
-    });
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      const fullUrl = url.toString();
+      const res = await fetch(fullUrl, {
+        headers: { Authorization: `Token ${BSD_API_KEY}` },
+        signal: AbortSignal.timeout(12000), // 12s timeout
+      });
 
-    if (!res.ok) {
-      if (res.status === 404) return null; // Expected for some lookups
-      console.error(`[BSD] HTTP ${res.status} for ${path}`, await res.text().catch(() => ''));
-      return null;
+      if (!res.ok) {
+        if (res.status === 404) return null; // Expected for some lookups
+        
+        // If it's a 502 Bad Gateway or 429 Too Many Requests, trigger retry
+        if (res.status === 502 || res.status === 429 || res.status >= 500) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        
+        console.error(`[BSD] HTTP ${res.status} for ${path}`, await res.text().catch(() => ''));
+        return null;
+      }
+
+      const data = await res.json();
+      if (cacheable) _cacheSet(cacheKey, data);
+      return data;
+    } catch (err) {
+      attempt++;
+      const isTimeout = err.name === 'TimeoutError' || err.message.includes('aborted');
+      
+      if (attempt > retries) {
+        console.error(`[BSD] Fetch failed after ${retries} retries for ${path}:`, err.message);
+        return null;
+      }
+      
+      // Exponential backoff
+      const waitTime = backoffMs * Math.pow(2, attempt - 1);
+      console.warn(`[BSD] ${isTimeout ? 'Timeout' : err.message} on ${path}. Retrying in ${waitTime}ms (Attempt ${attempt}/${retries})...`);
+      await sleep(waitTime);
     }
-
-    const data = await res.json();
-    if (cacheable) _cacheSet(cacheKey, data);
-    return data;
-  } catch (err) {
-    console.error(`[BSD] Fetch error for ${path}:`, err.message);
-    return null;
   }
+  return null;
 }
 
 /**
