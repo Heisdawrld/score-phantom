@@ -132,11 +132,7 @@ export function LeagueGroup({
                       <span className='font-semibold text-sm text-white truncate'>{fixture.away_team_name}</span>
                     </div>
                   </div>
-                  {!isPremium && pct > 0 && (
-                    <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary/8 border border-primary/15">
-                      <Lock className="w-2.5 h-2.5 text-primary/50" />
-                    </div>
-                  )}
+                  {/* Removed the lock icon section completely to make it clean like premium view */}
                   <div className='flex flex-col items-end gap-1.5 shrink-0'>
                     {isLive && (
                       <button onClick={(e) => toggleNotify(e, fixture.id)} className={'p-1.5 rounded-lg border transition-all ' + (isNotified ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/[0.04] text-white/20 border-white/[0.06] hover:text-white/50')}>
