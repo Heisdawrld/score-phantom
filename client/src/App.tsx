@@ -126,8 +126,9 @@ function GlassBubbles() {
 
 function Router() {
   const [loc] = useLocation();
+  
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode="wait" initial={false} onExitComplete={() => window.scrollTo(0, 0)}>
       <motion.div key={loc} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: "easeOut" }}>
         <Switch>
       <Route path="/home" component={Landing} />

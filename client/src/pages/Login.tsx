@@ -363,13 +363,13 @@ export default function Login() {
                     <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
                       <ArrowLeft size={15} />
                     </button>
-                    <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 3-day free trial</p></div>
+                    <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 7-day free trial</p></div>
                   </div>
                   <div className="p-3 rounded-xl bg-white/4 border border-primary/10 text-xs space-y-1.5">
                     <p className="text-white/50 font-semibold uppercase tracking-wider text-[9px] mb-2">Free trial includes</p>
-                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Full Premium Access for 3 Days</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Full Premium Access for 7 Days</div>
                     <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Top Picks, ACCA, Stats & PhantomChat</div>
-                    <div className="flex items-center gap-2 text-white/60"><span className="text-orange-500 font-bold mr-1">!</span>Limit: 5 Match Predictions per day</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-orange-500 font-bold mr-1">!</span>Limit: 15 Match Predictions per day</div>
                   </div>
                   <AnimatePresence>
                     {generalError && (

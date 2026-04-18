@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Crown, Bell, Heart, LogOut, ChevronRight, Shield, BarChart2,
   CreditCard, Calendar, CheckCircle, Lock, Zap, Star, TrendingUp,
-  Settings, HelpCircle, ExternalLink, Copy, Check
+  Settings, HelpCircle, ExternalLink, Copy, Check, Share2
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
@@ -25,13 +25,23 @@ export default function Profile() {
   const logout = useLogout();
   const [, nav] = useLocation();
   const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const copyReferral = () => {
+  const copyReferralCode = () => {
     if ((user as any)?.own_referral_code) {
       navigator.clipboard.writeText((user as any).own_referral_code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  const copyReferralLink = () => {
+    if ((user as any)?.own_referral_code) {
+      const link = `${window.location.origin}/login?ref=${(user as any).own_referral_code}`;
+      navigator.clipboard.writeText(link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
     }
   };
 
@@ -212,18 +222,30 @@ export default function Profile() {
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-base">Refer & Earn</h3>
-                  <p className="text-white/50 text-sm">Share your code to earn commissions on subscriptions</p>
+                  <p className="text-white/50 text-sm leading-snug mt-1">Share your code or link to earn 10% cash commission on every subscription.</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
-                <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any).own_referral_code}</span>
-                <button 
-                  onClick={copyReferral}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium text-white transition-colors"
-                >
-                  {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-white/70" />}
-                  {copied ? 'Copied' : 'Copy Code'}
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
+                  <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any).own_referral_code}</span>
+                  <button 
+                    onClick={copyReferralCode}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium text-white transition-colors"
+                  >
+                    {copiedCode ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-white/70" />}
+                    {copiedCode ? 'Copied' : 'Copy Code'}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
+                  <span className="text-sm font-medium text-white/70 truncate mr-3">score-phantom.com/login?ref={(user as any).own_referral_code}</span>
+                  <button 
+                    onClick={copyReferralLink}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-sm font-medium text-primary transition-colors shrink-0"
+                  >
+                    {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                    {copiedLink ? 'Copied' : 'Copy Link'}
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
