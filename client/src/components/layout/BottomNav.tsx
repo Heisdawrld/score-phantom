@@ -34,40 +34,19 @@ export function BottomNav() {
                 <Link key={href} href={href}>
                   <button
                     className={cn(
-                      'flex flex-col items-center justify-center gap-0.5 px-4 py-1.5 rounded-2xl transition-all duration-300 min-w-[60px] relative',
-                      isActive
-                        ? 'text-primary'
-                        : 'text-white/30 hover:text-white/50'
+                      "flex flex-col items-center justify-center w-full h-full gap-1 py-1 rounded-2xl transition-all duration-300 relative",
+                      isActive ? "text-primary" : "text-white/40 hover:text-white/70"
                     )}
                   >
-                    {/* Active background glow */}
                     {isActive && (
-                      <div className="absolute inset-0 rounded-2xl bg-primary/[0.08] shadow-[0_0_20px_rgba(16,231,116,0.12)]" />
+                      <motion.div layoutId="nav-pill" className="absolute inset-0 bg-primary/10 rounded-2xl" transition={{ type: "spring", bounce: 0.2, duration: 0.6 }} />
                     )}
-                    
-                    <div className="relative z-10 flex items-center justify-center w-7 h-7">
-                      <Icon
-                        className={cn(
-                          'w-[22px] h-[22px] transition-all duration-300',
-                          isActive && 'drop-shadow-[0_0_8px_rgba(16,231,116,0.7)]'
-                        )}
-                        strokeWidth={isActive ? 2.5 : 1.8}
-                      />
+                    <div className="relative z-10 flex flex-col items-center gap-1">
+                      <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
+                      <span className={cn("text-[9px] font-bold uppercase tracking-widest", isActive ? "text-primary" : "text-white/40")}>
+                        {label}
+                      </span>
                     </div>
-
-                    <span
-                      className={cn(
-                        'relative z-10 text-[10px] font-semibold leading-none transition-all duration-300',
-                        isActive ? 'text-primary font-bold' : 'text-white/30'
-                      )}
-                    >
-                      {label}
-                    </span>
-
-                    {/* Active dot indicator */}
-                    {isActive && (
-                      <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary shadow-[0_0_6px_rgba(16,231,116,0.8)]" />
-                    )}
                   </button>
                 </Link>
               );

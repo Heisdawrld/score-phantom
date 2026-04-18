@@ -79,13 +79,16 @@ export default function Profile() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
       {/* ── Header ── */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-xl border-b border-white/[0.04] px-4 py-4">
+      <div className="sticky top-0 z-10 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/[0.04] px-4 py-4">
         <h1 className="text-xl font-black text-white tracking-wide">Account</h1>
       </div>
 
-      <div className="px-4 py-5 flex flex-col gap-4">
+      <div className="px-4 py-5 flex flex-col gap-4 relative z-10">
         {/* ── Profile Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}

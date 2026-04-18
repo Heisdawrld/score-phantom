@@ -64,11 +64,11 @@ export function Header() {
   const initials = displayUsername.slice(0, 2).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/[0.04] bg-background/80 backdrop-blur-2xl">
+    <header className="sticky top-0 z-50 w-full border-b border-white/[0.02] bg-[#060a0e]/80 backdrop-blur-2xl">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-4 group shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-panel-light to-panel border border-primary/20 flex items-center justify-center shadow-[0_0_15px_rgba(16,231,116,0.15)] group-hover:shadow-[0_0_20px_rgba(16,231,116,0.25)] transition-all overflow-hidden p-1.5">
+          <div className="w-10 h-10 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_15px_rgba(16,231,116,0.05)] group-hover:shadow-[0_0_20px_rgba(16,231,116,0.15)] transition-all overflow-hidden p-1.5">
             <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <span className="font-display text-2xl tracking-wider text-white hidden sm:block">SCORE<span className="text-primary">PHANTOM</span></span>

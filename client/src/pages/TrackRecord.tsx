@@ -230,9 +230,13 @@ export default function TrackRecord() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
       <Header />
-      <div className="max-w-3xl mx-auto px-4">
+
+      <div className="flex-1 w-full max-w-lg mx-auto px-4 pt-6 space-y-6 relative z-10">
 
         {/* ── Page Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 mb-8">

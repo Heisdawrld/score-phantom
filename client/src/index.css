@@ -46,7 +46,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-foreground antialiased font-sans;
+    @apply bg-[#060a0e] text-foreground antialiased font-sans;
     background-image: 
       radial-gradient(circle at 20% 2%, hsla(148, 86%, 48%, 0.04), transparent 30%),
       radial-gradient(circle at 85% 5%, hsla(220, 100%, 65%, 0.03), transparent 25%);

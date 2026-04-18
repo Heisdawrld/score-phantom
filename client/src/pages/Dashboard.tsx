@@ -291,17 +291,40 @@ export default function Dashboard() {
   const displayName = (user as any)?.username || (user?.email ? user.email.split('@')[0] : 'User');
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-20">
+    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
+      
       <Header />
-
-      <main className="flex-1 container mx-auto max-w-3xl px-4 pt-4 space-y-4">
+      
+      {/* Main Content Area */}
+      <main className="flex-1 container mx-auto max-w-3xl px-4 pt-4 space-y-4 relative z-10">
 
         {/* ── Welcome Header ── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <h1 className="text-xl font-black text-white">
-            Welcome back, <span className="text-primary capitalize">{displayName}</span> 👋
-          </h1>
-          <p className="text-xs text-white/35 mt-0.5">Let's keep the edge going.</p>
+        <motion.div 
+          initial={{ opacity: 0, y: 8 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ duration: 0.3 }}
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.02] border border-white/[0.05] p-5 rounded-3xl"
+        >
+          <div>
+            <h1 className="text-xl font-black text-white tracking-tight">
+              Welcome back, <span className="text-primary capitalize">{displayName}</span> 👋
+            </h1>
+            <p className="text-xs text-white/50 mt-1">Here are today's highest value edges</p>
+          </div>
+          
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <input 
+              type="text" 
+              placeholder="Search teams or leagues..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#0a110d] border border-white/[0.05] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/30 transition-all"
+            />
+          </div>
         </motion.div>
 
         {/* ── Payment Success Banner ── */}
@@ -415,21 +438,12 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* ── Tabs & Search ── */}
+        {/* ── Tabs ── */}
           <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4">
             <button onClick={() => setActiveGroupTab("all")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
             <button onClick={() => setActiveGroupTab("live")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
             <button onClick={() => setActiveGroupTab("favorites")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
           </div>
-        <div className="relative mt-2">
-          <Search className="absolute left-4 top-3.5 h-4 w-4 text-white/25" />
-          <Input
-            placeholder="Search teams or leagues..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-11 h-11 bg-white/[0.03] border-white/[0.06] rounded-xl text-sm placeholder:text-white/20"
-          />
-        </div>
 
         {/* ── Fixtures count ── */}
         {data && ((data as any).total > 0) && (

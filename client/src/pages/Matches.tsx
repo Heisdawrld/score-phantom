@@ -47,8 +47,11 @@ export default function Matches() {
     grouped[k].push(f);
   });
   return (
-    <div className="min-h-screen bg-[#090d13] pb-24">
-      <div className="sticky top-0 z-20 bg-[#090d13]/95 backdrop-blur-xl border-b border-white/5">
+    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
+      <div className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5 relative z-10">
         <div className="px-4 pt-4 pb-2">
           <h1 className="text-xl font-black text-white tracking-wide mb-3">Matches</h1>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x overscroll-x-contain">
@@ -68,7 +71,7 @@ export default function Matches() {
           </div>
         </div>
       </div>
-      <div className="px-3 py-3 flex flex-col gap-3">
+      <div className="flex-1 w-full max-w-lg mx-auto px-3 py-3 flex flex-col gap-3 relative z-10">
         {isLoading && Array.from({length:6}).map((_,i)=>(
           <div key={i} className="h-16 rounded-2xl bg-white/4 animate-pulse"/>
         ))}

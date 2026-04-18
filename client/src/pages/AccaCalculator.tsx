@@ -67,9 +67,12 @@ export default function DailyAcca() {
   const strongestLink = sorted[sorted.length - 1] || null;
 
   return (
-    <div className='min-h-screen bg-background'>
+    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
       <Header />
-      <div className='max-w-2xl mx-auto px-4 pb-24'>
+      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pb-24 relative z-10">
         {/* ── Header ── */}
         <div className='flex items-center gap-3 pt-6 mb-6'>
           <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition'>

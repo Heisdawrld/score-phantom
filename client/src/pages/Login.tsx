@@ -256,34 +256,29 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#090d13]">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a0e] text-white selection:bg-primary/30">
       {/* Animated background */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-primary/10 blur-[120px] animate-pulse" />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-primary/8 blur-[120px] animate-pulse" style={{ animationDelay: "1.5s" }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-primary/5 blur-[100px]" />
-        <img src={`${import.meta.env.BASE_URL}images/auth-bg.png`} alt="" className="w-full h-full object-cover opacity-20 mix-blend-screen absolute inset-0" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#090d13] via-[#090d13]/70 to-transparent" />
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary/10 blur-[120px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-500/5 blur-[120px] mix-blend-screen" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.apply/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[380px] flex flex-col items-center gap-7">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-[400px] flex flex-col items-center gap-8">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}
-            className="w-[72px] h-[72px] rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-primary/25 flex items-center justify-center shadow-[0_0_50px_rgba(16,231,116,0.25),inset_0_1px_0_rgba(255,255,255,0.1)]">
-            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-11 h-11 object-contain" />
+            className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.1)]">
+            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain" />
           </motion.div>
-          <div className="text-center">
-            <h1 className="font-display text-[28px] tracking-[0.2em] text-white">SCORE<span className="text-primary">PHANTOM</span></h1>
-            <p className="text-xs text-muted-foreground mt-1 tracking-wider">DATA-DRIVEN FOOTBALL PREDICTIONS</p>
-          </div>
         </div>
 
         {/* Card */}
-        <div className="w-full rounded-3xl overflow-hidden border border-white/[0.07] bg-white/[0.03] backdrop-blur-2xl shadow-[0_32px_80px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]">
-          <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-          <div className="p-7">
+        <div className="w-full rounded-[2rem] p-1 overflow-hidden"
+             style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)" }}>
+          <div className="bg-[#0a110d] rounded-[1.85rem] p-8 w-full border border-white/[0.05] shadow-2xl relative">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
             <AnimatePresence mode="wait" custom={direction}>
 
               {/* ─── SIGN IN ─── */}
@@ -291,10 +286,10 @@ export default function Login() {
                 <motion.div key="email-signin" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setLocation("/home")} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
-                      <ArrowLeft size={15} />
+                    <button onClick={() => setLocation("/home")} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
                     </button>
-                    <div><p className="text-white font-semibold text-base leading-tight">Welcome back</p><p className="text-xs text-muted-foreground">Sign in to your account</p></div>
+                    <div><p className="text-white font-bold text-lg leading-tight tracking-tight">Welcome back</p><p className="text-xs text-white/40">Sign in to your account</p></div>
                   </div>
 
                   <AnimatePresence>
@@ -360,10 +355,10 @@ export default function Login() {
                 <motion.div key="email-signup" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
-                      <ArrowLeft size={15} />
+                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
                     </button>
-                    <div><p className="text-white font-semibold text-base leading-tight">Create account</p><p className="text-xs text-muted-foreground">Start your 7-day free trial</p></div>
+                    <div><p className="text-white font-bold text-lg leading-tight tracking-tight">Create account</p><p className="text-xs text-white/40">Start your 7-day free trial</p></div>
                   </div>
                   <div className="p-3 rounded-xl bg-white/4 border border-primary/10 text-xs space-y-1.5">
                     <p className="text-white/50 font-semibold uppercase tracking-wider text-[9px] mb-2">Free trial includes</p>
@@ -429,12 +424,12 @@ export default function Login() {
                 <motion.div key="forgot-password" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
                   transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all">
-                      <ArrowLeft size={15} />
+                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
                     </button>
                     <div>
-                      <p className="text-white font-semibold text-base leading-tight">Reset password</p>
-                      <p className="text-xs text-muted-foreground">We'll send a reset link via email</p>
+                      <p className="text-white font-bold text-lg leading-tight tracking-tight">Reset password</p>
+                      <p className="text-xs text-white/40">We'll send a reset link via email</p>
                     </div>
                   </div>
 

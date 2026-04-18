@@ -103,9 +103,13 @@ export default function MatchCenter() {
     }, [d?.standings, d?.meta?.standings, fix.home_team_name, fix.away_team_name]);
 
     return (
-    <div className="min-h-screen pb-28" style={{ background: "#060b08" }}>
+    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      </div>
+
       {/* ── MATCH HEADER ── */}
-      <div className="sticky top-0 z-20 px-4 pt-4 pb-0" style={{ background: "linear-gradient(180deg, #060b08 0%, #060b08 85%, transparent 100%)" }}>
+      <div className="sticky top-0 z-50 bg-[#060a0e]/80 backdrop-blur-xl border-b border-white/[0.02] px-4 pt-4 pb-0 relative">
         {/* Back + close */}
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => window.history.back()}
@@ -187,7 +191,7 @@ export default function MatchCenter() {
         </div>
       )}
       {!isLoading && (
-          <div className="px-4 pt-5">
+          <div className="flex-1 w-full max-w-lg mx-auto px-4 pt-5 relative z-10">
             <AnimatePresence mode="wait">
               <motion.div key={tab}
                 initial={{ opacity: 0, y: 8 }}
