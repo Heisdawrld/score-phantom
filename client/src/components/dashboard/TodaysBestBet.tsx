@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
+import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 
 function toWAT(dateStr: string): string {
