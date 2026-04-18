@@ -76,9 +76,12 @@ app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
 });
 
-// Legacy admin page removed
+// Serve standalone admin page
+  app.get("/admin.html", (req, res) => {
+    res.sendFile(path.join(__dirname, "..", "admin.html"));
+  });
 
-// SPA fallback — serve index.html for all non-API routes
+  // SPA fallback — serve index.html for all non-API routes
   app.get("*", (req, res) => {
     // Stop the server from trying to serve index.html as a fallback for missing Vite chunks or API calls.
     // This prevents the "Strict MIME type checking" crash when users load an old tab after a new deployment.
