@@ -170,6 +170,40 @@ function signToken(user) {
   return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
 }
 
+
+async function ensureReferralCode(user) {
+  if (user.own_referral_code) return user.own_referral_code;
+  const prefix = String(user.email).split("@")[0].replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase();
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const newCode = `${prefix}_${suffix}`;
+  
+  let isUnique = false;
+  let finalCode = newCode;
+  let attempts = 0;
+  while (!isUnique && attempts < 5) {
+    const existing = await db.execute({
+      sql: "SELECT id FROM users WHERE own_referral_code = ? LIMIT 1",
+      args: [finalCode],
+    });
+    if ((existing.rows || []).length === 0) {
+      isUnique = true;
+    } else {
+      finalCode = `${prefix}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      attempts++;
+    }
+  }
+  
+  if (isUnique) {
+    await db.execute({
+      sql: "UPDATE users SET own_referral_code = ? WHERE id = ?",
+      args: [finalCode, user.id],
+    });
+    user.own_referral_code = finalCode;
+    return finalCode;
+  }
+  return null;
+}
+
 export function computeAccessStatus(user) {
   // Admins always have full access (check both is_admin flag and ADMIN_EMAIL)
   const userEmail = String(user?.email || "").trim().toLowerCase();
@@ -202,6 +236,7 @@ export function computeAccessStatus(user) {
 }
 
 function publicUser(user) {
+  if (user.own_referral_code) { user.own_referral_code = user.own_referral_code; } // Just to be safe
   const access = computeAccessStatus(user);
   return {
     id:                    user.id,
@@ -215,6 +250,7 @@ function publicUser(user) {
     has_access:            access.has_full_access,
     access_status:         access.status,
     email_verified:        user.email_verified === 1 || user.email_verified === true,
+    own_referral_code:     user.own_referral_code || null,
   };
 }
 
@@ -469,6 +505,8 @@ router.post("/google", authLimiter, async (req, res) => {
     }
 
     if (!user) throw new Error("Failed to find or create user");
+
+    await ensureReferralCode(user);
 
     const token = signToken(user);
     const access = computeAccessStatus(user);
@@ -765,6 +803,8 @@ router.get("/me", requireAuth, async (req, res) => {
     });
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: "User not found" });
+
+    await ensureReferralCode(user);
 
     const access  = computeAccessStatus(user);
     const isAdmin = ADMIN_EMAIL && String(user.email).toLowerCase() === ADMIN_EMAIL;
