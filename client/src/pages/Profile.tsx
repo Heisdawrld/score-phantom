@@ -218,62 +218,60 @@ export default function Profile() {
         </motion.div>
 
         {/* Referral System */}
-        {(user as any)?.own_referral_code && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
-            <div className="bg-[#121212] rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none"/>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Star className="w-5 h-5 text-primary"/>
-                </div>
-                <div>
-                  <h3 className="text-white font-bold text-base">Refer & Earn</h3>
-                  <p className="text-white/50 text-sm leading-snug mt-1">Share your code or link to earn 10% cash commission on every subscription.</p>
-                </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
+          <div className="bg-[#121212] rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none"/>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Star className="w-5 h-5 text-primary"/>
               </div>
-              
-              {refStats && (
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
-                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Referrals</p>
-                    <p className="text-lg font-black text-white">{(refStats as any).total_referrals}</p>
-                  </div>
-                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
-                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Pending</p>
-                    <p className="text-lg font-black text-amber-400">₦{(refStats as any).pending_commission.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
-                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Earned</p>
-                    <p className="text-lg font-black text-primary">₦{(refStats as any).settled_commission.toLocaleString()}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
-                  <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any).own_referral_code}</span>
-                  <button 
-                    onClick={copyReferralCode}
-                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium text-white transition-colors"
-                  >
-                    {copiedCode ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-white/70" />}
-                    {copiedCode ? 'Copied' : 'Copy Code'}
-                  </button>
-                </div>
-                <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
-                  <span className="text-sm font-medium text-white/70 truncate mr-3">score-phantom.com/login?ref={(user as any).own_referral_code}</span>
-                  <button 
-                    onClick={copyReferralLink}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-sm font-medium text-primary transition-colors shrink-0"
-                  >
-                    {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                    {copiedLink ? 'Copied' : 'Copy Link'}
-                  </button>
-                </div>
+              <div>
+                <h3 className="text-white font-bold text-base">Refer & Earn</h3>
+                <p className="text-white/50 text-sm leading-snug mt-1">Share your code or link to earn 10% cash commission on every subscription.</p>
               </div>
             </div>
-          </motion.div>
-        )}
+            
+            {refStats && (
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                  <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Referrals</p>
+                  <p className="text-lg font-black text-white">{(refStats as any).total_referrals}</p>
+                </div>
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                  <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Pending</p>
+                  <p className="text-lg font-black text-amber-400">₦{(refStats as any).pending_commission.toLocaleString()}</p>
+                </div>
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                  <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Earned</p>
+                  <p className="text-lg font-black text-primary">₦{(refStats as any).settled_commission.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
+                <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any)?.own_referral_code || "Generating..."}</span>
+                <button 
+                  onClick={copyReferralCode}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium text-white transition-colors"
+                >
+                  {copiedCode ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-white/70" />}
+                  {copiedCode ? 'Copied' : 'Copy Code'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
+                <span className="text-sm font-medium text-white/70 truncate mr-3">score-phantom.com/login?ref={(user as any)?.own_referral_code || ""}</span>
+                <button 
+                  onClick={copyReferralLink}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-sm font-medium text-primary transition-colors shrink-0"
+                >
+                  {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                  {copiedLink ? 'Copied' : 'Copy Link'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
 
         {/* ── Navigation Items ── */}
         <div className="flex flex-col gap-2">
