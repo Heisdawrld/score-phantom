@@ -110,7 +110,7 @@ export default function VerifyEmail() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative z-10 w-full max-w-[380px] flex flex-col items-center gap-7">
         <div className="flex flex-col items-center gap-3">
           <div className="w-[72px] h-[72px] rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-primary/25 flex items-center justify-center shadow-[0_0_50px_rgba(16,231,116,0.2)]">
-            <img src={import.meta.env.BASE_URL + "images/logo.png"} alt="ScorePhantom" className="w-11 h-11 object-contain" />
+            <img src={import.meta.env.BASE_URL + "images/logo.png"} alt="ScorePhantom" className="w-11 h-11 object-contain animate-logo-glow" />
           </div>
           <h1 className="font-display text-[22px] tracking-[0.2em] text-white">SCORE<span className="text-primary">PHANTOM</span></h1>
         </div>

@@ -128,3 +128,18 @@ html { scroll-behavior: smooth; }
   background-size: 200% 100%;
   animation: sp-shimmer 1.5s ease-in-out infinite;
 }
+
+@keyframes logo-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(16, 231, 116, 0.4));
+    opacity: 0.8;
+  }
+  50% {
+    filter: drop-shadow(0 0 15px rgba(16, 231, 116, 1));
+    opacity: 1;
+  }
+}
+
+.animate-logo-glow {
+  animation: logo-glow 2.5s ease-in-out infinite;
+}

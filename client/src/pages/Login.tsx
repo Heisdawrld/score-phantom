@@ -270,7 +270,7 @@ export default function Login() {
         <div className="flex flex-col items-center gap-4">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}
             className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.1)]">
-            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain" />
+            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain animate-logo-glow" />
           </motion.div>
         </div>
 
