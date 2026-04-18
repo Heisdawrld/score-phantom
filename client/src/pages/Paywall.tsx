@@ -63,9 +63,9 @@ export default function Paywall(){
     if(paymentStatus==="success"){setPaymentDone(true);refetch();}
   },[paymentStatus]);
 
-  const handleSubscribe=()=>{
+  const handleSubscribe=(plan: string = 'monthly')=>{
     setError(null);
-    initPayment.mutate(undefined,{
+    initPayment.mutate({ plan } as any,{
       onSuccess:(data:any)=>{
         if(data?.link){
           try{
@@ -164,8 +164,8 @@ export default function Paywall(){
                   </div>
                 )}
                 <div className="px-6 pb-6">
-                  <motion.button onClick={handleSubscribe} disabled={initPayment.isPending} whileTap={{scale:0.97}}
-                    className="relative w-full py-4 rounded-2xl font-black text-black text-base overflow-hidden disabled:opacity-60 transition-all"
+                  <motion.button onClick={() => handleSubscribe('monthly')} disabled={initPayment.isPending} whileTap={{scale:0.97}}
+                    className="relative w-full py-4 rounded-2xl font-black text-black text-base overflow-hidden disabled:opacity-60 transition-all mb-3"
                     style={{background:"linear-gradient(135deg,#10e774 0%,#0bc95f 100%)",boxShadow:"0 0 30px rgba(16,231,116,0.35)"}}>
                     <motion.div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                       animate={{x:["-100%","100%"]}} transition={{duration:2.5,repeat:Infinity,ease:"linear"}}/>
@@ -173,9 +173,14 @@ export default function Paywall(){
                       {initPayment.isPending?(
                         <><Loader2 className="w-5 h-5 animate-spin"/>Redirecting to payment...</>
                       ):(
-                        <><Crown className="w-5 h-5"/>Pay ₦3,000 with Flutterwave</>
+                        <><Crown className="w-5 h-5"/>Pay ₦3,000 for 1 Month</>
                       )}
                     </span>
+                  </motion.button>
+
+                  <motion.button onClick={() => handleSubscribe('weekly')} disabled={initPayment.isPending} whileTap={{scale:0.97}}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-[#10e774] bg-[#10e774]/10 hover:bg-[#10e774]/20 transition-all disabled:opacity-50">
+                    Or try 1 Week for ₦1,000
                   </motion.button>
                   <div className="flex items-center justify-center gap-4 mt-4">
                     <span className="flex items-center gap-1 text-[10px] text-white/20"><Shield className="w-3 h-3 text-primary/40"/>SSL Secured</span>

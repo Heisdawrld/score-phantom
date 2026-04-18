@@ -321,11 +321,11 @@ export async function buildAcca(rows, mode = 'safe') {
   const maxUnders   = isSafeMode ? 1 : 2;
 
   // ── Quality gates — best leagues with enough stats only ─────────────────
-  // 0.65 = Championship / Eredivisie tier and above (see LEAGUE_PRESTIGE table)
-  // 0.60 = includes some lower-tier leagues — use 0.65 for SAFE, 0.55 for VALUE
-  const MIN_LEAGUE_PRESTIGE = isSafeMode ? 0.65 : 0.55;
-  // Only include fixtures with decent data completeness (avoid thin-data upsets)
-  const MIN_DATA_SCORE      = isSafeMode ? 0.50 : 0.40;
+    // Since Layer 1 Eligibility now strictly whitelists only the 35 premium BSD leagues,
+    // we can aggressively relax these gates to ensure the ACCA generates predictions "by force by fire".
+    const MIN_LEAGUE_PRESTIGE = isSafeMode ? 0.40 : 0.30;
+    // Allow matches with basic/limited data (down to 0.15) since the junk leagues are already filtered out
+    const MIN_DATA_SCORE      = isSafeMode ? 0.20 : 0.15;
 
   // Fetch accuracy cache once — used to score all candidates with real win rate data
   const accuracyCache = await getAccuracyCache().catch(() => null);

@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Crown, Bell, Heart, LogOut, ChevronRight, Shield, BarChart2,
   CreditCard, Calendar, CheckCircle, Lock, Zap, Star, TrendingUp,
-  Settings, HelpCircle, ExternalLink
+  Settings, HelpCircle, ExternalLink, Copy, Check
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +25,15 @@ export default function Profile() {
   const logout = useLogout();
   const [, nav] = useLocation();
   const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const copyReferral = () => {
+    if ((user as any)?.own_referral_code) {
+      navigator.clipboard.writeText((user as any).own_referral_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const isPremium = (user as any)?.access_status === "active";
   const isTrial = (user as any)?.access_status === "trial";
@@ -190,6 +200,34 @@ export default function Profile() {
             </div>
           </div>
         </motion.div>
+
+        {/* Referral System */}
+        {(user as any)?.own_referral_code && (
+          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.3}} className="mb-6">
+            <div className="bg-[#121212] rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none"/>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Star className="w-5 h-5 text-primary"/>
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base">Refer & Earn</h3>
+                  <p className="text-white/50 text-sm">Share your code to earn commissions on subscriptions</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
+                <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any).own_referral_code}</span>
+                <button 
+                  onClick={copyReferral}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium text-white transition-colors"
+                >
+                  {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-white/70" />}
+                  {copied ? 'Copied' : 'Copy Code'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Navigation Items ── */}
         <div className="flex flex-col gap-2">

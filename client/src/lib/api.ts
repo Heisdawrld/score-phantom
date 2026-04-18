@@ -102,3 +102,10 @@ export const FixtureSchema = z.object({
 });
 
 export type Fixture = z.infer<typeof FixtureSchema>;
+
+export const paymentApi = {
+  initialize: async (data?: { plan?: string }) => {
+    const pkg = data?.plan || 'monthly';
+    return fetchApi(`/auth/payment/initialize?package=${pkg}`);
+  },
+};

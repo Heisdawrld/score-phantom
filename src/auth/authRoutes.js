@@ -28,6 +28,8 @@ const FLW_ENCRYPTION  = process.env.FLUTTERWAVE_ENCRYPTION_KEY || "";
 
 const PLAN_AMOUNT_NGN  = 3000;       // ₦3,000 — always store in naira
 const PLAN_DURATION_DAYS = 30;
+const WEEKLY_PLAN_AMOUNT_NGN = 1000; // ₦1,000 — 1 week package
+const WEEKLY_PLAN_DURATION_DAYS = 7;
 const TRIAL_DURATION_DAYS = 7;       // 7-day free trial
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
@@ -186,11 +188,16 @@ export function computeAccessStatus(user) {
   let status = "expired";
   if (premiumActive || subActive) status = "active";
   else if (trialActive)           status = "trial";
+  
+  // Add referral code to the payload
+  const referralCode  = user?.own_referral_code || null;
+
   return {
     status,
     trial_active:        !!trialActive,
     subscription_active: !!(premiumActive || subActive),
     has_full_access:     !!trialActive || !!premiumActive || !!subActive,
+    referral_code:       referralCode,
   };
 }
 
@@ -250,9 +257,10 @@ export async function requirePremiumAccess(req, res, next) {
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
 import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
-async function activatePremium(userId, flwChargeId, reference) {
+async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN_AMOUNT_NGN) {
+  const durationDays = (amountPaid === WEEKLY_PLAN_AMOUNT_NGN) ? WEEKLY_PLAN_DURATION_DAYS : PLAN_DURATION_DAYS;
   const expiry          = new Date();
-  expiry.setDate(expiry.getDate() + PLAN_DURATION_DAYS);
+  expiry.setDate(expiry.getDate() + durationDays);
   const expiryISO       = expiry.toISOString();
   const subscriptionCode = `SUB_${crypto.randomBytes(16).toString('hex')}`;
   const now             = new Date().toISOString();
@@ -266,7 +274,7 @@ async function activatePremium(userId, flwChargeId, reference) {
     {
       sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
             VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
-      args: [userId, reference, PLAN_AMOUNT_NGN, now],
+      args: [userId, reference, amountPaid, now],
     },
     {
       sql: `UPDATE payments SET status = 'verified', flw_transaction_id = ?, paid_at = ? WHERE reference = ?`,
@@ -743,7 +751,7 @@ router.post("/login", authLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code FROM users WHERE id = ? LIMIT 1`,
       args: [req.user.id],
     });
     const user = result.rows?.[0];
@@ -754,6 +762,7 @@ router.get("/me", requireAuth, async (req, res) => {
     return res.json({
       user: {
         ...publicUser(user),
+        own_referral_code: user.own_referral_code,
         has_access:    access.has_full_access,
         access_status: access.status,
         ...(isAdmin ? { is_admin: true } : {}),
@@ -868,6 +877,9 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
   try {
     if (!flwConfigured()) return res.status(503).json({ error: 'Payment service not configured' });
 
+    const packageType = req.body?.package || req.query?.package || 'monthly';
+    const amount = packageType === 'weekly' ? WEEKLY_PLAN_AMOUNT_NGN : PLAN_AMOUNT_NGN;
+
     const userResult = await db.execute({
       sql: 'SELECT id, email, status, premium_expires_at, subscription_expires_at FROM users WHERE id = ? LIMIT 1',
       args: [req.user.id],
@@ -886,7 +898,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
 
     const link = await initializePayment({
       txRef,
-      amount:      PLAN_AMOUNT_NGN,
+      amount:      amount,
       currency:    'NGN',
       email:       user.email,
       name:        user.email.split('@')[0],
@@ -899,7 +911,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
     await db.execute({
       sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel)
             VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [user.id, txRef, PLAN_AMOUNT_NGN, 'NGN', 'initialized', 'flutterwave'],
+      args: [user.id, txRef, amount, 'NGN', 'initialized', 'flutterwave'],
     });
 
     return res.json({ link, reference: txRef });
@@ -960,7 +972,7 @@ router.get("/payment/callback", async (req, res) => {
 
     if (
       txData?.status !== 'successful' ||
-      Number(txData?.amount) !== PLAN_AMOUNT_NGN ||
+      (Number(txData?.amount) !== PLAN_AMOUNT_NGN && Number(txData?.amount) !== WEEKLY_PLAN_AMOUNT_NGN) ||
       txData?.currency !== 'NGN' ||
       txData?.tx_ref !== String(tx_ref)
     ) {
@@ -985,12 +997,13 @@ router.get("/payment/callback", async (req, res) => {
     }
 
     // Activate premium
-    await activatePremium(payment.user_id, String(transaction_id), String(tx_ref));
-    console.log('[FLW Callback] ✓ Premium activated — user=' + payment.user_id + ' tx=' + transaction_id);
+    const amountPaid = Number(txData?.amount);
+    await activatePremium(payment.user_id, String(txData?.id || ""), String(tx_ref), amountPaid);
+    console.log('[FLW Callback] ✓ Premium activated for user:', payment.user_id);
 
     // Create referral commission if applicable (first verified payment only)
-    const _pmtId1 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(tx_ref)] });
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId1.rows?.[0]?.id || null, String(tx_ref||""));
+    const _pmtId1 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(tx_ref||"")] });
+    await createReferralCommission(payment.user_id, amountPaid, _pmtId1.rows?.[0]?.id || null, String(tx_ref||""));
 
     return res.redirect(`${appUrl}/?payment=success`);
   } catch (err) {
@@ -1023,7 +1036,7 @@ router.post("/webhook/flutterwave", async (req, res) => {
       console.log('[FLW Webhook] status=' + status + ' — skipping');
       return res.sendStatus(200);
     }
-    if (currency !== 'NGN' || amount !== PLAN_AMOUNT_NGN) {
+    if (currency !== 'NGN' || (amount !== PLAN_AMOUNT_NGN && amount !== WEEKLY_PLAN_AMOUNT_NGN)) {
       console.warn('[FLW Webhook] Amount/currency mismatch:', amount, currency);
       return res.sendStatus(200);
     }
@@ -1038,17 +1051,17 @@ router.post("/webhook/flutterwave", async (req, res) => {
 
     // Double-verify
     const verified = await verifyTransaction(txId);
-    if (verified?.status !== 'successful' || Number(verified?.amount) !== PLAN_AMOUNT_NGN) {
+    if (verified?.status !== 'successful' || (Number(verified?.amount) !== PLAN_AMOUNT_NGN && Number(verified?.amount) !== WEEKLY_PLAN_AMOUNT_NGN)) {
       console.warn('[FLW Webhook] Re-verification failed for tx:', txId);
       return res.sendStatus(200);
     }
 
-    await activatePremium(payment.user_id, String(txId), String(txRef));
+    await activatePremium(payment.user_id, String(txId), String(txRef), amount);
     console.log('[FLW Webhook] ✓ Premium activated — user=' + payment.user_id);
 
     // Create referral commission if applicable (first verified payment only)
     const _pmtId2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [String(txRef||"")] });
-    await createReferralCommission(payment.user_id, PLAN_AMOUNT_NGN, _pmtId2.rows?.[0]?.id || null, String(txRef||""));
+    await createReferralCommission(payment.user_id, amount, _pmtId2.rows?.[0]?.id || null, String(txRef||""));
     
     res.sendStatus(200);
   } catch (err) {
