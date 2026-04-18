@@ -9,20 +9,20 @@ export function assessMatchPredictability(features, script, calibratedProbs) {
   const scriptConfidence = safeNum(sc.confidence, 0);
   const scriptPrimary    = sc.primary || '';
   const volatilityScore  = safeNum(sc.volatilityScore, 0.5);
-  // 1. Low data completeness
-  if (dataCompleteness < 0.35) {
-    return { predictable: false, reason: 'Insufficient data completeness (' + (dataCompleteness*100).toFixed(0) + '% < 35% minimum)', code: 'LOW_DATA' };
+  // 1. Low data completeness (Tightened from 0.35 to 0.45)
+  if (dataCompleteness < 0.45) {
+    return { predictable: false, reason: 'Insufficient data completeness (' + (dataCompleteness*100).toFixed(0) + '% < 45% minimum)', code: 'LOW_DATA' };
   }
-  // 2. Chaotic script with high confidence
-  if (scriptPrimary === 'chaotic_unreliable' && scriptConfidence > 0.65) {
-    return { predictable: false, reason: 'Match classified chaotic_unreliable with high confidence — no reliable pick possible', code: 'CHAOTIC_SCRIPT' };
+  // 2. Chaotic script with high confidence (Tightened from 0.65 to 0.50)
+  if (scriptPrimary === 'chaotic_unreliable' && scriptConfidence > 0.50) {
+    return { predictable: false, reason: 'Match classified chaotic_unreliable — no reliable pick possible', code: 'CHAOTIC_SCRIPT' };
   }
-  // 3. Extreme chaos score
-  if (matchChaosScore > 0.88) {
-    return { predictable: false, reason: 'Chaos score too high (' + (matchChaosScore*100).toFixed(0) + '% > 88%) — match too volatile', code: 'HIGH_CHAOS' };
+  // 3. Extreme chaos score (Tightened from 0.88 to 0.80)
+  if (matchChaosScore > 0.80) {
+    return { predictable: false, reason: 'Chaos score too high (' + (matchChaosScore*100).toFixed(0) + '% > 80%) — match too volatile', code: 'HIGH_CHAOS' };
   }
-  // 4. High upset risk + weak data
-  if (upsetRiskScore > 0.75 && dataCompleteness < 0.55) {
+  // 4. High upset risk + weak data (Tightened from 0.75/0.55 to 0.65/0.60)
+  if (upsetRiskScore > 0.65 && dataCompleteness < 0.60) {
     return { predictable: false, reason: 'High upset risk (' + (upsetRiskScore*100).toFixed(0) + '%) with weak data (' + (dataCompleteness*100).toFixed(0) + '%) — too uncertain', code: 'UPSET_RISK_WEAK_DATA' };
   }
   // 5. Contradictory 1X2 probabilities — all outcomes near-equal

@@ -107,15 +107,13 @@ function getBadMarketPenalty(candidate, featureVector) {
   }
 
   // Double chance: always apply a structural inflation penalty.
-  // DC probability = win + draw, so it's always 0.68–0.88 by construction.
-  // The excess above 0.65 is mathematical padding, not real edge.
-  // Penalty = excess * 1.2, expressed as a badMarketPenalty fraction (0–1 scale).
-  if (marketKey === 'double_chance_home' || marketKey === 'double_chance_away') {
-    const prob = safeNum(modelProbability, 0);
-    const excess = Math.max(0, prob - 0.65);
-    // Convert to 0–1 penalty scale: max excess ~0.23 → penalty ~0.28 → cap at 0.5
-    return clamp(excess * 1.2, 0, 0.5);
-  }
+    // We are significantly increasing the DC penalty to prevent "safe spam".
+    // DC probability = win + draw, so it's always 0.68–0.88 by construction.
+    if (marketKey === 'double_chance_home' || marketKey === 'double_chance_away') {
+      const prob = safeNum(modelProbability, 0);
+      const excess = Math.max(0, prob - 0.60); // Start penalizing earlier (0.60 instead of 0.65)
+      return clamp(excess * 1.8, 0, 0.8); // Much harsher penalty (max 0.8 instead of 0.5)
+    }
 
   return 0;
 }
