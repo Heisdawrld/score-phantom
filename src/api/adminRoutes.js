@@ -818,6 +818,50 @@ router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
     return res.json({ partners });
   } catch (err) { console.error("[Admin/partners]", err); return res.status(500).json({ error: err.message }); }
 });
+// GET /api/admin/standard-commissions — list all standard user referrals with pending payouts
+router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.execute(
+      "SELECT u.id as user_id, u.email, u.own_referral_code, " +
+      " COUNT(DISTINCT pc.referred_user_id) as total_referred_paid," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END),0) as pending_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
+      " FROM users u" +
+      " INNER JOIN partner_commissions pc ON pc.referrer_user_id = u.id AND pc.partner_id IS NULL" +
+      " GROUP BY u.id HAVING total_commission > 0 ORDER BY pending_commission DESC"
+    );
+    return res.json({ commissions: result.rows || [] });
+  } catch (err) { console.error("[Admin/standard-commissions]", err); return res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/standard-commissions/:id/ledger — list specific standard user ledger entries
+router.get("/standard-commissions/:id/ledger", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const result = await db.execute({
+      sql: "SELECT pc.*, u.email as referred_email FROM partner_commissions pc LEFT JOIN users u ON u.id = pc.referred_user_id WHERE pc.referrer_user_id = ? AND pc.partner_id IS NULL ORDER BY pc.created_at DESC",
+      args: [userId]
+    });
+    return res.json({ ledger: result.rows || [] });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/admin/standard-commissions/:id/settle — mark all pending standard commissions as paid
+router.post("/standard-commissions/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const notes = req.body?.notes || 'Manual settlement by Admin';
+    const now = new Date().toISOString();
+    const result = await db.execute({
+      sql: "UPDATE partner_commissions SET status = 'settled', settled_at = ?, notes = ? WHERE referrer_user_id = ? AND partner_id IS NULL AND status = 'pending'",
+      args: [now, notes, userId]
+    });
+    return res.json({ success: true, settled_count: result.affected_row_count || 0 });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
 // PATCH /api/admin/partners/:id — update partner details
 router.patch("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
   try {

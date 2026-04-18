@@ -183,6 +183,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const [partners, setPartners] = useState<Partner[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [standardCommissions, setStandardCommissions] = useState<any[]>([]);
+  const [selectedStandardUser, setSelectedStandardUser] = useState<any>(null);
   const [settleLoading, setSettleLoading] = useState(false);
   const [refCodeModal, setRefCodeModal] = useState<AdminUser | null>(null);
   const [refCodeInput, setRefCodeInput] = useState("");
@@ -242,6 +244,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
     try {
       const r = await call("/api/admin/partners");
       setPartners(r.partners || []);
+      const stdRes = await call("/api/admin/standard-commissions");
+      setStandardCommissions(stdRes.commissions || []);
     } catch { } finally { setLoading(false); }
   }, [call]);
 
@@ -251,6 +255,56 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
       setCommissions(r.commissions || []);
     } catch { setCommissions([]); }
   }, [call]);
+
+  const openPartnerLedger = async (p: Partner) => {
+    setSelectedPartner(p);
+    setSelectedStandardUser(null);
+    setCommissions([]);
+    setSelectedCommIds(new Set());
+    setLoading(true);
+    try {
+      const r = await call(`/api/admin/partners/${p.partner_id}/commissions`);
+      setCommissions(r.commissions || []);
+    } catch(e:any) { flash(false, e.message); }
+    finally { setLoading(false); }
+  };
+
+  const openStandardLedger = async (u: any) => {
+    setSelectedStandardUser(u);
+    setSelectedPartner(null);
+    setCommissions([]);
+    setSelectedCommIds(new Set());
+    setLoading(true);
+    try {
+      const r = await call(`/api/admin/standard-commissions/${u.user_id}/ledger`);
+      setCommissions(r.ledger || []);
+    } catch(e:any) { flash(false, e.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleSettleCommissions = async () => {
+    if (!selectedPartner && !selectedStandardUser) return;
+    const selectedCount = selectedCommIds.size;
+    if (selectedCount === 0 && !confirm(`Mark ALL pending commissions for ${selectedPartner ? selectedPartner.name : selectedStandardUser.email} as Paid?`)) return;
+    if (selectedCount > 0 && !confirm(`Mark ${selectedCount} selected commissions as Paid?`)) return;
+
+    setSettleLoading(true);
+    try {
+      const endpoint = selectedPartner 
+        ? `/api/admin/partners/${selectedPartner.partner_id}/settle` 
+        : `/api/admin/standard-commissions/${selectedStandardUser.user_id}/settle`;
+        
+      const body = selectedCount > 0 ? JSON.stringify({ commission_ids: Array.from(selectedCommIds) }) : "{}";
+      const r = await call(endpoint, { method: "POST", body });
+      flash(true, `✓ Settled ${r.settled_count || selectedCount || 'all'} commissions`);
+      
+      if (selectedPartner) await openPartnerLedger(selectedPartner);
+      else await openStandardLedger(selectedStandardUser);
+      
+      loadPartners();
+    } catch(e:any) { flash(false, e.message); }
+    finally { setSettleLoading(false); }
+  };
 
   const createPartner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -729,24 +783,102 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         {tab === "partners" && (
           <div className="space-y-6">
 
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-white">Partners</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Manage partner referral codes, track earnings and settle commissions.</p>
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-white">Referrals & Partners</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Manage partner referral codes, track earnings and settle commissions.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={loadPartners} disabled={loading} className="flex items-center gap-2 text-xs text-gray-400 hover:text-white px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/[0.06]">
+                    <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+                  </button>
+                  <button onClick={() => { setCreatePartnerOpen(true); setCreatePartnerError(""); }}
+                    className="flex items-center gap-2 text-xs text-white px-4 py-2 rounded-lg bg-primary/20 border border-primary/30 hover:bg-primary/30 transition-all font-semibold">
+                    <UserPlus size={13} /> New Partner
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={loadPartners} disabled={loading} className="flex items-center gap-2 text-xs text-gray-400 hover:text-white px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all border border-white/[0.06]">
-                  <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
-                </button>
-                <button onClick={() => { setCreatePartnerOpen(true); setCreatePartnerError(""); }}
-                  className="flex items-center gap-2 text-xs text-white px-4 py-2 rounded-lg bg-primary/20 border border-primary/30 hover:bg-primary/30 transition-all font-semibold">
-                  <UserPlus size={13} /> New Partner
-                </button>
-              </div>
-            </div>
 
-            {/* Create Partner Modal */}
+              {/* Standard Users Referral Table */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl overflow-hidden mt-6">
+                <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
+                  <h3 className="text-sm font-bold text-white">Standard User Referrals (10%)</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b border-white/[0.06]">
+                      {["User", "Code", "Total Revenue", "Commission", "Pending", "Paid", ""].map(h => (
+                        <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {standardCommissions.map(c => (
+                        <tr key={c.user_id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3 text-white text-xs font-bold">{c.email}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-gray-400">{c.own_referral_code}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">₦{Number(c.total_revenue).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-white font-bold">₦{Number(c.total_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-yellow-400 font-bold">₦{Number(c.pending_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-primary font-bold">₦{Number(c.settled_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button onClick={() => openStandardLedger(c)} className="text-xs bg-white/5 hover:bg-white/10 text-white px-3 py-1.5 rounded-lg transition-all font-semibold">
+                              Ledger
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {standardCommissions.length === 0 && (
+                        <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-gray-500">No standard user commissions generated yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Dedicated Partners Table */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl overflow-hidden mt-6">
+                <div className="px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
+                  <h3 className="text-sm font-bold text-white">Dedicated Partners (Custom %)</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b border-white/[0.06]">
+                      {["Partner", "Code", "Rate", "Signups", "Revenue", "Pending", "Paid", ""].map(h => (
+                        <th key={h} className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {partners.map(p => (
+                        <tr key={p.partner_id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-white text-xs font-bold">{p.name}</span>
+                              <span className="text-gray-500 text-[10px]">{p.email || "No email"}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono text-gray-400">{p.referral_code}</td>
+                          <td className="px-4 py-3 text-xs text-primary font-bold">{(p.commission_rate * 100).toFixed(0)}%</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">{p.total_referred_signups} users</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">₦{Number(p.total_revenue).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-yellow-400 font-bold">₦{Number(p.pending_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-primary font-bold">₦{Number(p.settled_commission).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button onClick={() => openPartnerLedger(p)} className="text-xs bg-white/5 hover:bg-white/10 text-white px-3 py-1.5 rounded-lg transition-all font-semibold">
+                              Ledger
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {partners.length === 0 && (
+                        <tr><td colSpan={8} className="px-4 py-8 text-center text-xs text-gray-500">No active partners found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Create Partner Modal */}
             {createPartnerOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                 <div className="bg-[#0f172a] border border-primary/20 rounded-2xl p-6 max-w-md w-full shadow-2xl">

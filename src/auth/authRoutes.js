@@ -306,14 +306,23 @@ export async function createReferralCommission(userId, grossAmount, paymentId, p
       partnerId = p.id;
       commissionRate = p.commission_rate ?? 0.25;
     } else if (u.referred_by_user_id) {
-      // Legacy: user-based referral — look up their partner record
-      const pRes = await db.execute({ sql: "SELECT id, commission_rate FROM partners WHERE user_id = ? LIMIT 1", args: [u.referred_by_user_id] });
-      const p = pRes.rows?.[0];
-      if (!p) return;
-      partnerId = p.id;
-      referrerUserId = u.referred_by_user_id;
-      commissionRate = p.commission_rate ?? 0.25;
-    } else return; // not a referred user
+        // Standard user-to-user referral
+        referrerUserId = u.referred_by_user_id;
+        
+        // Check if the referring user is an official partner
+        const pRes = await db.execute({ sql: "SELECT id, commission_rate FROM partners WHERE user_id = ? LIMIT 1", args: [u.referred_by_user_id] });
+        const p = pRes.rows?.[0];
+        
+        if (p) {
+          // They are a partner: use their partner ID and custom rate
+          partnerId = p.id;
+          commissionRate = p.commission_rate ?? 0.25;
+        } else {
+          // They are a standard user: track them with 10% commission rate and NULL partner_id
+          partnerId = null;
+          commissionRate = 0.10;
+        }
+      } else return; // not a referred user
     const commissionAmount = Math.round(grossAmount * commissionRate);
     const now = new Date().toISOString();
     await db.execute({
