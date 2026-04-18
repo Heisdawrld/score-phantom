@@ -604,6 +604,8 @@ router.post("/email", authLimiter, async (req, res) => {
 
     if (!user) throw new Error("Failed to find or create user");
 
+    await ensureReferralCode(user);
+
     const token = signToken(user);
     const access = computeAccessStatus(user);
     const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
@@ -670,6 +672,8 @@ router.post("/signup", authLimiter, async (req, res) => {
     if (referralCode && user) {
       await attachReferral(user.id, referralCode);
     }
+
+    await ensureReferralCode(user);
 
     // Auto-login: return JWT immediately
     const token  = signToken(user);
@@ -779,6 +783,8 @@ router.post("/login", authLimiter, async (req, res) => {
 
     const ok = await bcrypt.compare(String(password || ""), String(storedHash));
     if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+
+    await ensureReferralCode(user);
 
     const token   = signToken(user);
     const access  = computeAccessStatus(user);
