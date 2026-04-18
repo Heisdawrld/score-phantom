@@ -50,16 +50,20 @@ async function runSchema() {
       created_at TEXT DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS historical_matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      fixture_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      date TEXT,
-      home_team TEXT,
-      away_team TEXT,
-      home_goals INTEGER,
-      away_goals INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fixture_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        date TEXT,
+        home_team TEXT,
+        away_team TEXT,
+        home_goals INTEGER,
+        away_goals INTEGER,
+        home_xg REAL,
+        away_xg REAL,
+        momentum TEXT,
+        shotmap TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`,
     `CREATE TABLE IF NOT EXISTS fixture_odds (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL UNIQUE,
@@ -131,17 +135,26 @@ async function runSchema() {
     }
   }
 
-  const histTableInfo = await db.execute(`PRAGMA table_info(historical_matches)`);
-  const histColMigrations = [
+  const hmTableInfo = await db.execute(`PRAGMA table_info(historical_matches)`);
+  const hmCols = [
     ["home_xg", "ALTER TABLE historical_matches ADD COLUMN home_xg REAL"],
     ["away_xg", "ALTER TABLE historical_matches ADD COLUMN away_xg REAL"],
+    ["momentum", "ALTER TABLE historical_matches ADD COLUMN momentum TEXT"],
+    ["shotmap", "ALTER TABLE historical_matches ADD COLUMN shotmap TEXT"],
   ];
-  for (const [col, sql] of histColMigrations) {
-    const exists = histTableInfo.rows.some((c) => c.name === col);
-    if (!exists) {
-      try { await db.execute(sql); } catch (_) {}
+  for (const [colName, stmt] of hmCols) {
+    if (!hmTableInfo.rows.some((c) => c.name === colName)) {
+      try { await db.execute(stmt); } catch (e) {}
     }
   }
+
+  // Backfill columns for predictions_v2
+  const p2TableInfo = await db.execute(`PRAGMA table_info(predictions_v2)`);
+  if (!p2TableInfo.rows.some((c) => c.name === 'prediction_json')) {
+    try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`); } catch(e) {}
+  }
+
+  console.log("✅ Database tables ready!");
 }
 
 await runSchema();

@@ -28,8 +28,9 @@ export async function initPredictionsTable() {
       no_safe_pick INTEGER,
       no_safe_pick_reason TEXT,
       backup_picks_json TEXT,
-      home_team TEXT,
-      away_team TEXT,
+        prediction_json TEXT,
+        home_team TEXT,
+        away_team TEXT,
       created_at TEXT,
       updated_at TEXT
     )

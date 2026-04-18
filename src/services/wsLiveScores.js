@@ -35,8 +35,9 @@ async function notifyMatchSubscribers(fixtureId, homeTeam, awayTeam, homeScore, 
     const title = homeTeam + ' ' + homeScore + ' - ' + awayScore + ' ' + awayTeam;
     const body = (minute ? minute + "'"+' — ' : '') + 'Score update';
     if (tokens.length > 0) {
-      const { sendPush } = await import('./pushService.js');
-      await sendPush({ title, body, data: { type: 'live_score', url: '/', fixture_id: fixtureId }, tokens });
+      const { sendToUsers } = await import('./pushService.js');
+      const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+      await sendToUsers(userIds, { title, body, data: { type: 'live_score', url: '/', fixture_id: fixtureId } });
     }
   } catch(e) { console.warn('[WS] notifyMatchSubscribers error:', e.message); }
 }
