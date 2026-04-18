@@ -32,8 +32,13 @@ function applyVenueAnchoring(homeXg, awayXg, fv) {
 // Stage D: Script micro-adjustments (max ±0.08 per team — script must not drive large xG swings)
 function applyScriptAdjustments(homeXg, awayXg, script) {
   const p = script.primary||"";
-  if (p==="open_end_to_end") { homeXg+=0.05; awayXg+=0.05; }
-  else if (p==="tight_low_event") { homeXg-=0.08; awayXg-=0.08; }
+  if (p==="open_end_to_end") { 
+     // "Shootout" scenario recognition: If the engine detects an open game between two attacking teams, 
+     // we aggressively boost the expected goals to override the Poisson low-event bias.
+     homeXg += 0.25; 
+     awayXg += 0.25; 
+  }
+  else if (p==="tight_low_event") { homeXg-=0.15; awayXg-=0.15; }
   else if (p==="dominant_home_pressure") { homeXg+=0.05; awayXg-=0.04; }
   else if (p==="dominant_away_pressure") { awayXg+=0.05; homeXg-=0.04; }
   else if (p==="chaotic_unreliable") { homeXg=homeXg*0.9+LEAGUE_AVG*HOME_ADV*0.1; awayXg=awayXg*0.9+LEAGUE_AVG*0.1; }

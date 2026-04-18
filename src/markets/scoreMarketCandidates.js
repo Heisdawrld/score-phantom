@@ -152,6 +152,14 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
   const volatilityPenalty = clamp(safeNum(fv.matchChaosScore, 0.5), 0, 1);
 
+  // Data Starvation Penalty
+  // If the engine has less than 5 historical matches for either team, it shouldn't trust its own math heavily.
+  // This prevents it from making wildly confident picks based on tiny sample sizes.
+  const homeMatches = safeNum(fv.homeMatchCount, 10);
+  const awayMatches = safeNum(fv.awayMatchCount, 10);
+  const isDataStarved = homeMatches < 5 || awayMatches < 5;
+  const starvationPenalty = isDataStarved ? 0.35 : 0;
+
   // Extract market tracking data
   const recentMarketCounts = recentMarkets.markets || {};
   const recentTypeCounts = recentMarkets.marketTypes || {};
@@ -214,7 +222,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       0.22 * volatilityPenalty -
       0.14 * badMarketPenalty -
       0.08 * repetitionPenalty -
-      diversityPenalty;
+      diversityPenalty -
+      starvationPenalty;
 
     return {
       ...candidate,

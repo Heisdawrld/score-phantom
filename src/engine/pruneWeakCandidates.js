@@ -39,16 +39,24 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
   const minProb     = options.minProb     ?? 0.60;
   const minEdge     = options.minEdge     ?? -0.08;
   const minTactical = options.minTactical ?? 0.12;
-  const pruned  = [];
-  const removed = [];
-  for (const c of (scoredCandidates || [])) {
-    const prob     = safeNum(c.modelProbability, 0);
-    const edge     = safeNum(c.edge, 0);
-    const tactical = safeNum(c.tacticalFitScore, 0);
-    const score    = safeNum(c.finalScore, 0);
-    const marketFloor = MARKET_MIN_PROB[c.marketKey] ?? minProb;
+    const pruned  = [];
+    const removed = [];
+    for (const c of (scoredCandidates || [])) {
+      const prob     = safeNum(c.modelProbability, 0);
+      const edge     = safeNum(c.edge, 0);
+      const tactical = safeNum(c.tacticalFitScore, 0);
+      const score    = safeNum(c.finalScore, 0);
+      const marketFloor = MARKET_MIN_PROB[c.marketKey] ?? minProb;
 
-    if (prob < marketFloor) { removed.push(c.marketKey + '(prob=' + (prob*100).toFixed(1) + '%<floor=' + (marketFloor*100).toFixed(0) + '%)'); continue; }
+      // "Too Good To Be True" Anomaly Filter (The Value Trap)
+      // If the engine thinks a pick has a massive edge (>35%), it means the bookmaker strongly disagrees.
+      // Usually, the bookmaker knows something the data doesn't (injuries, rotation, motivation).
+      if (edge > 0.35) {
+         removed.push(c.marketKey + '(value_trap=' + (edge*100).toFixed(1) + 'pp edge)'); 
+         continue; 
+      }
+
+      if (prob < marketFloor) { removed.push(c.marketKey + '(prob=' + (prob*100).toFixed(1) + '%<floor=' + (marketFloor*100).toFixed(0) + '%)'); continue; }
     if (edge < minEdge) { removed.push(c.marketKey + '(edge=' + (edge*100).toFixed(1) + 'pp)'); continue; }
     if (tactical < minTactical) { removed.push(c.marketKey + '(tactical=' + tactical.toFixed(3) + ')'); continue; }
     if (score <= 0) { removed.push(c.marketKey + '(score=' + score.toFixed(3) + ')'); continue; }
