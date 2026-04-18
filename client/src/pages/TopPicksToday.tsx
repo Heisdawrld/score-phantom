@@ -68,7 +68,7 @@ const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
   const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.has_access;
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
   const savedScrollRef = useRef(0);
