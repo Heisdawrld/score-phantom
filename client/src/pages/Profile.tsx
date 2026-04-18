@@ -154,7 +154,7 @@ export default function Profile() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
-          className="rounded-2xl border overflow-hidden"
+          className="rounded-2xl border overflow-hidden mb-6"
           style={{
             borderColor: isPremium ? "rgba(245,158,11,0.2)" : isTrial ? "rgba(16,231,116,0.2)" : "rgba(239,68,68,0.2)",
             background: isPremium
@@ -219,7 +219,7 @@ export default function Profile() {
 
         {/* Referral System */}
         {(user as any)?.own_referral_code && (
-          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.3}} className="mb-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
             <div className="bg-[#121212] rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none"/>
               <div className="flex items-center gap-3 mb-4">
