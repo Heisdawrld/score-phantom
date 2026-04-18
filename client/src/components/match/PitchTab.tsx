@@ -48,7 +48,7 @@ export function PitchTab({ matchData }: any) {
   }
   
   // Sort timeline chronologically
-  timelineEvents.sort((a, b) => a.minute - b.minute);
+  timelineEvents.sort((a, b) => (a.minute || 0) - (b.minute || 0));
 
   return (
     <div className="flex flex-col gap-4">

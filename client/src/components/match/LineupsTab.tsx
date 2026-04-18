@@ -56,7 +56,7 @@ export function LineupsTab({ matchData }: any) {
                   <ul className="space-y-1">
                     {homeLineup.map((l: any, i: number) => (
                       <li key={i} className="text-xs text-white/80 flex justify-between">
-                        <span>{l.player_name}</span>
+                        <span>{l.player_name || l.name}</span>
                         <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
                       </li>
                     ))}
@@ -67,7 +67,7 @@ export function LineupsTab({ matchData }: any) {
                   <ul className="space-y-1">
                     {awayLineup.map((l: any, i: number) => (
                       <li key={i} className="text-xs text-white/80 flex justify-between">
-                        <span>{l.player_name}</span>
+                        <span>{l.player_name || l.name}</span>
                         <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
                       </li>
                     ))}

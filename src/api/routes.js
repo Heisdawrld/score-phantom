@@ -307,15 +307,16 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
 
     let query = `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name,
-       f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
-       f.enriched, f.created_at, f.meta, f.enrichment_status, f.data_quality,
-       f.country_flag, f.home_team_logo, f.away_team_logo,
-       f.odds_home, f.odds_draw, f.odds_away,
-       p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-       p.confidence_model AS pick_confidence_level
- FROM fixtures f
- LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
- WHERE 1=1`;
+         f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
+         f.enriched, f.created_at, f.meta, f.enrichment_status, f.data_quality,
+         f.country_flag, f.home_team_logo, f.away_team_logo,
+         f.odds_home, f.odds_draw, f.odds_away,
+         f.home_score, f.away_score, f.match_status, f.live_minute,
+         p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+         p.confidence_model AS pick_confidence_level
+   FROM fixtures f
+   LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
+   WHERE 1=1`;
     const args = [];
 
     if (date) {
@@ -1480,16 +1481,18 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
     
     // Live Match Bypass: If the match is currently live, fetch spatial data directly from BSD API
     const isLive = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(fixture.match_status || '');
-    if (isLive && fixture.bsd_event_api_id) {
+    if (isLive) {
       try {
         console.log(`[MatchCenter] Live match detected (${fixtureId}). Fetching live spatial data from BSD...`);
-        const liveBsdEvent = await bsdFetch(`/events/${fixture.bsd_event_api_id}/`, { full: 'true' }, { cacheable: false });
+        // BSD API /events/{id}/ uses the internal integer ID (which maps to our fixtureId)
+        const liveBsdEvent = await bsdFetch(`/events/${fixtureId}/`, { full: 'true' }, { cacheable: false });
         if (liveBsdEvent) {
           // Update meta with live spatial data
           if (liveBsdEvent.momentum) meta.momentum = liveBsdEvent.momentum;
           if (liveBsdEvent.shotmap) meta.shotmap = liveBsdEvent.shotmap;
           if (liveBsdEvent.lineups) meta.lineups = liveBsdEvent.lineups;
           if (liveBsdEvent.average_positions) meta.average_positions = liveBsdEvent.average_positions;
+          if (liveBsdEvent.incidents) meta.matchEvents = liveBsdEvent.incidents;
           
           // Update live score and minutes
           fixture.home_score = liveBsdEvent.home_score ?? fixture.home_score;

@@ -34,7 +34,7 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function bsdFetch(path, params = {}, { cacheable = true, retries = 3, backoffMs = 2000 } = {}) {
+export async function bsdFetch(path, params = {}, { cacheable = true, retries = 3, backoffMs = 2000 } = {}) {
   if (!BSD_API_KEY) {
     console.error('[BSD] BSD_API_KEY is not set — all API calls will fail');
     return null;
