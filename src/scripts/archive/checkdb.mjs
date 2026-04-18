@@ -1,4 +1,4 @@
-import db from '../config/database.js';
+import db from '../../config/database.js';
 try {
   const tot = await db.execute('SELECT COUNT(*) as c FROM fixtures');
   console.log('TOTAL FIXTURES:', tot.rows[0].c);

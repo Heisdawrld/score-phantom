@@ -1,4 +1,4 @@
-import { safeNum, clamp } from '../utils/math.js';
+import { safeNum, clamp } from '../../utils/math.js';
 import { scoreControlModel } from './scoreControlModel.js';
 
 /**

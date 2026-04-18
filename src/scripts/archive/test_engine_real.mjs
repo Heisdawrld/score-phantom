@@ -1,6 +1,6 @@
-import db from '../config/database.js';
-import { runPredictionEngine } from '../engine/runPredictionEngine.js';
-import { ensureFixtureData } from '../services/predictionCache.js';
+import db from '../../config/database.js';
+import { runPredictionEngine } from '../../engine/runPredictionEngine.js';
+import { ensureFixtureData } from '../../services/predictionCache.js';
 
 async function testEngine() {
   try {

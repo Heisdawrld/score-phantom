@@ -1,4 +1,4 @@
-import { safeNum, clamp } from '../utils/math.js';
+import { safeNum, clamp } from '../../utils/math.js';
 
 /**
  * Computes homeControlScore and awayControlScore from:

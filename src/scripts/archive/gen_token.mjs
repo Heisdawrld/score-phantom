@@ -1,4 +1,4 @@
-import db from "../config/database.js";
+import db from "../../config/database.js";
 import jwt from "jsonwebtoken";
 const res = await db.execute({sql:"SELECT id, email, status, premium_expires_at, trial_ends_at FROM users WHERE email = ? LIMIT 1", args:["davidchuks229@gmail.com"]});
 const user = res.rows[0];

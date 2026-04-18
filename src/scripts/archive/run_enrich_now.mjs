@@ -1,5 +1,5 @@
-import db from "../config/database.js";
-import { enrichFixture } from "../enrichment/enrichOne.js";
+import db from "../../config/database.js";
+import { enrichFixture } from "../../enrichment/enrichOne.js";
 
 async function run() {
   const today = new Date().toISOString().slice(0,10);

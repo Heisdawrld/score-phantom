@@ -4,10 +4,10 @@
  * Run: node src/scripts/engine_sanity_test.mjs
  */
 
-import { buildReasonCodes } from '../engine/buildReasonCodes.js';
-import { buildAcca } from '../engine/buildAcca.js';
-import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
-import { selectBestPickOrAbstain } from '../engine/selectBestPickOrAbstain.js';
+import { buildReasonCodes } from '../../engine/buildReasonCodes.js';
+import { buildAcca } from '../../engine/buildAcca.js';
+import { scoreMarketCandidates } from '../../markets/scoreMarketCandidates.js';
+import { selectBestPickOrAbstain } from '../../engine/selectBestPickOrAbstain.js';
 
 let passed = 0;
 let failed = 0;

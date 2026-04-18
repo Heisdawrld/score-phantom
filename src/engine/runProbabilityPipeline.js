@@ -1,7 +1,7 @@
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
 import { buildScoreMatrix, deriveMarketProbabilities } from "../probabilities/poisson.js";
 import { calibrateProbabilities } from "../probabilities/calibrateProbabilities.js";
-import { refineScriptPostXg } from "../scripts/refineScriptPostXg.js";
+import { refineScriptPostXg } from "../scripts/archive/refineScriptPostXg.js";
 import { computeLayer2Shifts } from "../markets/computeLayer2Override.js";
 
 /**

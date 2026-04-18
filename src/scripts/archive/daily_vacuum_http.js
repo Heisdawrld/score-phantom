@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { bsdFetchAll, normaliseBsdEventToFixture, extractOddsFromEvent } from '../services/bsd.js';
+import { bsdFetchAll, normaliseBsdEventToFixture, extractOddsFromEvent } from '../../services/bsd.js';
 
 dotenv.config();
 
