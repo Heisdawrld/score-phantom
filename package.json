@@ -5,12 +5,11 @@
   "scripts": {
     "start": "node src/app.js",
     "build": "cd client && npm install && npm run build",
-    "seed": "node src/scripts/seedFixtures.js",
+    "seed": "node src/services/fixtureSeeder.js",
     "enrich": "node src/scripts/enrichFixtures.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
-    "axios": "^1.6.7",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "disposable-email-domains": "^1.0.62",

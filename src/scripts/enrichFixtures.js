@@ -12,7 +12,7 @@ function sleep(ms) {
 }
 
 async function main() {
-  console.log('ScorePhantom Enrichment — LiveScore API');
+  console.log('ScorePhantom Enrichment — Bzzoiro API');
   console.log('========================================');
 
   const result = await db.execute({

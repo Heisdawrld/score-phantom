@@ -517,20 +517,14 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     const checks = {};
     // DB
     try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
-    // Odds API
+    // BSD API
     try {
-      const r = await fetch(`https://api.odds-api.io/v3/leagues?apiKey=${process.env.ODDS_API_KEY}&sport=football&limit=1`);
-      checks.odds_api = r.ok ? 'ok' : `error:${r.status}`;
-    } catch { checks.odds_api = 'error'; }
-    // SportAPI.ai
-    try {
-      const sportApiKey = process.env.SPORTAPI_KEY || "";
-      if (!sportApiKey) { checks.sportapi = "no_key"; } else {
-        try { const r = await fetch("https://sportapi.ai/api/standings/leagues?key=" + sportApiKey); checks.sportapi = r.ok ? "ok" : ("error:" + r.status); } catch(e) { checks.sportapi = "fetch_error"; }
+      const bsdKey = process.env.BZZOIRO_API_KEY || "";
+      if (!bsdKey) { checks.bsd_api = "no_key"; } else {
+        const r = await fetch(`https://sports.bzzoiro.com/api/leagues/?key=${bsdKey}`);
+        checks.bsd_api = r.ok ? "ok" : ("error:" + r.status);
       }
-
-
-    } catch { checks.sportapi = "error"; }
+    } catch(e) { checks.bsd_api = "fetch_error"; }
     // Email
     checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
     // Groq
@@ -694,16 +688,18 @@ router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res
 router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const date = req.query.date || new Date(Date.now()-86400000).toLocaleString("en-CA",{timeZone:"Africa/Lagos"}).split(",")[0].trim();
-    const axios = (await import("axios")).default;
-    const SPORTAPI_KEY = process.env.SPORTAPI_KEY;
+    const bsdKey = process.env.BZZOIRO_API_KEY || "";
     const hmRes = await db.execute({sql:"SELECT COUNT(*) cnt,MIN(date) earliest,MAX(date) latest FROM historical_matches WHERE home_goals IS NOT NULL AND date LIKE ?",args:["%"+date+"%"]});
     const hmSample = await db.execute({sql:"SELECT home_team,away_team,home_goals,away_goals,date FROM historical_matches WHERE home_goals IS NOT NULL ORDER BY date DESC LIMIT 5",args:[]});
     const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
     let apiRaw=null,apiError=null;
-    try { const r=await axios.get("https://sportapi.ai/api/fixtures/date/" + date,{params:{key:SPORTAPI_KEY},timeout:10000}); apiRaw={success:r.data.success,fixtureCount:(r.data.fixtures||[]).length,sample:(r.data.fixtures||[]).slice(0,2)}; } catch(e){apiError=e.message;}
+    try { 
+      const r = await fetch(`https://sports.bzzoiro.com/api/events/?key=${bsdKey}&date_from=${date}&date_to=${date}`);
+      const data = await r.json();
+      apiRaw={success:r.ok, fixtureCount:(data.events||data||[]).length, sample:(data.events||data||[]).slice(0,2)}; 
+    } catch(e){apiError=e.message;}
 
-
-    return res.json({date,historicalMatchesForDate:hmRes.rows[0],historicalSample:hmSample.rows,predictionOutcomes:poRes.rows,sportApiFixtures:{raw:apiRaw,error:apiError}});
+    return res.json({date,historicalMatchesForDate:hmRes.rows[0],historicalSample:hmSample.rows,predictionOutcomes:poRes.rows,bsdFixtures:{raw:apiRaw,error:apiError}});
   } catch(err){ return res.status(500).json({error:err.message}); }
 });
 
