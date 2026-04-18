@@ -149,13 +149,14 @@ export async function enrichFixture(fixture) {
 
   const hasUsableData = (data.homeForm?.length > 0) || (data.awayForm?.length > 0);
 
-  if (!hasUsableData) {
-    console.warn(
-      `[enrichOne] No usable form data for fixture ${fixture.id} ` +
-      `(${fixture.home_team_name} vs ${fixture.away_team_name}) — will retry on next request`
-    );
-  }
+    if (!hasUsableData) {
+      console.warn(
+        `[enrichOne] No usable form data for fixture ${fixture.id} ` +
+        `(${fixture.home_team_name} vs ${fixture.away_team_name}) — marking as no_data to clear queue`
+      );
+    }
 
-  await storeEnrichment(fixture.id, data, hasUsableData);
-  return data;
+    // FIX: Always mark enriched=1 so the queue doesn't get permanently stuck in an infinite loop
+    await storeEnrichment(fixture.id, data, true);
+    return data;
 }
