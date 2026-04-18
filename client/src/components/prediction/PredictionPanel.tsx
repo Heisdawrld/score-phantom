@@ -265,9 +265,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("prediction");
 
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
-  const isExpired = user?.access_status === "expired";
-  const blockReason: "expired" | "limit" | null = isExpired ? "expired" : limitReached ? "limit" : null;
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
+  const blockReason: "expired" | "limit" | "free" | null = !isPremium ? "free" : null;
   const { data, isLoading, error } = usePrediction(blockReason ? null : fixtureId, onError);
 
   const queryClient = useQueryClient();
@@ -387,7 +386,6 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
             >
               {/* ── BLOCKED STATE ── */}
               {blockReason ? (() => {
-                const isExpiredBlock = blockReason === "expired";
                 return (
                   <div className="relative mt-4 rounded-3xl overflow-hidden">
                     <div className="blur-sm select-none pointer-events-none space-y-4 p-5 opacity-70">
@@ -427,18 +425,15 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         <Lock className="w-7 h-7 text-primary" />
                       </div>
                       <div>
-                        <p className="text-white font-black text-xl mb-2">{isExpiredBlock ? "⏰ Trial Expired" : "🔒 Out of Predictions"}</p>
+                        <p className="text-white font-black text-xl mb-2">🔒 Premium Required</p>
                         <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
-                          {isExpiredBlock
-                            ? "Your 7-day free trial has ended. Every prediction is right there — upgrade to unlock full access."
-                            : "You've used your 15 free predictions today. The full analysis is right there — upgrade for unlimited access."}
+                          Unlock the AI prediction, exact probabilities, value edge, and PhantomChat analysis for this match.
                         </p>
                       </div>
                       <div className="space-y-2 w-full max-w-[260px]">
-                        <button onClick={goToPaywall} className="w-full bg-primary text-black font-black py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]">
-                          Upgrade to Premium — ₦3,000/mo
+                        <button onClick={goToPaywall} className="w-full flex items-center justify-center gap-2 bg-primary text-black font-black py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]">
+                          <Crown className="w-4 h-4" /> Upgrade to Premium
                         </button>
-                        {!isExpiredBlock && <p className="text-white/30 text-xs">Resets at midnight Lagos time</p>}
                       </div>
                     </div>
                   </div>

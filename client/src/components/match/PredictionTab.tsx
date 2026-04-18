@@ -31,18 +31,55 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   });
 
   if (!isPremium) return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <Zap size={28} className="text-primary" />
+    <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
+      <div className="blur-md select-none pointer-events-none p-5 space-y-4 opacity-50">
+        <div className="flex items-center justify-between mb-2">
+           <div className="flex items-center gap-2">
+             <span className="text-primary text-sm">🎯</span>
+             <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
+           </div>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <span className="text-[10px] font-bold tracking-widest uppercase border px-2.5 py-1 rounded-full bg-primary/20 text-primary border-primary/30">HIGH</span>
+          <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-wide">
+            STRONG EDGE
+          </span>
+        </div>
+        <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Our Best Bet</p>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex-1">
+            <p className="text-2xl font-black text-white uppercase leading-tight">Over 2.5 Goals</p>
+          </div>
+          <div className="w-16 h-16 rounded-full border-4 border-primary/30 flex items-center justify-center">
+            <span className="text-lg font-black text-white">78%</span>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <p className="text-[10px] font-bold tracking-widest text-white/30 uppercase mb-3">SportyBet Odds</p>
+          <div className="flex gap-2">
+            <div className="flex-1 bg-white/5 rounded-xl p-3 text-center"><p className="text-[10px] text-white/40 mb-1">Odds</p><p className="font-display text-xl text-white">1.85</p></div>
+            <div className="flex-1 bg-white/5 rounded-xl p-3 text-center"><p className="text-[10px] text-white/40 mb-1">Implied</p><p className="font-display text-xl text-white">54%</p></div>
+            <div className="flex-1 bg-primary/20 rounded-xl p-3 text-center border border-primary/30"><p className="text-[10px] text-primary/70 mb-1">Value</p><p className="font-display text-xl text-primary">✓</p></div>
+          </div>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="font-bold text-white mb-1">Trial or Premium Required</p>
-        <p className="text-sm text-white/40">Data-driven match analysis</p>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/60 via-black/70 to-black/90 p-6 text-center backdrop-blur-[1px]">
+        <div className="w-14 h-14 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.15)] mb-1">
+          <Lock className="w-6 h-6 text-primary" />
+        </div>
+        <div>
+          <p className="text-white font-black text-xl mb-1.5">🔒 Premium Angle</p>
+          <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
+            Unlock the exact AI prediction, winning probabilities, and bookmaker value edge for this match.
+          </p>
+        </div>
+        <button
+          onClick={() => setLocation("/paywall")}
+          className="mt-2 flex items-center justify-center gap-2 bg-primary text-black font-black w-full max-w-[240px] py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]"
+        >
+          Upgrade to Premium
+        </button>
       </div>
-      <button onClick={() => setLocation("/paywall")}
-        className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
-        Get Access
-      </button>
     </div>
   );
 

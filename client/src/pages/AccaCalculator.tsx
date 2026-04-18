@@ -91,17 +91,52 @@ export default function DailyAcca() {
 
         {/* ── Not Premium ── */}
         {!isPremium ? (
-          <div className='flex flex-col items-center justify-center py-20 text-center gap-6'>
-            <div className='w-20 h-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center glow-primary'>
-              <Crown className='w-10 h-10 text-primary' />
+          <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
+            <div className="blur-sm select-none pointer-events-none p-5 space-y-4 opacity-50">
+              <div className="bg-white/5 rounded-2xl p-4 border border-white/8">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Selected Mode</span>
+                  <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-wide">SAFE 2-ODDS</span>
+                </div>
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex items-center gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
+                      <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] text-white/50">{i}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white mb-0.5">Real Madrid vs Barcelona</p>
+                        <p className="text-xs text-primary">Over 1.5 Goals @ 1.25</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                  <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Total Odds</p>
+                  <p className="text-2xl font-black text-white">2.45</p>
+                </div>
+              </div>
+              <button className="w-full bg-white/10 text-white font-bold py-3.5 rounded-2xl text-sm">
+                Generate New Slip
+              </button>
             </div>
-            <div>
-              <h2 className='text-xl font-black text-white mb-2'>Premium Feature</h2>
-              <p className='text-white/40 text-sm max-w-xs'>Daily ACCA is available to premium subscribers only.</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/60 via-black/70 to-black/90 p-6 text-center backdrop-blur-[1px]">
+              <div className="w-14 h-14 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.15)] mb-1">
+                <Lock className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-white font-black text-xl mb-1.5">🔒 Premium Generator</p>
+                <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
+                  Generate high-confidence Accumulators instantly based on AI probability models.
+                </p>
+              </div>
+              <button
+                onClick={() => setLocation("/paywall")}
+                className="mt-2 flex items-center justify-center gap-2 bg-primary text-black font-black w-full max-w-[240px] py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]"
+              >
+                Upgrade to Premium
+              </button>
             </div>
-            <button onClick={() => setLocation('/paywall')} className='flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-black font-bold text-sm shadow-[0_0_20px_rgba(16,231,116,0.25)]'>
-              <Lock className='w-4 h-4' /> Upgrade to Premium
-            </button>
           </div>
         ) : isLoading ? (
           <div className='flex justify-center py-20'>

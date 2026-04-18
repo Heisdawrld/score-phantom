@@ -198,7 +198,7 @@ export default function TrackRecord() {
   const { data, isLoading } = useQuery({
     queryKey: ['track-record', days],
     queryFn: () => fetchApi('/track-record?days=' + days),
-    enabled: !authLoading && !!isPremium,
+    enabled: !authLoading,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -255,18 +255,14 @@ export default function TrackRecord() {
             </div>
           </div>
           
-          {isPremium && (
-            <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-1.5 self-start sm:self-center">
-              {[7, 14, 30].map(d => (
-                <PeriodPill key={d} label={d + 'D'} active={days === d} onClick={() => setDays(d)} />
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-1.5 self-start sm:self-center">
+            {[7, 14, 30].map(d => (
+              <PeriodPill key={d} label={d + 'D'} active={days === d} onClick={() => setDays(d)} />
+            ))}
+          </div>
         </div>
 
-        {!isPremium ? (
-          <PremiumGate onUpgrade={() => setLocation('/paywall')} />
-        ) : isLoading ? (
+        {isLoading ? (
           <div className="space-y-4">
             <div className="h-[200px] rounded-3xl sp-shimmer" />
             <div className="h-[120px] rounded-3xl sp-shimmer" />

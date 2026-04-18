@@ -35,18 +35,50 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
   }, [msgs]);
 
   if (!isPremium) return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <Bot size={28} className="text-primary" />
+    <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]" style={{ height: "400px" }}>
+      <div className="blur-sm select-none pointer-events-none p-5 opacity-50 flex flex-col h-full">
+        <div className="flex gap-2">
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <Bot size={14} className="text-primary" />
+          </div>
+          <div className="bg-white/[0.04] text-white/80 px-4 py-3 rounded-2xl rounded-tl-none text-sm w-[80%]">
+            I have analysed this match. Ask me about form, tactics, value bets, or anything you want to know.
+          </div>
+        </div>
+        <div className="flex gap-2 flex-row-reverse mt-6">
+          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-black text-white/60">U</span>
+          </div>
+          <div className="bg-primary/20 text-white px-4 py-3 rounded-2xl rounded-tr-none text-sm w-[70%]">
+            Why is the away team favored today?
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <Bot size={14} className="text-primary" />
+          </div>
+          <div className="bg-white/[0.04] text-white/80 px-4 py-3 rounded-2xl rounded-tl-none text-sm w-[85%]">
+            The away team has a significant edge in xG (2.1 vs 0.8) and the home team is missing their starting goalkeeper...
+          </div>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="font-bold text-white mb-1">PhantomChat</p>
-        <p className="text-sm text-white/40">Deep match insights</p>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-black/60 via-black/70 to-black/90 p-6 text-center backdrop-blur-[1px]">
+        <div className="w-14 h-14 rounded-full bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.15)] mb-1">
+          <Lock className="w-6 h-6 text-blue-400" />
+        </div>
+        <div>
+          <p className="text-white font-black text-xl mb-1.5">🔒 Premium AI</p>
+          <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
+            Ask PhantomChat about tactics, injuries, and exact betting angles for this specific match.
+          </p>
+        </div>
+        <button
+          onClick={() => setLocation("/paywall")}
+          className="mt-2 flex items-center justify-center gap-2 bg-primary text-black font-black w-full max-w-[240px] py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]"
+        >
+          Upgrade to Chat
+        </button>
       </div>
-      <button onClick={() => setLocation("/paywall")}
-        className="px-8 py-3 rounded-xl bg-primary text-black font-black text-sm">
-        Unlock PhantomChat
-      </button>
     </div>
   );
 
