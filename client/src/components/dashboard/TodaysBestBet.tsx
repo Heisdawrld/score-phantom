@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
+import { CountdownTimer } from "@/components/ui/CountdownTimer";
 
 function toWAT(dateStr: string): string {
   try {
