@@ -65,6 +65,12 @@ export default function Profile() {
   });
   const st = (td as any)?.overallStats || {};
 
+  const { data: refStats } = useQuery({
+    queryKey: ["/api/auth/referral-stats"],
+    queryFn: () => fetchApi("/auth/referral-stats"),
+    enabled: !!(user as any)?.own_referral_code,
+  });
+
   const navItems = [
     { icon: CreditCard, label: "Payment & Billing", sub: "Manage your subscription plan", go: "/billing" },
     { icon: Settings, label: "Account Settings", sub: "Preferences & notifications", go: "/settings" },
@@ -225,6 +231,24 @@ export default function Profile() {
                   <p className="text-white/50 text-sm leading-snug mt-1">Share your code or link to earn 10% cash commission on every subscription.</p>
                 </div>
               </div>
+              
+              {refStats && (
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Referrals</p>
+                    <p className="text-lg font-black text-white">{(refStats as any).total_referrals}</p>
+                  </div>
+                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Pending</p>
+                    <p className="text-lg font-black text-amber-400">₦{(refStats as any).pending_commission.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Earned</p>
+                    <p className="text-lg font-black text-primary">₦{(refStats as any).settled_commission.toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
                   <span className="font-mono text-lg font-bold text-primary tracking-wider">{(user as any).own_referral_code}</span>

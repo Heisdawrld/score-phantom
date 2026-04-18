@@ -1162,6 +1162,31 @@ router.get("/payment/status", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/auth/referral-stats
+router.get("/referral-stats", requireAuth, async (req, res) => {
+  try {
+    const stats = await db.execute({
+      sql: `SELECT 
+              COUNT(*) as total_referrals, 
+              SUM(CASE WHEN status = 'pending' THEN commission_amount ELSE 0 END) as pending_commission,
+              SUM(CASE WHEN status = 'settled' THEN commission_amount ELSE 0 END) as settled_commission
+            FROM partner_commissions 
+            WHERE referrer_user_id = ?`,
+      args: [req.user.id],
+    });
+    
+    const s = stats.rows?.[0] || { total_referrals: 0, pending_commission: 0, settled_commission: 0 };
+    return res.json({
+      total_referrals: Number(s.total_referrals || 0),
+      pending_commission: Number(s.pending_commission || 0),
+      settled_commission: Number(s.settled_commission || 0)
+    });
+  } catch (err) {
+    console.error("[Referral Stats]", err);
+    return res.status(500).json({ error: "Failed to load referral stats" });
+  }
+});
+
 // ── Admin routes ──────────────────────────────────────────────────────────────
 
 function requireAdminSecret(req, res, next) {
