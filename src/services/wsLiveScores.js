@@ -57,21 +57,55 @@ async function handleScoreUpdate(msg) {
       live_stats: msg.live_stats
     });
     if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
-      setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score).catch(() => {}), 5000);
-    }
+        setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score, msg.final_event).catch(() => {}), 5000);
+      }
   } catch (err) {
     console.warn('[WS] handleScoreUpdate error:', err.message);
   }
 }
 
 // Immediately evaluate predictions when a match finishes via WebSocket
-async function triggerResultCheck(fixtureId, homeScore, awayScore) {
+async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = null) {
   const { evaluatePrediction } = await import('./resultChecker.js');
+  
+  // Update H2H Historical Matches Memory for the Prediction Engine
+  const fix = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id = ? LIMIT 1', args: [fixtureId] });
+  const f = fix.rows?.[0];
+  
+  if (f) {
+     // Check if we need to fetch the final event data from BSD
+     let evt = finalEvent;
+     if (!evt) {
+        try {
+          const { bsdFetch } = await import('./bsd.js');
+          evt = await bsdFetch(`/events/${fixtureId}/`, { full: 'true' }, { cacheable: false });
+        } catch(e) { /* ignore */ }
+     }
+     
+     // Save match to historical_matches for future engine predictions (H2H memory)
+     let hXg = null, aXg = null, mmt = null, sh = null;
+     if (evt) {
+       hXg = evt.actual_home_xg ?? evt.home_xg_live ?? null;
+       aXg = evt.actual_away_xg ?? evt.away_xg_live ?? null;
+       mmt = evt.momentum ? JSON.stringify(evt.momentum) : null;
+       sh = evt.shotmap ? JSON.stringify(evt.shotmap) : null;
+     }
+     
+     await db.execute({
+        sql: `INSERT OR REPLACE INTO historical_matches 
+               (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap) 
+              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          fixtureId, f.match_date, f.home_team_name, f.away_team_name, 
+          homeScore, awayScore, hXg, aXg, mmt, sh
+        ]
+     });
+     console.log(`[Engine] Saved finished match memory to H2H for ${f.home_team_name} vs ${f.away_team_name}`);
+  }
+
   const pred = await db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1', args: [fixtureId] });
   const row = pred.rows?.[0];
   if (!row || !row.best_pick_selection) return;
-  const fix = await db.execute({ sql: 'SELECT home_team_name, away_team_name, match_date, tournament_name FROM fixtures WHERE id = ? LIMIT 1', args: [fixtureId] });
-  const f = fix.rows?.[0];
   if (!f) return;
   const outcome = evaluatePrediction(row.best_pick_market, row.best_pick_selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
   await db.execute({ sql: 'INSERT OR REPLACE INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime(\'now\'),datetime(\'now\'))', args: [fixtureId, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, row.best_pick_market, row.best_pick_selection, parseFloat(row.best_pick_probability || 0), row.confidence_model || '', homeScore, awayScore, homeScore + '-' + awayScore, outcome] });
@@ -85,15 +119,20 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore) {
   broadcastPush({ title: pushTitle, body: pushBody, data: pushData, url: '/results' }).catch(()=>{});
   saveNotification({ userId: null, type: 'match_result', title: pushTitle, body: pushBody, data: pushData }).catch(()=>{});
 }
+let activeLiveMatchIds = new Set();
+
 async function pollLiveScores() {
   try {
     const matches = await fetchLiveMatches();
-    if (matches.length > 0) {
+    const currentLiveIds = new Set();
+
+    if (matches && matches.length > 0) {
       if (!isConnected) isConnected = true;
       for (const m of matches) {
         // BSD live event fields: id, home_score, away_score, current_minute, status
         const fid = String(m.id || '');
         if (!fid) continue;
+        currentLiveIds.add(fid);
         await handleScoreUpdate({
           fixture_id: fid,
           home_score: m.home_score ?? 0,
@@ -105,6 +144,40 @@ async function pollLiveScores() {
         }).catch(() => {});
       }
     }
+
+    // Check for matches that dropped out of the live feed
+    for (const oldFid of activeLiveMatchIds) {
+      if (!currentLiveIds.has(oldFid)) {
+        // Match disappeared from live feed! It probably finished.
+        console.log(`[Live] Match ${oldFid} dropped from live feed. Fetching final status...`);
+        try {
+          const { bsdFetch } = await import('./bsd.js');
+          const finalEvent = await bsdFetch(`/events/${oldFid}/`, { full: 'true' }, { cacheable: false });
+          if (finalEvent && (finalEvent.status === 'finished' || finalEvent.status === 'FT')) {
+            console.log(`[Live] Match ${oldFid} confirmed finished! Score: ${finalEvent.home_score}-${finalEvent.away_score}`);
+            await handleScoreUpdate({
+              fixture_id: oldFid,
+              home_score: finalEvent.home_score ?? 0,
+              away_score: finalEvent.away_score ?? 0,
+              status: 'FT',
+              minute: null,
+              incidents: finalEvent.incidents || [],
+              live_stats: finalEvent.live_stats || null,
+              final_event: finalEvent // Pass the full event for memory storage
+            }).catch(() => {});
+          } else if (finalEvent && finalEvent.status) {
+             // Maybe postponed or cancelled?
+             await db.execute({ sql: 'UPDATE fixtures SET match_status = ? WHERE id = ?', args: [finalEvent.status, oldFid] });
+          }
+        } catch(e) {
+          console.warn(`[Live] Failed to verify dropped match ${oldFid}:`, e.message);
+        }
+      }
+    }
+    
+    // Update our tracking set for the next poll
+    activeLiveMatchIds = currentLiveIds;
+
   } catch (err) {
     console.warn('[Live] BSD poll error:', err.message);
   }
