@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
