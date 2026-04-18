@@ -19,7 +19,7 @@ const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").th
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function SpiralWatermark() {
+export function SpiralWatermark() {
   return (
     <svg width="110" height="110" viewBox="0 0 110 110" fill="none"
       className="absolute top-3 right-3 opacity-[0.06] pointer-events-none text-primary">

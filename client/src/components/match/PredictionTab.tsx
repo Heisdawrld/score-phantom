@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
+import { SpiralWatermark } from "@/pages/MatchCenter";
 
 const RISK_LABELS: Record<string, string> = {
   SAFE: 'Stable',

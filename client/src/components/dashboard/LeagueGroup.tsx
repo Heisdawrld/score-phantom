@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target, BellRing } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
@@ -19,6 +19,11 @@ function toWAT(dateStr: string): string {
 }
 
 import { EnrichmentBadge } from "./EnrichmentBadge";
+
+function fifaToEmoji(fifa: string): string {
+  if (!fifa || fifa.length !== 3) return "🌍";
+  return fifa; // Placeholder, as emoji conversion requires complex logic, return the code for now
+}
 
 export function LeagueGroup({
   tournament, fixtures, onSelectFixture, defaultOpen, isPremium

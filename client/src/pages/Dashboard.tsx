@@ -230,7 +230,7 @@ export default function Dashboard() {
       );
     }
     if (activeGroupTab === "live") {
-      filtered = filtered.filter(f => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(f.match_status || ''));
+      filtered = filtered.filter((f: any) => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(f.match_status || ''));
     } else if (activeGroupTab === "favorites") {
       try {
         const favs = JSON.parse((user as any)?.league_favorites || "[]");

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
