@@ -20,9 +20,25 @@ function toWAT(dateStr: string): string {
 
 import { EnrichmentBadge } from "./EnrichmentBadge";
 
-function fifaToEmoji(fifa: string): string {
-  if (!fifa || fifa.length !== 3) return "🌍";
-  return fifa; // Placeholder, as emoji conversion requires complex logic, return the code for now
+function getCountryEmoji(countryName: string): string {
+  if (!countryName) return "🌍";
+  const lower = countryName.toLowerCase();
+  if (lower.includes("england") || lower.includes("premier")) return "🏴󠁧󠁢󠁥󠁮󠁧󠁿";
+  if (lower.includes("spain") || lower.includes("la liga")) return "🇪🇸";
+  if (lower.includes("italy") || lower.includes("serie a")) return "🇮🇹";
+  if (lower.includes("germany") || lower.includes("bundesliga")) return "🇩🇪";
+  if (lower.includes("france") || lower.includes("ligue 1")) return "🇫🇷";
+  if (lower.includes("netherlands") || lower.includes("eredivisie")) return "🇳🇱";
+  if (lower.includes("portugal") || lower.includes("primeira")) return "🇵🇹";
+  if (lower.includes("brazil") || lower.includes("serie a (brazil)")) return "🇧🇷";
+  if (lower.includes("argentina")) return "🇦🇷";
+  if (lower.includes("belgium") || lower.includes("pro league")) return "🇧🇪";
+  if (lower.includes("turkey") || lower.includes("super lig")) return "🇹🇷";
+  if (lower.includes("greece")) return "🇬🇷";
+  if (lower.includes("scotland")) return "🏴󠁧󠁢󠁳󠁣󠁴󠁿";
+  if (lower.includes("europe") || lower.includes("champions") || lower.includes("uefa")) return "🇪🇺";
+  if (lower.includes("world") || lower.includes("international")) return "🌍";
+  return "⚽";
 }
 
 export function LeagueGroup({
@@ -30,7 +46,7 @@ export function LeagueGroup({
 }: {
   tournament: string; fixtures: any[]; onSelectFixture: (id: string) => void; defaultOpen: boolean; isPremium: boolean;
 }) {
-  const countryFlag = fixtures[0]?.country_flag ? fifaToEmoji(fixtures[0].country_flag) : '';
+  const countryFlag = fixtures[0]?.category_name ? getCountryEmoji(fixtures[0].category_name) : '';
   
   // Use session storage to remember if the user expanded this league
   const storageKey = `league-expanded-${tournament}`;

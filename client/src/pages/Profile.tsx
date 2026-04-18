@@ -194,43 +194,27 @@ export default function Profile() {
         {/* ── Navigation Items ── */}
         <div className="flex flex-col gap-2">
           {navItems.map(({ icon: Icon, label, sub, go }, i) => (
-            <motion.button
-              key={label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * i }}
-              onClick={() => nav(go)}
-              className="flex items-center gap-4 p-4 rounded-2xl glass-card glass-card-hover transition-all text-left w-full"
-            >
-              <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
-                <Icon size={16} className="text-white/45" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white">{label}</p>
-                {sub && <p className="text-xs text-white/30">{sub}</p>}
-              </div>
-              <ChevronRight size={14} className="text-white/20 shrink-0" />
-            </motion.button>
-          ))}
+              <motion.button
+                key={label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * i }}
+                onClick={() => nav(go)}
+                className="flex items-center gap-4 p-4 rounded-2xl glass-card glass-card-hover transition-all text-left w-full"
+              >
+                <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
+                  <Icon size={16} className="text-white/45" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{label}</p>
+                  {sub && <p className="text-xs text-white/30">{sub}</p>}
+                </div>
+                <ChevronRight size={14} className="text-white/20 shrink-0" />
+              </motion.button>
+            ))}
+          </div>
 
-          {/* Notifications (coming soon) */}
-          <motion.button
-            key="notif"
-            onClick={() => toast({ title: "Coming soon", description: "Push notifications are being set up.", duration: 3000 })}
-            className="flex items-center gap-4 p-4 rounded-2xl glass-card glass-card-hover transition-all text-left w-full"
-          >
-            <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
-              <Bell size={16} className="text-white/45" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">Notifications</p>
-              <p className="text-xs text-white/30">Match alerts and updates</p>
-            </div>
-            <ChevronRight size={14} className="text-white/20 shrink-0" />
-          </motion.button>
-        </div>
-
-        {/* ── Logout ── */}
+          {/* ── Logout ── */}
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
