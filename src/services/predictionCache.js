@@ -15,6 +15,7 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
+import { fetchPredictedLineup, bsdFetch } from './bsd.js';
 // Odds are now sourced from fixture_odds table (written at seed time from BSD events)
 // No external odds service needed.
 
@@ -23,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.5.2';
+const CURRENT_ENGINE_VERSION = '2.6.0'; // Bumped for injury & lineup injection
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -183,6 +184,23 @@ export async function ensureFixtureData(fixtureId) {
   let odds = await getOdds(fixtureId);
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
+
+  // ── INJECT LIVE INJURIES AND PREDICTED LINEUPS ──
+  try {
+    if (fixture.bsd_event_api_id) {
+      const liveData = await bsdFetch(`/events/${fixture.id}/`);
+      if (liveData?.unavailable_players) {
+        meta.unavailable_players = liveData.unavailable_players;
+      }
+      
+      const lineupData = await fetchPredictedLineup(fixture.bsd_event_api_id);
+      if (lineupData?.lineups) {
+        meta.predicted_lineup = lineupData.lineups;
+      }
+    }
+  } catch (err) {
+    console.error(`[predictionCache] Failed to fetch injuries/lineup for ${fixtureId}:`, err.message);
+  }
 
   return { fixture, historyRows, odds, meta };
 }

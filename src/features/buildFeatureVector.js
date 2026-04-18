@@ -221,6 +221,39 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const lineupModifier = meta?.lineupModifier || null;
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
+  // ── INJURY & BSD LINEUP INJECTION ──────────────────────────────────────────
+  const missingPlayers = meta?.unavailable_players || null;
+  const predictedLineups = meta?.predicted_lineup || null;
+
+  const injuryFeatures = {
+    homeKeyMissing: 0,
+    awayKeyMissing: 0,
+    homeMissingCount: 0,
+    awayMissingCount: 0,
+    missingPlayersDetails: missingPlayers
+  };
+
+  if (missingPlayers) {
+    injuryFeatures.homeMissingCount = missingPlayers.home?.length || 0;
+    injuryFeatures.awayMissingCount = missingPlayers.away?.length || 0;
+    
+    // Very basic heuristic: if they have more than 3 players out, assume at least 1 is key
+    if (injuryFeatures.homeMissingCount >= 3) injuryFeatures.homeKeyMissing = 1;
+    if (injuryFeatures.awayMissingCount >= 3) injuryFeatures.awayKeyMissing = 1;
+  }
+
+  const bsdLineupFeatures = {
+    hasPredictedLineups: !!predictedLineups,
+    homePredictedStrength: 1.0, // Default multiplier
+    awayPredictedStrength: 1.0
+  };
+
+  if (predictedLineups) {
+    // If we have predicted lineups but high injury counts, we might penalize strength slightly
+    if (injuryFeatures.homeKeyMissing > 0) bsdLineupFeatures.homePredictedStrength = 0.9;
+    if (injuryFeatures.awayKeyMissing > 0) bsdLineupFeatures.awayPredictedStrength = 0.9;
+  }
+
   // ── Data completeness from enrichment ─────────────────────────────────────
   const completeness = meta?.completeness || null;
 
@@ -263,6 +296,8 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
     // Lineup modifiers
     lineupFeatures,
+    injuryFeatures,
+    bsdLineupFeatures,
 
     // Data completeness from enrichment layer
     enrichmentCompleteness: completeness,

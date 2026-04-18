@@ -30,7 +30,7 @@ function applyVenueAnchoring(homeXg, awayXg, fv) {
 }
 
 // Stage D: Script micro-adjustments (max ±0.08 per team — script must not drive large xG swings)
-function applyScriptAdjustments(homeXg, awayXg, script) {
+function applyScriptAdjustments(homeXg, awayXg, script, fv) {
   const p = script.primary||"";
   if (p==="open_end_to_end") { 
      // "Shootout" scenario recognition: If the engine detects an open game between two attacking teams, 
@@ -42,6 +42,17 @@ function applyScriptAdjustments(homeXg, awayXg, script) {
   else if (p==="dominant_home_pressure") { homeXg+=0.05; awayXg-=0.04; }
   else if (p==="dominant_away_pressure") { awayXg+=0.05; homeXg-=0.04; }
   else if (p==="chaotic_unreliable") { homeXg=homeXg*0.9+LEAGUE_AVG*HOME_ADV*0.1; awayXg=awayXg*0.9+LEAGUE_AVG*0.1; }
+
+  // ── Apply BSD Predicted Lineup & Injury Dampeners ──
+  if (fv.homePredictedStrength && fv.homePredictedStrength < 1.0) {
+    homeXg *= fv.homePredictedStrength;
+    console.log(`[xG] Applied injury/lineup dampener to Home: ${fv.homePredictedStrength}`);
+  }
+  if (fv.awayPredictedStrength && fv.awayPredictedStrength < 1.0) {
+    awayXg *= fv.awayPredictedStrength;
+    console.log(`[xG] Applied injury/lineup dampener to Away: ${fv.awayPredictedStrength}`);
+  }
+
   return { homeXg, awayXg };
 }
 
@@ -86,7 +97,7 @@ export function estimateExpectedGoals(fv, script) {
   let { homeXg, awayXg } = computeBaseXg(fv);
   ({ homeXg, awayXg } = applyThinDataRegression(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyVenueAnchoring(homeXg, awayXg, fv));
-  ({ homeXg, awayXg } = applyScriptAdjustments(homeXg, awayXg, script));
+  ({ homeXg, awayXg } = applyScriptAdjustments(homeXg, awayXg, script, fv));
   const baseHomeXg = homeXg, baseAwayXg = awayXg; // L1 snapshot before form/odds boosts
   ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
