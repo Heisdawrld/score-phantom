@@ -91,8 +91,11 @@ export function useLogout() {
  */
 export function useInitPayment() {
   return useMutation({
-    mutationFn: async () => {
-      return fetchApi("/auth/payment/initialize", { method: "POST" });
+    mutationFn: async (data?: { plan?: string }) => {
+      return fetchApi("/auth/payment/initialize", { 
+        method: "POST",
+        body: JSON.stringify({ package: data?.plan || 'monthly' })
+      });
     },
   });
 }

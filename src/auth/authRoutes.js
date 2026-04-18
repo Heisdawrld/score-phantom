@@ -293,8 +293,8 @@ export async function requirePremiumAccess(req, res, next) {
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
 import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
-async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN_AMOUNT_NGN) {
-  const durationDays = (amountPaid === WEEKLY_PLAN_AMOUNT_NGN) ? WEEKLY_PLAN_DURATION_DAYS : PLAN_DURATION_DAYS;
+async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN_AMOUNT_NGN, customDays = null) {
+  const durationDays = customDays ? customDays : ((amountPaid === WEEKLY_PLAN_AMOUNT_NGN) ? WEEKLY_PLAN_DURATION_DAYS : PLAN_DURATION_DAYS);
   const expiry          = new Date();
   expiry.setDate(expiry.getDate() + durationDays);
   const expiryISO       = expiry.toISOString();
@@ -1264,7 +1264,7 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
     const ref = `MANUAL_${user.id}_${Date.now()}`;
     // Ensure payment record exists for tracking
     await db.execute({ sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
-    const { expiryISO } = await activatePremium(user.id, null, ref);
+    const { expiryISO } = await activatePremium(user.id, null, ref, 0, planDays);
     try { 
       const _pm2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] }); 
       await createReferralCommission(Number(user.id), 0, _pm2.rows?.[0]?.id||null, ref); 
