@@ -46,7 +46,11 @@ async function flwRequest(method, path, body = null) {
 
 // ── Initialize a hosted payment link ─────────────────────────────────────────
 // Returns a checkout URL the user is redirected to.
-export async function initializePayment({ txRef, amount, currency = 'NGN', email, name, redirectUrl }) {
+export async function initializePayment({ txRef, amount, currency = 'NGN', email, name, redirectUrl, packageType = 'monthly' }) {
+  const description = packageType === 'weekly' 
+    ? 'Weekly subscription — ₦1,000/week'
+    : 'Monthly subscription — ₦3,000/month';
+
   const data = await flwRequest('POST', '/payments', {
     tx_ref:       txRef,
     amount,
@@ -58,7 +62,7 @@ export async function initializePayment({ txRef, amount, currency = 'NGN', email
     },
     customizations: {
       title:       'ScorePhantom Premium',
-      description: 'Monthly subscription — ₦3,000/month',
+      description: description,
       logo:        'https://score-phantom.onrender.com/images/logo.png',
     },
     payment_options: 'card,banktransfer,ussd,mobilemoneyghana',

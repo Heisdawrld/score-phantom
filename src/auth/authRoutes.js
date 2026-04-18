@@ -32,7 +32,7 @@ const WEEKLY_PLAN_AMOUNT_NGN = 1000; // ₦1,000 — 1 week package
 const WEEKLY_PLAN_DURATION_DAYS = 7;
 const TRIAL_DURATION_DAYS = 7;       // 7-day free trial
 
-// ── Rate limiters ─────────────────────────────────────────────────────────────
+// ── Rate Limiters ────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -958,6 +958,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
       email:       user.email,
       name:        user.email.split('@')[0],
       redirectUrl,
+      packageType,
     });
 
     if (!link) throw new Error('Flutterwave did not return a payment link');
