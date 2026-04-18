@@ -181,12 +181,12 @@ function App() {
             <GlassBubbles />
             <ReferralCapture />
             <Router />
+            <BottomNav />
           </WouterRouter>
           <Toaster />
           <UpdateBanner />
           <NotificationPrompt />
           <InstallPrompt />
-          <BottomNav />
           {/* VerifyEmailHandler removed — Google Auth */}
         </TooltipProvider>
       </QueryClientProvider>

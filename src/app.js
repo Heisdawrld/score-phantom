@@ -79,11 +79,14 @@ app.get('/api/version', (req, res) => {
 // Legacy admin page removed
 
 // SPA fallback — serve index.html for all non-API routes
-app.get("*", (req, res) => {
-  if (req.path.startsWith("/api")) {
-    return res.status(404).json({ error: "Not found" });
-  }
-  // Try React frontend first, then legacy index.html
+  app.get("*", (req, res) => {
+    // Stop the server from trying to serve index.html as a fallback for missing Vite chunks or API calls.
+    // This prevents the "Strict MIME type checking" crash when users load an old tab after a new deployment.
+    if (req.path.startsWith("/api") || req.path.startsWith("/assets/")) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    
+    // Try React frontend first, then legacy index.html
   const reactIndex = path.join(clientDistPath, "index.html");
   if (fs.existsSync(reactIndex)) {
     // No-cache so browser always gets the latest index.html after a deploy
