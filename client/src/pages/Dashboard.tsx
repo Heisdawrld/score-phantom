@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 import { TodaysBestBet } from "@/components/dashboard/TodaysBestBet";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -199,6 +200,8 @@ export default function Dashboard() {
   useEffect(() => { try { sessionStorage.setItem("sp_dash_date", selectedDate.toISOString()); } catch (_) {} }, [selectedDate]);
   const { data, isLoading: fixturesLoading } = useFixtures(formattedDate);
 
+  useScrollRestoration("dashboard");
+
   const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5 * 60 * 1000 });
   const heroPick = (heroData as any)?.picks?.[0] || null;
   const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
@@ -264,24 +267,8 @@ export default function Dashboard() {
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
   const handleSelectFixture = (id: string) => {
-    // Save scroll position before leaving
-    sessionStorage.setItem("sp_dash_scroll", String(window.scrollY));
     setLocation("/matches/" + id);
   };
-  
-  // Restore scroll position after fixtures load
-  useEffect(() => {
-    if (!fixturesLoading) {
-      const savedScroll = sessionStorage.getItem("sp_dash_scroll");
-      if (savedScroll) {
-        // Use a tiny timeout to ensure DOM is fully painted
-        setTimeout(() => {
-          window.scrollTo({ top: parseInt(savedScroll), behavior: 'instant' });
-          sessionStorage.removeItem("sp_dash_scroll");
-        }, 50);
-      }
-    }
-  }, [fixturesLoading, data]);
   const handlePredictionError = (code: string) => {
     if (code === "daily_limit_reached") setDailyLimitHit(true);
   };

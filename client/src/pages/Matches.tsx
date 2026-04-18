@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Search, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 
 function toWAT(d: string) {
@@ -36,6 +37,8 @@ export default function Matches() {
     queryFn: () => fetchApi("/fixtures?date="+selectedDate),
     staleTime: 3 * 60 * 1000,
   });
+
+  useScrollRestoration("matches_list");
   const allFixtures: any[] = (data as any)?.fixtures || [];
   const filtered = search.trim()
     ? allFixtures.filter(f => (f.home_team_name+f.away_team_name+f.tournament_name).toLowerCase().includes(search.toLowerCase()))

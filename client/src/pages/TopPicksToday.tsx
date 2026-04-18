@@ -10,6 +10,7 @@ import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activi
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 
 interface Pick {
@@ -80,6 +81,8 @@ export default function TopPicksToday() {
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
     enabled: !authLoading && !!isPremium,
   });
+
+  useScrollRestoration("top_picks");
 
   // 7-day results
   const { data: resultsData } = useQuery({
