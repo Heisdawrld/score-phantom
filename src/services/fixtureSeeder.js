@@ -24,6 +24,18 @@ async function ensureColumns() {
   for (const sql of cols) { try { await db.execute(sql); } catch (_) {} }
 }
 
+// The 35 exact leagues officially covered by BSD for ML and advanced stats.
+const BSD_PREMIUM_LEAGUES = new Set([
+  'africa cup of nations 2025', 'caf champions league', 'pro league', 'brasileirão serie a',
+  'brasileirão serie b', 'copa do brasil', 'parva liga', 'championship', 'premier league',
+  'champions league', 'europa league', 'ligue 1', 'bundesliga', 'stoiximan super league',
+  'international friendly games', 'world cup 2026', 'serie a', 'liga mx apertura',
+  'liga mx clausura', 'eredivisie', 'nigeria premier football league', 'ekstraklasa',
+  'liga portugal betclic', 'superliga', 'saudi pro league', 'scottish premiership',
+  'copa libertadores', 'copa sudamericana', 'la liga', 'liga f', 'segunda división',
+  'allsvenskan', 'super league', 'trendyol super lig', 'mls'
+]);
+
 export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = false, log = console.log } = {}) {
   await ensureColumns();
   if (clearFirst) {
@@ -51,11 +63,17 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
   let inserted = 0, failed = 0, oddsWritten = 0;
 
   for (const event of allBsdEvents) {
-    try {
-      const f = normaliseBsdEventToFixture(event);
-      if (!f) continue;
+      try {
+        const f = normaliseBsdEventToFixture(event);
+        if (!f) continue;
 
-      await db.batch([
+        // LAYER 1 ELIGIBILITY: Only allow matches from the 35 officially covered leagues
+        const tourneyName = (f.tournament_name || '').toLowerCase().trim();
+        if (!BSD_PREMIUM_LEAGUES.has(tourneyName)) {
+          continue; // Throw junk matches in the trash before DB insertion
+        }
+
+        await db.batch([
         {
           sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
           args: [f.home_team_id, f.home_team_name, f.home_team_name.substring(0, 3).toUpperCase()],
