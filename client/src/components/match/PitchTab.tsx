@@ -27,8 +27,56 @@ export function PitchTab({ matchData }: any) {
   const momentum = matchStats.momentum || matchData?.meta?.momentum || [];
   const shotmap = matchStats.shotmap || matchData?.meta?.shotmap || [];
   
+  // Combine shots and events for timeline
+  const timelineEvents = [...events];
+  
+  // Add goals from shotmap if they aren't already in events
+  if (shotmap && shotmap.length > 0) {
+    shotmap.filter((s: any) => s.type === 'goal').forEach((goal: any) => {
+      // Check if we already have this goal at this minute
+      const exists = timelineEvents.some(e => e.minute === goal.min && e.type === 'goal');
+      if (!exists) {
+        timelineEvents.push({
+          minute: goal.min,
+          type: 'goal',
+          team: goal.home ? 'home' : 'away',
+          player: goal.pid ? `Player ${goal.pid}` : 'Goal',
+          detail: `xG: ${goal.xg?.toFixed(2) || 'N/A'}`
+        });
+      }
+    });
+  }
+  
+  // Sort timeline chronologically
+  timelineEvents.sort((a, b) => a.minute - b.minute);
+
   return (
     <div className="flex flex-col gap-4">
+      {/* ── LIVE SCORE & MINUTE ── */}
+      {['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(matchData?.fixture?.match_status || '') && (
+        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-red-500 uppercase tracking-wider flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              LIVE {matchData?.fixture?.live_minute ? `${matchData?.fixture?.live_minute}'` : ''}
+            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xl font-bold">{matchData?.fixture?.home_score ?? 0}</span>
+              <span className="text-white/30">-</span>
+              <span className="text-xl font-bold">{matchData?.fixture?.away_score ?? 0}</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col items-end text-right">
+            <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Live xG</span>
+            <div className="flex items-center gap-2 mt-1 text-sm font-medium">
+              <span className="text-primary">{matchData?.fixture?.home_xg_live?.toFixed(2) ?? '0.00'}</span>
+              <span className="text-white/30">|</span>
+              <span className="text-blue-500">{matchData?.fixture?.away_xg_live?.toFixed(2) ?? '0.00'}</span>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── LIVE MOMENTUM ── */}
       <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
         <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Live Match Momentum</p>
@@ -105,23 +153,23 @@ export function PitchTab({ matchData }: any) {
           {shotmap && shotmap.length > 0 ? (
             shotmap.map((shot: any, i: number) => {
               if (!shot.pos || shot.pos.x == null || shot.pos.y == null) return null;
-              
+
               // Normalize coordinates (0-100 scale). BSD gives x=0 at home goal, x=100 at away goal
               const x = shot.home ? shot.pos.x : 100 - shot.pos.x;
               const y = shot.home ? shot.pos.y : 100 - shot.pos.y;
-              
+
               const isGoal = shot.type === 'goal';
               const size = Math.max(6, Math.min(16, (shot.xg || 0.1) * 30)); // Size based on xG
 
               return (
-                <div 
+                <div
                   key={i}
                   className={cn(
                     "absolute rounded-full -translate-x-1/2 -translate-y-1/2 shadow-lg transition-transform hover:scale-150 cursor-pointer z-10",
                     isGoal ? (shot.home ? "bg-primary border-2 border-white" : "bg-blue-500 border-2 border-white") : (shot.home ? "bg-primary/50 border border-primary/80" : "bg-blue-500/50 border border-blue-500/80")
                   )}
-                  style={{ 
-                    left: `${x}%`, 
+                  style={{
+                    left: `${x}%`,
                     top: `${y}%`,
                     width: `${size}px`,
                     height: `${size}px`
@@ -138,6 +186,31 @@ export function PitchTab({ matchData }: any) {
           )}
         </div>
       </div>
+
+      {/* ── MATCH EVENTS TIMELINE ── */}
+      {timelineEvents.length > 0 && (
+        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] mt-2">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-4">Key Events</p>
+          <div className="relative pl-4 border-l border-white/10 space-y-6">
+            {timelineEvents.map((ev: any, idx: number) => (
+              <div key={idx} className="relative">
+                <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-[#09090b] bg-white/20" />
+                <div className="flex gap-3">
+                  <span className="text-xs font-bold text-white/60 w-6 shrink-0">{ev.minute}'</span>
+                  <div className="flex flex-col">
+                    <span className={cn("text-xs font-medium", ev.team === 'home' ? 'text-primary' : 'text-blue-400')}>
+                      {ev.type === 'goal' ? '⚽ Goal' : ev.type === 'yellow' ? '🟨 Yellow Card' : ev.type === 'red' ? '🟥 Red Card' : ev.type === 'sub' ? '🔄 Substitution' : ev.type}
+                    </span>
+                    {(ev.player || ev.detail) && (
+                      <span className="text-[10px] text-white/50 mt-0.5">{ev.player} {ev.detail ? `(${ev.detail})` : ''}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

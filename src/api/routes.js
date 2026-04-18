@@ -14,6 +14,7 @@ import {
   getHistoryRows,
   getOdds,
 } from "../services/predictionCache.js";
+import { bsdFetch } from '../services/bsd.js';
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
@@ -1476,6 +1477,35 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
       oddsRow = await getOdds(fixtureId);
     }
     const standings = meta?.standings || [];
+    
+    // Live Match Bypass: If the match is currently live, fetch spatial data directly from BSD API
+    const isLive = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(fixture.match_status || '');
+    if (isLive && fixture.bsd_event_api_id) {
+      try {
+        console.log(`[MatchCenter] Live match detected (${fixtureId}). Fetching live spatial data from BSD...`);
+        const liveBsdEvent = await bsdFetch(`/events/${fixture.bsd_event_api_id}/`, { full: 'true' }, { cacheable: false });
+        if (liveBsdEvent) {
+          // Update meta with live spatial data
+          if (liveBsdEvent.momentum) meta.momentum = liveBsdEvent.momentum;
+          if (liveBsdEvent.shotmap) meta.shotmap = liveBsdEvent.shotmap;
+          if (liveBsdEvent.lineups) meta.lineups = liveBsdEvent.lineups;
+          if (liveBsdEvent.average_positions) meta.average_positions = liveBsdEvent.average_positions;
+          
+          // Update live score and minutes
+          fixture.home_score = liveBsdEvent.home_score ?? fixture.home_score;
+          fixture.away_score = liveBsdEvent.away_score ?? fixture.away_score;
+          fixture.live_minute = liveBsdEvent.current_minute;
+          
+          // Update live xG
+          if (liveBsdEvent.home_xg_live !== undefined) fixture.home_xg_live = liveBsdEvent.home_xg_live;
+          if (liveBsdEvent.away_xg_live !== undefined) fixture.away_xg_live = liveBsdEvent.away_xg_live;
+        }
+      } catch (bsdErr) {
+        console.warn(`[MatchCenter] Failed to fetch live spatial data for ${fixtureId}:`, bsdErr.message);
+        // Fallback to cached meta if BSD fetch fails
+      }
+    }
+
     return res.json({ fixture, meta, h2h, homeForm, awayForm, standings, odds: oddsRow, access: buildAccessPayload(req.access) });
   } catch(err) {
     console.error("[MatchCenter]", err.message);

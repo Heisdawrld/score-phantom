@@ -22,9 +22,23 @@ function riskColor(r: string) {
 }
 
 export function LineupsTab({ matchData }: any) {
-  // Bzzoiro API returns lineups grouped by side: { home: { players: [...] }, away: { players: [...] } }
-  const homeLineup = matchData?.meta?.lineups?.home?.players || [];
-  const awayLineup = matchData?.meta?.lineups?.away?.players || [];
+  // Check if we have live match spatial data (flat array format)
+  // Format: [{player_name, position, x, y, is_home}]
+  const isLiveFormat = Array.isArray(matchData?.meta?.lineups);
+  
+  let homeLineup: any[] = [];
+  let awayLineup: any[] = [];
+
+  if (isLiveFormat) {
+    const allPlayers = matchData.meta.lineups || [];
+    homeLineup = allPlayers.filter((p: any) => p.is_home);
+    awayLineup = allPlayers.filter((p: any) => !p.is_home);
+  } else {
+    // Bzzoiro API returns lineups grouped by side for predicted lineups: { home: { players: [...] }, away: { players: [...] } }
+    homeLineup = matchData?.meta?.lineups?.home?.players || [];
+    awayLineup = matchData?.meta?.lineups?.away?.players || [];
+  }
+  
   const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
 
   return (
