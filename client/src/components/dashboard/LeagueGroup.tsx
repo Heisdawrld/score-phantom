@@ -134,7 +134,6 @@ export function LeagueGroup({
                   </div>
                   {!isPremium && pct > 0 && (
                     <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary/8 border border-primary/15">
-                      <span className="text-[9px] font-black text-primary/70 blur-[3px] select-none">{pct.toFixed(0)}%</span>
                       <Lock className="w-2.5 h-2.5 text-primary/50" />
                     </div>
                   )}
