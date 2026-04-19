@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Soccer Ball -->
+  <g transform="translate(176, 230)" fill="none" stroke="#10e774" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="80" cy="80" r="70" />
+    <path d="M 80 40 L 105 60 L 95 95 L 65 95 L 55 60 Z" />
+    <path d="M 80 40 L 80 10" />
+    <path d="M 105 60 L 135 50" />
+    <path d="M 95 95 L 120 120" />
+    <path d="M 65 95 L 40 120" />
+    <path d="M 55 60 L 25 50" />
+  </g>
+
+  <!-- Ghost Shape -->
+  <path d="M 160 270 
+           C 160 240, 160 170, 190 120 
+           C 220 70, 292 70, 322 120 
+           C 352 170, 352 240, 352 270 
+           C 360 270, 370 280, 370 300 
+           L 360 300 
+           C 340 280, 310 260, 256 260 
+           C 202 260, 172 280, 152 300 
+           L 142 300 
+           C 142 280, 152 270, 160 270 Z" 
+        fill="none" stroke="#10e774" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- Eyes -->
+  <path d="M 230 170 Q 235 150 240 170" fill="none" stroke="#10e774" stroke-width="16" stroke-linecap="round" />
+  <path d="M 282 170 Q 277 150 272 170" fill="none" stroke="#10e774" stroke-width="16" stroke-linecap="round" />
+
+</svg>

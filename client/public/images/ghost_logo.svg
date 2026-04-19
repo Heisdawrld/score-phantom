@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <g stroke="#75ed85" stroke-width="16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Soccer Ball -->
+    <circle cx="256" cy="320" r="80" />
+    
+    <!-- Central Pentagon -->
+    <path d="M 256 280 L 285 300 L 275 335 L 237 335 L 227 300 Z" />
+    
+    <!-- Lines radiating from pentagon corners -->
+    <line x1="256" y1="280" x2="256" y2="240" />
+    <line x1="285" y1="300" x2="325" y2="290" />
+    <line x1="275" y1="335" x2="305" y2="375" />
+    <line x1="237" y1="335" x2="207" y2="375" />
+    <line x1="227" y1="300" x2="187" y2="290" />
+    
+    <!-- Outer hexagons (partial lines connecting to the circle border) -->
+    <line x1="325" y1="290" x2="335" y2="305" />
+    <line x1="325" y1="290" x2="300" y2="255" />
+    
+    <line x1="305" y1="375" x2="325" y2="355" />
+    <line x1="305" y1="375" x2="275" y2="395" />
+    
+    <line x1="207" y1="375" x2="187" y2="355" />
+    <line x1="207" y1="375" x2="237" y2="395" />
+    
+    <line x1="187" y1="290" x2="212" y2="255" />
+    <line x1="187" y1="290" x2="177" y2="305" />
+
+    <!-- Ghost Outline -->
+    <!-- Starts bottom left flare, curves up to head, curves down to right flare, then arches over the ball -->
+    <path d="M 120 310 
+             C 130 280, 140 260, 140 220
+             C 140 140, 180 110, 256 110
+             C 332 110, 372 140, 372 220
+             C 372 260, 382 280, 392 310
+             L 392 310
+             C 350 280, 320 260, 256 220
+             C 192 260, 162 280, 120 310 Z" />
+             
+    <!-- Eyes -->
+    <ellipse cx="230" cy="185" rx="8" ry="18" transform="rotate(-15 230 185)" fill="#75ed85" />
+    <ellipse cx="282" cy="185" rx="8" ry="18" transform="rotate(15 282 185)" fill="#75ed85" />
+  </g>
+</svg>
