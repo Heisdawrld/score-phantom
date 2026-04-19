@@ -28,11 +28,11 @@ export async function initPredictionsTable() {
       no_safe_pick INTEGER,
       no_safe_pick_reason TEXT,
       backup_picks_json TEXT,
-        prediction_json TEXT,
-        home_team TEXT,
-        away_team TEXT,
-      created_at TEXT,
-      updated_at TEXT
+      prediction_json TEXT,
+      home_team TEXT,
+      away_team TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -43,6 +43,13 @@ export async function initPredictionsTable() {
     `ALTER TABLE predictions_v2 ADD COLUMN backup_picks_json TEXT`,
     `ALTER TABLE predictions_v2 ADD COLUMN home_team TEXT`,
     `ALTER TABLE predictions_v2 ADD COLUMN away_team TEXT`,
+    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_implied_probability REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_edge REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_score REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN confidence_model TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN confidence_value TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN confidence_volatility TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT",
   ];
   for (const sql of migrations) {
     try { await db.execute(sql); } catch (_) { /* column already exists */ }

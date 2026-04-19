@@ -897,7 +897,7 @@ router.put("/profile", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Username can only contain letters, numbers, and underscores" });
     }
 
-    const existing = await db.execute({ sql: "SELECT id FROM users WHERE username = ? COLLATE NOCASE LIMIT 1", args: [normalized] });
+    const existing = await db.execute({ sql: "SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", args: [normalized] });
     if ((existing.rows || []).length > 0 && existing.rows[0].id !== req.user.id) {
        return res.status(400).json({ error: "Username is already taken" });
     }
