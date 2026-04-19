@@ -19,16 +19,40 @@ const db = {
   execute: async (queryOrObj, ...argsObj) => {
     let sql = typeof queryOrObj === 'string' ? queryOrObj : queryOrObj.sql;
     let args = typeof queryOrObj === 'string' ? (argsObj.length ? argsObj[0] : []) : (queryOrObj.args || []);
-    
+
     // Replace ? with $1, $2, etc.
     let paramIndex = 1;
     const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
-    
+
     try {
       const res = await pool.query(pgSql, args);
       return { rows: res.rows, rowsAffected: res.rowCount };
     } catch (err) {
       throw err;
+    }
+  },
+  batch: async (statements) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const results = [];
+      for (const stmt of statements) {
+        let sql = typeof stmt === 'string' ? stmt : stmt.sql;
+        let args = typeof stmt === 'string' ? [] : (stmt.args || []);
+        
+        let paramIndex = 1;
+        const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
+        
+        const res = await client.query(pgSql, args);
+        results.push({ rows: res.rows, rowsAffected: res.rowCount });
+      }
+      await client.query('COMMIT');
+      return results;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
   }
 };
