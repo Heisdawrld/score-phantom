@@ -110,39 +110,43 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, man
   return (
     <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] shadow-2xl flex flex-col">
       {/* Top Scoreboard */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/80 via-black/50 to-transparent pointer-events-none">
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <span className="text-white font-bold truncate text-sm md:text-base">{homeTeamName}</span>
-            <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.home}</span>
+      <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent pointer-events-none">
+        
+        {/* Home Team */}
+        <div className="flex-1 flex flex-col gap-1 items-start max-w-[40%]">
+          <div className="flex items-center gap-3 w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-2 shadow-lg">
+            <span className="text-white font-black truncate text-sm md:text-lg tracking-wide w-full">{homeTeamName.toUpperCase()}</span>
+            <span className="text-3xl font-black text-primary tabular-nums shrink-0">{score.home}</span>
           </div>
           {managers?.home?.name && (
-            <div className="text-[10px] text-white/60 font-medium truncate">
-              {managers.home.name} • {managers.home.preferred_formation || '4-3-3'} • {managers.home.team_style?.toUpperCase() || 'BALANCED'}
+            <div className="text-[9px] md:text-[11px] text-white/70 font-medium truncate w-full px-2 uppercase tracking-widest">
+              <span className="text-primary">{managers.home.preferred_formation || '4-3-3'}</span> • {managers.home.team_style?.toUpperCase() || 'BALANCED'} • {managers.home.name}
             </div>
           )}
         </div>
-        
-        <div className="flex flex-col items-center shrink-0 mx-4">
-          <div className="bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 flex items-center gap-2 shadow-lg">
+
+        {/* Timer */}
+        <div className="flex flex-col items-center shrink-0 mx-2 md:mx-4 mt-1">
+          <div className="bg-black/80 backdrop-blur-md px-5 py-2 rounded-2xl border border-white/20 flex items-center gap-2 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
             <Clock className={cn("w-4 h-4", currentPhase === 'ft' ? "text-white/50" : "text-primary animate-pulse")} />
-            <span className="text-lg font-black text-white tabular-nums min-w-[40px] text-center">
+            <span className="text-xl md:text-2xl font-black text-white tabular-nums min-w-[48px] text-center font-display">
               {currentMinute}'
             </span>
           </div>
-          <span className="text-[10px] text-primary/80 font-bold uppercase tracking-widest mt-1">
-            {currentPhase === 'ht' ? 'HALF TIME' : currentPhase === 'ft' ? 'FULL TIME' : 'LIVE'}
+          <span className="text-[9px] md:text-[10px] text-primary/90 font-black uppercase tracking-widest mt-2 bg-black/40 px-2 py-0.5 rounded border border-primary/20">
+            {currentPhase === 'ht' ? 'HALF TIME' : currentPhase === 'ft' ? 'FULL TIME' : 'LIVE SIMULATION'}
           </span>
         </div>
 
-        <div className="flex-1 flex flex-col gap-1 items-end">
-          <div className="flex items-center gap-3 justify-end overflow-hidden">
-            <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.away}</span>
-            <span className="text-white font-bold truncate text-right text-sm md:text-base">{awayTeamName}</span>
+        {/* Away Team */}
+        <div className="flex-1 flex flex-col gap-1 items-end max-w-[40%]">
+          <div className="flex items-center gap-3 w-full justify-end bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-2 shadow-lg">
+            <span className="text-3xl font-black text-blue-400 tabular-nums shrink-0">{score.away}</span>
+            <span className="text-white font-black truncate text-right text-sm md:text-lg tracking-wide w-full">{awayTeamName.toUpperCase()}</span>
           </div>
           {managers?.away?.name && (
-            <div className="text-[10px] text-white/60 font-medium truncate text-right">
-              {managers.away.team_style?.toUpperCase() || 'BALANCED'} • {managers.away.preferred_formation || '4-3-3'} • {managers.away.name}
+            <div className="text-[9px] md:text-[11px] text-white/70 font-medium truncate text-right w-full px-2 uppercase tracking-widest">
+              {managers.away.name} • {managers.away.team_style?.toUpperCase() || 'BALANCED'} • <span className="text-blue-400">{managers.away.preferred_formation || '4-3-3'}</span>
             </div>
           )}
         </div>
