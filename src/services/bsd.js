@@ -232,6 +232,22 @@ export async function fetchEventDetail(eventId, full = false) {
   return await bsdFetch(`/events/${eventId}/${full ? '?full=true' : ''}`);
 }
 
+/**
+ * Fetch multi-bookmaker odds for a specific event.
+ * Returns prices from 22+ bookmakers to find true value edge.
+ */
+export async function fetchMultiBookmakerOdds(eventId) {
+  if (!eventId) return null;
+  // Fallback to empty array if endpoint fails so we don't break the main flow
+  try {
+    const data = await bsdFetch('/odds/compare/', { event: eventId });
+    return data?.results || data || [];
+  } catch (err) {
+    console.error(`[fetchMultiBookmakerOdds] Failed for event ${eventId}:`, err.message);
+    return [];
+  }
+}
+
 export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
   if (!team) return [];
 

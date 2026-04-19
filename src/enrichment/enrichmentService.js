@@ -20,6 +20,7 @@ import {
   fetchStandings,
   fetchPredictedLineup,
   fetchEventDetail,
+  fetchMultiBookmakerOdds,
   normaliseBsdLineup,
   normaliseEventToForm,
   normaliseStandingsRow,
@@ -387,6 +388,16 @@ export async function fetchAndStoreEnrichment(fixture) {
     // Stats not available pre-match — expected
   }
 
+  // ── Step 5.6: Fetch Multi-Bookmaker Odds ────────────────────────────────────
+  let deepOdds = [];
+  try {
+    const matchId = fixture.match_id || fixture.id;
+    deepOdds = await fetchMultiBookmakerOdds(matchId);
+    console.log(`[enrichmentService] Fetched ${deepOdds.length} bookmaker odds for fixture ${matchId}`);
+  } catch {
+    // Odds not available
+  }
+
   // ── Step 6: Data completeness ─────────────────────────────────────────────
   const completeness = computeDataCompleteness({
     homeForm,
@@ -423,6 +434,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     actualHomeXg,
     actualAwayXg,
     shotmap,
+    deepOdds,
     odds: null,
   };
 }
