@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
 import adminRoutes from "./api/adminRoutes.js";
+import trackRecordRoutes from "./api/trackRecordRoutes.js";
 import { initBacktestingTable } from "./storage/backtesting.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
@@ -60,6 +61,7 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/track-record", trackRecordRoutes);
 
 // Duplicate /api/admin/seed removed — handled by adminRoutes.js
 

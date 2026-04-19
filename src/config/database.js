@@ -98,9 +98,25 @@ async function runSchema() {
     `CREATE TABLE IF NOT EXISTS push_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, platform TEXT DEFAULT 'web', created_at TEXT DEFAULT (datetime('now')))  `,
     `CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, data TEXT DEFAULT '{}', read INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))  `,
     `CREATE TABLE IF NOT EXISTS match_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, fixture_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, fixture_id))`,
+    `CREATE TABLE IF NOT EXISTS backtest_results (
+      fixture_id TEXT PRIMARY KEY,
+      league_id TEXT,
+      season TEXT,
+      match_date TEXT,
+      home_team TEXT,
+      away_team TEXT,
+      predicted_script TEXT,
+      top_prediction TEXT,
+      confidence_score REAL,
+      actual_result TEXT,
+      home_goals INTEGER,
+      away_goals INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
   ];
 
   for (const sql of statements) {
