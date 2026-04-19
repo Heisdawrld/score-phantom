@@ -38,6 +38,9 @@ export async function initPredictionsTable() {
 
   // Migrate existing table — add missing columns if they don't exist
   const migrations = [
+    `ALTER TABLE predictions_v2 ADD COLUMN script_primary TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN script_secondary TEXT`,
+    `ALTER TABLE predictions_v2 ADD COLUMN script_confidence REAL`,
     `ALTER TABLE predictions_v2 ADD COLUMN explanation_text TEXT`,
     `ALTER TABLE predictions_v2 ADD COLUMN no_safe_pick_reason TEXT`,
     `ALTER TABLE predictions_v2 ADD COLUMN backup_picks_json TEXT`,

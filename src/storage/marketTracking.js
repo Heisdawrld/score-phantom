@@ -21,7 +21,7 @@ export async function initMarketTrackingTable() {
         market_key TEXT NOT NULL,
         market_type TEXT NOT NULL,
         selection TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
+        timestamp BIGINT NOT NULL,
         engine_version TEXT DEFAULT 'v2',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

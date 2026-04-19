@@ -203,6 +203,15 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let diversityBonus = 0;
     if (typeCount === 0) diversityBonus = 0.03;
 
+    // Mismatch Penalty: if the script says tight but we bet over, etc.
+    let scriptMismatchPenalty = 0;
+    const primaryScript = scriptOutput?.primary || '';
+    if (primaryScript === "tight_low_event" && marketKey.includes("over")) {
+      scriptMismatchPenalty = 0.5;
+    } else if (primaryScript === "open_end_to_end" && marketKey.includes("under")) {
+      scriptMismatchPenalty = 0.5;
+    }
+
     // Historical accuracy score — how well has the engine done with this market+script?
     // 0.5 = no data yet (neutral). 1.0 = consistently correct. 0.0 = consistently wrong.
     const historicalAccuracyScore = getHistoricalAccuracyScore(
