@@ -196,10 +196,12 @@ export async function fetchStandings(leagueId) {
 export async function fetchFixturesByDate(dateStr) {
   if (!dateStr) return [];
 
-  // BSD uses tz=UTC so date_from=date_to=dateStr gives exactly that UTC day
+  // Use Africa/Lagos timezone so BSD returns fixtures for that Lagos calendar day.
+  // Without this, midnight Lagos matches (23:00 UTC prior day) are missed by date LIKE filters.
   const results = await bsdFetchAll('/events/', {
     date_from: dateStr,
     date_to: dateStr,
+    tz: 'Africa/Lagos',
   });
   return results || [];
 }
@@ -591,7 +593,9 @@ export function extractFormFromStandings(standings, teamId, teamName) {
   return String(row.form).split('').map((result, i) => ({
     home:        result === 'W' ? teamName : 'Opponent',
     away:        result === 'W' ? 'Opponent' : teamName,
-    score:       result === 'W' ? '1-0' : result === 'D' ? '1-1' : '0-1',
+    // Use league-average goal scores (1.5 home, 1.2 away) so synthetic fallback
+    // doesn't bias the prediction engine toward extreme Under 2.5 predictions
+    score:       result === 'W' ? '2-1' : result === 'D' ? '1-1' : '1-2',
     date:        '',
     competition: row.competition || '',
     _synthetic:  true,

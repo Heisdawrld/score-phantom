@@ -64,6 +64,7 @@ import Privacy from "@/pages/Privacy";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { NotificationPrompt } from '@/components/NotificationPrompt';
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { ContactSupport } from "@/components/ContactSupport";
 import { BottomNav } from "@/components/layout/BottomNav";
 
 const queryClient = new QueryClient({
@@ -190,6 +191,7 @@ function App() {
           <UpdateBanner />
           <NotificationPrompt />
           <InstallPrompt />
+          <ContactSupport />
           {/* VerifyEmailHandler removed — Google Auth */}
         </TooltipProvider>
       </QueryClientProvider>

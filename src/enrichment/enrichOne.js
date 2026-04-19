@@ -51,6 +51,9 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     const matches = Array.isArray(data?.[section.key]) ? data[section.key] : [];
 
     for (const match of matches) {
+      // Skip synthetic form records (from standings) — they bias the prediction engine
+      if (match._synthetic) continue;
+
       const normalized = normalizeMatch(match);
       const { home, away } = parseScore(normalized.score);
 
