@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Activity, Target, Shield, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function TrackRecord() {
+export default function TrackRecord({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['track-record-stats'],
     queryFn: () => fetchApi('/track-record/stats')
@@ -21,13 +21,11 @@ export default function TrackRecord() {
     return marketId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   };
 
-  return (
-    <div className='min-h-screen bg-background pb-24'>
-      <Header />
+  const content = (
+    <main className='max-w-lg mx-auto px-4 pt-6 space-y-8'>
       
-      <main className='max-w-lg mx-auto px-4 pt-6 space-y-8'>
-        
-        {/* Header */}
+      {/* Header */}
+      {!isEmbedded && (
         <div className='text-center space-y-2 mb-8'>
           <div className='inline-flex items-center justify-center p-3 bg-primary/10 rounded-full mb-2'>
             <Activity className='w-8 h-8 text-primary' />
@@ -39,6 +37,7 @@ export default function TrackRecord() {
             Verifiable, transparent historical hit rates across 58,000+ simulated past matches.
           </p>
         </div>
+      )}
 
         {/* Global Stats Card */}
         {stats && (
@@ -140,6 +139,14 @@ export default function TrackRecord() {
         </div>
 
       </main>
+  );
+
+  if (isEmbedded) return content;
+
+  return (
+    <div className='min-h-screen bg-background pb-24'>
+      <Header />
+      {content}
     </div>
   );
 }
