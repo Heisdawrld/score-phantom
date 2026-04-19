@@ -42,19 +42,19 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
   const top  = ranked[0];
   const topProb = safeNum(top.modelProbability, 0);
 
-  // B. Probability floor (stricter than old 0.60)
-  if (topProb < 0.62) return abstain('Best pick probability too low (' + (topProb*100).toFixed(1) + '% < 62% floor)', 'LOW_PROBABILITY');
+  // B. Probability floor (restored to 0.55 to allow value edge picks)
+  if (topProb < 0.55) return abstain('Best pick probability too low (' + (topProb*100).toFixed(1) + '% < 55% floor)', 'LOW_PROBABILITY');
 
   // C. Separation check (top two too close)
   if (ranked.length >= 2) {
     const hasOdds = ranked.some(c => c.edge != null && c.edge !== 0);
-    const minGap  = hasOdds ? 0.018 : 0.012;
+    const minGap  = hasOdds ? 0.010 : 0.008;
     const gap     = safeNum(top.finalScore, 0) - safeNum(ranked[1].finalScore, 0);
     if (gap < minGap) {
       // ── Rescue: both top picks are genuinely strong — trust the top one ──────
       // Two strong picks near-tied is NOT the same as no picks.
       const secondProb = safeNum(ranked[1].modelProbability, 0);
-      if (topProb >= 0.68 && secondProb >= 0.68) {
+      if (topProb >= 0.60 && secondProb >= 0.60) {
         console.log('[selectBestPickOrAbstain] Both top picks strong (' + (topProb*100).toFixed(1) + '% + ' + (secondProb*100).toFixed(1) + '%) — picking top despite small gap=' + gap.toFixed(4));
         return { bestPick: annotate(top, fv, script), backupPicks: ranked.slice(1,3).map(p=>annotate(p,fv,script)), noSafePick: false, noSafePickReason: null, layer2OverrideApplied: false, abstainCode: null };
       }
