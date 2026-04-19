@@ -10,7 +10,7 @@ export async function initBacktestingTable() {
   try {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS prediction_outcomes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         fixture_id TEXT NOT NULL UNIQUE,
         home_team TEXT,
         away_team TEXT,
@@ -59,11 +59,17 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   );
   try {
     await db.execute({
-      sql: `INSERT OR REPLACE INTO prediction_outcomes
+      sql: `INSERT INTO prediction_outcomes
         (fixture_id, home_team, away_team, match_date, tournament,
          predicted_market, predicted_selection, predicted_probability,
          model_confidence, home_score, away_score, full_score, outcome, evaluated_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT (fixture_id) DO UPDATE SET
+          home_score = EXCLUDED.home_score,
+          away_score = EXCLUDED.away_score,
+          full_score = EXCLUDED.full_score,
+          outcome = EXCLUDED.outcome,
+          evaluated_at = CURRENT_TIMESTAMP`,
       args: [
         String(fixtureId),
         prediction.home_team || '',

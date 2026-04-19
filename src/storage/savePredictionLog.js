@@ -3,7 +3,7 @@ import db from '../config/database.js';
 export async function initLogsTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prediction_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       fixture_id TEXT,
       features_json TEXT,
       script_json TEXT,

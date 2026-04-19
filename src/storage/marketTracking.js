@@ -16,7 +16,7 @@ export async function initMarketTrackingTable() {
   try {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS market_tracking (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         fixture_id TEXT NOT NULL,
         market_key TEXT NOT NULL,
         market_type TEXT NOT NULL,

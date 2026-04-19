@@ -1313,8 +1313,18 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
     const planDays = parseInt(days || PLAN_DURATION_DAYS, 10);
     const normalizedEmail = String(email).trim().toLowerCase();
     const userResult = await db.execute({ sql: "SELECT id, email, status FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
-    const user = userResult.rows?.[0];
-    if (!user) return res.status(404).json({ error: "User not found" });
+    let user = userResult.rows?.[0];
+    if (!user) {
+      // If the user doesn't exist yet (e.g. wiped database), create them on the fly!
+      await db.execute({
+        sql: "INSERT INTO users (email, status, email_verified) VALUES (?, 'premium', 1)",
+        args: [normalizedEmail]
+      });
+      const created = await db.execute({ sql: "SELECT id, email, status FROM users WHERE email = ? LIMIT 1", args: [normalizedEmail] });
+      user = created.rows?.[0];
+      if (!user) return res.status(500).json({ error: "Failed to auto-create user" });
+    }
+
     const ref = `MANUAL_${user.id}_${Date.now()}`;
     // Ensure payment record exists for tracking
     await db.execute({ sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
