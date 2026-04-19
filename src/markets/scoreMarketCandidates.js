@@ -221,9 +221,10 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     }
 
     const finalScore =
-      0.25 * modelConfidenceScore +
+      0.30 * modelConfidenceScore + // Boosted weight for raw probability
       0.25 * edgeScore +
-      0.24 * tacticalFitScore +
+      0.20 * tacticalFitScore +
+      0.15 * predScore + // NEW: Inject predictability directly into the final score
       0.10 * dataSupportScore +
       0.08 * historicalAccuracyScore +
       0.08 * formMomentumScore +
