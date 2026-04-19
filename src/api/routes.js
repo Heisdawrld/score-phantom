@@ -152,7 +152,7 @@ async function getTodayCount(userId) {
 
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const result = await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
             ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1
@@ -1431,7 +1431,7 @@ export function createTrialLimitGuard(trialDailyLimit = 15) {
 router.post('/notify-match/:id', requireAuth, async (req, res) => {
   try {
     const fixtureId = req.params.id;
-    await db.execute({ sql: 'INSERT INTO match_subscriptions (user_id,fixture_id) VALUES (?,?) ON CONFLICT DO NOTHING', args: [req.user.id, fixtureId] });
+    await db.execute({ sql: 'INSERT INTO match_subscriptions (user_id,fixture_id) VALUES (?,?) ON CONFLICT (user_id,fixture_id) DO NOTHING', args: [req.user.id, fixtureId] });
     res.json({ ok: true, subscribed: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });

@@ -10,16 +10,16 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function ensureColumns() {
   const cols = [
-    'ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ""',
-    'ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ""',
-    'ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ""',
-    'ALTER TABLE fixtures ADD COLUMN odds_home REAL',
-    'ALTER TABLE fixtures ADD COLUMN odds_draw REAL',
-    'ALTER TABLE fixtures ADD COLUMN odds_away REAL',
-    'ALTER TABLE fixtures ADD COLUMN home_score INTEGER',
-    'ALTER TABLE fixtures ADD COLUMN away_score INTEGER',
-    'ALTER TABLE fixtures ADD COLUMN match_status TEXT DEFAULT "NS"',
-    'ALTER TABLE fixtures ADD COLUMN live_minute TEXT',
+    `ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''`,
+    `ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''`,
+    `ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''`,
+    `ALTER TABLE fixtures ADD COLUMN odds_home REAL`,
+    `ALTER TABLE fixtures ADD COLUMN odds_draw REAL`,
+    `ALTER TABLE fixtures ADD COLUMN odds_away REAL`,
+    `ALTER TABLE fixtures ADD COLUMN home_score INTEGER`,
+    `ALTER TABLE fixtures ADD COLUMN away_score INTEGER`,
+    `ALTER TABLE fixtures ADD COLUMN match_status TEXT DEFAULT 'NS'`,
+    `ALTER TABLE fixtures ADD COLUMN live_minute TEXT`,
   ];
   for (const sql of cols) { try { await db.execute(sql); } catch (_) {} }
 }
