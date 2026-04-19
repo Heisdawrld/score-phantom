@@ -4,3 +4,4 @@ scorephantom.db
 *.db-shm
 *.db-wal
 *.sqlite
+user_emails_export.csv
