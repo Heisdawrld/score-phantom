@@ -1,49 +1,45 @@
-# Phantom Lab: Advanced Match Simulation (Premium)
+# Phantom Lab & AI Advisor: Premium Upgrades
 
 ## Overview
-The "Phantom Lab" replaces the initial Match Simulator. It transforms a basic utility into a premium, power-user experience by allowing subscribers to tweak real-world variables on upcoming matches and compare the AI's base prediction against their simulated scenario. 
+Based on user feedback, the app needs to move beyond just presenting raw percentages. Users want the engine to act as a *Premium Betting Advisor*. This document outlines the improvements to the **Phantom Lab** and the introduction of a new **AI Advisor Indicator** across the app.
 
-## Key Improvements
-1. **Rebranding:** "Match Simulator" → "Phantom Lab". "AI Engine" → "ScorePhantom Model".
-2. **Match Selection UX:** Users will click a "Select Match" button that opens a searchable modal of upcoming fixtures (restricted to the 35 supported leagues). No more entering Team IDs.
-3. **Expanded Variables:** 
-   - Home / Away Motivation
-   - Home / Away Injuries
-   - Weather Conditions
-   - Lineup Strength (Rotation Risk)
-4. **Before vs. After Comparison:** The output will display two side-by-side cards: the "Base Model" (original prediction) and the "Simulated Model" (new prediction), highlighting probability shifts and providing a dynamic reason for the change.
-5. **Premium Exclusivity:** The feature is locked behind the premium paywall.
+## 1. Phantom Lab (Premium Match Sandbox)
+The Phantom Lab replaces the basic simulator with a sleek, expensive-feeling UI where users can manipulate real-world variables for upcoming matches in supported leagues.
+
+### Match Selection
+- **Search Modal:** Users click "Select Match" to open a modal displaying upcoming fixtures (filtered to the 35 supported leagues). They can search by team name or browse.
+- **Visuals:** The modal uses dark, glassmorphic styling consistent with the new premium UI.
+
+### Expanded Simulation Variables
+- **Motivation:** Sliders for Home/Away (-15% to +15% boost).
+- **Injuries:** Sliders for Home/Away (0 to 5 key players missing).
+- **Weather:** Toggles for Normal, Rain, Snow (affects variance and goal output).
+- **Lineup Strength (Rotation):** Toggles for Full Strength, Rotated, Heavily Rotated.
+
+### Before vs. After Results
+- The engine calculates both the *Base Model* (no modifiers) and the *Simulated Model*.
+- **UI Presentation:** Two side-by-side or stacked cards showing the shift in Expected Goals (xG) and the top market recommendation.
+- **Dynamic Reasoning:** The backend generates a sentence explaining the shift (e.g., "Heavy rotation and snow decreased attacking output, shifting the best value to Under 2.5 Goals").
+- **Animation:** A pulsing "Phantom" logo or a simulated pitch animation plays while the engine "calculates."
 
 ---
 
-## 1. Match Selection Modal (Frontend)
-- **Component:** `client/src/components/simulator/MatchSelectorModal.tsx`
-- **Functionality:** 
-  - A full-screen or large modal.
-  - A search bar to filter upcoming fixtures by team name or league.
-  - Displays a list of matches (similar to the `UpcomingFixtures` component).
-  - Clicking a match selects it and populates the Phantom Lab context.
+## 2. AI Advisor Indicator (App-Wide Upgrade)
+To solve the problem of users not knowing *when* to trust a percentage, we are introducing a fun, clear, and actionable indicator attached to predictions.
 
-## 2. Expanded Modifiers (Frontend & Backend)
-- **Component:** `client/src/pages/PhantomLab.tsx`
-- **Sliders/Toggles:**
-  - `homeMotivation`, `awayMotivation`: -1 (Low), 0 (Normal), 1 (High)
-  - `homeInjuries`, `awayInjuries`: 0 to 5 players
-  - `weather`: 'normal', 'rain', 'snow'
-  - `lineupStrength`: 'full', 'rotated', 'heavily_rotated'
-- **Backend Update:** `src/features/modifyFeatureVector.js`
-  - Update the modification logic to handle `lineupStrength` (e.g., 'rotated' applies a 10% penalty to both offensive and defensive strength).
+### The Advisor Logic
+The engine will evaluate the prediction's probability and the match's overall predictability score to categorize the pick into one of three buckets:
 
-## 3. Before vs. After Comparison (Frontend & Backend)
-- **Backend API (`POST /api/simulator/run`):**
-  - The endpoint will now return *two* sets of results:
-    1. `base_simulation`: The result of running the engine *without* the user's modifiers.
-    2. `custom_simulation`: The result of running the engine *with* the user's modifiers.
-  - The API will generate a `shift_reason` string comparing the two (e.g., "Heavy rotation and snow decreased expected goals by 0.8, shifting the best value from Home Win to Under 2.5").
-- **Frontend UI (`PhantomLab.tsx`):**
-  - Upon simulation completion, display a "Base Model" card (left/top) and a "Simulated Model" card (right/bottom).
-  - Use Framer Motion to animate the transition and highlight the differences (e.g., green up arrows or red down arrows for probability changes).
-  - Display the `shift_reason` prominently to explain the "Why".
+1. **"🔥 FIRE PICK" (Green/Gold Glow)**
+   - *Condition:* High predictability match AND prediction probability > 75%.
+   - *Meaning:* The engine is extremely confident. This is a core bet.
+2. **"🎲 GAMBLE IT" (Orange/Amber Glow)**
+   - *Condition:* Medium predictability OR prediction probability between 60% - 74%.
+   - *Meaning:* Good value, but carries inherent risk. Good for accas or small stakes.
+3. **"🛑 AVOID / TOO CHAOTIC" (Red/Muted Glow)**
+   - *Condition:* Low predictability match OR prediction probability < 60%.
+   - *Meaning:* The data is too volatile. The engine recommends staying away.
 
-## 4. Animation (Frontend)
-- **Loading State:** While the simulation runs, display a custom SVG animation of a glowing soccer ball moving across a pitch, or a pulsing "Phantom" logo, indicating the engine is "crunching the numbers."
+### UI Integration
+- These indicators will be small, animated badges (e.g., blinking dots or glowing borders) attached to the market predictions in the `MatchCenter`, `TopPicksToday`, and `Phantom Lab`.
+- It transforms the engine from a "calculator" into a "consultant."
