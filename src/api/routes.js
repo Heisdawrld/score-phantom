@@ -17,6 +17,7 @@ import {
 import { bsdFetch } from '../services/bsd.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from "../services/notifications.js";
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
+import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFeatureVector.js";
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
 import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
@@ -1532,33 +1533,40 @@ router.get("/notifications/vapidPublicKey", requireAuth, (req, res) => {
   res.json({ publicKey });
 });
 
+// Teams Search Endpoint
+router.get("/teams", requireAuth, async (req, res) => {
+  try {
+    const result = await db.execute(`
+      SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, league_id, league_name
+      FROM fixtures
+      ORDER BY team_name ASC
+    `);
+    
+    // Group unique teams to prevent duplicates if they play in multiple leagues (e.g. UCL + PL)
+    const teamsMap = new Map();
+    result.rows.forEach(r => {
+      if (!teamsMap.has(r.team_id)) {
+        teamsMap.set(r.team_id, r);
+      }
+    });
+
+    res.json(Array.from(teamsMap.values()));
+  } catch (error) {
+    console.error("Error fetching teams:", error);
+    res.status(500).json({ error: "Failed to fetch teams" });
+  }
+});
+
 // Interactive Simulator API
 router.post("/simulator/run", requireAuth, async (req, res) => {
-  const { home_team_id, away_team_id, modifiers } = req.body;
-  if (!home_team_id || !away_team_id) {
-    return res.status(400).json({ error: "Missing team IDs" });
+  const { home_team_id, away_team_id, home_team_name, away_team_name, modifiers } = req.body;
+  if (!home_team_id || !away_team_id || !home_team_name || !away_team_name) {
+    return res.status(400).json({ error: "Missing team data" });
   }
 
   try {
-    // 1. Fetch recent matches for both teams from the database to build a baseline feature vector
-    const result = await db.execute({
-      sql: `SELECT * FROM historical_matches 
-            WHERE fixture_id IN (
-              SELECT id FROM fixtures WHERE home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?
-            ) ORDER BY date DESC LIMIT 20`,
-      args: [home_team_id, home_team_id, away_team_id, away_team_id]
-    });
-
-    const mockFixture = {
-      home_team_id,
-      away_team_id,
-      home_team_name: "Home Team",
-      away_team_name: "Away Team",
-      historical_matches: result.rows
-    };
-
-    // 2. Build baseline feature vector
-    const baselineVector = await buildFeatureVector(mockFixture);
+    // 1. Build hypothetical feature vector
+    const baselineVector = await buildHypotheticalFeatureVector(home_team_id, away_team_id, home_team_name, away_team_name);
     
     // 3. Run Base Model
     const basePredictability = assessMatchPredictability(baselineVector);

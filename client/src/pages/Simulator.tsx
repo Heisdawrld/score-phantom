@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { ChevronLeft, Zap, Target, TrendingUp, AlertTriangle, Shield, SlidersHorizontal, CloudRain, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ConfidenceBadge } from '@/components/ui/ConfidenceBadge';
 import { AIAdvisorBadge, AdvisorStatus } from '@/components/ui/AIAdvisorBadge';
 import { useLocation } from 'wouter';
 import { MatchSelectorModal } from '@/components/simulator/MatchSelectorModal';
@@ -19,10 +18,11 @@ export default function PhantomLab() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<{
-    fixtureId: string;
     homeTeamId: string;
     awayTeamId: string;
     name: string;
+    homeTeamName: string;
+    awayTeamName: string;
   } | null>(null);
   
   const [modifiers, setModifiers] = useState({
@@ -42,6 +42,8 @@ export default function PhantomLab() {
         body: JSON.stringify({
           home_team_id: selectedMatch.homeTeamId,
           away_team_id: selectedMatch.awayTeamId,
+          home_team_name: selectedMatch.homeTeamName,
+          away_team_name: selectedMatch.awayTeamName,
           modifiers
         })
       });
@@ -294,8 +296,14 @@ export default function PhantomLab() {
       <MatchSelectorModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
-        onSelect={(fixtureId, homeTeamId, awayTeamId, name) => {
-          setSelectedMatch({ fixtureId, homeTeamId, awayTeamId, name });
+        onSelect={(homeTeamId, awayTeamId, homeTeamName, awayTeamName) => {
+          setSelectedMatch({ 
+            homeTeamId, 
+            awayTeamId, 
+            homeTeamName, 
+            awayTeamName, 
+            name: `${homeTeamName} vs ${awayTeamName}` 
+          });
           setIsModalOpen(false);
         }}
       />
