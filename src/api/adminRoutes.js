@@ -229,8 +229,7 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
 
     // Create a verified payment record so this shows in revenue stats
     await db.execute({
-      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
-            VALUES (?, ?, 3000, 'NGN', 'verified', 'manual_grant', ?)`,
+      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at) VALUES (?, ?, 3000, 'NGN', 'verified', 'manual_grant', ?) ON CONFLICT DO NOTHING`,
       args: [userId, ref, new Date().toISOString()],
     });
     // Create partner commission if this user was referred (treats manual grant as ₦3000 payment)

@@ -75,24 +75,22 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
 
         await db.batch([
         {
-          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          sql: 'INSERT INTO teams (id, name, short_name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
           args: [f.home_team_id, f.home_team_name, f.home_team_name.substring(0, 3).toUpperCase()],
         },
         {
-          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          sql: 'INSERT INTO teams (id, name, short_name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
           args: [f.away_team_id, f.away_team_name, f.away_team_name.substring(0, 3).toUpperCase()],
         },
         {
-          sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
+          sql: 'INSERT INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
           args: [f.tournament_id, f.tournament_name, f.category_name, ''],
         },
         {
-          sql: `INSERT OR IGNORE INTO fixtures
-                  (id, home_team_id, away_team_id, tournament_id,
+          sql: `INSERT INTO fixtures (id, home_team_id, away_team_id, tournament_id,
                    home_team_name, away_team_name, tournament_name, category_name,
                    match_date, match_url, match_status, home_score, away_score,
-                   home_team_logo, away_team_logo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   home_team_logo, away_team_logo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
           args: [
             f.match_id, f.home_team_id, f.away_team_id, f.tournament_id,
             f.home_team_name, f.away_team_name, f.tournament_name, f.category_name,

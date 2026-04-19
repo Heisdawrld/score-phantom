@@ -1430,7 +1430,7 @@ export function createTrialLimitGuard(trialDailyLimit = 15) {
 router.post('/notify-match/:id', requireAuth, async (req, res) => {
   try {
     const fixtureId = req.params.id;
-    await db.execute({ sql: 'INSERT OR IGNORE INTO match_subscriptions (user_id,fixture_id) VALUES (?,?)', args: [req.user.id, fixtureId] });
+    await db.execute({ sql: 'INSERT INTO match_subscriptions (user_id,fixture_id) VALUES (?,?) ON CONFLICT DO NOTHING', args: [req.user.id, fixtureId] });
     res.json({ ok: true, subscribed: true });
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });

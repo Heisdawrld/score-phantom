@@ -325,7 +325,7 @@ async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN
       args: [expiryISO, expiryISO, subscriptionCode, userId],
     },
     {
-      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
+      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at) ON CONFLICT DO NOTHING
             VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
       args: [userId, reference, amountPaid, now],
     },
@@ -439,7 +439,7 @@ async function attachReferral(newUserId, referralCode) {
     const partner = pRes.rows?.[0];
     if (partner) {
       await db.execute({ sql: "UPDATE users SET partner_id = ?, referred_by_code = ? WHERE id = ?", args: [partner.id, code, newUserId] });
-      await db.execute({ sql: "INSERT OR IGNORE INTO partner_referrals (partner_id, user_id, referral_code) VALUES (?, ?, ?)", args: [partner.id, newUserId, code] });
+      await db.execute({ sql: "INSERT INTO partner_referrals (partner_id, user_id, referral_code) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", args: [partner.id, newUserId, code] });
       console.log("[Referral] User " + newUserId + " attributed to partner " + partner.id + " code=" + code);
       return;
     }
@@ -497,7 +497,7 @@ router.post("/google", authLimiter, async (req, res) => {
       // Brand-new user — create with trial starting NOW
       const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
       await db.execute({
-        sql: `INSERT OR IGNORE INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [email, firebaseUid, trialEnds],
       });
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
@@ -589,7 +589,7 @@ router.post("/email", authLimiter, async (req, res) => {
       // Brand-new user — create with trial starting NOW
       const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
       await db.execute({
-        sql: `INSERT OR IGNORE INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
+        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [normalizedEmail, firebaseUid, trialEnds],
       });
       // If INSERT was silently ignored (race condition), SELECT will find the existing user
@@ -663,11 +663,49 @@ router.post("/signup", authLimiter, async (req, res) => {
       return res.status(400).json({ error: "Password too long" });
 
     const existing = await db.execute({
-      sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
+      sql: "SELECT id, password_hash, password FROM users WHERE email = ? LIMIT 1",
       args: [normalizedEmail],
     });
-    if ((existing.rows || []).length > 0)
-      return res.status(400).json({ error: "Email already registered" });
+    if ((existing.rows || []).length > 0) {
+      const existingUser = existing.rows[0];
+      const hasPassword = existingUser.password_hash || existingUser.password;
+      
+      if (hasPassword) {
+        return res.status(400).json({ error: "Email already registered" });
+      } else {
+        // User exists but has no password (e.g. created via admin, migration, or Firebase). Set their password now.
+        const hashedPassword = await bcrypt.hash(String(password), 10);
+        await db.execute({
+          sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
+          args: [hashedPassword, existingUser.id]
+        });
+        
+        // Reload user to return token
+        const created = await db.execute({
+          sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE id = ? LIMIT 1`,
+          args: [existingUser.id],
+        });
+        const user = created.rows?.[0];
+        if (!user) throw new Error("User updated but could not be reloaded");
+
+        // Attach referral if code was provided (partner or user-based)
+        if (referralCode && user) {
+          await attachReferral(user.id, referralCode);
+        }
+
+        await ensureReferralCode(user);
+
+        // Auto-login: return JWT immediately
+        const token  = signToken(user);
+        const access = computeAccessStatus(user);
+        return res.status(201).json({
+          token,
+          user: publicUser(user),
+          has_access:    access.has_full_access,
+          access_status: access.status,
+        });
+      }
+    }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
     const trialEnds      = new Date();
@@ -982,8 +1020,7 @@ router.post("/payment/initialize", requireAuth, async (req, res) => {
 
     // Save pending payment record
     await db.execute({
-      sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel)
-            VALUES (?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       args: [user.id, txRef, amount, 'NGN', 'initialized', 'flutterwave'],
     });
 
@@ -1280,7 +1317,7 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
     if (!user) return res.status(404).json({ error: "User not found" });
     const ref = `MANUAL_${user.id}_${Date.now()}`;
     // Ensure payment record exists for tracking
-    await db.execute({ sql: `INSERT OR IGNORE INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?)`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
+    await db.execute({ sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, args: [user.id, ref, 0, "NGN", "verified", "manual"] });
     const { expiryISO } = await activatePremium(user.id, null, ref, 0, planDays);
     try { 
       const _pm2 = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] }); 

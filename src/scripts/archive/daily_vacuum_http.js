@@ -83,15 +83,15 @@ async function insertEvents(events) {
       
       statements.push(
         {
-          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          sql: 'INSERT INTO teams (id, name, short_name) VALUES (?, ?, ?)',
           args: [f.home_team_id, f.home_team_name, f.home_team_name.substring(0, 3).toUpperCase()],
         },
         {
-          sql: 'INSERT OR IGNORE INTO teams (id, name, short_name) VALUES (?, ?, ?)',
+          sql: 'INSERT INTO teams (id, name, short_name) VALUES (?, ?, ?)',
           args: [f.away_team_id, f.away_team_name, f.away_team_name.substring(0, 3).toUpperCase()],
         },
         {
-          sql: 'INSERT OR IGNORE INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
+          sql: 'INSERT INTO tournaments (id, name, category, url) VALUES (?, ?, ?, ?)',
           args: [f.tournament_id, f.tournament_name, f.category_name, ''],
         },
         {
