@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { ChevronLeft, Zap, Target, TrendingUp, AlertTriangle, Shield, SlidersHorizontal, CloudRain, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AIAdvisorBadge, AdvisorStatus } from '@/components/ui/AIAdvisorBadge';
+import { ModelAdvisorBadge, AdvisorStatus } from '@/components/ui/ModelAdvisorBadge';
 import { useLocation } from 'wouter';
 import { MatchSelectorModal } from '@/components/simulator/MatchSelectorModal';
 import { TeamLogo } from '@/components/TeamLogo';
@@ -299,7 +299,7 @@ export default function PhantomLab() {
                         <div key={idx} className='flex items-center justify-between p-4 rounded-2xl bg-black/40 border border-white/5'>
                           <div>
                             <p className='font-display tracking-wide text-sm text-white/80'>{market.market}</p>
-                            <AIAdvisorBadge status={(market.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} className="mt-1.5 opacity-60" />
+                            <ModelAdvisorBadge status={(market.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} className="mt-1.5 opacity-60" />
                           </div>
                           <div className='text-right'>
                             <p className='text-xl font-display text-white/70'>{(market.probability * 100).toFixed(0)}%</p>
@@ -336,7 +336,7 @@ export default function PhantomLab() {
                         <div key={idx} className='flex items-center justify-between p-4 rounded-2xl bg-primary/10 border border-primary/20 backdrop-blur-sm'>
                           <div>
                             <p className='font-display tracking-wide text-sm text-white'>{market.market}</p>
-                            <AIAdvisorBadge status={(market.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={true} className="mt-1.5" />
+                            <ModelAdvisorBadge status={(market.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={true} className="mt-1.5" />
                           </div>
                           <div className='text-right'>
                             <p className='text-2xl font-display text-primary drop-shadow-[0_0_10px_rgba(16,231,116,0.3)]'>{(market.probability * 100).toFixed(0)}%</p>

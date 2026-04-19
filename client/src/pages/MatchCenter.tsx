@@ -72,7 +72,8 @@ export default function MatchCenter() {
   const fixtureId = params.id;
   const [, setLocation] = useLocation();
   const { data: user } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
+  // isPremium represents full access to predictions (either active subscription or active trial)
+  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.trial_active || (user as any)?.is_admin;
   const [tab, setTab] = useState("Prediction");
 
   // Scroll to top when MatchCenter loads

@@ -6,9 +6,9 @@ import { Check, Crown, Zap, Shield, Loader2, ArrowLeft, Sparkles, TrendingUp, Bo
 import { cn } from "@/lib/utils";
 
 const FEATURES = [
-  { icon: Target, title: "Top Picks & Edges", desc: "Our highest confidence AI predictions" },
+  { icon: Target, title: "Top Picks & Edges", desc: "Our highest confidence model predictions" },
   { icon: Zap, title: "Daily ACCA Builder", desc: "Smart accumulators generated daily" },
-  { icon: Bot, title: "PhantomChat AI", desc: "Deep match analysis for any game" },
+  { icon: Bot, title: "PhantomChat", desc: "Deep match analysis for any game" },
   { icon: TrendingUp, title: "Real-Time Value", desc: "Detects mispriced bookmaker odds" },
   { icon: Shield, title: "Verified Track Record", desc: "Full transparency on all past picks" },
 ];
@@ -132,7 +132,7 @@ export default function Paywall() {
                 
                 <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                   className="text-white/50 text-base max-w-sm mx-auto leading-relaxed">
-                  Join thousands of smart bettors using AI-driven probabilities to beat the bookmakers every day.
+                  Join thousands of smart bettors using model-driven probabilities to beat the bookmakers every day.
                 </motion.p>
               </div>
 
@@ -169,7 +169,7 @@ export default function Paywall() {
                   <div className="flex justify-between items-start mb-6">
                     <div>
                       <h2 className="text-2xl font-black text-white">Premium</h2>
-                      <p className="text-sm text-primary font-semibold mt-1">Full AI Access</p>
+                      <p className="text-sm text-primary font-semibold mt-1">Full Model Access</p>
                     </div>
                     <div className="text-right">
                       <div className="flex items-start justify-end gap-1">

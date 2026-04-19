@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils';
 
 export type AdvisorStatus = 'FIRE' | 'GAMBLE' | 'AVOID';
 
-interface AIAdvisorBadgeProps {
+interface ModelAdvisorBadgeProps {
   status: AdvisorStatus;
   className?: string;
   showLabel?: boolean;
 }
 
-export function AIAdvisorBadge({ status, className, showLabel = true }: AIAdvisorBadgeProps) {
+export function ModelAdvisorBadge({ status, className, showLabel = true }: ModelAdvisorBadgeProps) {
   if (status === 'FIRE') {
     return (
       <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#10e774]/20 border border-[#10e774]/50 shadow-[0_0_15px_rgba(16,231,116,0.3)] backdrop-blur-md', className)}>

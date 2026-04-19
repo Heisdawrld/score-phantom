@@ -10,7 +10,7 @@ import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activi
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { AIAdvisorBadge, AdvisorStatus } from "@/components/ui/AIAdvisorBadge";
+import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 
@@ -328,7 +328,7 @@ export default function TopPicksToday() {
                           <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
                         <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
-                        <AIAdvisorBadge status={(pick.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} />
+                        <ModelAdvisorBadge status={(pick.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} />
                       </div>
 
                       {/* Analysis factor tags */}
