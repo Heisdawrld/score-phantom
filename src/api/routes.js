@@ -19,6 +19,7 @@ import { getVapidPublicKey, saveSubscription, sendPushNotification } from "../se
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
 import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFeatureVector.js";
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
+import { flattenFeatureVector } from "../features/flattenFeatureVector.js";
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
 import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
 import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
@@ -1568,8 +1569,11 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
 
   try {
     // 1. Build hypothetical feature vector
-    const baselineVector = await buildHypotheticalFeatureVector(home_team_id, away_team_id, home_team_name, away_team_name);
+    const baselineVectorNested = await buildHypotheticalFeatureVector(home_team_id, away_team_id, home_team_name, away_team_name);
     
+    // 2. Flatten the vector for the engine
+    const baselineVector = flattenFeatureVector(baselineVectorNested);
+
     // 3. Run Base Model
     const basePredictability = assessMatchPredictability(baselineVector);
     const { home_xg: baseHomeXg, away_xg: baseAwayXg } = estimateExpectedGoals(baselineVector);
