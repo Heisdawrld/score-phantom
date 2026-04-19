@@ -20,15 +20,57 @@ export function poissonProb(lambda, k) {
 
 /**
  * Build a score probability matrix [homeGoals][awayGoals]
+ * Applies Dixon-Coles adjustment to account for bivariate dependency
+ * in low-scoring matches (especially 0-0, 1-1, 1-0, 0-1).
  */
 export function buildScoreMatrix(homeLambda, awayLambda, maxGoals = 7) {
   const matrix = [];
+  
+  // Rho (correlation factor). Positive rho increases draw probability.
+  // Standard Dixon-Coles rho is typically around -0.15 to -0.05, 
+  // but we adjust dynamically based on lambda sum to prevent negative probs
+  let rho = -0.10; 
+  if (homeLambda * awayLambda < Math.abs(rho)) {
+    rho = -(homeLambda * awayLambda) + 0.01; // Safety bound
+  }
+
   for (let h = 0; h <= maxGoals; h++) {
     matrix[h] = [];
     for (let a = 0; a <= maxGoals; a++) {
-      matrix[h][a] = poissonProb(homeLambda, h) * poissonProb(awayLambda, a);
+      let p = poissonProb(homeLambda, h) * poissonProb(awayLambda, a);
+      
+      // Dixon-Coles Bivariate Adjustment
+      if (h === 0 && a === 0) {
+        p = p * (1 - (homeLambda * awayLambda * rho));
+      } else if (h === 0 && a === 1) {
+        p = p * (1 + (homeLambda * rho));
+      } else if (h === 1 && a === 0) {
+        p = p * (1 + (awayLambda * rho));
+      } else if (h === 1 && a === 1) {
+        p = p * (1 - rho);
+      }
+      
+      // Ensure probability stays positive
+      matrix[h][a] = Math.max(0, p);
     }
   }
+  
+  // Normalize the matrix so it sums perfectly to 1.0
+  let sum = 0;
+  for (let h = 0; h <= maxGoals; h++) {
+    for (let a = 0; a <= maxGoals; a++) {
+      sum += matrix[h][a];
+    }
+  }
+  
+  if (sum > 0) {
+    for (let h = 0; h <= maxGoals; h++) {
+      for (let a = 0; a <= maxGoals; a++) {
+        matrix[h][a] /= sum;
+      }
+    }
+  }
+  
   return matrix;
 }
 

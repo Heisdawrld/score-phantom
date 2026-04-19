@@ -236,10 +236,21 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   if (missingPlayers) {
     injuryFeatures.homeMissingCount = missingPlayers.home?.length || 0;
     injuryFeatures.awayMissingCount = missingPlayers.away?.length || 0;
+
+    // Use BSD API player roles to identify key missing players
+    // Key players are typically 'Starter', 'Captain', or 'Key'
+    const isKeyPlayer = (p) => {
+      const reason = (p.reason || '').toLowerCase();
+      const status = (p.status || '').toLowerCase();
+      return reason.includes('key') || reason.includes('starter') || status === 'suspended' || p.rating >= 7.0;
+    };
+
+    injuryFeatures.homeKeyMissing = (missingPlayers.home || []).filter(isKeyPlayer).length;
+    injuryFeatures.awayKeyMissing = (missingPlayers.away || []).filter(isKeyPlayer).length;
     
-    // Very basic heuristic: if they have more than 3 players out, assume at least 1 is key
-    if (injuryFeatures.homeMissingCount >= 3) injuryFeatures.homeKeyMissing = 1;
-    if (injuryFeatures.awayMissingCount >= 3) injuryFeatures.awayKeyMissing = 1;
+    // Fallback heuristic if the API didn't provide rich role info but they have 4+ missing
+    if (injuryFeatures.homeKeyMissing === 0 && injuryFeatures.homeMissingCount >= 4) injuryFeatures.homeKeyMissing = 1;
+    if (injuryFeatures.awayKeyMissing === 0 && injuryFeatures.awayMissingCount >= 4) injuryFeatures.awayKeyMissing = 1;
   }
 
   const bsdLineupFeatures = {
