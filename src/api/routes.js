@@ -14,7 +14,7 @@ import {
   getHistoryRows,
   getOdds,
 } from "../services/predictionCache.js";
-import { bsdFetch } from '../services/bsd.js';
+import { bsdFetch, fetchManagerByTeamId } from '../services/bsd.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from "../services/notifications.js";
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
 import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFeatureVector.js";
@@ -1611,6 +1611,12 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     // 2. Flatten the vector for the engine
     const baselineVector = flattenFeatureVector(baselineVectorNested);
 
+    // Fetch managers for tactical influence
+    const [homeManager, awayManager] = await Promise.all([
+      fetchManagerByTeamId(home_team_id),
+      fetchManagerByTeamId(away_team_id)
+    ]);
+
     // 3. Run Base Model
     const baseScript = classifyMatchScript(baselineVector);
     const baseXg = estimateExpectedGoals(baselineVector, baseScript);
@@ -1662,7 +1668,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     }
 
     // Generate Visual Match Script for 4-minute loop
-    const simulation_script = generateSimulationTimeline(simVector, simXg, simScript);
+    const simulation_script = generateSimulationTimeline(simVector, simXg, simScript, homeManager, awayManager);
 
     // 7. Format output
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
@@ -1685,6 +1691,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
           home_xg: simXg.homeExpectedGoals.toFixed(2),
           away_xg: simXg.awayExpectedGoals.toFixed(2),
           markets: formatMarkets(simMarkets)
+        },
+        managers: {
+          home: homeManager,
+          away: awayManager
         }
       }
     });

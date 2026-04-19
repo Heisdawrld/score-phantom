@@ -358,6 +358,15 @@ export async function fetchPredictedLineup(eventApiId) {
   return await bsdFetch(`/predicted-lineup/${eventApiId}/`);
 }
 
+export async function fetchManagerByTeamId(teamId) {
+  if (!teamId) return null;
+  const data = await bsdFetch('/managers/', { team_id: teamId });
+  if (data?.results && data.results.length > 0) {
+    return data.results[0];
+  }
+  return null;
+}
+
 // ── Referees ──────────────────────────────────────────────────────────────────
 
 /**

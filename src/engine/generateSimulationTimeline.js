@@ -7,7 +7,7 @@ import { safeNum } from '../utils/math.js';
  *
  * Returns an array of events: { minute, type, team, xg, message }
  */
-export function generateSimulationTimeline(simVector, simXg, simScript) {
+export function generateSimulationTimeline(simVector, simXg, simScript, homeManager, awayManager) {
   const events = [];
   const homeXg = safeNum(simXg.homeExpectedGoals, 1.2);
   const awayXg = safeNum(simXg.awayExpectedGoals, 1.0);
@@ -55,8 +55,8 @@ export function generateSimulationTimeline(simVector, simXg, simScript) {
   // Generally, teams take about 10-15 shots per match. 
   // We scale this based on their xG and script type.
   const isEndToEnd = simScript.primary === 'open_end_to_end';
-  const homeShots = Math.floor(homeXg * 6) + (isEndToEnd ? 4 : 0);
-  const awayShots = Math.floor(awayXg * 6) + (isEndToEnd ? 4 : 0);
+  const homeShots = Math.floor(homeXg * 6) + (isEndToEnd ? 4 : 0) + (homeManager?.avg_shots ? (homeManager.avg_shots - 12) * 0.5 : 0);
+  const awayShots = Math.floor(awayXg * 6) + (isEndToEnd ? 4 : 0) + (awayManager?.avg_shots ? (awayManager.avg_shots - 12) * 0.5 : 0);
 
   // Helper to ensure events don't completely stack on the exact same minute
   const getFreeMinute = () => {
@@ -88,38 +88,47 @@ export function generateSimulationTimeline(simVector, simXg, simScript) {
   distributeShots(awayShots, awayGoals, 'away');
 
   // 4. Distribute Realistic Match Events (Fouls, Corners, Free Kicks, Cards)
-  const distributeMatchEvents = (team) => {
-    // 4-6 corners per team
-    const corners = 4 + Math.floor(Math.random() * 3);
+  const distributeMatchEvents = (team, manager) => {
+    // Corners based on manager's actual average or fallback
+    let corners = manager?.avg_corners ? Math.round(manager.avg_corners) : (4 + Math.floor(Math.random() * 3));
+    // Introduce some slight random variance to the manager's average
+    corners = Math.max(0, corners + Math.floor(Math.random() * 3) - 1);
+
     for (let i = 0; i < corners; i++) {
       events.push({ minute: getFreeMinute(), type: 'corner', team, message: 'Corner Kick' });
     }
 
-    // 8-12 fouls per team
+    // Fouls
     const fouls = 8 + Math.floor(Math.random() * 5);
     for (let i = 0; i < fouls; i++) {
       events.push({ minute: getFreeMinute(), type: 'foul', team, message: 'Foul Committed' });
     }
 
-    // 2-4 dangerous free kicks
+    // Dangerous free kicks
     const freeKicks = 2 + Math.floor(Math.random() * 3);
     for (let i = 0; i < freeKicks; i++) {
       events.push({ minute: getFreeMinute(), type: 'free_kick', team, message: 'Dangerous Free Kick' });
     }
 
-    // 1-3 yellow cards
-    const yellows = 1 + Math.floor(Math.random() * 3);
+    // Yellow cards based on manager's average
+    let yellows = manager?.avg_yellow_cards ? Math.round(manager.avg_yellow_cards) : (1 + Math.floor(Math.random() * 3));
+    yellows = Math.max(0, yellows + Math.floor(Math.random() * 2));
+    
     for (let i = 0; i < yellows; i++) {
       events.push({ minute: getFreeMinute(), type: 'yellow_card', team, message: 'Yellow Card' });
     }
   };
 
-  distributeMatchEvents('home');
-  distributeMatchEvents('away');
+  distributeMatchEvents('home', homeManager);
+  distributeMatchEvents('away', awayManager);
 
   // 5. Distribute Possession Shifts (Momentum swings)
   // Every ~5 minutes, the engine calculates who controls the pitch
-  const homeDom = simVector.home_dom || 0.5; // baseline control
+  // We bias this heavily if a manager plays a "possession" style
+  let homeDom = simVector.home_dom || 0.5; // baseline control
+  if (homeManager?.team_style === 'possession') homeDom += 0.1;
+  if (awayManager?.team_style === 'possession') homeDom -= 0.1;
+  
   for (let m = 2; m < 90; m += 4) {
     if (events.some(e => e.minute === m)) continue; // skip if there's action
 

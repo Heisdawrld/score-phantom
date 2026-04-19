@@ -235,6 +235,7 @@ export default function PhantomLab() {
                 homeTeamName={selectedMatch!.homeTeamName}
                 awayTeamName={selectedMatch!.awayTeamName}
                 simulationScript={simulation.simulation.simulation_script}
+                managers={simulation.simulation.managers}
                 onComplete={() => setSimulationState('completed')}
               />
             </motion.div>

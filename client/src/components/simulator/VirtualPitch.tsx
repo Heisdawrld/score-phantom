@@ -11,10 +11,14 @@ interface VirtualPitchProps {
     addedTime: { half1: number; half2: number };
     finalScore: { home: number; away: number };
   };
+  managers?: {
+    home: any;
+    away: any;
+  };
   onComplete: () => void;
 }
 
-export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onComplete }: VirtualPitchProps) {
+export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, managers, onComplete }: VirtualPitchProps) {
   // 4-minute loop config:
   // First Half (45 mins) = 120 seconds -> 1 in-game minute = 2.66s real-time
   const REAL_TIME_PER_HALF_MS = 120000;
@@ -106,10 +110,17 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
   return (
     <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] shadow-2xl flex flex-col">
       {/* Top Scoreboard */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-center p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-        <div className="flex-1 flex items-center gap-3 overflow-hidden">
-          <span className="text-white font-bold truncate text-sm md:text-base">{homeTeamName}</span>
-          <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.home}</span>
+      <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/80 via-black/50 to-transparent pointer-events-none">
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <span className="text-white font-bold truncate text-sm md:text-base">{homeTeamName}</span>
+            <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.home}</span>
+          </div>
+          {managers?.home?.name && (
+            <div className="text-[10px] text-white/60 font-medium truncate">
+              {managers.home.name} • {managers.home.preferred_formation || '4-3-3'} • {managers.home.team_style?.toUpperCase() || 'BALANCED'}
+            </div>
+          )}
         </div>
         
         <div className="flex flex-col items-center shrink-0 mx-4">
@@ -124,9 +135,16 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
           </span>
         </div>
 
-        <div className="flex-1 flex items-center gap-3 justify-end overflow-hidden">
-          <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.away}</span>
-          <span className="text-white font-bold truncate text-right text-sm md:text-base">{awayTeamName}</span>
+        <div className="flex-1 flex flex-col gap-1 items-end">
+          <div className="flex items-center gap-3 justify-end overflow-hidden">
+            <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.away}</span>
+            <span className="text-white font-bold truncate text-right text-sm md:text-base">{awayTeamName}</span>
+          </div>
+          {managers?.away?.name && (
+            <div className="text-[10px] text-white/60 font-medium truncate text-right">
+              {managers.away.team_style?.toUpperCase() || 'BALANCED'} • {managers.away.preferred_formation || '4-3-3'} • {managers.away.name}
+            </div>
+          )}
         </div>
       </div>
 
