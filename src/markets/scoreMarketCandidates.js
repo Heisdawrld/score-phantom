@@ -121,15 +121,17 @@ function getBadMarketPenalty(candidate, featureVector) {
 /**
  * Score each market candidate.
  *
- * REBALANCED FORMULA (v2.5.0 — self-learning):
+ * Scoring Formula (Weights sum to 1.0):
  * finalScore =
- *   0.25 * modelConfidenceScore
- * + 0.25 * edgeScore
- * + 0.24 * tacticalFitScore
- * + 0.10 * dataSupportScore
- * + 0.08 * historicalAccuracyScore (NEW — engine learns from own win/loss record)
- * + 0.08 * formMomentumScore
+ *   0.30 * modelConfidenceScore    (How strongly the model predicts this outcome)
+ * + 0.20 * edgeScore               (Bookmaker value — negative edge penalized)
+ * + 0.15 * tacticalFitScore        (How well the market aligns with the match script)
+ * + 0.15 * predictabilityScore     (Safety anchor — how predictable the match is)
+ * + 0.10 * dataSupportScore        (How much data backs up this pick)
+ * + 0.05 * historicalAccuracyScore (How often this market type hits in similar scripts)
+ * + 0.05 * formMomentumScore       (Recent form backing the pick)
  * - 0.22 * volatilityPenalty
+ * - 0.15 * scriptMismatchPenalty
  * - 0.14 * badMarketPenalty
  * - 0.08 * repetitionPenalty
  * - 0.05 * diversityPenalty
@@ -212,7 +214,13 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     // AI Advisor Logic
     let advisorStatus = "GAMBLE";
     const prob = safeNum(candidate.modelProbability, 0);
-    const predScore = safeNum(featureVector?.predictability_score, 0.5); // Fallback to 0.5 if missing
+    
+    // Calculate predictability score from available feature vector fields
+    // Higher completeness, lower chaos, lower upset risk = higher predictability
+    const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
+    const matchChaos = safeNum(featureVector?.matchChaosScore, 0.5);
+    const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
+    const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
     if (predScore > 0.65 && prob > 0.75) {
       advisorStatus = "FIRE";
@@ -220,16 +228,18 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       advisorStatus = "AVOID";
     }
 
+    // Rescaled weights to sum to 1.0
     const finalScore =
       0.30 * modelConfidenceScore + // Boosted weight for raw probability
-      0.25 * edgeScore +
-      0.20 * tacticalFitScore +
-      0.15 * predScore + // NEW: Inject predictability directly into the final score
+      0.20 * edgeScore +
+      0.15 * tacticalFitScore +
+      0.15 * predScore + // Predictability acts as a safety anchor
       0.10 * dataSupportScore +
-      0.08 * historicalAccuracyScore +
-      0.08 * formMomentumScore +
+      0.05 * historicalAccuracyScore +
+      0.05 * formMomentumScore +
       diversityBonus -
       0.22 * volatilityPenalty -
+      0.15 * scriptMismatchPenalty -
       0.14 * badMarketPenalty -
       0.08 * repetitionPenalty -
       diversityPenalty -

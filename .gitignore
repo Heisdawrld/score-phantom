@@ -3,3 +3,4 @@ node_modules/
 scorephantom.db
 *.db-shm
 *.db-wal
+*.sqlite

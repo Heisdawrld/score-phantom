@@ -21,6 +21,10 @@ import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFea
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
 import { flattenFeatureVector } from "../features/flattenFeatureVector.js";
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
+import { classifyMatchScript } from "../scripts/archive/classifyMatchScript.js";
+import { buildScoreMatrix, deriveMarketProbabilities } from "../probabilities/poisson.js";
+import { calibrateProbabilities } from "../probabilities/calibrateProbabilities.js";
+import { buildMarketCandidates } from "../markets/buildMarketCandidates.js";
 import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
 import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
@@ -278,16 +282,29 @@ router.get("/live", requireAuth, async (req, res) => {
 });
 
 // ─── GET /live-stream — SSE push for real-time score updates ────────────────
+const MAX_SSE_CONNECTIONS = 250;
+let currentSseConnections = 0;
+
 router.get("/live-stream", requireAuth, (req, res) => {
+  if (currentSseConnections >= MAX_SSE_CONNECTIONS) {
+    return res.status(503).json({ error: "Service Unavailable", message: "Maximum live stream connections reached. Please try again later." });
+  }
+  
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
   res.write("data: {\"type\":\"connected\"}\n\n");
+  
   addSseClient(res);
+  currentSseConnections++;
+  
   const heartbeat = setInterval(() => res.write(":heartbeat\n\n"), 20000);
-  req.on("close", () => clearInterval(heartbeat));
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    currentSseConnections--;
+  });
 });
 // ─── GET /access — lightweight access check ──────────────────────────────────
 router.get("/access", requireAuth, (req, res) => {
@@ -1479,9 +1496,11 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
     if (!bundle) return res.status(404).json({ error: "Match not found" });
     const { fixture, meta } = bundle;
     const historyRows = await getHistoryRows(fixtureId);
-    const h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
-    const homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
-    const awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: r.home_goals + "-" + r.away_goals, date: r.date }));
+    
+    const formatScore = (r) => (r.home_goals != null && r.away_goals != null) ? `${r.home_goals}-${r.away_goals}` : "vs";
+    const h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    const homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    const awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
     let oddsRow = null;
     if (req.access.has_full_access) {
       oddsRow = await getOdds(fixtureId);
@@ -1575,22 +1594,32 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const baselineVector = flattenFeatureVector(baselineVectorNested);
 
     // 3. Run Base Model
-    const basePredictability = assessMatchPredictability(baselineVector);
-    const { home_xg: baseHomeXg, away_xg: baseAwayXg } = estimateExpectedGoals(baselineVector);
-    const baseMarkets = scoreMarketCandidates(baseHomeXg, baseAwayXg, baselineVector);
+    const baseScript = classifyMatchScript(baselineVector);
+    const baseXg = estimateExpectedGoals(baselineVector, baseScript);
+    const baseScoreMatrix = buildScoreMatrix(baseXg.homeExpectedGoals, baseXg.awayExpectedGoals);
+    const baseRawProbs = deriveMarketProbabilities(baseScoreMatrix);
+    const baseCalibratedProbs = calibrateProbabilities(baseRawProbs, baseScript);
+    
+    const baseCandidates = buildMarketCandidates(baseCalibratedProbs, null);
+    const baseMarkets = scoreMarketCandidates(baseCandidates, baseScript, baselineVector, {}, null);
 
     // 4. Apply User Simulation Modifiers
     const simVector = modifyFeatureVectorForSimulation(baselineVector, modifiers);
 
     // 5. Run Simulated Model
-    const simPredictability = assessMatchPredictability(simVector);
-    const { home_xg: simHomeXg, away_xg: simAwayXg } = estimateExpectedGoals(simVector);
-    const simMarkets = scoreMarketCandidates(simHomeXg, simAwayXg, simVector);
+    const simScript = classifyMatchScript(simVector);
+    const simXg = estimateExpectedGoals(simVector, simScript);
+    const simScoreMatrix = buildScoreMatrix(simXg.homeExpectedGoals, simXg.awayExpectedGoals);
+    const simRawProbs = deriveMarketProbabilities(simScoreMatrix);
+    const simCalibratedProbs = calibrateProbabilities(simRawProbs, simScript);
+
+    const simCandidates = buildMarketCandidates(simCalibratedProbs, null);
+    const simMarkets = scoreMarketCandidates(simCandidates, simScript, simVector, {}, null);
 
     // 6. Generate Shift Reason
     let shift_reason = "Variables adjusted.";
-    const homeXgDiff = simHomeXg - baseHomeXg;
-    const awayXgDiff = simAwayXg - baseAwayXg;
+    const homeXgDiff = simXg.homeExpectedGoals - baseXg.homeExpectedGoals;
+    const awayXgDiff = simXg.awayExpectedGoals - baseXg.awayExpectedGoals;
     
     if (Math.abs(homeXgDiff) > 0.5 || Math.abs(awayXgDiff) > 0.5) {
       shift_reason = "The extreme variable changes caused a massive shift in expected attacking output, completely flipping the script.";
@@ -1606,22 +1635,27 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       shift_reason = "The applied variables caused minor probability shifts but did not fundamentally alter the game script.";
     }
 
+    // 7. Format output
+    const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
+      market: m.id,
+      probability: m.probability,
+      advisor_status: m.advisorStatus || 'GAMBLE'
+    }));
+
     res.json({
       success: true,
       simulation: {
+        shift_reason,
         base_model: {
-          home_xg: baseHomeXg.toFixed(2),
-          away_xg: baseAwayXg.toFixed(2),
-          predictability: basePredictability,
-          markets: baseMarkets.slice(0, 3)
+          home_xg: baseXg.homeExpectedGoals.toFixed(2),
+          away_xg: baseXg.awayExpectedGoals.toFixed(2),
+          markets: formatMarkets(baseMarkets)
         },
         simulated_model: {
-          home_xg: simHomeXg.toFixed(2),
-          away_xg: simAwayXg.toFixed(2),
-          predictability: simPredictability,
-          markets: simMarkets.slice(0, 3)
-        },
-        shift_reason
+          home_xg: simXg.homeExpectedGoals.toFixed(2),
+          away_xg: simXg.awayExpectedGoals.toFixed(2),
+          markets: formatMarkets(simMarkets)
+        }
       }
     });
 

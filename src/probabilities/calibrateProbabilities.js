@@ -49,6 +49,7 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
 
   // ── Enforce complements (under = 1 - over) ───────────────────────────────
   const pairs = [
+    ['over05',  'under05'],
     ['over15',  'under15'],
     ['over25',  'under25'],
     ['over35',  'under35'],
@@ -58,7 +59,9 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
     ['homeOver15', 'homeUnder15'],
     ['awayOver15', 'awayUnder15'],
     ['homeOver25', 'homeUnder25'],
-    ['awayOver25', 'awayUnder25']
+    ['awayOver25', 'awayUnder25'],
+    ['homeOver35', 'homeUnder35'],
+    ['awayOver35', 'awayUnder35']
   ];
   for (const [overKey, underKey] of pairs) {
     if (cal[overKey] != null) {
