@@ -105,9 +105,13 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
       if (odds.home || odds.draw || odds.away) {
         try {
           await db.execute({
-            sql: `INSERT OR REPLACE INTO fixture_odds
+            sql: `INSERT INTO fixture_odds
                     (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT (fixture_id) DO UPDATE SET
+                    home = EXCLUDED.home, draw = EXCLUDED.draw, away = EXCLUDED.away,
+                    btts_yes = EXCLUDED.btts_yes, btts_no = EXCLUDED.btts_no,
+                    over_under = EXCLUDED.over_under`,
             args: [
               odds.fixture_id, odds.home, odds.draw, odds.away,
               odds.btts_yes, odds.btts_no, odds.over_under,

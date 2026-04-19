@@ -325,8 +325,8 @@ async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN
       args: [expiryISO, expiryISO, subscriptionCode, userId],
     },
     {
-      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at) ON CONFLICT DO NOTHING
-            VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?)`,
+      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at)
+            VALUES (?, ?, ?, 'NGN', 'verified', 'manual', ?) ON CONFLICT DO NOTHING`,
       args: [userId, reference, amountPaid, now],
     },
     {

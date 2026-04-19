@@ -3,13 +3,15 @@ import { Shield } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface TeamLogoProps {
-  src: string | undefined | null;
-  alt: string;
+  src?: string | null;
+  alt?: string;
+  name?: string;
+  teamId?: string | number;
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
-export function TeamLogo({ src, alt, className, size = 'md' }: TeamLogoProps) {
+export function TeamLogo({ src, alt, name, teamId, className, size = 'md' }: TeamLogoProps) {
   const [error, setError] = useState(false);
 
   const sizeClasses = {
@@ -25,7 +27,10 @@ export function TeamLogo({ src, alt, className, size = 'md' }: TeamLogoProps) {
     className
   );
 
-  if (!src || error) {
+  const finalSrc = src || (teamId ? `https://sports.bzzoiro.com/img/team/${teamId}/` : null);
+  const finalAlt = alt || name || "Team Logo";
+
+  if (!finalSrc || error) {
     return (
       <div className={cn(baseClasses, 'flex items-center justify-center border border-white/10')}>
         <Shield className="w-1/2 h-1/2 text-white/20" />
@@ -35,8 +40,8 @@ export function TeamLogo({ src, alt, className, size = 'md' }: TeamLogoProps) {
 
   return (
     <img
-      src={src}
-      alt={alt}
+      src={finalSrc}
+      alt={finalAlt}
       loading="lazy"
       decoding="async"
       onError={() => setError(true)}
