@@ -82,7 +82,7 @@ export default function TopPicksToday() {
     enabled: !authLoading && !!isPremium,
   });
 
-  useScrollRestoration("top_picks");
+  useScrollRestoration("top_picks", !isLoading);
 
   // 7-day results
   const { data: resultsData } = useQuery({

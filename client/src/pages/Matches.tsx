@@ -38,7 +38,8 @@ export default function Matches() {
     staleTime: 3 * 60 * 1000,
   });
 
-  useScrollRestoration("matches_list");
+  // We are ready to restore scroll position once the fixtures load
+  useScrollRestoration("matches_list", !isLoading);
   const allFixtures: any[] = (data as any)?.fixtures || [];
   const filtered = search.trim()
     ? allFixtures.filter(f => (f.home_team_name+f.away_team_name+f.tournament_name).toLowerCase().includes(search.toLowerCase()))

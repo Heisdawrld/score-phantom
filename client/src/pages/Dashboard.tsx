@@ -200,7 +200,7 @@ export default function Dashboard() {
   useEffect(() => { try { sessionStorage.setItem("sp_dash_date", selectedDate.toISOString()); } catch (_) {} }, [selectedDate]);
   const { data, isLoading: fixturesLoading } = useFixtures(formattedDate);
 
-  useScrollRestoration("dashboard");
+  useScrollRestoration("dashboard", !fixturesLoading && !authLoading);
 
   const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5 * 60 * 1000 });
   const heroPick = (heroData as any)?.picks?.[0] || null;
