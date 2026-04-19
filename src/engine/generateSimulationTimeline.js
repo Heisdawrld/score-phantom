@@ -58,13 +58,21 @@ export function generateSimulationTimeline(simVector, simXg, simScript) {
   const homeShots = Math.floor(homeXg * 6) + (isEndToEnd ? 4 : 0);
   const awayShots = Math.floor(awayXg * 6) + (isEndToEnd ? 4 : 0);
 
+  // Helper to ensure events don't completely stack on the exact same minute
+  const getFreeMinute = () => {
+    let min = Math.floor(Math.random() * 90) + 1;
+    let attempts = 0;
+    while (events.some(e => e.minute === min) && attempts < 20) {
+      min = Math.floor(Math.random() * 90) + 1;
+      attempts++;
+    }
+    return min;
+  };
+
   const distributeShots = (shots, goals, team) => {
     const nonGoalShots = Math.max(0, shots - goals);
     for (let i = 0; i < nonGoalShots; i++) {
-      const min = Math.floor(Math.random() * 90) + 1;
-      // Ensure we don't overwrite a goal minute exactly
-      if (events.some(e => e.minute === min && e.type === 'goal')) continue;
-
+      const min = getFreeMinute();
       const isSave = Math.random() > 0.5;
       events.push({
         minute: min,
@@ -79,7 +87,37 @@ export function generateSimulationTimeline(simVector, simXg, simScript) {
   distributeShots(homeShots, homeGoals, 'home');
   distributeShots(awayShots, awayGoals, 'away');
 
-  // 4. Distribute Possession Shifts (Momentum swings)
+  // 4. Distribute Realistic Match Events (Fouls, Corners, Free Kicks, Cards)
+  const distributeMatchEvents = (team) => {
+    // 4-6 corners per team
+    const corners = 4 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < corners; i++) {
+      events.push({ minute: getFreeMinute(), type: 'corner', team, message: 'Corner Kick' });
+    }
+
+    // 8-12 fouls per team
+    const fouls = 8 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < fouls; i++) {
+      events.push({ minute: getFreeMinute(), type: 'foul', team, message: 'Foul Committed' });
+    }
+
+    // 2-4 dangerous free kicks
+    const freeKicks = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < freeKicks; i++) {
+      events.push({ minute: getFreeMinute(), type: 'free_kick', team, message: 'Dangerous Free Kick' });
+    }
+
+    // 1-3 yellow cards
+    const yellows = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < yellows; i++) {
+      events.push({ minute: getFreeMinute(), type: 'yellow_card', team, message: 'Yellow Card' });
+    }
+  };
+
+  distributeMatchEvents('home');
+  distributeMatchEvents('away');
+
+  // 5. Distribute Possession Shifts (Momentum swings)
   // Every ~5 minutes, the engine calculates who controls the pitch
   const homeDom = simVector.home_dom || 0.5; // baseline control
   for (let m = 2; m < 90; m += 4) {

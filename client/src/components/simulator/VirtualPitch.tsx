@@ -25,18 +25,20 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
   const [currentPhase, setCurrentPhase] = useState<'h1' | 'ht' | 'h2' | 'ft'>('h1');
   const [score, setScore] = useState({ home: 0, away: 0 });
   const [ballZone, setBallZone] = useState<'neutral' | 'home' | 'away'>('neutral');
-  const [activeEvent, setActiveEvent] = useState<string | null>(null);
+  const [activeEvent, setActiveEvent] = useState<{ message: string; type: string } | null>(null);
 
   const { events, addedTime } = simulationScript;
 
   // Run the simulation clock
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    let minuteCount = 0;
 
     if (currentPhase === 'ft') {
-      onComplete();
-      return;
+      // Delay for 4 seconds at full time to let user see final score before transitioning
+      timer = setTimeout(() => {
+        onComplete();
+      }, 4000);
+      return () => clearTimeout(timer);
     }
 
     if (currentPhase === 'ht') {
@@ -70,14 +72,17 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
                 ...s,
                 [e.team]: s[e.team as keyof typeof s] + 1
               }));
-              setActiveEvent(`${e.message} - ${e.team === 'home' ? homeTeamName : awayTeamName}`);
+              setActiveEvent({ message: `GOALLLL!!! - ${e.team === 'home' ? homeTeamName : awayTeamName}`, type: 'goal' });
               setTimeout(() => setActiveEvent(null), 3000);
             } else if (e.type === 'possession') {
               setBallZone(e.team as 'neutral' | 'home' | 'away');
-            } else if (e.type === 'save' || e.type === 'miss') {
-              setBallZone(e.team === 'home' ? 'away' : 'home'); // Ball is in opposing box
-              setActiveEvent(`${e.message} - ${e.team === 'home' ? homeTeamName : awayTeamName}`);
-              setTimeout(() => setActiveEvent(null), 2000);
+            } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
+              // Ball shifts context depending on event
+              if (e.type === 'corner' || e.type === 'free_kick' || e.type === 'save' || e.type === 'miss') {
+                setBallZone(e.team === 'home' ? 'away' : 'home'); // attacking team is in opposing box
+              }
+              setActiveEvent({ message: `${e.message} - ${e.team === 'home' ? homeTeamName : awayTeamName}`, type: e.type });
+              setTimeout(() => setActiveEvent(null), 2500);
             }
           });
         }
@@ -102,9 +107,9 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
     <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] shadow-2xl flex flex-col">
       {/* Top Scoreboard */}
       <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-center p-4 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-        <div className="flex-1 flex items-center gap-3">
-          <span className="text-white font-bold truncate max-w-[120px]">{homeTeamName}</span>
-          <span className="text-3xl font-black text-white tabular-nums">{score.home}</span>
+        <div className="flex-1 flex items-center gap-3 overflow-hidden">
+          <span className="text-white font-bold truncate text-sm md:text-base">{homeTeamName}</span>
+          <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.home}</span>
         </div>
         
         <div className="flex flex-col items-center shrink-0 mx-4">
@@ -119,9 +124,9 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
           </span>
         </div>
 
-        <div className="flex-1 flex items-center gap-3 justify-end">
-          <span className="text-3xl font-black text-white tabular-nums">{score.away}</span>
-          <span className="text-white font-bold truncate max-w-[120px] text-right">{awayTeamName}</span>
+        <div className="flex-1 flex items-center gap-3 justify-end overflow-hidden">
+          <span className="text-3xl font-black text-white tabular-nums shrink-0">{score.away}</span>
+          <span className="text-white font-bold truncate text-right text-sm md:text-base">{awayTeamName}</span>
         </div>
       </div>
 
@@ -151,9 +156,18 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, onC
               exit={{ opacity: 0, scale: 1.5, y: '-50%', x: '-50%' }}
               className="absolute top-1/2 left-1/2 z-30 pointer-events-none"
             >
-              <div className="bg-black/80 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/20 shadow-2xl">
-                <span className="text-xl font-black text-white whitespace-nowrap drop-shadow-md">
-                  {activeEvent}
+              <div className={cn(
+                "backdrop-blur-md px-6 py-3 rounded-2xl border shadow-2xl",
+                activeEvent.type === 'goal' ? 'bg-yellow-500/90 border-yellow-300' :
+                activeEvent.type === 'corner' || activeEvent.type === 'free_kick' ? 'bg-blue-500/90 border-blue-300' :
+                activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'bg-orange-500/90 border-orange-300' :
+                'bg-black/80 border-white/20'
+              )}>
+                <span className={cn(
+                  "text-xl font-black whitespace-nowrap drop-shadow-md",
+                  activeEvent.type === 'goal' || activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'text-black' : 'text-white'
+                )}>
+                  {activeEvent.message}
                 </span>
               </div>
             </motion.div>
