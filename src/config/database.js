@@ -137,7 +137,7 @@ async function runSchema() {
       keys TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    `CREATE TABLE IF NOT EXISTS push_tokens (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, platform TEXT DEFAULT 'web', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)  `,
+    `CREATE TABLE IF NOT EXISTS push_tokens (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, platform TEXT DEFAULT 'web', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)  `,
     `CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, user_id INTEGER, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, data TEXT DEFAULT '{}', read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)  `,
     `CREATE TABLE IF NOT EXISTS match_subscriptions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, fixture_id TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, fixture_id))`,
     `CREATE TABLE IF NOT EXISTS backtest_results (
@@ -230,6 +230,18 @@ async function runSchema() {
     `);
     if (!p2TableInfo.rows.some((c) => c.name === 'prediction_json')) {
       try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`); } catch(e) {}
+    }
+  } catch (e) {}
+
+  // Backfill columns for push_tokens
+  try {
+    const ptTableInfo = await db.execute(`
+      SELECT column_name as name 
+      FROM information_schema.columns 
+      WHERE table_name = 'push_tokens'
+    `);
+    if (!ptTableInfo.rows.some((c) => c.name === 'updated_at')) {
+      try { await db.execute(`ALTER TABLE push_tokens ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`); } catch(e) {}
     }
   } catch (e) {}
 

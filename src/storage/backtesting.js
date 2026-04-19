@@ -159,8 +159,8 @@ export async function runBacktestForFinishedFixtures() {
       LEFT JOIN prediction_outcomes po ON po.fixture_id = p.fixture_id
       WHERE po.fixture_id IS NULL
         AND p.best_pick_market IS NOT NULL
-        AND datetime(f.match_date) < datetime('now', '-120 minutes')
-        AND datetime(f.match_date) > datetime('now', '-7 days')
+        AND f.match_date::timestamptz < NOW() - INTERVAL '120 minutes'
+        AND f.match_date::timestamptz > NOW() - INTERVAL '7 days'
       LIMIT 50
     `);
     return result.rows || [];

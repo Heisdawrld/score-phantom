@@ -1454,7 +1454,7 @@ router.post('/push-token', requireAuth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token required' });
-    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id', args: [req.user.id, token, 'web'] });
+    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id, updated_at=CURRENT_TIMESTAMP', args: [req.user.id, token, 'web'] });
     res.json({ ok: true });
   } catch(e) { console.error('[PushToken]',e.message); res.status(500).json({ error: 'Failed to save token' }); }
 });

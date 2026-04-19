@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import pg from "pg";
-import { fetchFixturesBySeason } from '../services/bsd.js';
+import { fetchFixturesByRange } from '../services/bsd.js';
 import { flattenFeatureVector } from '../features/flattenFeatureVector.js';
 import { classifyMatchScript } from '../scripts/archive/classifyMatchScript.js';
 import { estimateExpectedGoals } from '../probabilities/estimateExpectedGoals.js';
@@ -92,34 +92,33 @@ function determineResult(market, homeGoals, awayGoals) {
 }
 
 async function runBacktestForSeason(leagueId, seasonId) {
-  console.log(`\n🚀 Starting Backtest for League ${leagueId}, Season ${seasonId}`);
-
-  // 1. Fetch matches
-  console.log(`Fetching historical matches...`);
-  const matches = await fetchFixturesBySeason(seasonId, { status: 'finished' });
+  console.log(`Fetching historical matches for the last 30 days...`);
+  const dateTo = new Date().toISOString().split('T')[0];
+  const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const allMatches = await fetchFixturesByRange(dateFrom, dateTo);
+  const matches = allMatches.filter(m => m.status === 'finished');
   console.log(`Found ${matches.length} finished matches.`);
 
-  // 2. Get already tested matches
-  const testedRes = await db.execute({
-    sql: `SELECT fixture_id FROM backtest_results WHERE league_id = ? AND season = ?`,
-    args: [String(leagueId), String(seasonId)]
-  });
-  const testedIds = new Set(testedRes.rows.map(r => r.fixture_id));
+  // 2. Get already tested matches globally
+  const testedRes = await db.execute({ sql: `SELECT fixture_id FROM backtest_results` });
+  const testedIds = new Set(testedRes.rows.map(r => String(r.fixture_id)));
   
-  const toTest = matches.filter(m => !testedIds.has(String(m.id)) && m.home_score?.current !== undefined);
+  const toTest = matches.filter(m => !testedIds.has(String(m.id)) && m.home_score !== null && m.home_score !== undefined);
   console.log(`Matches to process: ${toTest.length}`);
 
   let successCount = 0;
   let failCount = 0;
 
-  for (let i = 0; i < toTest.length; i++) {
+  for (let i = 0; i < Math.min(toTest.length, 500); i++) { // Process max 500 per run to avoid huge runs
     const match = toTest[i];
     const fixtureId = String(match.id);
-    const homeTeam = match.home_team?.name || 'Home';
-    const awayTeam = match.away_team?.name || 'Away';
-    const homeGoals = match.home_score?.current || 0;
-    const awayGoals = match.away_score?.current || 0;
-    const matchDate = match.start_time || new Date().toISOString();
+    const mLeagueId = match.league?.id || leagueId;
+    const mSeasonId = match.season?.year || seasonId;
+    const homeTeam = match.home_team?.name || match.home_team || 'Home';
+    const awayTeam = match.away_team?.name || match.away_team || 'Away';
+    const homeGoals = match.home_score || 0;
+    const awayGoals = match.away_score || 0;
+    const matchDate = match.start_time || match.event_date || new Date().toISOString();
 
     console.log(`[${i+1}/${toTest.length}] Testing ${homeTeam} vs ${awayTeam}...`);
 
@@ -145,7 +144,7 @@ async function runBacktestForSeason(leagueId, seasonId) {
       markets.sort((a, b) => b.finalScore - a.finalScore);
       const topPick = markets[0];
       
-      const actualResult = determineResult(topPick.id, homeGoals, awayGoals);
+      const actualResult = determineResult(topPick.marketKey, homeGoals, awayGoals);
       
       // Save to DB
       await db.execute({
@@ -155,16 +154,16 @@ async function runBacktestForSeason(leagueId, seasonId) {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         args: [
-          fixtureId, String(leagueId), String(seasonId), matchDate, homeTeam, awayTeam,
-          script?.primary || 'balanced', topPick.id, topPick.probability,
+          fixtureId, String(mLeagueId), String(mSeasonId), matchDate, homeTeam, awayTeam,
+          script?.primary || 'balanced', topPick.marketKey, topPick.modelProbability,
           actualResult, homeGoals, awayGoals
         ]
       });
 
       if (actualResult === 'WON') successCount++;
-      else failCount++;
+      else if (actualResult === 'LOST') failCount++;
 
-      console.log(`  -> Pick: ${topPick.id} (${(topPick.probability*100).toFixed(0)}%) | Result: ${actualResult} (${homeGoals}-${awayGoals})`);
+      console.log(`  -> Pick: ${topPick.marketKey} (${(topPick.modelProbability*100).toFixed(0)}%) | Result: ${actualResult} (${homeGoals}-${awayGoals})`);
       
       // Rate limiting
       await sleep(100);
