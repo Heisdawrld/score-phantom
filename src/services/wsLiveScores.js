@@ -93,13 +93,18 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
      }
      
      await db.execute({
-        sql: `INSERT OR REPLACE INTO historical_matches 
-               (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap) 
-              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          fixtureId, f.match_date, f.home_team_name, f.away_team_name, 
-          homeScore, awayScore, hXg, aXg, mmt, sh
-        ]
+       sql: `DELETE FROM historical_matches WHERE fixture_id = ? AND type = 'h2h'`,
+       args: [fixtureId]
+     });
+
+     await db.execute({
+       sql: `INSERT INTO historical_matches
+              (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap)
+             VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       args: [
+         fixtureId, f.match_date, f.home_team_name, f.away_team_name,
+         homeScore, awayScore, hXg, aXg, mmt, sh
+       ]
      });
      console.log(`[Engine] Saved finished match memory to H2H for ${f.home_team_name} vs ${f.away_team_name}`);
   }
