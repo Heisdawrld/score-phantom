@@ -23,7 +23,7 @@ export async function initMarketTrackingTable() {
         selection TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         engine_version TEXT DEFAULT 'v2',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 

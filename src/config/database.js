@@ -10,7 +10,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL.includes("sslmode=require")
+    ? process.env.DATABASE_URL.replace("sslmode=require", "sslmode=verify-full")
+    : process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
