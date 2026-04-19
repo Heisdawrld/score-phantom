@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLogin, useSignup } from "@/hooks/use-auth";
-import { Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle, MessageCircle } from "lucide-react";
 import { z } from "zod";
 import { fetchApi, setAuthToken } from "@/lib/api";
 import { signInWithGoogle } from "@/lib/firebase";
@@ -469,6 +469,23 @@ export default function Login() {
           <div><p className="text-primary font-black text-lg leading-tight">Model</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Predictions</p></div>
           <div className="w-px h-7 bg-white/8" />
           <div><p className="text-primary font-black text-lg leading-tight">73%</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Accuracy</p></div>
+        </motion.div>
+
+        {/* WhatsApp support — for users who lost premium access */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+          className="flex flex-col items-center gap-2 pb-2">
+          <p className="text-[11px] text-white/30 text-center">
+            Lost premium access after our database update?
+          </p>
+          <a
+            href="https://wa.me/2348117024699?text=Hi%20ScorePhantom%20support%2C%20I%20need%20help%20restoring%20my%20premium%20access."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#25D366] text-xs font-bold hover:bg-[#25D366]/20 transition-all"
+          >
+            <MessageCircle className="w-3.5 h-3.5 fill-[#25D366]" />
+            Contact us on WhatsApp
+          </a>
         </motion.div>
       </motion.div>
     </div>

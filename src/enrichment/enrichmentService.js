@@ -295,134 +295,60 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
  * @param {object} fixture - fixture row from DB
  * @returns {object} enrichment data bundle
  */
-export async function fetchAndStoreEnrichment(fixture) {
-  // Guard: skip fixtures with missing team IDs
+﻿export async function fetchAndStoreEnrichment(fixture) {
   if (!fixture.home_team_id || !fixture.away_team_id || String(fixture.home_team_id).trim() === '' || String(fixture.away_team_id).trim() === '') {
-    console.warn('[enrichmentService] Skipping ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' — missing team IDs');
-    return { h2h: [], homeForm: [], awayForm: [], standings: [], homeMomentum: null, awayMomentum: null, homeProfile: null, awayProfile: null, lineupModifier: null, completeness: { score: 0, tier: 'thin', checks: {} }, homeStats: null, awayStats: null, matchStats: null, matchEvents: null, odds: null };
+    console.warn('[enrichmentService] Skipping ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' - missing team IDs');
+    return { h2h: [], homeForm: [], awayForm: [], standings: [], homeMomentum: null, awayMomentum: null, homeProfile: null, awayProfile: null, lineupModifier: null, completeness: { score: 0, tier: 'thin', checks: {} }, homeStats: null, awayStats: null, matchStats: null, matchEvents: null, actualHomeXg: null, actualAwayXg: null, shotmap: null, refereeData: null, injuries: null, odds: null };
   }
-  console.log(`[enrichmentService] Starting enrichment for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
-
-  // Step 1: Team form PRIMARY (up to 15 finished matches) + H2H + Standings
-  // We completely bypass Bzzoiro for historical form and H2H to avoid rate limits.
-  // The daily_vacuum script handles populating the local DB.
-  
-  // ── 1. API Form & H2H (Primary) ──
+  console.log('[enrichmentService] Enriching ' + fixture.home_team_name + ' vs ' + fixture.away_team_name);
+  let eventDetail = null, bsdH2H = [], bsdHomeFormStats = null, bsdAwayFormStats = null;
+  let actualHomeXg = null, actualAwayXg = null, matchStats = null, matchEvents = null;
+  let shotmap = null, refereeData = null, injuries = null;
+  try {
+    const eventId = fixture.id || fixture.match_id;
+    eventDetail = await fetchEventDetail(eventId, false);
+    if (eventDetail) {
+      const h2hBlock = eventDetail.head_to_head;
+      if (h2hBlock && h2hBlock.recent_matches && h2hBlock.recent_matches.length > 0) {
+        bsdH2H = h2hBlock.recent_matches.map(m => ({ home: m.home || '', away: m.away || '', score: m.score || null, date: m.date || '', competition: '' })).filter(m => m.score);
+      }
+      bsdHomeFormStats = eventDetail.home_form || null;
+      bsdAwayFormStats = eventDetail.away_form || null;
+      actualHomeXg = eventDetail.actual_home_xg != null ? eventDetail.actual_home_xg : (eventDetail.home_xg_live != null ? eventDetail.home_xg_live : null);
+      actualAwayXg = eventDetail.actual_away_xg != null ? eventDetail.actual_away_xg : (eventDetail.away_xg_live != null ? eventDetail.away_xg_live : null);
+      if (eventDetail.referee) { refereeData = { name: eventDetail.referee.name, yellowCards: eventDetail.referee.yellowCards, redCards: eventDetail.referee.redCards }; }
+      const unavail = eventDetail.unavailable_players;
+      if (unavail && ((unavail.home && unavail.home.length) || (unavail.away && unavail.away.length))) {
+        injuries = { home: unavail.home || [], away: unavail.away || [], homeMissingCount: (unavail.home || []).length, awayMissingCount: (unavail.away || []).length };
+      }
+    }
+  } catch (err) { console.warn('[enrichmentService] Event detail fetch failed:', err.message); }
   const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_id);
   const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_id);
-  const h2hRaw = await fetchH2H(fixture.home_team_id, fixture.away_team_id);
-
-  // ── 1b. Local Database Fallback (Secondary) ──
-  const localHome = await fetchLocalTeamForm(fixture.home_team_name);
-  const localAway = await fetchLocalTeamForm(fixture.away_team_name);
-  const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
-
-  const homeFormMergedApi = mergeForm(homeFormRaw, localHome);
-  const awayFormMergedApi = mergeForm(awayFormRaw, localAway);
-  const h2hMergedApi = mergeForm(h2hRaw, localH2h);
-
-  const h2hData = { h2h: h2hMergedApi, homeForm: homeFormMergedApi, awayForm: awayFormMergedApi };
+  const localHome   = await fetchLocalTeamForm(fixture.home_team_name);
+  const localAway   = await fetchLocalTeamForm(fixture.away_team_name);
+  const localH2h    = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
+  const homeFormMerged = mergeForm(homeFormRaw, localHome);
+  const awayFormMerged = mergeForm(awayFormRaw, localAway);
+  const h2hMerged = bsdH2H.length > 0 ? mergeForm(bsdH2H, localH2h) : mergeForm([], localH2h);
   await sleep(300);
-
-  // ── 2. Standings (Still needed for basic league context) ──
-  const standingsRaw = await fetchStandings(fixture.tournament_id).catch((e) => {
-    console.warn("[enrichmentService] Standings failed:", e.message); return [];
-  });
+  const standingsRaw = await fetchStandings(fixture.tournament_id).catch(() => []);
   const standings = (standingsRaw || []).map(normaliseStandingsRow);
-
-  // If team endpoint gave thin data, top up from standings form (free)
-  const homeFormFallback = homeFormMergedApi.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
-  const awayFormFallback = awayFormMergedApi.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
-  // Step 2: Use best source
-  const homeFormMerged = homeFormMergedApi.length >= homeFormFallback.length ? homeFormMergedApi : homeFormFallback;
-  const awayFormMerged = awayFormMergedApi.length >= awayFormFallback.length ? awayFormMergedApi : awayFormFallback;
-
-  const homeForm = filterRelevantForm(homeFormMerged, fixture.home_team_name, 50);
-  const awayForm = filterRelevantForm(awayFormMerged, fixture.away_team_name, 50);
-
-  // ── Step 3 (renumbered): Build team profiles from form data ────────────────
-  // Premium match stats (shots/possession) are not fetched — API plan required.
-  // All profile intelligence comes from form-derived goal/outcome data.
-  const homeProfile = buildTeamProfile(fixture.home_team_name, homeForm, []);
-  const awayProfile = buildTeamProfile(fixture.away_team_name, awayForm, []);
-
-  // ── Step 4: Compute momentum ──────────────────────────────────────────────
-  const homeMomentum = computeMomentum(homeForm, fixture.home_team_name);
-  const awayMomentum = computeMomentum(awayForm, fixture.away_team_name);
-
-  // ── Step 5: Optional lineup (non-blocking, typically only near kickoff) ────
+  const homeFormFallback = homeFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
+  const awayFormFallback = awayFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
+  const homeFormFinal = filterRelevantForm(homeFormMerged.length >= homeFormFallback.length ? homeFormMerged : homeFormFallback, fixture.home_team_name, 50);
+  const awayFormFinal = filterRelevantForm(awayFormMerged.length >= awayFormFallback.length ? awayFormMerged : awayFormFallback, fixture.away_team_name, 50);
+  const homeProfile = buildTeamProfile(fixture.home_team_name, homeFormFinal, []);
+  const awayProfile = buildTeamProfile(fixture.away_team_name, awayFormFinal, []);
+  if (bsdHomeFormStats) { const n = bsdHomeFormStats.matches_played || 0; if (n > 0) { if (bsdHomeFormStats.goals_scored_last_n != null) homeProfile.avgGoalsScored = +(bsdHomeFormStats.goals_scored_last_n / n).toFixed(2); if (bsdHomeFormStats.goals_conceded_last_n != null) homeProfile.avgGoalsConceded = +(bsdHomeFormStats.goals_conceded_last_n / n).toFixed(2); if (bsdHomeFormStats.avg_xg != null) homeProfile.avgXg = +bsdHomeFormStats.avg_xg.toFixed(3); if (bsdHomeFormStats.avg_xg_conceded != null) homeProfile.avgXgConceded = +bsdHomeFormStats.avg_xg_conceded.toFixed(3); if (bsdHomeFormStats.avg_shots != null) homeProfile.avgShots = +bsdHomeFormStats.avg_shots.toFixed(1); if (bsdHomeFormStats.avg_shots_on_target != null) homeProfile.avgShotsOnTarget = +bsdHomeFormStats.avg_shots_on_target.toFixed(1); homeProfile.formString = bsdHomeFormStats.form_string || homeProfile.formString; homeProfile.matchesAnalyzed = Math.max(homeProfile.matchesAnalyzed || 0, n); homeProfile.bsdEnriched = true; } }
+  if (bsdAwayFormStats) { const n = bsdAwayFormStats.matches_played || 0; if (n > 0) { if (bsdAwayFormStats.goals_scored_last_n != null) awayProfile.avgGoalsScored = +(bsdAwayFormStats.goals_scored_last_n / n).toFixed(2); if (bsdAwayFormStats.goals_conceded_last_n != null) awayProfile.avgGoalsConceded = +(bsdAwayFormStats.goals_conceded_last_n / n).toFixed(2); if (bsdAwayFormStats.avg_xg != null) awayProfile.avgXg = +bsdAwayFormStats.avg_xg.toFixed(3); if (bsdAwayFormStats.avg_xg_conceded != null) awayProfile.avgXgConceded = +bsdAwayFormStats.avg_xg_conceded.toFixed(3); if (bsdAwayFormStats.avg_shots != null) awayProfile.avgShots = +bsdAwayFormStats.avg_shots.toFixed(1); if (bsdAwayFormStats.avg_shots_on_target != null) awayProfile.avgShotsOnTarget = +bsdAwayFormStats.avg_shots_on_target.toFixed(1); awayProfile.formString = bsdAwayFormStats.form_string || awayProfile.formString; awayProfile.matchesAnalyzed = Math.max(awayProfile.matchesAnalyzed || 0, n); awayProfile.bsdEnriched = true; } }
+  const homeMomentum = computeMomentum(homeFormFinal, fixture.home_team_name);
+  const awayMomentum = computeMomentum(awayFormFinal, fixture.away_team_name);
   let lineupModifier = null;
-  try {
-    // BSD predicted-lineup uses api_id (external), not internal id
-    const matchApiId = fixture.bsd_event_api_id || fixture.match_id;
-    const rawLineup = await fetchPredictedLineup(matchApiId);
-    const normLineup = normaliseBsdLineup(rawLineup);
-    lineupModifier = parseLineupModifier(normLineup);
-    if (lineupModifier) {
-      console.log(`[enrichmentService] Lineup available for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
-    }
-  } catch {
-    // Lineups not available — this is expected for pre-match enrichment
-  }
-
-  // ── Step 5.5: Fetch match stats and events ──────────────────────────────────
-  let matchStats = null;
-  let matchEvents = null;
-  let actualHomeXg = null;
-  let actualAwayXg = null;
-  let shotmap = null;
-  try {
-    // BSD: single event detail call gives us stats, incidents, xG, shotmap
-    const matchId = fixture.match_id || fixture.id;
-    const eventDetail = await fetchEventDetail(matchId, true).catch(() => null);
-    if (eventDetail) {
-      matchStats = eventDetail.live_stats || null;
-      matchEvents = eventDetail.incidents || null;
-      actualHomeXg = eventDetail.actual_home_xg || eventDetail.home_xg || null;
-      actualAwayXg = eventDetail.actual_away_xg || eventDetail.away_xg || null;
-      shotmap = eventDetail.shotmap || null;
-      console.log('[enrichmentService] Event detail available for fixture ' + matchId);
-    }
-  } catch {
-    // Stats not available pre-match — expected
-  }
-
-  // ── Step 6: Data completeness ─────────────────────────────────────────────
-  const completeness = computeDataCompleteness({
-    homeForm,
-    awayForm,
-    h2h: h2hData.h2h,
-    standings,
-    matchEvents,
-    lineupModifier,
-  });
-
+  try { const rawLineup = await fetchPredictedLineup(fixture.id); lineupModifier = parseLineupModifier(normaliseBsdLineup(rawLineup)); } catch (_) {}
+  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier });
+  if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) { completeness.score = Math.min(0.80, completeness.score + 0.15); completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial'; completeness.checks.hasBsdFormStats = true; }
   const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
-  console.log(
-    `[enrichmentService] ${fixture.home_team_name} vs ${fixture.away_team_name} → ` +
-    `${tierLabel} (${completeness.score}) | ` +
-    `home_form=${homeForm.length} away_form=${awayForm.length} ` +
-    `h2h=${h2hData.h2h.length} standings=${standings.length}` +
-    (completeness.checks.floorApplied ? ' [floor applied]' : '')
-  );
-
-  // ── Step 7: Assemble enrichment bundle ────────────────────────────────────
-  return {
-    h2h: cloneForm(h2hData.h2h),
-    homeForm: cloneForm(homeForm),
-    awayForm: cloneForm(awayForm),
-    standings,
-    homeMomentum,
-    awayMomentum,
-    lineupModifier,
-    completeness,
-    homeStats: homeProfile,
-    awayStats: awayProfile,
-    matchStats,
-    matchEvents,
-    actualHomeXg,
-    actualAwayXg,
-    shotmap,
-    odds: null,
-  };
+  console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' bsdStats=' + (bsdHomeFormStats ? 'YES' : 'no') + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
+  return { h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings, homeMomentum, awayMomentum, lineupModifier, completeness, homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile, matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, bsdHomeFormStats, bsdAwayFormStats, refereeData, injuries, odds: null };
 }

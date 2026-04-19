@@ -447,9 +447,11 @@ export function normaliseBsdEventToFixture(event) {
   const awayTeamId   = String(awayTeamObj.id || event.id + '_away');
   const tournamentId = String(league.id || '');
 
-  // Logo URLs (no API call — just URL template using api_id)
-  const homeTeamLogo = getTeamLogoUrl(homeTeamObj.api_id);
-  const awayTeamLogo = getTeamLogoUrl(awayTeamObj.api_id);
+  // Logo URLs: BSD events endpoint doesn't return api_id on team objects,
+  // so we use the internal BSD team id (e.g. 314) as the logo URL key.
+  // URL format: https://sports.bzzoiro.com/img/team/{id}/
+  const homeTeamLogo = getTeamLogoUrl(homeTeamObj.api_id || homeTeamObj.id);
+  const awayTeamLogo = getTeamLogoUrl(awayTeamObj.api_id || awayTeamObj.id);
 
   // Map BSD status to our internal status codes
   const statusMap = {

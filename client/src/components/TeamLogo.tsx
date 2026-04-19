@@ -27,7 +27,9 @@ export function TeamLogo({ src, alt, name, teamId, className, size = 'md' }: Tea
     className
   );
 
-  const finalSrc = src || (teamId ? `https://sports.bzzoiro.com/img/team/${teamId}/` : null);
+  // Treat empty string as no src — fallback to teamId URL or shield icon
+  const effectiveSrc = src && src.trim() ? src : null;
+  const finalSrc = effectiveSrc || (teamId ? `https://sports.bzzoiro.com/img/team/${teamId}/` : null);
   const finalAlt = alt || name || "Team Logo";
 
   if (!finalSrc || error) {
