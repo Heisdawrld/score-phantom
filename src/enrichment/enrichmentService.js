@@ -21,6 +21,7 @@ import {
   fetchPredictedLineup,
   fetchEventDetail,
   fetchMultiBookmakerOdds,
+  fetchReferees,
   normaliseBsdLineup,
   normaliseEventToForm,
   normaliseStandingsRow,
@@ -400,6 +401,40 @@ export async function fetchAndStoreEnrichment(fixture) {
     // Odds not available
   }
 
+  // ── Step 5.7: Fetch Referee Intelligence ──────────────────────────────────
+  let refereeData = null;
+  try {
+    const matchId = fixture.match_id || fixture.id;
+    // We already fetched eventDetail in 5.5, but we need the referee ID from it
+    const eventDetail = await fetchEventDetail(matchId, true).catch(() => null);
+    
+    if (eventDetail && eventDetail.referee && eventDetail.referee.id) {
+      const refId = eventDetail.referee.id;
+      // Fetch all referees for the league to get stats
+      const referees = await fetchReferees(fixture.league_id).catch(() => []);
+      
+      const refMatch = referees.find(r => r.id === refId);
+      if (refMatch) {
+        refereeData = {
+          name: refMatch.name,
+          matches: refMatch.matches,
+          yellow_cards: refMatch.yellow_cards,
+          red_cards: refMatch.red_cards,
+          avg_yellows: refMatch.matches > 0 ? (refMatch.yellow_cards / refMatch.matches).toFixed(2) : 0,
+          avg_reds: refMatch.matches > 0 ? (refMatch.red_cards / refMatch.matches).toFixed(2) : 0,
+          fouls: refMatch.fouls || 0,
+          avg_fouls: refMatch.matches > 0 && refMatch.fouls ? (refMatch.fouls / refMatch.matches).toFixed(2) : 0
+        };
+        console.log(`[enrichmentService] Extracted referee stats for ${refereeData.name}`);
+      } else {
+        // Fallback to basic name if stats aren't available in league lookup
+        refereeData = { name: eventDetail.referee.name || 'Unknown' };
+      }
+    }
+  } catch (err) {
+    console.error('[enrichmentService] Failed to extract referee data:', err.message);
+  }
+
   // ── Step 6: Data completeness ─────────────────────────────────────────────
   const completeness = computeDataCompleteness({
     homeForm,
@@ -438,6 +473,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     actualAwayXg,
     shotmap,
     deepOdds,
+    refereeData,
     odds: null,
   };
 }
