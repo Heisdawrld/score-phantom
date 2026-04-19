@@ -340,7 +340,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
          f.home_score, f.away_score, f.match_status, f.live_minute,
          p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
          p.best_pick_score, p.best_pick_edge, p.best_pick_implied_probability,
-         p.confidence_model AS pick_confidence_level
+         p.confidence_model AS pick_confidence_level, p.confidence_volatility
    FROM fixtures f
    LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
    WHERE 1=1`;
@@ -365,7 +365,17 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     args.push(parseInt(limit, 10), parseInt(offset, 10));
 
     const result = await db.execute({ sql: query, args });
-    const fixtures = result.rows;
+    const fixtures = result.rows.map(f => {
+      const prob = parseFloat(f.best_pick_probability || 0);
+      const impl = parseFloat(f.best_pick_implied_probability || 0);
+      const edge = parseFloat(f.best_pick_edge || 0);
+      const vol = (f.confidence_volatility || '').toLowerCase();
+      
+      f.is_safe_bet = prob >= 0.72 && vol === 'low';
+      f.is_value_bet = impl > 0 && edge >= 0.08;
+      return f;
+    });
+
     // Fire-and-forget: enrich any fixtures with null status so badges update on next poll
     const _pending = fixtures.filter(f => !f.enrichment_status);
     if (_pending.length > 0 && !_bgEnrichRunning) {
@@ -1106,6 +1116,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     let pickQuery = `
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+             p.best_pick_implied_probability, p.best_pick_edge,
              p.best_pick_score, p.confidence_model, p.confidence_volatility,
              p.explanation_json, p.backup_picks_json,
              f.tournament_name, f.match_date, f.enrichment_status, f.data_quality,
@@ -1200,7 +1211,10 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       } catch (_) {}
 
       const prob   = parseFloat(row.best_pick_probability || 0);
+      const impl   = parseFloat(row.best_pick_implied_probability || 0);
+      const edge   = parseFloat(row.best_pick_edge || 0);
       const score  = parseFloat(row.best_pick_score || 0);
+      const vol    = (row.confidence_volatility || '').toLowerCase();
       // confidence_model is text: 'HIGH','MEDIUM','LOW','LEAN' — map to numeric
       const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
       const conf = confMap[(row.confidence_model || '').toUpperCase()] || 30;
@@ -1218,6 +1232,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         market:      row.best_pick_market,
         pick:        row.best_pick_selection,
         probability: parseFloat((prob * 100).toFixed(1)),
+        isSafeBet:   prob >= 0.72 && vol === 'low',
+        isValueBet:  impl > 0 && edge >= 0.08,
         score,
         confidence:  parseFloat(conf.toFixed(1)),
         composite:   parseFloat(composite.toFixed(1)),

@@ -192,7 +192,7 @@ export default function Dashboard() {
     });
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment") === "success");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live">("all");
+  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live" | "safe" | "value">("all");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
@@ -234,6 +234,10 @@ export default function Dashboard() {
     }
     if (activeGroupTab === "live") {
       filtered = filtered.filter((f: any) => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(f.match_status || ''));
+    } else if (activeGroupTab === "safe") {
+      filtered = filtered.filter((f: any) => f.is_safe_bet);
+    } else if (activeGroupTab === "value") {
+      filtered = filtered.filter((f: any) => f.is_value_bet);
     } else if (activeGroupTab === "favorites") {
       try {
         const favs = JSON.parse((user as any)?.league_favorites || "[]");
@@ -426,10 +430,12 @@ export default function Dashboard() {
         </div>
 
         {/* ── Tabs ── */}
-          <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4">
-            <button onClick={() => setActiveGroupTab("all")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
-            <button onClick={() => setActiveGroupTab("live")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
-            <button onClick={() => setActiveGroupTab("favorites")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
+          <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4 overflow-x-auto hide-scrollbar touch-pan-x overscroll-x-contain">
+            <button onClick={() => setActiveGroupTab("all")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
+            <button onClick={() => setActiveGroupTab("live")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
+            <button onClick={() => setActiveGroupTab("safe")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "safe" ? "bg-green-500/20 text-green-400" : "text-white/40 hover:text-white/70"}`}>Safe</button>
+            <button onClick={() => setActiveGroupTab("value")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "value" ? "bg-amber-500/20 text-amber-400" : "text-white/40 hover:text-white/70"}`}>Value</button>
+            <button onClick={() => setActiveGroupTab("favorites")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
           </div>
 
         {/* ── Fixtures count ── */}

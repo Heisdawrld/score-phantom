@@ -13,6 +13,19 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
   const confidence = buildConfidenceProfile(bestPick, features);
   // Pass bestPick.marketKey so reasons are filtered to support the chosen pick
   const reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
+
+  if (bestPick) {
+    const prob = bestPick.modelProbability || 0;
+    const impl = bestPick.impliedProbability || 0;
+    const edge = bestPick.edge || 0;
+    
+    // Safe Bet = probability >= 72%, low volatility, regardless of odds
+    bestPick.isSafeBet = prob >= 0.72 && confidence.volatility === 'low';
+    
+    // Value Bet = model probability exceeds implied probability by >= 8pp
+    bestPick.isValueBet = impl > 0 && edge >= 0.08;
+  }
+
   const result = {
     fixtureId,
     homeTeam: homeTeamName,

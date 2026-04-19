@@ -31,6 +31,8 @@ interface Pick {
   time: string;
   enrichment?: string;
   dataQuality?: string;
+  isSafeBet?: boolean;
+  isValueBet?: boolean;
   factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
 }
 
@@ -63,7 +65,7 @@ function FactorTag({ icon, label, active }: { icon: React.ReactNode; label: stri
   );
 }
 
-type FilterMode = "all" | "elite" | "high_edge" | "value";
+type FilterMode = "all" | "elite" | "safe" | "value";
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -98,10 +100,10 @@ export default function TopPicksToday() {
 
   // Apply filter
   const picks = allPicks.filter(p => {
+    if (filter === "safe") return p.isSafeBet;
+    if (filter === "value") return p.isValueBet;
     const comp = p.composite ?? p.score * 100;
     if (filter === "elite") return comp >= 65;
-    if (filter === "high_edge") return comp >= 52;
-    if (filter === "value") return p.probability >= 65;
     return true;
   });
 
@@ -196,9 +198,9 @@ export default function TopPicksToday() {
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4 touch-pan-x overscroll-x-contain">
           {[
             { key: "all" as FilterMode, label: "All Picks" },
+            { key: "safe" as FilterMode, label: "Safe Bets" },
+            { key: "value" as FilterMode, label: "Value Bets" },
             { key: "elite" as FilterMode, label: "Elite" },
-            { key: "high_edge" as FilterMode, label: "High Edge" },
-            { key: "value" as FilterMode, label: "Value" },
           ].map(f => (
             <button
               key={f.key}
@@ -292,6 +294,16 @@ export default function TopPicksToday() {
                             {pick.time && (
                               <span className="flex items-center gap-0.5 text-[10px] text-white/25">
                                 <Clock className="w-2.5 h-2.5" />{pick.time}
+                              </span>
+                            )}
+                            {pick.isSafeBet && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                                Safe Bet
+                              </span>
+                            )}
+                            {pick.isValueBet && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" /> Value Bet
                               </span>
                             )}
                           </div>

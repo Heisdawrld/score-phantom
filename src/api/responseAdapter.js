@@ -415,6 +415,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       edgeLabel: resolveEdgeLabel(bestPick),
       reasons: humanReasonCodes,
       no_edge: false,
+      isSafeBet: bestPick.isSafeBet || false,
+      isValueBet: bestPick.isValueBet || false,
     };
   } else {
     recommendation = {

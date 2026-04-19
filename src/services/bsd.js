@@ -234,12 +234,10 @@ export async function fetchEventDetail(eventId, full = false) {
   return await bsdFetch(`/events/${eventId}/${full ? '?full=true' : ''}`);
 }
 
-export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
-  if (!team) return [];
+export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {}) {
+  if (!teamId) return [];
 
   const dTo = new Date();
-  // Never look back more than 1 year for form events.
-  // Using large lookbacks (like 15 years) causes massive multi-page fetches that hang the API.
   const yearsBack = 1;
   const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
   const dateFrom = dFrom.toISOString().slice(0, 10);
@@ -249,16 +247,10 @@ export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
     status: 'finished',
     date_from: dateFrom,
     date_to: dateTo,
+    team_id: teamId
   };
 
-  let teamSearchText = '';
-  // If team is a number (or string that is a number), it's likely an ID
-  if (!isNaN(team) && String(team).trim() !== '') {
-    params.team_id = team;
-  } else {
-    params.team = team;
-    teamSearchText = String(team).trim().toLowerCase();
-  }
+  let teamSearchText = teamName ? String(teamName).trim().toLowerCase() : '';
 
   // We use bsdFetch instead of bsdFetchAll to only grab the first page
   // The API sorts descending, so the first page naturally has the most recent games.
@@ -266,15 +258,12 @@ export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
   const results = data?.results || data || [];
 
   // POST-FETCH QUARANTINE FILTER
-  // BSD ignores the 'team' text parameter and returns a global dump.
-  // We must manually filter the results to ensure they actually contain the requested team.
   let filteredResults = results || [];
   if (teamSearchText && teamSearchText.length > 2) {
     const searchTokens = teamSearchText.split(' ').filter(t => t.length > 2);
     filteredResults = filteredResults.filter(e => {
       const h = String(e.home_team || '').toLowerCase();
       const a = String(e.away_team || '').toLowerCase();
-      // Require at least one significant word from the team name to appear in home or away
       return searchTokens.some(token => h.includes(token) || a.includes(token));
     });
   }
@@ -287,29 +276,13 @@ export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
 
 // ── H2H (Bzzoiro /h2h/ endpoint) ──────────────────────────────────────────
 
-/**
- * Fetch H2H records for two teams.
- * BSD /h2h/ endpoint takes team1 and team2 (internal IDs or names).
- *
- * @param {string|number} team1 - home team id or name
- * @param {string|number} team2 - away team id or name
- * @param {number} n - max results to return
- */
-export async function fetchH2H(team1, team2, n = 20) {
-  if (!team1 || !team2) return [];
-
-  // BSD /h2h/ takes team1 and team2 params
-  const params = { limit: n };
-  if (!isNaN(team1) && String(team1).trim() !== '') params.team1_id = team1;
-  else params.team1 = team1;
-  
-  if (!isNaN(team2) && String(team2).trim() !== '') params.team2_id = team2;
-  else params.team2 = team2;
-
+export async function fetchH2H(team1Id, team2Id, n = 10) {
+  if (!team1Id || !team2Id) return [];
+  const params = { team1: team1Id, team2: team2Id };
   const data = await bsdFetch('/h2h/', params);
 
   const results = data?.results || data || [];
-  
+
   let mapped = results.slice(0, n).map(e => normaliseEventToForm(e)).filter(Boolean);
 
   return mapped;
@@ -320,19 +293,21 @@ export async function fetchH2H(team1, team2, n = 20) {
  * Fetches last 30 finished matches for each team, then finds matches
  * where BOTH teams appear.
  *
+ * @param {string} homeTeamId
  * @param {string} homeTeamName
+ * @param {string} awayTeamId
  * @param {string} awayTeamName
  * @returns {Array} H2H matches in enrichmentService format
  */
-export async function deriveH2H(homeTeamName, awayTeamName, opts = {}) {
-  if (!homeTeamName || !awayTeamName) return [];
+export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamName, opts = {}) {
+  if (!homeTeamId || !awayTeamId) return [];
 
   const target = Number(opts.target ?? 10);
 
   const firstPassCount = Math.max(100, target * 10); // increased from 50
   const [homeEvents1, awayEvents1] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, firstPassCount, { yearsBack: 3 }), // increased from 2
-    fetchTeamRecentEvents(awayTeamName, firstPassCount, { yearsBack: 3 }),
+    fetchTeamRecentEvents(homeTeamId, homeTeamName, firstPassCount, { yearsBack: 3 }), // increased from 2
+    fetchTeamRecentEvents(awayTeamId, awayTeamName, firstPassCount, { yearsBack: 3 }),
   ]);
 
   const aIds1 = new Set((awayEvents1 || []).map(e => e.id));
@@ -342,8 +317,8 @@ export async function deriveH2H(homeTeamName, awayTeamName, opts = {}) {
 
   const deepCount = Math.max(300, target * 25); // increased from 200
   const [homeEvents2, awayEvents2] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamName, deepCount, { yearsBack: 15 }), // increased from 10
-    fetchTeamRecentEvents(awayTeamName, deepCount, { yearsBack: 15 }),
+    fetchTeamRecentEvents(homeTeamId, homeTeamName, deepCount, { yearsBack: 15 }), // increased from 10
+    fetchTeamRecentEvents(awayTeamId, awayTeamName, deepCount, { yearsBack: 15 }),
   ]);
 
   // Build a set of event IDs from the away team's matches for fast lookup

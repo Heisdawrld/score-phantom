@@ -131,6 +131,20 @@ export function LeagueGroup({
                       <TeamLogo src={fixture.away_team_logo} name={fixture.away_team_name} />
                       <span className='font-semibold text-sm text-white truncate'>{fixture.away_team_name}</span>
                     </div>
+                    {(fixture.is_safe_bet || fixture.is_value_bet) && (
+                      <div className="flex gap-1.5 mt-2">
+                        {fixture.is_safe_bet && (
+                          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 uppercase tracking-wide">
+                            SAFE BET
+                          </span>
+                        )}
+                        {fixture.is_value_bet && (
+                          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-0.5">
+                            VALUE BET
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {/* Removed the lock icon section completely to make it clean like premium view */}
                   <div className='flex flex-col items-end gap-1.5 shrink-0'>
