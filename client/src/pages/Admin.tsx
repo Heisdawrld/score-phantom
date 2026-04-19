@@ -408,7 +408,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   useEffect(() => { if (tab === "engine") loadEngineStats(); }, [tab, loadEngineStats]);
 
   const run = async (fn: () => Promise<any>, msg: string) => {
-    try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
+    try { await fn(); flash(true, msg); } catch (e: any) { const raw = e?.message || ""; const friendly = /SQL|sqlite|SQLITE|no such column|postgres|relation|pg|unique/i.test(raw) ? "Data sync error — please retry. Run Enrichment first if this persists." : (raw || "Operation failed"); flash(false, friendly); }
   };
 
   const handleUpgrade = async (e: React.FormEvent) => {

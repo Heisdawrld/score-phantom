@@ -95,13 +95,19 @@ async function insertEvents(events) {
           args: [f.tournament_id, f.tournament_name, f.category_name, ''],
         },
         {
-          sql: `INSERT OR REPLACE INTO fixtures
-                  (id, home_team_id, away_team_id, tournament_id,
-                   home_team_name, away_team_name, tournament_name, category_name,
-                   match_date, match_url, match_status, home_score, away_score,
-                   home_team_logo, away_team_logo,
-                   bsd_league_id, bsd_home_api_id, bsd_away_api_id, bsd_event_api_id, enriched)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+          sql: `INSERT INTO fixtures
+                 (id, home_team_id, away_team_id, tournament_id,
+                  home_team_name, away_team_name, tournament_name, category_name,
+                  match_date, match_url, home_score, away_score,
+                  match_status, home_team_logo, away_team_logo,
+                  bsd_league_id, bsd_home_api_id, bsd_away_api_id, bsd_event_api_id, enriched)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                 ON CONFLICT (id) DO UPDATE SET
+                   home_score = EXCLUDED.home_score,
+                   away_score = EXCLUDED.away_score,
+                   match_status = EXCLUDED.match_status,
+                   home_team_logo = EXCLUDED.home_team_logo,
+                   away_team_logo = EXCLUDED.away_team_logo`,
           args: [
             f.match_id, f.home_team_id, f.away_team_id, f.tournament_id,
             f.home_team_name, f.away_team_name, f.tournament_name, f.category_name,
@@ -116,9 +122,13 @@ async function insertEvents(events) {
       const odds = extractOddsFromEvent(event, f.match_id);
       if (odds.home || odds.draw || odds.away) {
         statements.push({
-          sql: `INSERT OR REPLACE INTO fixture_odds
-                  (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO fixture_odds
+                    (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT (fixture_id) DO UPDATE SET
+                    home = EXCLUDED.home, draw = EXCLUDED.draw, away = EXCLUDED.away,
+                    btts_yes = EXCLUDED.btts_yes, btts_no = EXCLUDED.btts_no,
+                    over_under = EXCLUDED.over_under`,
           args: [
             odds.fixture_id, odds.home, odds.draw, odds.away,
             odds.btts_yes, odds.btts_no, JSON.stringify(odds.over_under || {}),

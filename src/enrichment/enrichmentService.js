@@ -323,8 +323,8 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
       }
     }
   } catch (err) { console.warn('[enrichmentService] Event detail fetch failed:', err.message); }
-  const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_id);
-  const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_id);
+  const homeFormRaw = await fetchTeamRecentEvents(fixture.home_team_name);
+  const awayFormRaw = await fetchTeamRecentEvents(fixture.away_team_name);
   const localHome   = await fetchLocalTeamForm(fixture.home_team_name);
   const localAway   = await fetchLocalTeamForm(fixture.away_team_name);
   const localH2h    = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
