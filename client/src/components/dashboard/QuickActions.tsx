@@ -28,7 +28,7 @@ export function QuickActions({ onTopPicks, onAcca, onLive, onValueBets }: {
   const items = [
     { label: "Top Picks", sub: "Updated daily", icon: <Flame className="w-5 h-5" />, color: "text-orange-400", onClick: onTopPicks },
     { label: "ACCA Builder", sub: "Smart combos", icon: <Zap className="w-5 h-5" />, color: "text-blue-400", onClick: onAcca },
-    { label: "Track Record", sub: "Historical hit rate", icon: <Activity className="w-5 h-5" />, color: "text-emerald-400", onClick: () => setLocation('/track-record') },
+    { label: "Live Tracker", sub: "Track in real-time", icon: <Activity className="w-5 h-5" />, color: "text-emerald-400", onClick: onLive },
     { label: "Value Bets", sub: "High edge plays", icon: <Star className="w-5 h-5" />, color: "text-amber-400", onClick: onValueBets },
   ];
 

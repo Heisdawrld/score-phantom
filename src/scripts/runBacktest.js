@@ -10,6 +10,7 @@ import { buildMarketCandidates } from '../markets/buildMarketCandidates.js';
 import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
 import { assessMatchPredictability } from '../engine/assessMatchPredictability.js';
 
+// Use the exact environment variables the user just provided
 const db = createClient({
   url: process.env.TURSO_URL,
   authToken: process.env.TURSO_TOKEN,
@@ -76,19 +77,7 @@ function determineResult(market, homeGoals, awayGoals) {
   }
 }
 
-async function run() {
-  const args = process.argv.slice(2);
-  const leagueArg = args.find(a => a.startsWith('--league='));
-  const seasonArg = args.find(a => a.startsWith('--season='));
-
-  if (!leagueArg || !seasonArg) {
-    console.error("Usage: node runBacktest.js --league=<id> --season=<year>");
-    process.exit(1);
-  }
-
-  const leagueId = leagueArg.split('=')[1];
-  const seasonId = seasonArg.split('=')[1];
-
+async function runBacktestForSeason(leagueId, seasonId) {
   console.log(`\n🚀 Starting Backtest for League ${leagueId}, Season ${seasonId}`);
 
   // 1. Fetch matches
@@ -99,7 +88,7 @@ async function run() {
   // 2. Get already tested matches
   const testedRes = await db.execute({
     sql: `SELECT fixture_id FROM backtest_results WHERE league_id = ? AND season = ?`,
-    args: [leagueId, seasonId]
+    args: [String(leagueId), String(seasonId)]
   });
   const testedIds = new Set(testedRes.rows.map(r => r.fixture_id));
   
@@ -152,7 +141,7 @@ async function run() {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         args: [
-          fixtureId, leagueId, seasonId, matchDate, homeTeam, awayTeam,
+          fixtureId, String(leagueId), String(seasonId), matchDate, homeTeam, awayTeam,
           script?.primary || 'balanced', topPick.id, topPick.probability,
           actualResult, homeGoals, awayGoals
         ]
@@ -172,10 +161,34 @@ async function run() {
   }
 
   const totalProcessed = successCount + failCount;
-  console.log(`\n✅ Backtest Complete.`);
+  console.log(`\n✅ Season ${seasonId} Complete.`);
   console.log(`Processed: ${totalProcessed}`);
   if (totalProcessed > 0) {
     console.log(`Hit Rate: ${((successCount / totalProcessed) * 100).toFixed(1)}%`);
+  }
+}
+
+async function run() {
+  const args = process.argv.slice(2);
+  const leagueArg = args.find(a => a.startsWith('--league='));
+  const seasonArg = args.find(a => a.startsWith('--season='));
+
+  if (leagueArg && seasonArg) {
+    const leagueId = leagueArg.split('=')[1];
+    const seasonId = seasonArg.split('=')[1];
+    await runBacktestForSeason(leagueId, seasonId);
+  } else {
+    // Run for the top 5 leagues over the last 3 seasons if no args provided
+    // Premier League (39), La Liga (140), Serie A (140 is actually La Liga, Serie A is 135), Bundesliga (140), Ligue 1 (61)
+    // BSD API seasons for PL: 2023=current, 2022, 2021
+    const leagues = [39, 140, 135, 78, 61]; 
+    const seasons = [2023, 2022, 2021];
+
+    for (const league of leagues) {
+      for (const season of seasons) {
+        await runBacktestForSeason(league, season);
+      }
+    }
   }
   process.exit(0);
 }

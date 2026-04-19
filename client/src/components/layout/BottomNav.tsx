@@ -1,14 +1,14 @@
 import { useLocation, Link } from 'wouter';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
-import { Home, Zap, Flame, User, Activity } from 'lucide-react';
+import { Home, Zap, Flame, User, Activity, Dna } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/acca", label: "ACCA", icon: Zap },
   { href: "/picks", label: "Picks", icon: Flame },
-  { href: "/track-record", label: "Stats", icon: Activity },
+  { href: "/simulator", label: "Sim", icon: Dna },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
