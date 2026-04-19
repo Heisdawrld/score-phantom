@@ -85,7 +85,7 @@ export async function savePrediction(predictionResult) {
 
     await db.execute({
       sql: `
-        INSERT OR REPLACE INTO predictions_v2 (
+        INSERT INTO predictions_v2 (
           fixture_id, model_version,
           script_primary, script_secondary, script_confidence,
           home_xg, away_xg, total_xg,
@@ -106,7 +106,32 @@ export async function savePrediction(predictionResult) {
           ?, ?, ?,
           ?, ?,
           ?, ?
-        )
+        ) ON CONFLICT (fixture_id) DO UPDATE SET
+          model_version = EXCLUDED.model_version,
+          script_primary = EXCLUDED.script_primary,
+          script_secondary = EXCLUDED.script_secondary,
+          script_confidence = EXCLUDED.script_confidence,
+          home_xg = EXCLUDED.home_xg,
+          away_xg = EXCLUDED.away_xg,
+          total_xg = EXCLUDED.total_xg,
+          best_pick_market = EXCLUDED.best_pick_market,
+          best_pick_selection = EXCLUDED.best_pick_selection,
+          best_pick_probability = EXCLUDED.best_pick_probability,
+          best_pick_implied_probability = EXCLUDED.best_pick_implied_probability,
+          best_pick_edge = EXCLUDED.best_pick_edge,
+          best_pick_score = EXCLUDED.best_pick_score,
+          confidence_model = EXCLUDED.confidence_model,
+          confidence_value = EXCLUDED.confidence_value,
+          confidence_volatility = EXCLUDED.confidence_volatility,
+          explanation_json = EXCLUDED.explanation_json,
+          explanation_text = EXCLUDED.explanation_text,
+          reason_codes = EXCLUDED.reason_codes,
+          no_safe_pick = EXCLUDED.no_safe_pick,
+          no_safe_pick_reason = EXCLUDED.no_safe_pick_reason,
+          backup_picks_json = EXCLUDED.backup_picks_json,
+          home_team = EXCLUDED.home_team,
+          away_team = EXCLUDED.away_team,
+          updated_at = EXCLUDED.updated_at
       `,
       args: [
         r.fixtureId || null,

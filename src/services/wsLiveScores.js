@@ -93,9 +93,20 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
      }
      
      await db.execute({
-        sql: `INSERT OR REPLACE INTO historical_matches 
+        sql: `INSERT INTO historical_matches 
                (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap) 
-              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (fixture_id) DO UPDATE SET
+                type = EXCLUDED.type,
+                date = EXCLUDED.date,
+                home_team = EXCLUDED.home_team,
+                away_team = EXCLUDED.away_team,
+                home_goals = EXCLUDED.home_goals,
+                away_goals = EXCLUDED.away_goals,
+                home_xg = EXCLUDED.home_xg,
+                away_xg = EXCLUDED.away_xg,
+                momentum = EXCLUDED.momentum,
+                shotmap = EXCLUDED.shotmap`,
         args: [
           fixtureId, f.match_date, f.home_team_name, f.away_team_name, 
           homeScore, awayScore, hXg, aXg, mmt, sh

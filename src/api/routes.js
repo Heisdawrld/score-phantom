@@ -339,6 +339,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
          f.odds_home, f.odds_draw, f.odds_away,
          f.home_score, f.away_score, f.match_status, f.live_minute,
          p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
+         p.best_pick_score, p.best_pick_edge, p.best_pick_implied_probability,
          p.confidence_model AS pick_confidence_level
    FROM fixtures f
    LEFT JOIN predictions_v2 p ON p.fixture_id = f.id

@@ -194,7 +194,7 @@ export async function saveMatchStats(matchId, homeTeam, awayTeam, rawStats) {
 
   try {
     await db.execute({
-      sql: `INSERT OR REPLACE INTO match_stats (
+      sql: `INSERT INTO match_stats (
         match_id, home_team, away_team,
         home_shots, away_shots,
         home_shots_on_target, away_shots_on_target,
@@ -205,7 +205,27 @@ export async function saveMatchStats(matchId, homeTeam, awayTeam, rawStats) {
         home_yellow_cards, away_yellow_cards,
         home_red_cards, away_red_cards,
         fetched_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (match_id) DO UPDATE SET
+        home_team = EXCLUDED.home_team,
+        away_team = EXCLUDED.away_team,
+        home_shots = EXCLUDED.home_shots,
+        away_shots = EXCLUDED.away_shots,
+        home_shots_on_target = EXCLUDED.home_shots_on_target,
+        away_shots_on_target = EXCLUDED.away_shots_on_target,
+        home_dangerous_attacks = EXCLUDED.home_dangerous_attacks,
+        away_dangerous_attacks = EXCLUDED.away_dangerous_attacks,
+        home_corners = EXCLUDED.home_corners,
+        away_corners = EXCLUDED.away_corners,
+        home_possession = EXCLUDED.home_possession,
+        away_possession = EXCLUDED.away_possession,
+        home_fouls = EXCLUDED.home_fouls,
+        away_fouls = EXCLUDED.away_fouls,
+        home_yellow_cards = EXCLUDED.home_yellow_cards,
+        away_yellow_cards = EXCLUDED.away_yellow_cards,
+        home_red_cards = EXCLUDED.home_red_cards,
+        away_red_cards = EXCLUDED.away_red_cards,
+        fetched_at = EXCLUDED.fetched_at`,
       args: [
         String(matchId),
         homeTeam || null,

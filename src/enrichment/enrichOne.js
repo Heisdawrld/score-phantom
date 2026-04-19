@@ -81,10 +81,16 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
   // Store odds if present
   if (data?.odds) {
     await db.execute({
-      sql: `
-        INSERT OR REPLACE INTO fixture_odds (
-          fixture_id, home, draw, away, btts_yes, btts_no, over_under
+        sql: `
+        INSERT INTO fixture_odds (
+          fixture_id,
+          home, draw, away,
+          btts_yes, btts_no, over_under
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (fixture_id) DO UPDATE SET
+          home = EXCLUDED.home, draw = EXCLUDED.draw, away = EXCLUDED.away,
+          btts_yes = EXCLUDED.btts_yes, btts_no = EXCLUDED.btts_no,
+          over_under = EXCLUDED.over_under
       `,
       args: [
         fixtureId,
