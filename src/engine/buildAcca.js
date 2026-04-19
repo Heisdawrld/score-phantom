@@ -429,21 +429,43 @@ export async function buildAcca(rows, mode = 'safe') {
     scriptCounts[pick.scriptCat] = catCount + 1;
   }
 
+  // ── Emergency Fill ────────────────────────────────────────────────────────
+  // If we couldn't reach 5 picks because of strict correlation/league limits,
+  // ignore the correlation limits and just take the next best picks until we hit 5.
+  if (selected.length < 5) {
+    for (const pick of candidates) {
+      if (selected.length >= 5) break;
+      // Skip if already selected
+      if (selected.some(s => s.fixture_id === pick.fixture_id)) continue;
+      
+      const mk_ = (pick.best_pick_market || '').toLowerCase();
+      const pickOdds_ = resolvePickOdds(pick);
+      if (pickOdds_ && pickOdds_ < 1.05) continue;
+
+      selected.push(pick);
+    }
+  }
+
   // ── Step 3: Hard validate — must have at least 1 attacking/result pick ────
   const ATTACKING_MARKETS = new Set(['home_win','away_win','double_chance_home','double_chance_away','dnb_home','dnb_away','btts_yes','over_15','over_25']);
   const hasResultPick = selected.some(p => ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
 
   if (!hasResultPick && selected.length >= 2) {
-    // All picks are unders — not acceptable for an ACCA. Return empty.
-    console.log('[ACCA] Rejected: zero attacking/result picks in final set. All defensive — not a good ACCA.');
-    return {
-      accaType:           null,
-      totalMatches:       0,
-      combinedConfidence: 0,
-      riskLevel:          null,
-      picks:              [],
-      message:            'No ACCA available today — qualifying matches did not produce a balanced mixed pick set.',
-    };
+    // All picks are unders — not acceptable for an ACCA. Try to swap one out.
+    const attackingCandidate = candidates.find(p => !selected.some(s => s.fixture_id === p.fixture_id) && ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
+    if (attackingCandidate) {
+      selected[selected.length - 1] = attackingCandidate; // Replace the weakest pick
+    } else {
+      console.log('[ACCA] Rejected: zero attacking/result picks in final set. All defensive — not a good ACCA.');
+      return {
+        accaType:           null,
+        totalMatches:       0,
+        combinedConfidence: 0,
+        riskLevel:          null,
+        picks:              [],
+        message:            'No attacking/result picks available.',
+      };
+    }
   }
 
   if (selected.length < targetMin) {
