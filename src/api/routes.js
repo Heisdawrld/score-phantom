@@ -28,6 +28,7 @@ import { buildMarketCandidates } from "../markets/buildMarketCandidates.js";
 import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
 import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
+import { generateSimulationTimeline } from "../engine/generateSimulationTimeline.js";
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
@@ -1645,7 +1646,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     let shift_reason = "Variables adjusted.";
     const homeXgDiff = simXg.homeExpectedGoals - baseXg.homeExpectedGoals;
     const awayXgDiff = simXg.awayExpectedGoals - baseXg.awayExpectedGoals;
-    
+
     if (Math.abs(homeXgDiff) > 0.5 || Math.abs(awayXgDiff) > 0.5) {
       shift_reason = "The extreme variable changes caused a massive shift in expected attacking output, completely flipping the script.";
     } else if (homeXgDiff < -0.2 && modifiers.homeInjuries > 0) {
@@ -1660,6 +1661,9 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       shift_reason = "The applied variables caused minor probability shifts but did not fundamentally alter the game script.";
     }
 
+    // Generate Visual Match Script for 4-minute loop
+    const simulation_script = generateSimulationTimeline(simVector, simXg, simScript);
+
     // 7. Format output
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
       market: m.id,
@@ -1671,6 +1675,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       success: true,
       simulation: {
         shift_reason,
+        simulation_script,
         base_model: {
           home_xg: baseXg.homeExpectedGoals.toFixed(2),
           away_xg: baseXg.awayExpectedGoals.toFixed(2),

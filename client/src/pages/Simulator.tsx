@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ModelAdvisorBadge, AdvisorStatus } from '@/components/ui/ModelAdvisorBadge';
 import { useLocation } from 'wouter';
 import { MatchSelectorModal } from '@/components/simulator/MatchSelectorModal';
+import { VirtualPitch } from '@/components/simulator/VirtualPitch';
 import { TeamLogo } from '@/components/TeamLogo';
 import { useToast } from '@/hooks/use-toast';
 
@@ -35,6 +36,8 @@ export default function PhantomLab() {
     lineupStrength: 'full'
   });
 
+  const [simulationState, setSimulationState] = useState<'idle' | 'running' | 'completed'>('idle');
+
   const { toast } = useToast();
 
   const { data: simulation, isPending, mutate, reset } = useMutation({
@@ -51,12 +54,16 @@ export default function PhantomLab() {
         })
       });
     },
+    onSuccess: () => {
+      setSimulationState('running');
+    },
     onError: (error: any) => {
       toast({
         title: "Simulation Failed",
         description: error.message || "Failed to run simulation. Please try again.",
         variant: "destructive"
       });
+      setSimulationState('idle');
     }
   });
 
@@ -256,11 +263,29 @@ export default function PhantomLab() {
         </div>
 
         {/* Results - Before & After */}
-        <AnimatePresence>
-          {simulation && simulation.simulation && (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              animate={{ opacity: 1, y: 0 }} 
+        <AnimatePresence mode="wait">
+          {simulationState === 'running' && simulation?.simulation && (
+            <motion.div
+              key="pitch"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="mt-8"
+            >
+              <VirtualPitch 
+                homeTeamName={selectedMatch!.homeTeamName}
+                awayTeamName={selectedMatch!.awayTeamName}
+                simulationScript={simulation.simulation.simulation_script}
+                onComplete={() => setSimulationState('completed')}
+              />
+            </motion.div>
+          )}
+
+          {simulationState === 'completed' && simulation?.simulation && (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
               className='space-y-6 pt-4'
@@ -368,6 +393,7 @@ export default function PhantomLab() {
           setIsModalOpen(false);
           // Clear simulation on new match selection
           reset();
+          setSimulationState('idle');
         }}
       />
     </div>
