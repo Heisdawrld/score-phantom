@@ -130,7 +130,7 @@ export default function DailyAcca() {
               <div>
                 <p className="text-white font-black text-xl mb-1.5">🔒 Premium Generator</p>
                 <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
-                  Generate high-confidence Accumulators instantly based on AI probability models.
+                  Generate high-confidence Accumulators instantly based on our probability models.
                 </p>
               </div>
               <button

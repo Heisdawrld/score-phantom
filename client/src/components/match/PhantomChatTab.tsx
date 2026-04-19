@@ -67,7 +67,7 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
           <Lock className="w-6 h-6 text-blue-400" />
         </div>
         <div>
-          <p className="text-white font-black text-xl mb-1.5">🔒 Premium AI</p>
+          <p className="text-white font-black text-xl mb-1.5">🔒 Premium Access</p>
           <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
             Ask PhantomChat about tactics, injuries, and exact betting angles for this specific match.
           </p>

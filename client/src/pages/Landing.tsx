@@ -256,7 +256,7 @@ export default function Landing() {
             Unlock the algorithm.
           </h2>
           <p className="text-white/50 mb-10 text-lg max-w-xl mx-auto">
-            Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep AI match analysis for just ₦3,000/month.
+            Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep model analysis for just ₦3,000/month.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button onClick={() => setLocation("/login")}

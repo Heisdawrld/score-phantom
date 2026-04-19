@@ -427,7 +427,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                       <div>
                         <p className="text-white font-black text-xl mb-2">🔒 Premium Required</p>
                         <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
-                          Unlock the AI prediction, exact probabilities, value edge, and PhantomChat analysis for this match.
+                          Unlock the model prediction, exact probabilities, value edge, and PhantomChat analysis for this match.
                         </p>
                       </div>
                       <div className="space-y-2 w-full max-w-[260px]">

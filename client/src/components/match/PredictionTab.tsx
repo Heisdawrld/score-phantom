@@ -71,7 +71,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
         <div>
           <p className="text-white font-black text-xl mb-1.5">🔒 Premium Angle</p>
           <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
-            Unlock the exact AI prediction, winning probabilities, and bookmaker value edge for this match.
+            Unlock the exact model prediction, winning probabilities, and bookmaker value edge for this match.
           </p>
         </div>
         <button
