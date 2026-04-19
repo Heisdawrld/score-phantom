@@ -56,6 +56,7 @@ import Profile from "@/pages/Profile";
 import PaymentBilling from "@/pages/PaymentBilling";
 import BillingHistory from "@/pages/BillingHistory";
 import Settings from "@/pages/Settings";
+import Simulator from "@/pages/Simulator";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
 import VerifyEmail from "@/pages/VerifyEmail";
@@ -149,6 +150,7 @@ function Router() {
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchCenter} />} />
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
+      <Route path="/simulator" component={() => <ProtectedRoute component={Simulator} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/billing" component={() => <ProtectedRoute component={PaymentBilling} />} />
       <Route path="/billing/history" component={() => <ProtectedRoute component={BillingHistory} />} />

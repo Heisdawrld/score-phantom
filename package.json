@@ -20,7 +20,11 @@
     "groq-sdk": "^0.3.3",
     "jsonwebtoken": "^9.0.2",
     "path-to-regexp": "^8.4.2",
+    "web-push": "^3.6.7",
     "ws": "^8.20.0"
   },
-  "buildTime": "2026-04-04T11:00:00.000Z"
+  "buildTime": "2026-04-04T11:00:00.000Z",
+  "devDependencies": {
+    "@types/web-push": "^3.6.4"
+  }
 }

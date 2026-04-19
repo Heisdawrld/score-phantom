@@ -15,6 +15,13 @@ import {
   getOdds,
 } from "../services/predictionCache.js";
 import { bsdFetch } from '../services/bsd.js';
+import { getVapidPublicKey, saveSubscription, sendPushNotification } from "../services/notifications.js";
+import { buildFeatureVector } from "../features/buildFeatureVector.js";
+import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
+import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
+import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
+import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
+import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
@@ -1515,4 +1522,103 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to load match data" });
   }
 });
+
+// Push Notification Endpoints
+router.get("/notifications/vapidPublicKey", requireAuth, (req, res) => {
+  const publicKey = getVapidPublicKey();
+  if (!publicKey) {
+    return res.status(500).json({ error: "VAPID keys not configured" });
+  }
+  res.json({ publicKey });
+});
+
+// Interactive Simulator API
+router.post("/simulator/run", requireAuth, async (req, res) => {
+  const { home_team_id, away_team_id, modifiers } = req.body;
+  if (!home_team_id || !away_team_id) {
+    return res.status(400).json({ error: "Missing team IDs" });
+  }
+
+  try {
+    // 1. Fetch recent matches for both teams from the database to build a baseline feature vector
+    const result = await db.execute({
+      sql: `SELECT * FROM historical_matches 
+            WHERE fixture_id IN (
+              SELECT id FROM fixtures WHERE home_team_id = ? OR away_team_id = ? OR home_team_id = ? OR away_team_id = ?
+            ) ORDER BY date DESC LIMIT 20`,
+      args: [home_team_id, home_team_id, away_team_id, away_team_id]
+    });
+
+    // Mock fixture object for the engine
+    const mockFixture = {
+      home_team_id,
+      away_team_id,
+      home_team_name: "Home Team", // Could fetch real names
+      away_team_name: "Away Team",
+      historical_matches: result.rows
+    };
+
+    // 2. Build baseline feature vector
+    const baselineVector = await buildFeatureVector(mockFixture);
+    
+    // 3. Apply User Simulation Modifiers
+    const simVector = modifyFeatureVectorForSimulation(baselineVector, modifiers);
+
+    // 4. Run through probability engine
+    const matchPredictability = assessMatchPredictability(simVector);
+    const { home_xg, away_xg } = estimateExpectedGoals(simVector);
+    const markets = scoreMarketCandidates(home_xg, away_xg, simVector);
+
+    res.json({
+      success: true,
+      simulation: {
+        home_xg: home_xg.toFixed(2),
+        away_xg: away_xg.toFixed(2),
+        predictability: matchPredictability,
+        markets: markets
+      }
+    });
+
+  } catch (error) {
+    console.error("Simulation error:", error);
+    res.status(500).json({ error: "Failed to run simulation" });
+  }
+});
+
+router.post("/notifications/subscribe", requireAuth, async (req, res) => {
+  const subscription = req.body;
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
+    return res.status(400).json({ error: "Invalid subscription object" });
+  }
+
+  try {
+    await saveSubscription(req.user.id, subscription);
+    res.status(201).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to save subscription" });
+  }
+});
+
+router.post("/admin/notify", requireAdmin, async (req, res) => {
+  const { title, body, userId } = req.body;
+  
+  if (!title || !body) {
+    return res.status(400).json({ error: "Missing title or body" });
+  }
+
+  try {
+    const payload = { title, body };
+    if (userId) {
+      await sendPushNotification(userId, payload);
+    } else {
+      // Broadcast logic would go here if implemented, or loop over users
+      return res.status(501).json({ error: "Broadcast not yet implemented, please provide userId" });
+    }
+    
+    res.json({ success: true, message: "Notification sent" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to send notification" });
+  }
+});
+
 export default router;

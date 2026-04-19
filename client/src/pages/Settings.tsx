@@ -1,5 +1,6 @@
 import { useAuth, useLogout } from '@/hooks/use-auth';
 import { useNotifications } from '@/hooks/use-notifications';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
 import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle, Check, X, Edit2 } from 'lucide-react';
@@ -17,7 +18,8 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { permission, enableNotifications } = useNotifications();
-  
+  const pushNotifications = usePushNotifications();
+
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -170,22 +172,26 @@ export default function Settings() {
                          <Bell className="w-4 h-4 text-white/70" />
                        </div>
                        <div>
-                          <p className="text-sm font-bold text-white">Push Notifications</p>
-                          <p className="text-xs text-white/40 mt-0.5">Get alerts for match predictions.</p>
+                          <p className="text-sm font-bold text-white">Smart Match Alerts</p>
+                          <p className="text-xs text-white/40 mt-0.5">Get notified before matches start.</p>
                        </div>
                     </div>
-                    <button
-                      onClick={async () => {
-                         if (permission === 'granted') {
-                            toast({ title: 'Notifications already active', description: 'To disable, change browser site settings.', variant: 'destructive' });
-                         } else {
-                            await enableNotifications();
-                         }
-                      }}
-                      className={`w-12 h-6 rounded-full relative transition-colors ${permission === 'granted' ? 'bg-primary' : 'bg-white/[0.1]'}`}
-                    >
-                       <div className={`w-4 h-4 rounded-full absolute top-1 transition-all ${permission === 'granted' ? 'bg-black right-1' : 'bg-white/40 left-1'}`} />
-                    </button>
+                    {pushNotifications.isSupported ? (
+                      pushNotifications.isSubscribed ? (
+                        <span className='text-sm font-medium text-primary px-3 py-1 bg-primary/10 rounded-full border border-primary/20'>
+                          Active
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => pushNotifications.subscribeToNotifications()}
+                          className='text-sm font-medium text-white px-4 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-colors'
+                        >
+                          Enable
+                        </button>
+                      )
+                    ) : (
+                      <span className='text-sm text-white/40'>Unsupported</span>
+                    )}
                  </div>
                  
                  <div className="p-4 sm:p-5 flex items-center justify-between opacity-60">
