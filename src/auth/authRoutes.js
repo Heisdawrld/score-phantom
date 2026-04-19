@@ -150,11 +150,18 @@ export async function initUsersTable() {
     _refCol = (_info2.rows || []).find(r => String(r.name).toLowerCase() === "referrer_user_id");
   } catch(e){}
   if (_refCol && _refCol.is_nullable === 'NO') {
-    await db.execute("ALTER TABLE partner_commissions RENAME TO partner_commissions_legacy2");
-    await db.execute("CREATE TABLE partner_commissions (id SERIAL PRIMARY KEY, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, settled_at TIMESTAMP, payment_reference TEXT, paid_at TIMESTAMP, payout_batch_id TEXT, notes TEXT)");
-    await db.execute("INSERT INTO partner_commissions (id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes) SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2 ON CONFLICT DO NOTHING");
-    await db.execute("DROP TABLE IF EXISTS partner_commissions_legacy2");
-    console.log("[Migration] partner_commissions.referrer_user_id made nullable");
+    try {
+      const tblCheck = await db.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'partner_commissions'");
+      if (tblCheck.rows && tblCheck.rows.length > 0) {
+        await db.execute("ALTER TABLE partner_commissions RENAME TO partner_commissions_legacy2");
+        await db.execute("CREATE TABLE partner_commissions (id SERIAL PRIMARY KEY, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, settled_at TIMESTAMP, payment_reference TEXT, paid_at TIMESTAMP, payout_batch_id TEXT, notes TEXT)");
+        await db.execute("INSERT INTO partner_commissions (id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes) SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2 ON CONFLICT DO NOTHING");
+        await db.execute("DROP TABLE IF EXISTS partner_commissions_legacy2");
+        console.log("[Migration] partner_commissions.referrer_user_id made nullable");
+      }
+    } catch(e) {
+      console.error("[Migration Error] partner_commissions:", e.message);
+    }
   }
 
   // Partners table — migrate to standalone schema (no user_id required)

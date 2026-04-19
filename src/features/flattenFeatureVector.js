@@ -184,6 +184,9 @@ function flattenFeatureVector(fv) {
     // Form match counts (used by responseAdapter for dataQuality display)
     homeMatchesAvailable: safeNum(hf.matches_available, 0),
     awayMatchesAvailable: safeNum(af.matches_available, 0),
+
+    // New predictability metric
+    predictability_score: fv.predictability_score ?? 0.5,
   };
 }
 

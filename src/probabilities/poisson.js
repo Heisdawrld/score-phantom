@@ -39,10 +39,10 @@ export function deriveMarketProbabilities(scoreMatrix) {
   const maxGoals = scoreMatrix.length - 1;
 
   let homeWin = 0, draw = 0, awayWin = 0;
-  let over15 = 0, over25 = 0, over35 = 0;
+  let over05 = 0, over15 = 0, over25 = 0, over35 = 0;
   let bttsYes = 0;
-  let homeOver05 = 0, homeOver15 = 0, homeOver25 = 0;
-  let awayOver05 = 0, awayOver15 = 0, awayOver25 = 0;
+  let homeOver05 = 0, homeOver15 = 0, homeOver25 = 0, homeOver35 = 0;
+  let awayOver05 = 0, awayOver15 = 0, awayOver25 = 0, awayOver35 = 0;
   let handicapHome1 = 0, handicapAway1 = 0;
 
   for (let h = 0; h <= maxGoals; h++) {
@@ -54,6 +54,7 @@ export function deriveMarketProbabilities(scoreMatrix) {
       else if (h === a) draw += p;
       else awayWin += p;
 
+      if (total > 0.5) over05 += p;
       if (total > 1.5) over15 += p;
       if (total > 2.5) over25 += p;
       if (total > 3.5) over35 += p;
@@ -61,9 +62,11 @@ export function deriveMarketProbabilities(scoreMatrix) {
       if (h > 0) homeOver05 += p;
       if (h > 1) homeOver15 += p;
       if (h > 2) homeOver25 += p;
+      if (h > 3) homeOver35 += p;
       if (a > 0) awayOver05 += p;
       if (a > 1) awayOver15 += p;
       if (a > 2) awayOver25 += p;
+      if (a > 3) awayOver35 += p;
       // Handicap: home team -1 (home wins by 2+)
       if (h - a >= 2) handicapHome1 += p;
       // Handicap: away team +1 (away wins outright OR draw)
@@ -84,22 +87,25 @@ export function deriveMarketProbabilities(scoreMatrix) {
     homeWin: cap(homeWin),
     draw: cap(draw),
     awayWin: cap(awayWin),
+    over05: cap(over05),
     over15: cap(over15),
     over25: cap(over25),
     over35: cap(over35),
-    under15: cap(under15),
-    under25: cap(under25),
-    under35: cap(under35),
+    under15: cap(1 - over15),
+    under25: cap(1 - over25),
+    under35: cap(1 - over35),
     bttsYes: cap(bttsYes),
-    bttsNo: cap(bttsNo),
+    bttsNo: cap(1 - bttsYes),
     homeOver05: cap(homeOver05),
     homeOver15: cap(homeOver15),
     homeOver25: cap(homeOver25),
-    homeUnder15: cap(homeUnder15),
+    homeOver35: cap(homeOver35),
+    homeUnder15: cap(1 - homeOver15),
     awayOver05: cap(awayOver05),
     awayOver15: cap(awayOver15),
     awayOver25: cap(awayOver25),
-    awayUnder15: cap(awayUnder15),
+    awayOver35: cap(awayOver35),
+    awayUnder15: cap(1 - awayOver15),
     handicapHome1: cap(handicapHome1),
     handicapAway1: cap(handicapAway1),
   };

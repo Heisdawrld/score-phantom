@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import pg from "pg";
+import db from "../config/database.js";
 import { fetchFixturesByRange } from '../services/bsd.js';
 import { flattenFeatureVector } from '../features/flattenFeatureVector.js';
 import { classifyMatchScript } from '../scripts/archive/classifyMatchScript.js';
@@ -9,26 +9,6 @@ import { calibrateProbabilities } from '../probabilities/calibrateProbabilities.
 import { buildMarketCandidates } from '../markets/buildMarketCandidates.js';
 import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
 import { assessMatchPredictability } from '../engine/assessMatchPredictability.js';
-
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-const db = {
-  execute: async (queryOrObj, ...argsObj) => {
-    let sql = typeof queryOrObj === 'string' ? queryOrObj : queryOrObj.sql;
-    let args = typeof queryOrObj === 'string' ? (argsObj.length ? argsObj[0] : []) : (queryOrObj.args || []);
-    let paramIndex = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
-    try {
-      const res = await pool.query(pgSql, args);
-      return { rows: res.rows, rowsAffected: res.rowCount };
-    } catch (err) {
-      throw err;
-    }
-  }
-};
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

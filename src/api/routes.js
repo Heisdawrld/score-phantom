@@ -1601,6 +1601,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const baseRawProbs = deriveMarketProbabilities(baseScoreMatrix);
     const baseCalibratedProbs = calibrateProbabilities(baseRawProbs, baseScript);
     
+    // Evaluate predictability
+    const predictability = assessMatchPredictability(baselineVector, baseScript, baseCalibratedProbs);
+    baselineVector.predictability_score = predictability.predictable ? 0.8 : 0.4;
+
     const baseCandidates = buildMarketCandidates(baseCalibratedProbs, null);
     const baseMarkets = scoreMarketCandidates(baseCandidates, baseScript, baselineVector, {}, null);
 
@@ -1613,6 +1617,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const simScoreMatrix = buildScoreMatrix(simXg.homeExpectedGoals, simXg.awayExpectedGoals);
     const simRawProbs = deriveMarketProbabilities(simScoreMatrix);
     const simCalibratedProbs = calibrateProbabilities(simRawProbs, simScript);
+    
+    // Evaluate predictability
+    const simPredictability = assessMatchPredictability(simVector, simScript, simCalibratedProbs);
+    simVector.predictability_score = simPredictability.predictable ? 0.8 : 0.4;
 
     const simCandidates = buildMarketCandidates(simCalibratedProbs, null);
     const simMarkets = scoreMarketCandidates(simCandidates, simScript, simVector, {}, null);
