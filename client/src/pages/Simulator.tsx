@@ -28,10 +28,6 @@ export default function PhantomLab() {
   } | null>(null);
   
   const [modifiers, setModifiers] = useState({
-    homeMotivation: 0,
-    awayMotivation: 0,
-    homeInjuries: 0,
-    awayInjuries: 0,
     weather: 'normal',
     lineupStrength: 'full'
   });
@@ -140,52 +136,15 @@ export default function PhantomLab() {
           </div>
 
           <div className={cn('space-y-8 transition-all duration-500 relative z-10', !selectedMatch && 'opacity-20 grayscale pointer-events-none')}>
-            {/* Motivation Sliders */}
-            <div className='space-y-5'>
-              <label className='text-[10px] font-bold text-white/40 uppercase tracking-widest block pl-1 flex items-center gap-2'>
-                <Target className='w-3 h-3' /> Tactical Motivation
-              </label>
-              
-              <div className='bg-black/20 p-4 rounded-2xl border border-white/5 space-y-5'>
-                <div>
-                  <div className='flex justify-between text-xs mb-3 font-medium'>
-                    <span className='text-white/70'>Home Boost</span>
-                    <span className='text-primary font-display tracking-wider text-sm'>{(modifiers.homeMotivation * 15).toFixed(0)}%</span>
-                  </div>
-                  <input type="range" min="-1" max="1" step="0.1" value={modifiers.homeMotivation} onChange={e => setModifiers({...modifiers, homeMotivation: parseFloat(e.target.value)})} className='w-full accent-primary h-1.5 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(16,231,116,0.8)]' />
-                </div>
-
-                <div>
-                  <div className='flex justify-between text-xs mb-3 font-medium'>
-                    <span className='text-white/70'>Away Boost</span>
-                    <span className='text-blue-400 font-display tracking-wider text-sm'>{(modifiers.awayMotivation * 15).toFixed(0)}%</span>
-                  </div>
-                  <input type="range" min="-1" max="1" step="0.1" value={modifiers.awayMotivation} onChange={e => setModifiers({...modifiers, awayMotivation: parseFloat(e.target.value)})} className='w-full accent-blue-400 h-1.5 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(96,165,250,0.8)]' />
-                </div>
-              </div>
-            </div>
-
-            {/* Injury Sliders */}
-            <div className='space-y-5'>
-               <label className='text-[10px] font-bold text-white/40 uppercase tracking-widest block pl-1 flex items-center gap-2'>
-                <AlertTriangle className='w-3 h-3 text-destructive' /> Key Absences
-              </label>
-              
-              <div className='grid grid-cols-2 gap-4'>
-                <div className='bg-black/20 p-4 rounded-2xl border border-white/5'>
-                  <div className='flex justify-between text-xs mb-3 font-medium'>
-                    <span className='text-white/70'>Home</span>
-                    <span className='text-destructive font-display tracking-wider text-sm'>{modifiers.homeInjuries}</span>
-                  </div>
-                  <input type="range" min="0" max="5" step="1" value={modifiers.homeInjuries} onChange={e => setModifiers({...modifiers, homeInjuries: parseInt(e.target.value)})} className='w-full accent-destructive h-1.5 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-destructive [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(239,68,68,0.8)]' />
-                </div>
-                <div className='bg-black/20 p-4 rounded-2xl border border-white/5'>
-                  <div className='flex justify-between text-xs mb-3 font-medium'>
-                    <span className='text-white/70'>Away</span>
-                    <span className='text-destructive font-display tracking-wider text-sm'>{modifiers.awayInjuries}</span>
-                  </div>
-                  <input type="range" min="0" max="5" step="1" value={modifiers.awayInjuries} onChange={e => setModifiers({...modifiers, awayInjuries: parseInt(e.target.value)})} className='w-full accent-destructive h-1.5 bg-white/10 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-destructive [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(239,68,68,0.8)]' />
-                </div>
+            {/* Auto-Derived Context Banner */}
+            <div className='bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-3 items-start relative overflow-hidden'>
+              <div className='absolute -right-4 -top-4 w-16 h-16 bg-primary/20 blur-2xl rounded-full' />
+              <Zap className='w-5 h-5 text-primary shrink-0 mt-0.5 relative z-10' />
+              <div className='relative z-10'>
+                <p className='text-sm font-bold text-white mb-1'>Live Data Integration Active</p>
+                <p className='text-xs text-white/60 leading-relaxed'>
+                  The simulator automatically pulls the predicted starting XIs, key player absences, tactical setups, and team momentum directly from the API. Adjust the environment and rotation risk below to see how external chaos affects the match script.
+                </p>
               </div>
             </div>
 
