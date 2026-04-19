@@ -61,7 +61,7 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/track-record", trackRecordRoutes);
+app.use("/api/backtest", trackRecordRoutes);
 
 // Duplicate /api/admin/seed removed — handled by adminRoutes.js
 

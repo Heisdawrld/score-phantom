@@ -391,7 +391,7 @@ export default function Dashboard() {
 
         {/* ── Your Stats ── */}
         {trackStats && trackStats.totalPicks > 0 && (
-          <YourStats stats={trackStats} onView={() => setLocation("/track-record")} />
+          <YourStats stats={trackStats} onView={() => setLocation("/results")} />
         )}
 
         {/* ── Value Bet of the Day ── */}

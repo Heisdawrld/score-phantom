@@ -8,13 +8,13 @@ import { cn } from '@/lib/utils';
 
 export default function TrackRecord({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['track-record-stats'],
-    queryFn: () => fetchApi('/track-record/stats')
+    queryKey: ['backtest-stats'],
+    queryFn: () => fetchApi('/backtest/stats')
   });
 
   const { data: recent, isLoading: recentLoading } = useQuery({
-    queryKey: ['track-record-recent'],
-    queryFn: () => fetchApi('/track-record/recent?limit=50')
+    queryKey: ['backtest-recent'],
+    queryFn: () => fetchApi('/backtest/recent?limit=50')
   });
 
   const formatMarket = (marketId: string) => {
