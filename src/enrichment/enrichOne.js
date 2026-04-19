@@ -106,6 +106,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     homeProfile: data?.homeProfile ?? null,
     awayProfile: data?.awayProfile ?? null,
     lineupModifier: data?.lineupModifier ?? null,
+    rawLineupData: data?.rawLineupData ?? null,
     completeness: data?.completeness ?? null,
     homeMomentum: data?.homeMomentum ?? null,
     awayMomentum: data?.awayMomentum ?? null,

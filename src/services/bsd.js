@@ -552,10 +552,34 @@ export function normaliseBsdLineup(bsdLineup) {
   if (!bsdLineup?.lineups) return null;
 
   const mapTeam = (side) => {
-    if (!side) return { players: [] };
-    const starters  = (side.starters  || []).map(p => ({ position: p.position, name: p.name }));
-    const subs      = (side.substitutes || []).map(p => ({ position: p.position, name: p.name }));
-    return { players: starters, substitutes: subs };
+    if (!side) return { players: [], substitutes: [], unavailable: [], formation: null };
+    
+    const starters = (side.starters || []).map(p => ({ 
+      position: p.position, 
+      name: p.name,
+      number: p.number,
+      pos_x: p.pos_x,
+      pos_y: p.pos_y
+    }));
+    
+    const subs = (side.substitutes || []).map(p => ({ 
+      position: p.position, 
+      name: p.name,
+      number: p.number
+    }));
+
+    const unavailable = (side.unavailable || []).map(p => ({
+      name: p.name,
+      reason: p.reason || p.status, // e.g. "Injured", "Suspended"
+      expected_return: p.expected_return
+    }));
+
+    return { 
+      players: starters, 
+      substitutes: subs,
+      unavailable: unavailable,
+      formation: side.formation || null
+    };
   };
 
   return {

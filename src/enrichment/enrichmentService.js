@@ -353,11 +353,13 @@ export async function fetchAndStoreEnrichment(fixture) {
 
   // ── Step 5: Optional lineup (non-blocking, typically only near kickoff) ────
   let lineupModifier = null;
+  let rawLineupData = null;
   try {
     // BSD predicted-lineup uses api_id (external), not internal id
     const matchApiId = fixture.bsd_event_api_id || fixture.match_id;
     const rawLineup = await fetchPredictedLineup(matchApiId);
     const normLineup = normaliseBsdLineup(rawLineup);
+    rawLineupData = normLineup; // Store the full data bundle to send to frontend
     lineupModifier = parseLineupModifier(normLineup);
     if (lineupModifier) {
       console.log(`[enrichmentService] Lineup available for ${fixture.home_team_name} vs ${fixture.away_team_name}`);
@@ -426,6 +428,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     homeMomentum,
     awayMomentum,
     lineupModifier,
+    rawLineupData,
     completeness,
     homeStats: homeProfile,
     awayStats: awayProfile,
