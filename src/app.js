@@ -24,10 +24,9 @@ import { refreshAccuracyCache } from "./storage/accuracyCache.js";
 dotenv.config();
 
 // ── Startup checks ────────────────────────────────────────────────────────────
-if (!process.env.TURSO_URL || !process.env.TURSO_TOKEN) {
-  console.error("❌ FATAL: TURSO_URL and TURSO_TOKEN environment variables are required.");
-  console.error("   Set them in your Render dashboard (or .env file locally).");
-  console.error("   Get them from: https://app.turso.tech → your database → Connect");
+if (!process.env.DATABASE_URL) {
+  console.error("❌ FATAL: DATABASE_URL environment variable is required.");
+  console.error("   Set it in your Render dashboard (or .env file locally).");
   process.exit(1);
 }
 
