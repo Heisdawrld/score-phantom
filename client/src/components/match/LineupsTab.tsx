@@ -22,148 +22,66 @@ function riskColor(r: string) {
 }
 
 export function LineupsTab({ matchData }: any) {
-  const lineupData = matchData?.meta?.rawLineupData || null;
+  // Check if we have live match spatial data (flat array format)
+  // Format: [{player_name, position, x, y, is_home}]
+  const isLiveFormat = Array.isArray(matchData?.meta?.lineups);
+  
+  let homeLineup: any[] = [];
+  let awayLineup: any[] = [];
 
-  const home = lineupData?.home || { players: [], substitutes: [], unavailable: [], formation: null };
-  const away = lineupData?.away || { players: [], substitutes: [], unavailable: [], formation: null };
-
-  const hasLineups = home.players.length > 0 || away.players.length > 0;
-  const hasInjuries = home.unavailable.length > 0 || away.unavailable.length > 0;
-
-  // Simple pitch rendering for a team
-  const renderPitchSide = (team: any, isHome: boolean) => {
-    return (
-      <div className={cn(
-        "relative w-full h-[240px] rounded-lg border overflow-hidden",
-        isHome ? "bg-primary/5 border-primary/20" : "bg-blue-500/5 border-blue-500/20"
-      )}>
-        {/* Pitch lines */}
-        <div className="absolute inset-0 border-[0.5px] border-white/10" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-12 border-[0.5px] border-white/10 border-t-0" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 h-12 border-[0.5px] border-white/10 border-b-0" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full border-[0.5px] border-white/10" />
-
-        {/* Players */}
-        {team.players.map((p: any, i: number) => {
-          if (p.pos_x == null || p.pos_y == null) return null;
-          
-          // Map BSD coords to CSS %
-          const x = isHome ? p.pos_x : 100 - p.pos_x;
-          const y = isHome ? p.pos_y : 100 - p.pos_y;
-
-          return (
-            <div 
-              key={i}
-              className="absolute flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${x}%`, top: `${y}%` }}
-            >
-              <div className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border",
-                isHome ? "bg-primary text-black border-white" : "bg-blue-500 text-white border-white"
-              )}>
-                {p.number || ''}
-              </div>
-              <span className="text-[8px] font-bold text-white/80 bg-black/50 px-1 rounded mt-0.5 whitespace-nowrap">
-                {p.name.split(' ').pop()}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  if (isLiveFormat) {
+    const allPlayers = matchData.meta.lineups || [];
+    homeLineup = allPlayers.filter((p: any) => p.is_home);
+    awayLineup = allPlayers.filter((p: any) => !p.is_home);
+  } else {
+    // Bzzoiro API returns lineups grouped by side for predicted lineups: { home: { players: [...] }, away: { players: [...] } }
+    homeLineup = matchData?.meta?.lineups?.home?.players || [];
+    awayLineup = matchData?.meta?.lineups?.away?.players || [];
+  }
+  
+  const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── STARTING XI PITCH ── */}
       <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Starting XIs & Formations</p>
-          <div className="flex gap-4">
-            <span className="text-[10px] font-bold text-primary">{home.formation || 'TBD'}</span>
-            <span className="text-[10px] font-bold text-blue-500">{away.formation || 'TBD'}</span>
-          </div>
         </div>
-
+        
         {hasLineups ? (
           <div className="space-y-4">
-            {/* Home Pitch */}
-            <div>
-              <h3 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary" /> {matchData?.fixture?.home_team_name}
-              </h3>
-              {renderPitchSide(home, true)}
-            </div>
-
-            {/* Away Pitch */}
-            <div>
-              <h3 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500" /> {matchData?.fixture?.away_team_name}
-              </h3>
-              {renderPitchSide(away, false)}
-            </div>
+             <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-xs font-bold text-primary mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.home_team_name}</h3>
+                  <ul className="space-y-1">
+                    {homeLineup.map((l: any, i: number) => (
+                      <li key={i} className="text-xs text-white/80 flex justify-between">
+                        <span>{l.player_name || l.name}</span>
+                        <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-blue-500 mb-2 border-b border-white/10 pb-1">{matchData?.fixture?.away_team_name}</h3>
+                  <ul className="space-y-1">
+                    {awayLineup.map((l: any, i: number) => (
+                      <li key={i} className="text-xs text-white/80 flex justify-between">
+                        <span>{l.player_name || l.name}</span>
+                        <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">{l.position}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-white/10 rounded-xl">
-             <Users className="w-8 h-8 text-white/20 mb-2" />
-             <p className="text-xs text-white/40 font-medium">Predicted lineups not yet available</p>
-             <p className="text-[10px] text-white/30 mt-1">Usually posted 24h before kickoff</p>
+          <div className="flex flex-col items-center justify-center text-center p-8 bg-black/20 rounded-xl">
+             <Users className="w-8 h-8 text-white/10 mb-2" />
+             <p className="text-xs text-white/30 font-medium">Lineups will be available closer to kick-off</p>
           </div>
         )}
       </div>
-
-      {/* ── INJURIES & UNAVAILABLE ── */}
-      {hasInjuries && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-red-500/[0.02]">
-          <p className="text-[10px] font-black text-red-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <AlertCircle className="w-3 h-3" /> Missing Players
-          </p>
-
-          <div className="space-y-4">
-            {home.unavailable.length > 0 && (
-              <div>
-                <h3 className="text-xs font-bold text-primary mb-2 border-b border-white/5 pb-1">{matchData?.fixture?.home_team_name}</h3>
-                <ul className="space-y-2">
-                  {home.unavailable.map((p: any, i: number) => (
-                    <li key={i} className="text-xs flex justify-between items-center bg-white/[0.02] p-2 rounded-lg">
-                      <span className="font-medium text-white/90">{p.name}</span>
-                      <div className="text-right">
-                        <span className="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                          {p.reason}
-                        </span>
-                        {p.expected_return && (
-                          <p className="text-[8px] text-white/30 mt-0.5">Exp: {p.expected_return}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {away.unavailable.length > 0 && (
-              <div>
-                <h3 className="text-xs font-bold text-blue-500 mb-2 border-b border-white/5 pb-1">{matchData?.fixture?.away_team_name}</h3>
-                <ul className="space-y-2">
-                  {away.unavailable.map((p: any, i: number) => (
-                    <li key={i} className="text-xs flex justify-between items-center bg-white/[0.02] p-2 rounded-lg">
-                      <span className="font-medium text-white/90">{p.name}</span>
-                      <div className="text-right">
-                        <span className="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                          {p.reason}
-                        </span>
-                        {p.expected_return && (
-                          <p className="text-[8px] text-white/30 mt-0.5">Exp: {p.expected_return}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

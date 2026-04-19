@@ -51,17 +51,23 @@ const adminLimiter = rateLimit({
 
 // ── DB migrations ─────────────────────────────────────────────────────────────
 async function ensureColumn(table, col, sql) {
-  const info = await db.execute(`PRAGMA table_info(${table})`);
-  const exists = (info.rows || []).some(
-    r => String(r.name).toLowerCase() === col.toLowerCase()
-  );
-  if (!exists) await db.execute(sql);
+  try {
+    const info = await db.execute(`
+      SELECT column_name as name 
+      FROM information_schema.columns 
+      WHERE table_name = '${table}'
+    `);
+    const exists = (info.rows || []).some(
+      r => String(r.name).toLowerCase() === col.toLowerCase()
+    );
+    if (!exists) await db.execute(sql);
+  } catch (e) {}
 }
 
 export async function initUsersTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       email TEXT UNIQUE
     )
   `);
@@ -91,7 +97,7 @@ export async function initUsersTable() {
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       reference TEXT UNIQUE NOT NULL,
       amount INTEGER NOT NULL,
@@ -99,8 +105,8 @@ export async function initUsersTable() {
       status TEXT DEFAULT 'initialized',
       channel TEXT DEFAULT 'flutterwave',
       flw_transaction_id TEXT,
-      paid_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      paid_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
   const paymentCols = [
@@ -113,7 +119,7 @@ export async function initUsersTable() {
   // ── Partner commissions table ──────────────────────────────────────────────
   await db.execute(`
     CREATE TABLE IF NOT EXISTS partner_commissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       referrer_user_id INTEGER,
       referred_user_id INTEGER NOT NULL UNIQUE,
       payment_id INTEGER,
@@ -121,8 +127,8 @@ export async function initUsersTable() {
       commission_rate REAL NOT NULL DEFAULT 0.25,
       commission_amount INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      settled_at TEXT
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      settled_at TIMESTAMP
     )
   `);
 
@@ -134,26 +140,37 @@ export async function initUsersTable() {
   await ensureColumn("partner_commissions", "payout_batch_id",     "ALTER TABLE partner_commissions ADD COLUMN payout_batch_id TEXT");
   await ensureColumn("partner_commissions", "notes",               "ALTER TABLE partner_commissions ADD COLUMN notes TEXT");
   // Migrate: make referrer_user_id nullable if it was created with NOT NULL
-  const _pcInfo = await db.execute("PRAGMA table_info(partner_commissions)");
-  const _refCol = (_pcInfo.rows||[]).find(r=>r.name==="referrer_user_id");
-  if (_refCol && Number(_refCol.notnull) === 1) {
+  let _refCol;
+  try {
+    const _info2 = await db.execute(`
+      SELECT column_name as name, is_nullable
+      FROM information_schema.columns 
+      WHERE table_name = 'partner_commissions' AND column_name = 'referrer_user_id'
+    `);
+    _refCol = (_info2.rows || []).find(r => String(r.name).toLowerCase() === "referrer_user_id");
+  } catch(e){}
+  if (_refCol && _refCol.is_nullable === 'NO') {
     await db.execute("ALTER TABLE partner_commissions RENAME TO partner_commissions_legacy2");
-    await db.execute("CREATE TABLE partner_commissions (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT \"pending\", created_at TEXT DEFAULT CURRENT_TIMESTAMP, settled_at TEXT, payment_reference TEXT, paid_at TEXT, payout_batch_id TEXT, notes TEXT)");
-    await db.execute("INSERT OR IGNORE INTO partner_commissions SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2");
+    await db.execute("CREATE TABLE partner_commissions (id SERIAL PRIMARY KEY, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, settled_at TIMESTAMP, payment_reference TEXT, paid_at TIMESTAMP, payout_batch_id TEXT, notes TEXT)");
+    await db.execute("INSERT INTO partner_commissions (id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes) SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2 ON CONFLICT DO NOTHING");
     await db.execute("DROP TABLE IF EXISTS partner_commissions_legacy2");
     console.log("[Migration] partner_commissions.referrer_user_id made nullable");
   }
 
   // Partners table — migrate to standalone schema (no user_id required)
-  const _ptInfo = await db.execute("PRAGMA table_info(partners)");
-  const _ptCols = (_ptInfo.rows||[]).map(r=>r.name);
+  const _ptInfo = await db.execute(`
+    SELECT column_name as name 
+    FROM information_schema.columns 
+    WHERE table_name = 'partners'
+  `);
+  const _ptCols = (_ptInfo.rows||[]).map(r=>String(r.name).toLowerCase());
   if (!_ptCols.includes("email")) {
     try {
       await db.execute("ALTER TABLE partners RENAME TO partners_legacy");
     } catch(_){}
-    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_payout_at TEXT)");
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
     try {
-      await db.execute("INSERT OR IGNORE INTO partners (id,name,user_id,referral_code,commission_rate,created_at,last_payout_at) SELECT id,name,user_id,referral_code,commission_rate,created_at,last_payout_at FROM partners_legacy");
+      await db.execute("INSERT INTO partners (id,name,user_id,referral_code,commission_rate,created_at,last_payout_at) SELECT id,name,user_id,referral_code,commission_rate,created_at,last_payout_at FROM partners_legacy ON CONFLICT DO NOTHING");
       await db.execute("DROP TABLE IF EXISTS partners_legacy");
     } catch(_){}
   } else {
@@ -161,7 +178,7 @@ export async function initUsersTable() {
     await ensureColumn("partners","status","ALTER TABLE partners ADD COLUMN status TEXT DEFAULT 'active'");
     await ensureColumn("partners","notes","ALTER TABLE partners ADD COLUMN notes TEXT");
   }
-  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TEXT DEFAULT CURRENT_TIMESTAMP)");
+  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id SERIAL PRIMARY KEY, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 }
 

@@ -232,22 +232,6 @@ export async function fetchEventDetail(eventId, full = false) {
   return await bsdFetch(`/events/${eventId}/${full ? '?full=true' : ''}`);
 }
 
-/**
- * Fetch multi-bookmaker odds for a specific event.
- * Returns prices from 22+ bookmakers to find true value edge.
- */
-export async function fetchMultiBookmakerOdds(eventId) {
-  if (!eventId) return null;
-  // Fallback to empty array if endpoint fails so we don't break the main flow
-  try {
-    const data = await bsdFetch('/odds/compare/', { event: eventId });
-    return data?.results || data || [];
-  } catch (err) {
-    console.error(`[fetchMultiBookmakerOdds] Failed for event ${eventId}:`, err.message);
-    return [];
-  }
-}
-
 export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
   if (!team) return [];
 
@@ -552,34 +536,10 @@ export function normaliseBsdLineup(bsdLineup) {
   if (!bsdLineup?.lineups) return null;
 
   const mapTeam = (side) => {
-    if (!side) return { players: [], substitutes: [], unavailable: [], formation: null };
-    
-    const starters = (side.starters || []).map(p => ({ 
-      position: p.position, 
-      name: p.name,
-      number: p.number,
-      pos_x: p.pos_x,
-      pos_y: p.pos_y
-    }));
-    
-    const subs = (side.substitutes || []).map(p => ({ 
-      position: p.position, 
-      name: p.name,
-      number: p.number
-    }));
-
-    const unavailable = (side.unavailable || []).map(p => ({
-      name: p.name,
-      reason: p.reason || p.status, // e.g. "Injured", "Suspended"
-      expected_return: p.expected_return
-    }));
-
-    return { 
-      players: starters, 
-      substitutes: subs,
-      unavailable: unavailable,
-      formation: side.formation || null
-    };
+    if (!side) return { players: [] };
+    const starters  = (side.starters  || []).map(p => ({ position: p.position, name: p.name }));
+    const subs      = (side.substitutes || []).map(p => ({ position: p.position, name: p.name }));
+    return { players: starters, substitutes: subs };
   };
 
   return {

@@ -11,14 +11,12 @@ import { useLocation } from 'wouter';
 import { MatchSelectorModal } from '@/components/simulator/MatchSelectorModal';
 import { TeamLogo } from '@/components/TeamLogo';
 import { useToast } from '@/hooks/use-toast';
-import TrackRecord from '@/pages/TrackRecord'; // Import the backtesting track record component
 
 export default function PhantomLab() {
   const [, setLocation] = useLocation();
   const { data: user } = useAuth();
   const isPremium = user?.access_status === 'active' || (user as any)?.subscription_active || (user as any)?.is_admin;
 
-  const [activeTab, setActiveTab] = useState<'simulator' | 'track_record'>('simulator');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<{
     homeTeamId: string;
@@ -100,40 +98,11 @@ export default function PhantomLab() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex bg-white/[0.05] p-1 rounded-2xl border border-white/10">
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-black tracking-widest uppercase rounded-xl transition-all",
-              activeTab === 'simulator' ? "bg-primary text-black shadow-lg" : "text-white/50 hover:text-white"
-            )}
-          >
-            Live Simulator
-          </button>
-          <button
-            onClick={() => setActiveTab('track_record')}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-black tracking-widest uppercase rounded-xl transition-all",
-              activeTab === 'track_record' ? "bg-primary text-black shadow-lg" : "text-white/50 hover:text-white"
-            )}
-          >
-            Backtest Results
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'track_record' ? (
-          <div className="-mx-4 -mt-2">
-            <TrackRecord isEmbedded={true} />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Controls */}
-            <div className='glass-panel p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl space-y-8'>
-              <div className='absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none' />
-              
-              {/* Match Selector */}
+        {/* Controls */}
+        <div className='glass-panel p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl space-y-8'>
+          <div className='absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none' />
+          
+          {/* Match Selector */}
           <div className='relative z-10'>
             <label className='text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3 block pl-1'>Matchup</label>
             <button 
@@ -381,8 +350,6 @@ export default function PhantomLab() {
             </motion.div>
           )}
         </AnimatePresence>
-          </div>
-        )}
 
       </main>
 

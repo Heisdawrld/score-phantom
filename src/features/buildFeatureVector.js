@@ -206,9 +206,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const contextFeatures = computeContextFeatures(tableContext, standings);
 
   // ── Volatility features ────────────────────────────────────────────────────
-  const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures, {
-    refereeData: fixture.meta?.refereeData
-  });
+  const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures);
 
   // ── Market features ────────────────────────────────────────────────────────
   const marketFeatures = computeMarketFeatures(odds);

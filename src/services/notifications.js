@@ -30,7 +30,7 @@ export const saveSubscription = async (userId, subscription) => {
     await db.execute({
       sql: `INSERT INTO push_subscriptions (user_id, endpoint, keys) 
             VALUES (?, ?, ?) 
-            ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, keys = excluded.keys`,
+            ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, keys = EXCLUDED.keys`,
       args: [userId, endpoint, keys]
     });
     return true;

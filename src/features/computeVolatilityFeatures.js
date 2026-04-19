@@ -1,10 +1,9 @@
 import { safeNum, variance, clamp } from '../utils/math.js';
 
-export function computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures, contextFeatures = {}) {
+export function computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures) {
   const hf = homeFormFeatures || {};
   const af = awayFormFeatures || {};
   const h2h = h2hFeatures || {};
-  const refereeData = contextFeatures.refereeData || null;
 
   const homeGoals = (hf._teamGoals || []).map(m => m.scored).filter(v => v !== null);
   const awayGoals = (af._teamGoals || []).map(m => m.scored).filter(v => v !== null);
@@ -50,29 +49,13 @@ export function computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2
   const avgScoreVar = (scoringVarianceHome + scoringVarianceAway) / 2;
   const normScoreVar = clamp(avgScoreVar / 4.0, 0, 1);
 
-  // Referee Strictness injection
-  // If a referee hands out > 4.5 yellows or > 0.2 reds per game, they inject chaos
-  let refereeVolatility = 0;
-  if (refereeData) {
-    const avgY = parseFloat(refereeData.avg_yellows || 0);
-    const avgR = parseFloat(refereeData.avg_reds || 0);
-    if (avgY > 4.5 || avgR > 0.2) {
-      refereeVolatility = 0.2; // 20% bump to chaos
-    } else if (avgY < 3.0) {
-      refereeVolatility = -0.1; // Lenient ref reduces chaos
-    }
-  }
-
-  let matchChaosScore = clamp(
-    (normFormVar * 0.3) +
-    (normScoreVar * 0.25) +
-    (upsetRiskScore * 0.25) +
-    ((1 - dataCompletenessScore) * 0.2),
+  const matchChaosScore = clamp(
+    normFormVar * 0.3 +
+    normScoreVar * 0.25 +
+    upsetRiskScore * 0.25 +
+    (1 - dataCompletenessScore) * 0.2,
     0, 1
   );
-
-  // Apply referee volatility multiplier
-  matchChaosScore = clamp(matchChaosScore + refereeVolatility, 0, 1);
 
   return {
     homeFormVariance: parseFloat(homeFormVariance.toFixed(4)),

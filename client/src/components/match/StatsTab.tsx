@@ -25,7 +25,6 @@ export function StatsTab({ d }: any) {
   const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length ? d.meta.h2h : [];
   const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length ? d.meta.homeForm : [];
   const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length ? d.meta.awayForm : [];
-  const ref = d?.meta?.refereeData || null;
   const fix = d?.fixture || {};
   const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
   const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
@@ -102,56 +101,6 @@ export function StatsTab({ d }: any) {
           </div>
         </div>
       ))}
-
-      {/* ── REFEREE INTELLIGENCE ── */}
-      {ref && ref.name && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Target className="w-3 h-3" /> Match Officials
-          </p>
-          
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center">
-                <span className="text-xl">🟨</span>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white/90">{ref.name}</p>
-                <p className="text-[10px] text-white/40 uppercase tracking-wide">Referee ({ref.matches || 0} Matches)</p>
-              </div>
-            </div>
-            
-            {ref.avg_yellows > 4.5 || ref.avg_reds > 0.2 ? (
-              <span className="text-[9px] font-black bg-red-500/20 text-red-400 px-2 py-1 rounded-full uppercase border border-red-500/30 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Strict
-              </span>
-            ) : ref.avg_yellows < 3.0 ? (
-              <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full uppercase border border-emerald-500/30">
-                Lenient
-              </span>
-            ) : (
-              <span className="text-[9px] font-black bg-white/10 text-white/60 px-2 py-1 rounded-full uppercase border border-white/20">
-                Average
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-white/[0.03] rounded-lg p-2 text-center">
-              <p className="text-lg font-black text-amber-400">{ref.avg_yellows || 0}</p>
-              <p className="text-[8px] text-white/40 uppercase tracking-wider mt-0.5">Avg Yellows</p>
-            </div>
-            <div className="bg-white/[0.03] rounded-lg p-2 text-center">
-              <p className="text-lg font-black text-red-500">{ref.avg_reds || 0}</p>
-              <p className="text-[8px] text-white/40 uppercase tracking-wider mt-0.5">Avg Reds</p>
-            </div>
-            <div className="bg-white/[0.03] rounded-lg p-2 text-center">
-              <p className="text-lg font-black text-white/70">{ref.avg_fouls || 0}</p>
-              <p className="text-[8px] text-white/40 uppercase tracking-wider mt-0.5">Avg Fouls</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── HEAD TO HEAD ── */}
       {h2h.length > 0 && (

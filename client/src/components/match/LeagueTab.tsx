@@ -46,30 +46,23 @@ export function LeagueTab({ d }: any) {
           <span className="w-5 text-center">W</span>
           <span className="w-5 text-center">D</span>
           <span className="w-5 text-center">L</span>
-          <span className="w-8 text-center">GD</span>
-          <span className="w-16 text-center">Form</span>
+          <span className="w-7 text-center">GD</span>
           <span className="w-7 text-right">Pts</span>
         </div>
         <div className="flex flex-col gap-0.5">
           {st.slice(0, 20).map((r: any, i: number) => {
             const hi = [fix.home_team_name, fix.away_team_name].some((n: string) => (n || "").toLowerCase().includes((r.team || "").toLowerCase().split(" ")[0]));
-            const gd = r.gd ?? r.goal_difference ?? null; const gdN = Number(gd);
+            const gd = r.goal_difference ?? r.gd ?? null; const gdN = Number(gd);
             const gdStr = gd !== null ? (gdN > 0 ? "+" + gd : String(gd)) : "-";
-            const formStr = (r.form || '').slice(-5); // Get last 5
             return (
-              <div key={i} className={cn("flex items-center gap-0 px-2 py-1.5 rounded-lg text-xs", hi ? "bg-primary/10 border border-primary/20" : "hover:bg-white/[0.02]")}>
+              <div key={i} className={cn("flex items-center gap-0 px-2 py-1.5 rounded-lg text-xs", hi ? "bg-primary/10 border border-primary/20" : "")}>
                 <span className={cn("w-5 font-bold shrink-0", hi ? "text-primary" : "text-white/30")}>{r.position}</span>
                 <span className={cn("flex-1 font-semibold truncate mr-1", hi ? "text-primary" : "text-white/65")}>{r.team}</span>
                 <span className="w-5 text-center text-white/35">{r.played ?? "-"}</span>
-                <span className="w-5 text-center text-white/35">{r.wins ?? r.won ?? "-"}</span>
-                <span className="w-5 text-center text-white/35">{r.draws ?? r.drawn ?? "-"}</span>
-                <span className="w-5 text-center text-white/35">{r.losses ?? r.lost ?? "-"}</span>
-                <span className={cn("w-8 text-center font-bold", gdN > 0 ? "text-primary/60" : gdN < 0 ? "text-red-400/60" : "text-white/25")}>{gdStr}</span>
-                <span className="w-16 flex gap-0.5 justify-center">
-                  {formStr.split('').map((char, i) => (
-                    <span key={i} className={cn("w-2 h-2 rounded-full", char === 'W' ? "bg-primary" : char === 'D' ? "bg-amber-400" : "bg-red-500")} title={char} />
-                  ))}
-                </span>
+                <span className="w-5 text-center text-white/35">{r.won ?? "-"}</span>
+                <span className="w-5 text-center text-white/35">{r.drawn ?? "-"}</span>
+                <span className="w-5 text-center text-white/35">{r.lost ?? "-"}</span>
+                <span className={cn("w-7 text-center font-bold", gdN > 0 ? "text-primary/60" : gdN < 0 ? "text-red-400/60" : "text-white/25")}>{gdStr}</span>
                 <span className={cn("w-7 text-right font-black", hi ? "text-primary" : "text-white")}>{r.points ?? "-"}</span>
               </div>
             );

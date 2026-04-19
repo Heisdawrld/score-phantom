@@ -6,26 +6,28 @@ import { motion } from 'framer-motion';
 import { Activity, Target, Shield, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function TrackRecord({ isEmbedded = false }: { isEmbedded?: boolean }) {
+export default function TrackRecord() {
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['backtest-stats'],
-    queryFn: () => fetchApi('/backtest/stats')
+    queryKey: ['track-record-stats'],
+    queryFn: () => fetchApi('/track-record/stats')
   });
 
   const { data: recent, isLoading: recentLoading } = useQuery({
-    queryKey: ['backtest-recent'],
-    queryFn: () => fetchApi('/backtest/recent?limit=50')
+    queryKey: ['track-record-recent'],
+    queryFn: () => fetchApi('/track-record/recent?limit=50')
   });
 
   const formatMarket = (marketId: string) => {
     return marketId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   };
 
-  const content = (
-    <main className='max-w-lg mx-auto px-4 pt-6 space-y-8'>
+  return (
+    <div className='min-h-screen bg-background pb-24'>
+      <Header />
       
-      {/* Header */}
-      {!isEmbedded && (
+      <main className='max-w-lg mx-auto px-4 pt-6 space-y-8'>
+        
+        {/* Header */}
         <div className='text-center space-y-2 mb-8'>
           <div className='inline-flex items-center justify-center p-3 bg-primary/10 rounded-full mb-2'>
             <Activity className='w-8 h-8 text-primary' />
@@ -37,7 +39,6 @@ export default function TrackRecord({ isEmbedded = false }: { isEmbedded?: boole
             Verifiable, transparent historical hit rates across 58,000+ simulated past matches.
           </p>
         </div>
-      )}
 
         {/* Global Stats Card */}
         {stats && (
@@ -139,14 +140,6 @@ export default function TrackRecord({ isEmbedded = false }: { isEmbedded?: boole
         </div>
 
       </main>
-  );
-
-  if (isEmbedded) return content;
-
-  return (
-    <div className='min-h-screen bg-background pb-24'>
-      <Header />
-      {content}
     </div>
   );
 }

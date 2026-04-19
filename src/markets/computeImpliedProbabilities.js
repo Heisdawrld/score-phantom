@@ -47,83 +47,27 @@ function lookupOdds(marketKey, oddsSnapshot) {
 
 /**
  * Add impliedProbability and edge to each candidate based on odds.
- * Also extracts Pinnacle odds specifically to use as the true mathematical baseline.
  *
  * @param {MarketCandidate[]} candidates
  * @param {object|null} oddsSnapshot
- * @param {Array|null} deepOdds - Multi-bookmaker array from BSD
  * @returns {MarketCandidate[]}
  */
-export function computeImpliedProbabilities(candidates, oddsSnapshot, deepOdds = []) {
+export function computeImpliedProbabilities(candidates, oddsSnapshot) {
   return candidates.map((candidate) => {
-    // 1. Try to find the best odds and Pinnacle odds from the deepOdds array
-    let bestOdds = null;
-    let bestBookmaker = null;
-    let pinnacleOdds = null;
+    const decimalOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
 
-    if (deepOdds && Array.isArray(deepOdds) && deepOdds.length > 0) {
-      // Find the specific market in the deep odds array
-      // Deep odds usually come back with specific market names or IDs depending on the endpoint
-      // We will do a fuzzy match on the market name
-      const marketName = candidate.marketKey.replace(/_/g, ' ').toLowerCase();
-      
-      const marketOdds = deepOdds.find(m => {
-        const mName = String(m.market || m.name || '').toLowerCase();
-        return mName.includes(marketName) || marketName.includes(mName);
-      });
-
-      if (marketOdds && marketOdds.bookmakers && Array.isArray(marketOdds.bookmakers)) {
-        let highestPrice = 0;
-        
-        marketOdds.bookmakers.forEach(bookie => {
-          // Assume the outcome matches our selection (e.g. 'Home', 'Over', etc)
-          // In a production app, we would match the exact outcome ID. 
-          // For now, we take the highest price found for this market as a proxy.
-          const price = parseFloat(bookie.odds || bookie.price || 0);
-          
-          if (price > highestPrice) {
-            highestPrice = price;
-            bestOdds = price;
-            bestBookmaker = bookie.name || bookie.bookmaker || 'Unknown';
-          }
-
-          if (String(bookie.name || bookie.bookmaker).toLowerCase().includes('pinnacle')) {
-            pinnacleOdds = price;
-          }
-        });
-      }
+    if (!decimalOdds || decimalOdds <= 1.0) {
+      return { ...candidate, impliedProbability: null, edge: null };
     }
 
-    // 2. Fallback to the generic odds snapshot if deep odds failed or weren't found
-    const genericOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
-    
-    const finalDisplayOdds = bestOdds || genericOdds;
-    const finalDisplayBookmaker = bestBookmaker || 'Average Market';
-    
-    // 3. For the edge calculation, we strictly prefer Pinnacle. If no Pinnacle, use the generic.
-    const baselineOdds = pinnacleOdds || genericOdds;
-
-    if (!baselineOdds || baselineOdds <= 1.0) {
-      return { 
-        ...candidate, 
-        impliedProbability: null, 
-        edge: null,
-        bookmakerOdds: finalDisplayOdds,
-        bookmakerName: finalDisplayBookmaker,
-        pinnacleOdds: null
-      };
-    }
-
-    const impliedProbability = parseFloat((1 / baselineOdds).toFixed(4));
+    const impliedProbability = parseFloat((1 / decimalOdds).toFixed(4));
     const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
 
     return {
       ...candidate,
       impliedProbability,
-      edge, // Edge is now strictly calculated against Pinnacle (if available)
-      bookmakerOdds: finalDisplayOdds, // But we display the best available price to the user
-      bookmakerName: finalDisplayBookmaker,
-      pinnacleOdds: pinnacleOdds
+      edge,
+      bookmakerOdds: decimalOdds,
     };
   });
 }

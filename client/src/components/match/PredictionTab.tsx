@@ -128,20 +128,14 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     : null;
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
   const edgePct = impliedPct != null ? (conf - impliedPct) : null;
-  const hasValue = edgePct != null && edgePct > 0;
+  const hasValue = edgePct != null && edgePct > 2;
   const betLink = oddsData?.betLinkSportybet || null;
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
   const riskLabel = rec.riskLevel || (conf >= 75 ? "SAFE" : conf >= 60 ? "MODERATE" : "AGGRESSIVE");
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
-  const edgeLabel = rec.edgeLabel || (edgePct != null && edgePct >= 5 ? "STRONG EDGE" : edgePct != null && edgePct >= 2 ? "MODERATE EDGE" : "LEAN");
-  
-  // Extract deep odds data
-  const bestOdds = rec.bookmakerOdds ? Number(rec.bookmakerOdds).toFixed(2) : null;
-  const bestBookie = rec.bookmakerName || 'Average Market';
-  const pinnacleOdds = rec.pinnacleOdds ? Number(rec.pinnacleOdds).toFixed(2) : null;
-
+  const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE" : conf >= 60 ? "MODERATE EDGE" : "LEAN");
   const confLevel = (rec.modelConfidence || (conf >= 75 ? "HIGH" : conf >= 60 ? "MEDIUM" : "LOW")).toUpperCase();
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
 
@@ -210,32 +204,14 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           </div>
 
           {/* Edge vs bookmakers */}
-          <div className="mt-4 mb-2 p-3 rounded-xl bg-primary/[0.05] border border-primary/20">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-[10px] text-primary/70 uppercase font-black tracking-wider">Value Detection</p>
-              {hasValue && edgePct != null && (
-                <span className="text-[10px] font-black text-primary bg-primary/20 px-2 py-0.5 rounded-full">
-                  +{edgePct.toFixed(1)}% EDGE
-                </span>
-              )}
+          {hasValue && edgePct != null && (
+            <div className="flex items-center gap-2 mt-2 mb-3">
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
+                {edgeLabel}
+              </span>
+              <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
             </div>
-            <div className="flex justify-between items-end">
-              <div>
-                <p className="text-xs text-white/60 font-medium">Best Available</p>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-display text-white">{bestOdds || (odds ? Number(odds).toFixed(2) : '-')}</span>
-                  <span className="text-[9px] text-white/40 uppercase mb-1">via {bestBookie}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-white/40 font-medium uppercase tracking-widest">Sharp Baseline</p>
-                <div className="flex items-baseline justify-end gap-1">
-                  <span className="text-sm font-bold text-amber-400/80">{pinnacleOdds || '-'}</span>
-                  <span className="text-[8px] text-white/30 uppercase mb-0.5">Pinnacle</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* ── MATCH SCRIPT ── */}
           {scriptLabel && (

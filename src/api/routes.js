@@ -126,13 +126,13 @@ const TRIAL_DAILY_LIMIT = 15; // 15 predictions per day during free trial
 async function ensureDailyCountTable() {
   try {
     await db.execute(`
-      CREATE TABLE IF NOT EXISTS trial_daily_counts (
-        user_id INTEGER NOT NULL,
-        date TEXT NOT NULL,
-        count INTEGER DEFAULT 0,
-        PRIMARY KEY (user_id, date)
-      )
-    `);
+    CREATE TABLE IF NOT EXISTS trial_daily_counts (
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      count INTEGER DEFAULT 0,
+      PRIMARY KEY (user_id, date)
+    )
+  `);
   } catch {}
 }
 ensureDailyCountTable();
@@ -155,7 +155,7 @@ async function incrementAndCheckDailyCount(userId, limit) {
     const today = new Date().toISOString().split("T")[0];
     const result = await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1
+            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1
             RETURNING count`,
       args: [userId, today],
     });
@@ -175,7 +175,7 @@ async function incrementDailyCount(userId, today) {
   try {
     await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`,
+            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1`,
       args: [userId, today],
     });
   } catch {}
@@ -1453,7 +1453,7 @@ router.post('/push-token', requireAuth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token required' });
-    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,updated_at) VALUES (?,?,?,datetime("now")) ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,updated_at=datetime("now")', args: [req.user.id, token, 'web'] });
+    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id', args: [req.user.id, token, 'web'] });
     res.json({ ok: true });
   } catch(e) { console.error('[PushToken]',e.message); res.status(500).json({ error: 'Failed to save token' }); }
 });

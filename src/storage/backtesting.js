@@ -27,8 +27,8 @@ export async function initBacktestingTable() {
         full_score TEXT,
         -- Outcome
         outcome TEXT,
-        evaluated_at TEXT DEFAULT (datetime('now')),
-        created_at TEXT DEFAULT (datetime('now'))
+        evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_fixture ON prediction_outcomes(fixture_id)`);
@@ -62,8 +62,8 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
       sql: `INSERT OR REPLACE INTO prediction_outcomes
         (fixture_id, home_team, away_team, match_date, tournament,
          predicted_market, predicted_selection, predicted_probability,
-         model_confidence, home_score, away_score, full_score, outcome, evaluated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
+         model_confidence, home_score, away_score, full_score, outcome, evaluated_at, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
       args: [
         String(fixtureId),
         prediction.home_team || '',

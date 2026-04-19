@@ -74,7 +74,7 @@ export default function Profile() {
   const navItems = [
     { icon: CreditCard, label: "Payment & Billing", sub: "Manage your subscription plan", go: "/billing" },
     { icon: Settings, label: "Account Settings", sub: "Preferences & notifications", go: "/settings" },
-    { icon: BarChart2, label: "Track Record", sub: "Win rates & prediction history", go: "/results" },
+    { icon: BarChart2, label: "Track Record", sub: "Win rates & prediction history", go: "/track-record" },
     { icon: Heart, label: "Favourite Leagues", sub: "Personalise your match feed", go: "/league-favorites" },
   ];
 
