@@ -227,9 +227,9 @@ export async function fetchFixturesBySeason(seasonId, { status } = {}) {
  * Fetch a single event by its internal BSD id.
  * Returns full event including shotmap, momentum, odds, incidents.
  */
-export async function fetchEventDetail(eventId) {
+export async function fetchEventDetail(eventId, full = false) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/`);
+  return await bsdFetch(`/events/${eventId}/${full ? '?full=true' : ''}`);
 }
 
 export async function fetchTeamRecentEvents(team, n = 50, opts = {}) {
@@ -414,8 +414,8 @@ export function normaliseEventToForm(event) {
     date:        event.event_date || '',
     competition: event.league?.name || '',
     // Extract true historical xG from the event if available
-    home_xg:     event.live_stats?.expected_goals?.home ?? null,
-    away_xg:     event.live_stats?.expected_goals?.away ?? null,
+    home_xg:     event.actual_home_xg ?? event.home_xg ?? event.live_stats?.expected_goals?.home ?? null,
+    away_xg:     event.actual_away_xg ?? event.away_xg ?? event.live_stats?.expected_goals?.away ?? null,
     // Keep BSD extras for future use
     _bsdId:      event.id,
     _bsdApiId:   event.api_id,

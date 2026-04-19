@@ -84,6 +84,10 @@ function flattenFeatureVector(fv) {
     homeAvgXgAgainst: safeNum(hf.avg_xg_against, null),
     awayAvgXgFor: safeNum(af.avg_xg_for, null),
     awayAvgXgAgainst: safeNum(af.avg_xg_against, null),
+    
+    // Real Post-Match xG (if available)
+    actualHomeXg: safeNum(fv.actualHomeXg, null),
+    actualAwayXg: safeNum(fv.actualAwayXg, null),
 
     homeWinRate: safeNum(hf.win_rate, 0.4),
     awayWinRate: safeNum(af.win_rate, 0.35),

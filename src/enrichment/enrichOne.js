@@ -115,6 +115,9 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     awayForm: Array.isArray(data?.awayForm) ? data.awayForm : [],
     matchStats: data?.matchStats ?? null,
     matchEvents: data?.matchEvents ?? null,
+    actualHomeXg: data?.actualHomeXg ?? null,
+    actualAwayXg: data?.actualAwayXg ?? null,
+    shotmap: data?.shotmap ?? null,
   };
 
   // Derive enrichment_status and data_quality from completeness tier

@@ -159,14 +159,35 @@ export function PitchTab({ matchData }: any) {
               const y = shot.home ? shot.pos.y : 100 - shot.pos.y;
 
               const isGoal = shot.type === 'goal';
-              const size = Math.max(6, Math.min(16, (shot.xg || 0.1) * 30)); // Size based on xG
+              const isSaved = shot.type === 'attempt_saved';
+              
+              // Base size on xG (minimum 8px, max 24px)
+              const xgValue = shot.xg || 0.05;
+              const size = Math.max(8, Math.min(24, xgValue * 40)); 
+
+              // Color based on outcome and team
+              let bgColor = "";
+              let borderColor = "";
+              let shadow = "";
+
+              if (isGoal) {
+                bgColor = shot.home ? "bg-primary" : "bg-blue-500";
+                borderColor = "border-white border-2";
+                shadow = shot.home ? "shadow-[0_0_15px_rgba(16,231,116,0.8)]" : "shadow-[0_0_15px_rgba(59,130,246,0.8)]";
+              } else if (isSaved) {
+                bgColor = shot.home ? "bg-primary/40" : "bg-blue-500/40";
+                borderColor = shot.home ? "border-primary border" : "border-blue-500 border";
+              } else {
+                bgColor = "bg-red-500/30";
+                borderColor = "border-red-500/50 border";
+              }
 
               return (
                 <div
                   key={i}
                   className={cn(
-                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 shadow-lg transition-transform hover:scale-150 cursor-pointer z-10",
-                    isGoal ? (shot.home ? "bg-primary border-2 border-white" : "bg-blue-500 border-2 border-white") : (shot.home ? "bg-primary/50 border border-primary/80" : "bg-blue-500/50 border border-blue-500/80")
+                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-[2] hover:z-50 cursor-pointer z-10 backdrop-blur-sm",
+                    bgColor, borderColor, shadow
                   )}
                   style={{
                     left: `${x}%`,
@@ -174,14 +195,15 @@ export function PitchTab({ matchData }: any) {
                     width: `${size}px`,
                     height: `${size}px`
                   }}
-                  title={`${shot.home ? 'Home' : 'Away'} ${isGoal ? 'Goal' : 'Shot'} - xG: ${shot.xg?.toFixed(2)}`}
+                  title={`${shot.home ? 'Home' : 'Away'} ${shot.type.replace('_', ' ')} - xG: ${xgValue.toFixed(2)}`}
                 />
               );
             })
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 z-20 bg-black/40">
-               <Target className="w-8 h-8 text-white/40 mb-2" />
-               <p className="text-xs text-white/60 font-medium">Shotmap data will appear here during the match</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 z-20 bg-black/60 backdrop-blur-sm rounded-xl">
+               <Target className="w-10 h-10 text-white/20 mb-3" />
+               <p className="text-xs text-white/50 font-display tracking-widest uppercase">Shotmap Unavailable</p>
+               <p className="text-[10px] text-white/30 mt-1">Awaiting spatial data from engine</p>
             </div>
           )}
         </div>

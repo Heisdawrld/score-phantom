@@ -368,13 +368,19 @@ export async function fetchAndStoreEnrichment(fixture) {
   // ── Step 5.5: Fetch match stats and events ──────────────────────────────────
   let matchStats = null;
   let matchEvents = null;
+  let actualHomeXg = null;
+  let actualAwayXg = null;
+  let shotmap = null;
   try {
     // BSD: single event detail call gives us stats, incidents, xG, shotmap
     const matchId = fixture.match_id || fixture.id;
-    const eventDetail = await fetchEventDetail(matchId).catch(() => null);
+    const eventDetail = await fetchEventDetail(matchId, true).catch(() => null);
     if (eventDetail) {
       matchStats = eventDetail.live_stats || null;
       matchEvents = eventDetail.incidents || null;
+      actualHomeXg = eventDetail.actual_home_xg || eventDetail.home_xg || null;
+      actualAwayXg = eventDetail.actual_away_xg || eventDetail.away_xg || null;
+      shotmap = eventDetail.shotmap || null;
       console.log('[enrichmentService] Event detail available for fixture ' + matchId);
     }
   } catch {
@@ -414,6 +420,9 @@ export async function fetchAndStoreEnrichment(fixture) {
     awayStats: awayProfile,
     matchStats,
     matchEvents,
+    actualHomeXg,
+    actualAwayXg,
+    shotmap,
     odds: null,
   };
 }
