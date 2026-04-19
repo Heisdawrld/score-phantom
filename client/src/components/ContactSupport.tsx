@@ -16,6 +16,7 @@ const WHATSAPP_MESSAGE = encodeURIComponent(
 
 export function ContactSupport() {
   const [open, setOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { data: user } = useAuth();
 
   // Only show when logged in
@@ -28,16 +29,25 @@ export function ContactSupport() {
     <>
       {/* Floating button */}
       <motion.button
+        drag
+        dragConstraints={{ left: -window.innerWidth + 80, right: 0, top: -window.innerHeight + 80, bottom: 0 }}
+        dragElastic={0.1}
+        dragMomentum={false}
+        whileDrag={{ scale: 1.1, cursor: "grabbing" }}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setTimeout(() => setIsDragging(false), 150)} // small delay to prevent click firing immediately after drag
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 2, type: "spring", stiffness: 300 }}
-        onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-[#25D366] shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all"
+        onClick={() => {
+          if (!isDragging) setOpen(true);
+        }}
+        className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-[#25D366] shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all cursor-grab touch-none"
         aria-label="Contact Support"
       >
-        <MessageCircle className="w-7 h-7 text-white fill-white" />
+        <MessageCircle className="w-7 h-7 text-white fill-white pointer-events-none" />
         {/* Pulse ring */}
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-30" />
+        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-30 pointer-events-none" />
       </motion.button>
 
       {/* Modal */}
