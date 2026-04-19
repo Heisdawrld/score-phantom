@@ -1549,11 +1549,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       args: [home_team_id, home_team_id, away_team_id, away_team_id]
     });
 
-    // Mock fixture object for the engine
     const mockFixture = {
       home_team_id,
       away_team_id,
-      home_team_name: "Home Team", // Could fetch real names
+      home_team_name: "Home Team",
       away_team_name: "Away Team",
       historical_matches: result.rows
     };
@@ -1561,21 +1560,54 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     // 2. Build baseline feature vector
     const baselineVector = await buildFeatureVector(mockFixture);
     
-    // 3. Apply User Simulation Modifiers
+    // 3. Run Base Model
+    const basePredictability = assessMatchPredictability(baselineVector);
+    const { home_xg: baseHomeXg, away_xg: baseAwayXg } = estimateExpectedGoals(baselineVector);
+    const baseMarkets = scoreMarketCandidates(baseHomeXg, baseAwayXg, baselineVector);
+
+    // 4. Apply User Simulation Modifiers
     const simVector = modifyFeatureVectorForSimulation(baselineVector, modifiers);
 
-    // 4. Run through probability engine
-    const matchPredictability = assessMatchPredictability(simVector);
-    const { home_xg, away_xg } = estimateExpectedGoals(simVector);
-    const markets = scoreMarketCandidates(home_xg, away_xg, simVector);
+    // 5. Run Simulated Model
+    const simPredictability = assessMatchPredictability(simVector);
+    const { home_xg: simHomeXg, away_xg: simAwayXg } = estimateExpectedGoals(simVector);
+    const simMarkets = scoreMarketCandidates(simHomeXg, simAwayXg, simVector);
+
+    // 6. Generate Shift Reason
+    let shift_reason = "Variables adjusted.";
+    const homeXgDiff = simHomeXg - baseHomeXg;
+    const awayXgDiff = simAwayXg - baseAwayXg;
+    
+    if (Math.abs(homeXgDiff) > 0.5 || Math.abs(awayXgDiff) > 0.5) {
+      shift_reason = "The extreme variable changes caused a massive shift in expected attacking output, completely flipping the script.";
+    } else if (homeXgDiff < -0.2 && modifiers.homeInjuries > 0) {
+      shift_reason = `Home injuries sapped their attacking threat, dropping their xG by ${Math.abs(homeXgDiff).toFixed(2)}.`;
+    } else if (modifiers.weather === 'snow') {
+      shift_reason = "Snow and harsh conditions increased match volatility and suppressed goal scoring expectations.";
+    } else if (modifiers.lineupStrength === 'heavily_rotated') {
+      shift_reason = "Heavy rotation tanked predictability and expected goals, making this match a chaotic gamble.";
+    } else if (homeXgDiff > 0.2 || awayXgDiff > 0.2) {
+      shift_reason = "Boosted motivation slightly elevated the expected goals output.";
+    } else {
+      shift_reason = "The applied variables caused minor probability shifts but did not fundamentally alter the game script.";
+    }
 
     res.json({
       success: true,
       simulation: {
-        home_xg: home_xg.toFixed(2),
-        away_xg: away_xg.toFixed(2),
-        predictability: matchPredictability,
-        markets: markets
+        base_model: {
+          home_xg: baseHomeXg.toFixed(2),
+          away_xg: baseAwayXg.toFixed(2),
+          predictability: basePredictability,
+          markets: baseMarkets.slice(0, 3)
+        },
+        simulated_model: {
+          home_xg: simHomeXg.toFixed(2),
+          away_xg: simAwayXg.toFixed(2),
+          predictability: simPredictability,
+          markets: simMarkets.slice(0, 3)
+        },
+        shift_reason
       }
     });
 

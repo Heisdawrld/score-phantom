@@ -4,7 +4,7 @@
 This plan details the implementation of the "Phantom Lab" premium sandbox and the app-wide "AI Advisor" indicator, based on the design at `docs/superpowers/specs/2026-04-19-phantom-lab-design.md`.
 
 ## Phase 1: AI Advisor Indicator (App-Wide)
-We will introduce a reusable UI component that analyzes a prediction and assigns it a "Fire", "Gamble", or "Avoid" status with corresponding animations.
+We will introduce a reusable UI component that analyzes a prediction and assigns it a "Fire", "Gamble", or "Avoid" status with corresponding animations. **Crucially, this is an app-wide feature, primarily focused on the Match Panel (`MatchCenter.tsx`) and `TopPicksToday.tsx`, not just the Phantom Lab.**
 
 ### 1.1 Backend Logic Update
 1. **File:** `src/markets/scoreMarketCandidates.js` (or a new utility)
@@ -12,14 +12,16 @@ We will introduce a reusable UI component that analyzes a prediction and assigns
    - High predictability + >75% prob = `FIRE`
    - Medium predictability OR 60-74% prob = `GAMBLE`
    - Low predictability OR <60% prob = `AVOID`
+3. **Task:** Ensure this `advisor_status` is returned in all prediction endpoints (e.g., `/api/predictions/:id`, `/api/top-picks-today`).
 
-### 1.2 Frontend Component
+### 1.2 Frontend Component & Integration
 1. **Component:** `client/src/components/ui/AIAdvisorBadge.tsx`
-2. **Task:** Create a React component that takes an `advisor_status` prop and renders an animated badge.
-   - `FIRE`: Green/Gold pulsing glow with a fire icon.
-   - `GAMBLE`: Orange/Amber pulse with dice icon.
-   - `AVOID`: Red muted border with stop icon.
-3. **Integration:** Inject this badge into `MatchCenter.tsx` and `TopPicksToday.tsx` wherever predictions are displayed.
+2. **Task:** Create a React component that takes an `advisor_status` prop and renders an animated, entertaining badge.
+   - `FIRE`: Green/Gold pulsing glow with a fire icon ("🔥 FIRE PICK").
+   - `GAMBLE`: Orange/Amber pulse with dice icon ("🎲 GAMBLE IT").
+   - `AVOID`: Red muted border with stop icon ("🛑 AVOID / TOO CHAOTIC").
+3. **Integration - Match Center:** Inject this badge prominently into `MatchCenter.tsx` near the top prediction recommendation to act as the user's consultant.
+4. **Integration - Top Picks:** Inject this badge into `TopPicksToday.tsx` to instantly categorize the day's slate.
 
 ## Phase 2: Phantom Lab Backend Upgrades
 Upgrade the simulator endpoint to support the new variables and generate the "Before vs. After" comparison.
@@ -50,4 +52,5 @@ Transform the basic `Simulator.tsx` into the premium `PhantomLab.tsx`.
    - Expand the modifier sliders/toggles to match the new spec (Lineup Strength).
    - Implement the "Before vs. After" side-by-side card layout using Framer Motion for smooth reveals.
    - Display the dynamic `shift_reason` prominently.
+   - Integrate the `AIAdvisorBadge` to show how the status changes (e.g., from GAMBLE to FIRE).
 3. **Animation:** Add a pulsing CSS animation (e.g., the glowing ghost logo) during the `isPending` state of the API call.

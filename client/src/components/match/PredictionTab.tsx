@@ -6,6 +6,7 @@ import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
+import { AIAdvisorBadge, AdvisorStatus } from "@/components/ui/AIAdvisorBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 import { SpiralWatermark } from "@/pages/MatchCenter";
 
@@ -136,6 +137,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE" : conf >= 60 ? "MODERATE EDGE" : "LEAN");
   const confLevel = (rec.modelConfidence || (conf >= 75 ? "HIGH" : conf >= 60 ? "MEDIUM" : "LOW")).toUpperCase();
+  const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -168,6 +170,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
 
           {/* Badges row */}
           <div className="flex flex-wrap gap-2 mb-3">
+            <AIAdvisorBadge status={advisorStatus} />
             <ConfidenceBadge value={conf} size="md" />
             <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-wide">
               {edgeLabel}

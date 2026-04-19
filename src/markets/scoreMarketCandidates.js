@@ -209,6 +209,17 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       accuracyCache
     );
 
+    // AI Advisor Logic
+    let advisorStatus = "GAMBLE";
+    const prob = safeNum(candidate.modelProbability, 0);
+    const predScore = safeNum(featureVector?.predictability_score, 0.5); // Fallback to 0.5 if missing
+
+    if (predScore > 0.65 && prob > 0.75) {
+      advisorStatus = "FIRE";
+    } else if (predScore < 0.40 || prob < 0.60) {
+      advisorStatus = "AVOID";
+    }
+
     const finalScore =
       0.25 * modelConfidenceScore +
       0.25 * edgeScore +
@@ -232,6 +243,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       formMomentumScore:       parseFloat(formMomentumScore.toFixed(3)),
       historicalAccuracyScore: parseFloat(historicalAccuracyScore.toFixed(3)),
       finalScore:              parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
+      advisor_status:          advisorStatus,
     };
   });
 }

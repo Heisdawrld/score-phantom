@@ -1,7 +1,7 @@
 /**
  * Modifies a base feature vector based on user-provided simulation sliders.
  * @param {Object} vector - The original feature vector for the match
- * @param {Object} modifiers - User adjustments { homeMotivation, awayMotivation, homeInjuries, awayInjuries, weather }
+ * @param {Object} modifiers - User adjustments { homeMotivation, awayMotivation, homeInjuries, awayInjuries, weather, lineupStrength }
  * @returns {Object} - The modified feature vector
  */
 export function modifyFeatureVectorForSimulation(vector, modifiers) {
@@ -49,6 +49,21 @@ export function modifyFeatureVectorForSimulation(vector, modifiers) {
     simVector.home_offensive_strength *= 0.85;
     simVector.away_offensive_strength *= 0.85;
     simVector.expected_goals_variance = (simVector.expected_goals_variance || 1.0) * 1.30;
+  }
+
+  // 4. Lineup Strength / Rotation Risk
+  if (modifiers.lineupStrength === 'rotated') {
+    simVector.home_offensive_strength *= 0.90;
+    simVector.home_defensive_strength *= 1.10;
+    simVector.away_offensive_strength *= 0.90;
+    simVector.away_defensive_strength *= 1.10;
+    simVector.predictability_score = (simVector.predictability_score || 0.5) * 0.9;
+  } else if (modifiers.lineupStrength === 'heavily_rotated') {
+    simVector.home_offensive_strength *= 0.75;
+    simVector.home_defensive_strength *= 1.25;
+    simVector.away_offensive_strength *= 0.75;
+    simVector.away_defensive_strength *= 1.25;
+    simVector.predictability_score = (simVector.predictability_score || 0.5) * 0.7;
   }
 
   return simVector;
