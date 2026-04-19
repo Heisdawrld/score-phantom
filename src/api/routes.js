@@ -1536,8 +1536,10 @@ router.get("/notifications/vapidPublicKey", requireAuth, (req, res) => {
 // Teams Search Endpoint
 router.get("/teams", requireAuth, async (req, res) => {
   try {
+    // The previous query failed because `league_id` and `league_name` don't exist directly on `fixtures`.
+    // They are `tournament_id` and `tournament_name`.
     const result = await db.execute(`
-      SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, league_id, league_name
+      SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, tournament_id as league_id, tournament_name as league_name
       FROM fixtures
       ORDER BY team_name ASC
     `);

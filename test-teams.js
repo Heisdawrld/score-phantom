@@ -2,7 +2,7 @@ import db from './src/config/database.js';
 async function test() {
   try {
     const result = await db.execute(`
-      SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, league_id, league_name
+      SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, tournament_id as league_id, tournament_name as league_name
       FROM fixtures
       ORDER BY team_name ASC
     `);
