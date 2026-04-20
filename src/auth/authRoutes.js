@@ -237,21 +237,48 @@ export function computeAccessStatus(user) {
     };
   }
   const now = new Date();
-  const trialActive   = user?.trial_ends_at           && new Date(user.trial_ends_at)           > now;
-  const premiumActive = user?.premium_expires_at      && new Date(user.premium_expires_at)      > now;
-  const subActive     = user?.subscription_expires_at && new Date(user.subscription_expires_at) > now;
-  let status = "expired";
-  if (premiumActive || subActive) status = "active";
-  else if (trialActive)           status = "trial";
   
+  // Clean up potential invalid dates from CSV imports
+  const parsedTrialEnds = user?.trial_ends_at ? new Date(user.trial_ends_at) : null;
+  const trialIsValid = parsedTrialEnds && !isNaN(parsedTrialEnds.getTime());
+  
+  const parsedPremiumExpires = user?.premium_expires_at ? new Date(user.premium_expires_at) : null;
+  const premiumIsValid = parsedPremiumExpires && !isNaN(parsedPremiumExpires.getTime());
+
+  const parsedSubExpires = user?.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
+  const subIsValid = parsedSubExpires && !isNaN(parsedSubExpires.getTime());
+
+  const trialActive   = trialIsValid && parsedTrialEnds > now;
+  const premiumActive = premiumIsValid && parsedPremiumExpires > now;
+  const subActive     = subIsValid && parsedSubExpires > now;
+  
+  let status = "expired";
+  
+  // If they have no valid trial date but their DB status explicitly says "trial", 
+  // give them a fallback grace period so they aren't instantly blocked.
+  let isFallbackTrial = false;
+  if (!trialIsValid && user?.status === "trial" && !premiumActive && !subActive) {
+    isFallbackTrial = true;
+    status = "trial";
+  }
+  
+  let isFallbackPremium = false;
+  if (!premiumIsValid && user?.status === "premium" && !subActive) {
+    isFallbackPremium = true;
+    status = "active";
+  }
+
+  if (premiumActive || subActive || isFallbackPremium) status = "active";
+  else if (trialActive || isFallbackTrial)           status = "trial";
+
   // Add referral code to the payload
   const referralCode  = user?.own_referral_code || null;
 
   return {
     status,
-    trial_active:        !!trialActive,
-    subscription_active: !!(premiumActive || subActive),
-    has_full_access:     !!trialActive || !!premiumActive || !!subActive,
+    trial_active:        !!trialActive || isFallbackTrial,
+    subscription_active: !!(premiumActive || subActive || isFallbackPremium),
+    has_full_access:     !!trialActive || isFallbackTrial || !!premiumActive || !!subActive || isFallbackPremium,
     referral_code:       referralCode,
   };
 }
