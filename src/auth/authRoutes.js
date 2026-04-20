@@ -704,37 +704,9 @@ router.post("/signup", authLimiter, async (req, res) => {
       if (hasPassword) {
         return res.status(400).json({ error: "Email already registered" });
       } else {
-        // User exists but has no password (e.g. created via admin, migration, or Firebase). Set their password now.
-        const hashedPassword = await bcrypt.hash(String(password), 10);
-        await db.execute({
-          sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
-          args: [hashedPassword, existingUser.id]
-        });
-        
-        // Reload user to return token
-        const created = await db.execute({
-          sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE id = ? LIMIT 1`,
-          args: [existingUser.id],
-        });
-        const user = created.rows?.[0];
-        if (!user) throw new Error("User updated but could not be reloaded");
-
-        // Attach referral if code was provided (partner or user-based)
-        if (referralCode && user) {
-          await attachReferral(user.id, referralCode);
-        }
-
-        await ensureReferralCode(user);
-
-        // Auto-login: return JWT immediately
-        const token  = signToken(user);
-        const access = computeAccessStatus(user);
-        return res.status(201).json({
-          token,
-          user: publicUser(user),
-          has_access:    access.has_full_access,
-          access_status: access.status,
-        });
+        // User exists but has no password (e.g. created via Google/Firebase).
+        // Refuse to set password automatically via signup to prevent account takeover.
+        return res.status(400).json({ error: "Email already registered. Please sign in with Google or reset your password." });
       }
     }
 
@@ -865,14 +837,9 @@ router.post("/login", authLimiter, async (req, res) => {
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const storedHash = user.password_hash || user.password;
     if (!storedHash) {
-      // The user exists in the database (likely from a CSV import), but has no password set.
-      // Let's set their password right now so they can log in seamlessly!
-      const hashedPassword = await bcrypt.hash(String(password || ""), 10);
-      await db.execute({
-        sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
-        args: [hashedPassword, user.id]
-      });
-      // The password is now set and implicitly verified since they just "created" it
+      // The user exists in the database (likely from Google auth or CSV import), but has no password set.
+      // Do NOT set it automatically to prevent account takeover.
+      return res.status(400).json({ error: "Please sign in with Google or reset your password to create one." });
     } else {
       // Normal login check
       const ok = await bcrypt.compare(String(password || ""), String(storedHash));
