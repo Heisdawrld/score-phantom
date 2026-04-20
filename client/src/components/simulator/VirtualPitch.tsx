@@ -27,6 +27,23 @@ interface VirtualPitchProps {
   onComplete: () => void;
 }
 
+// 4-3-3 Standard Formation Coordinates (Left-to-Right attacking)
+const HOME_FORMATION = [
+  { id: 'h1', role: 'gk', x: 5, y: 50 },
+  { id: 'h2', role: 'lb', x: 20, y: 15 },
+  { id: 'h3', role: 'cb', x: 15, y: 35 },
+  { id: 'h4', role: 'cb', x: 15, y: 65 },
+  { id: 'h5', role: 'rb', x: 20, y: 85 },
+  { id: 'h6', role: 'cm', x: 35, y: 30 },
+  { id: 'h7', role: 'cdm', x: 30, y: 50 },
+  { id: 'h8', role: 'cm', x: 35, y: 70 },
+  { id: 'h9', role: 'lw', x: 60, y: 20 },
+  { id: 'h10', role: 'st', x: 65, y: 50 },
+  { id: 'h11', role: 'rw', x: 60, y: 80 },
+];
+// Mirror coordinates for Away team (Right-to-Left attacking)
+const AWAY_FORMATION = HOME_FORMATION.map(p => ({ ...p, id: p.id.replace('h', 'a'), x: 100 - p.x }));
+
 export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamId, simulationScript, managers, onComplete }: VirtualPitchProps) {
   const [currentMinute, setCurrentMinute] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<'h1' | 'ht' | 'h2' | 'ft' | 'stats'>('h1');
@@ -54,30 +71,36 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
     const logicalWidth = rect.width;
     const logicalHeight = rect.height;
 
-    engineRef.current = new MatchEngine(canvas, simulationScript, {
-      onMinute: (min: number) => setCurrentMinute(min),
-      onEvent: (e: any) => {
-        if (e) {
-          const isHome = e.team === 'home';
-          const teamName = isHome ? homeTeamName : awayTeamName;
-          if (e.type === 'goal') {
-            setScore(s => ({ ...s, [e.team]: s[e.team as keyof typeof s] + 1 }));
+    engineRef.current = new MatchEngine(
+      canvas, 
+      simulationScript, 
+      {
+        onMinute: (min: number) => setCurrentMinute(min),
+        onEvent: (e: any) => {
+          if (e) {
+            const isHome = e.team === 'home';
+            const teamName = isHome ? homeTeamName : awayTeamName;
+            if (e.type === 'goal') {
+              setScore(s => ({ ...s, [e.team]: s[e.team as keyof typeof s] + 1 }));
+            }
+            setActiveEvent({ 
+              message: `${e.message} - ${teamName.substring(0,3).toUpperCase()}`, 
+              type: e.type 
+            });
+          } else {
+            setActiveEvent(null);
           }
-          setActiveEvent({ 
-            message: `${e.message} - ${teamName.substring(0,3).toUpperCase()}`, 
-            type: e.type 
-          });
-        } else {
-          setActiveEvent(null);
+        },
+        onPhaseChange: (phase: string) => {
+          setCurrentPhase(phase as any);
+        },
+        onComplete: () => {
+          // Handled via state transition to 'stats'
         }
       },
-      onPhaseChange: (phase: string) => {
-        setCurrentPhase(phase as any);
-      },
-      onComplete: () => {
-        // Handled via state transition to 'stats'
-      }
-    });
+      HOME_FORMATION,
+      AWAY_FORMATION
+    );
 
     engineRef.current.width = logicalWidth;
     engineRef.current.height = logicalHeight;

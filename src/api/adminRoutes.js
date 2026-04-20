@@ -44,41 +44,42 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
     const now = new Date();
     const todayStart = now.toISOString().slice(0, 10);
 
-    const [totalResult, usersResult, paymentsToday, totalRevenue, pendingResult] = await Promise.all([
+    const [totalResult, usersResult, paymentsToday, verifiedPayments, pendingResult] = await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM users`),
       db.execute(`SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at FROM users`),
       db.execute({
-        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND paid_at::date = ?`,
-        args: [todayStart],
+        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND paid_at LIKE ?`,
+        args: [`${todayStart}%`],
       }),
-      // Revenue = verified payments + estimated from premium users without payment records (manual upgrades)
-      db.execute(`
-        SELECT
-          COUNT(*) as count,
-          COALESCE(SUM(amount), 0) +
-          (SELECT COUNT(*) * 3000 FROM users
-           WHERE (status = 'premium' OR (premium_expires_at IS NOT NULL AND premium_expires_at > NOW()))
-           AND id NOT IN (SELECT DISTINCT user_id FROM payments WHERE status = 'verified')
-          ) as total
-        FROM payments WHERE status = 'verified'
-      `),
+      db.execute(`SELECT DISTINCT user_id, amount FROM payments WHERE status = 'verified'`),
       db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
     const users = usersResult.rows || [];
+    const verifiedUserIds = new Set((verifiedPayments.rows || []).map(p => p.user_id));
+    const rawTotalRevenue = (verifiedPayments.rows || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    
     let activeCount = 0;
     let trialCount = 0;
     let expiredCount = 0;
+    let manualPremiumCount = 0;
 
     for (const user of users) {
       const access = computeAccessStatus(user);
-      if (access.subscription_active) activeCount++;
-      else if (access.trial_active) trialCount++;
-      else expiredCount++;
+      if (access.subscription_active) {
+        activeCount++;
+        if (!verifiedUserIds.has(user.id)) {
+          manualPremiumCount++;
+        }
+      } else if (access.trial_active) {
+        trialCount++;
+      } else {
+        expiredCount++;
+      }
     }
 
     const totalUsers   = Number(totalResult.rows[0].count || 0);
-    const totalRev     = Number(totalRevenue.rows[0].total || 0);
+    const totalRev     = rawTotalRevenue + (manualPremiumCount * 3000);
     const todayPay     = Number(paymentsToday.rows[0].count || 0);
     const todayRev     = Number(paymentsToday.rows[0].total || 0);
 
@@ -93,7 +94,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       revenue: {
         currency: 'NGN',
         total: totalRev,
-        total_payments: Number(totalRevenue.rows[0].count || 0),
+        total_payments: (verifiedPayments.rows || []).length,
         pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {

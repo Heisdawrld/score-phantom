@@ -265,8 +265,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("prediction");
 
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
-  const blockReason: "expired" | "limit" | "free" | null = !isPremium ? "free" : null;
+  const hasAccess = user?.has_access === true || user?.access_status === "active" || user?.access_status === "trial" || (user as any)?.subscription_active || (user as any)?.is_admin || (user as any)?.trial_active;
+  const blockReason: "expired" | "limit" | "free" | null = limitReached ? "limit" : !hasAccess ? "free" : null;
   const { data, isLoading, error } = usePrediction(blockReason ? null : fixtureId, onError);
 
   const queryClient = useQueryClient();
