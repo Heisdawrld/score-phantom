@@ -88,8 +88,8 @@ export default function PhantomLab() {
       </div>
 
       <Header />
-      
-      <main className='max-w-lg mx-auto px-4 pt-6 space-y-6 relative z-10'>
+
+      <main className='max-w-7xl mx-auto px-4 pt-6 space-y-6 relative z-10'>
         {/* Header */}
         <div className='flex items-center gap-4 mb-8'>
           <button onClick={() => setLocation('/')} className='w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all'>
@@ -101,9 +101,11 @@ export default function PhantomLab() {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className='glass-panel p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl space-y-8'>
-          <div className='absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none' />
+        <div className='lg:grid lg:grid-cols-12 lg:gap-8'>
+          {/* Controls - Left Side on PC */}
+          <div className='lg:col-span-4 space-y-6'>
+            <div className='glass-panel p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl space-y-8'>
+              <div className='absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none' />
           
           {/* Match Selector */}
           <div className='relative z-10'>
@@ -219,37 +221,53 @@ export default function PhantomLab() {
               </>
             )}
           </button>
-        </div>
+            </div>
+          </div>
 
-        {/* Results - Before & After */}
-        <AnimatePresence mode="wait">
-          {simulationState === 'running' && simulation?.simulation && (
-            <motion.div
-              key="pitch"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="mt-8"
-            >
-              <VirtualPitch 
-                homeTeamName={selectedMatch!.homeTeamName}
-                awayTeamName={selectedMatch!.awayTeamName}
-                simulationScript={simulation.simulation.simulation_script}
-                managers={simulation.simulation.managers}
-                onComplete={() => setSimulationState('completed')}
-              />
-            </motion.div>
-          )}
+          {/* Results - Right Side on PC */}
+          <div className='lg:col-span-8 mt-8 lg:mt-0'>
+            <AnimatePresence mode="wait">
+              {simulationState === 'idle' && (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="h-full min-h-[400px] rounded-3xl border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center text-center p-8 hidden lg:flex"
+                >
+                  <Target className="w-16 h-16 text-white/10 mb-4" />
+                  <h3 className="text-xl font-display text-white/40 tracking-widest">AWAITING SIMULATION</h3>
+                  <p className="text-white/20 mt-2 max-w-sm">Select a matchup and run the engine to visualize the 90-minute tactical simulation.</p>
+                </motion.div>
+              )}
 
-          {simulationState === 'completed' && simulation?.simulation && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className='space-y-6 pt-4'
-            >
+              {simulationState === 'running' && simulation?.simulation && (
+                <motion.div
+                  key="pitch"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="h-full flex items-center"
+                >
+                  <VirtualPitch
+                    homeTeamName={selectedMatch!.homeTeamName}
+                    awayTeamName={selectedMatch!.awayTeamName}
+                    simulationScript={simulation.simulation.simulation_script}
+                    managers={simulation.simulation.managers}
+                    onComplete={() => setSimulationState('completed')}
+                  />
+                </motion.div>
+              )}
+
+              {simulationState === 'completed' && simulation?.simulation && (
+                <motion.div
+                  key="results"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                  className='space-y-6 pt-4 lg:pt-0'
+                >
               {/* Shift Reason Callout */}
               <div className='p-5 bg-gradient-to-r from-primary/20 to-primary/5 border border-primary/30 rounded-2xl flex gap-4 items-center shadow-[0_0_30px_rgba(16,231,116,0.1)] relative overflow-hidden'>
                 <div className='absolute left-0 top-0 bottom-0 w-1 bg-primary' />
@@ -333,9 +351,10 @@ export default function PhantomLab() {
                 </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
       </main>
 
       {/* Match Selector Modal */}

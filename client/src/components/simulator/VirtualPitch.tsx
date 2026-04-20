@@ -108,7 +108,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, simulationScript, man
   };
 
   return (
-    <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] shadow-2xl flex flex-col">
+    <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] lg:aspect-[21/9] shadow-2xl flex flex-col">
       {/* Top Scoreboard */}
       <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent pointer-events-none">
         
