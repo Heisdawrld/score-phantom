@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Trophy, Clock, AlertCircle, Maximize, Minimize } from "lucide-react";
-
 import { TeamLogo } from '@/components/TeamLogo';
+import { MatchEngine } from "./engine/MatchEngine";
 
 interface VirtualPitchProps {
   homeTeamName: string;
@@ -27,320 +27,92 @@ interface VirtualPitchProps {
   onComplete: () => void;
 }
 
-// 4-3-3 Standard Formation Coordinates (Left-to-Right attacking)
-const HOME_FORMATION = [
-  { id: 'h1', role: 'gk', x: 5, y: 50 },
-  { id: 'h2', role: 'lb', x: 20, y: 15 },
-  { id: 'h3', role: 'cb', x: 15, y: 35 },
-  { id: 'h4', role: 'cb', x: 15, y: 65 },
-  { id: 'h5', role: 'rb', x: 20, y: 85 },
-  { id: 'h6', role: 'cm', x: 35, y: 30 },
-  { id: 'h7', role: 'cdm', x: 30, y: 50 },
-  { id: 'h8', role: 'cm', x: 35, y: 70 },
-  { id: 'h9', role: 'lw', x: 60, y: 20 },
-  { id: 'h10', role: 'st', x: 65, y: 50 },
-  { id: 'h11', role: 'rw', x: 60, y: 80 },
-];
-// Mirror coordinates for Away team (Right-to-Left attacking)
-const AWAY_FORMATION = HOME_FORMATION.map(p => ({ ...p, id: p.id.replace('h', 'a'), x: 100 - p.x }));
-
 export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamId, simulationScript, managers, onComplete }: VirtualPitchProps) {
-  // 4-minute loop config:
-  // First Half (45 mins) = 120 seconds -> 1 in-game minute = 2.66s real-time
-  const REAL_TIME_PER_HALF_MS = 120000;
-  const IN_GAME_MINUTES_PER_HALF = 45;
-  const MS_PER_MINUTE = REAL_TIME_PER_HALF_MS / IN_GAME_MINUTES_PER_HALF;
-
   const [currentMinute, setCurrentMinute] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<'h1' | 'ht' | 'h2' | 'ft' | 'stats'>('h1');
   const [score, setScore] = useState({ home: 0, away: 0 });
-  const [ballZone, setBallZone] = useState<'neutral' | 'home' | 'away'>('neutral');
   const [activeEvent, setActiveEvent] = useState<{ message: string; type: string } | null>(null);
-  
-  // Player passing & tactical mechanics
-  const [activePlayer, setActivePlayer] = useState<{ team: 'home' | 'away', index: number } | null>(null);
-  const [playPhase, setPlayPhase] = useState<'buildup' | 'midfield' | 'attack'>('midfield');
-  const [ballTarget, setBallTarget] = useState<{x: number, y: number} | null>(null);
-
-  // Exact calculated coordinates for all 22 players
-  const [playerPositions, setPlayerPositions] = useState({
-    home: HOME_FORMATION.map(p => ({ x: p.x, y: p.y })),
-    away: AWAY_FORMATION.map(p => ({ x: p.x, y: p.y }))
-  });
-
-  // Expand View toggle
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const { events, addedTime, stats } = simulationScript;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<MatchEngine | null>(null);
 
-  // Run the simulation clock
+  const { stats } = simulationScript;
+
+  // Initialize Canvas Engine
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    if (!canvasRef.current) return;
 
-    if (currentPhase === 'ft') {
-      // Delay for 4 seconds at full time to let user see final score before showing stats
-      timer = setTimeout(() => {
-        setCurrentPhase('stats');
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
-    if (currentPhase === 'stats') {
-      return; // Wait for manual 'Reveal Prediction' click
-    }
-
-    if (currentPhase === 'ht') {
-      timer = setTimeout(() => {
-        setCurrentPhase('h2');
-        setCurrentMinute(45);
-      }, 5000); // 5 seconds for halftime
-      return () => clearTimeout(timer);
-    }
-
-    timer = setInterval(() => {
-      setCurrentMinute(prev => {
-        const next = prev + 1;
-        
-        // Check for phase transitions
-        if (currentPhase === 'h1' && next > 45 + addedTime.half1) {
-          setCurrentPhase('ht');
-          return 45;
-        }
-        if (currentPhase === 'h2' && next > 90 + addedTime.half2) {
-          setCurrentPhase('ft');
-          return 90 + addedTime.half2;
-        }
-
-        // Process events for this minute
-        const currentEvents = events.filter(e => e.minute === next);
-        if (currentEvents.length > 0) {
-          currentEvents.forEach(e => {
-            const isHome = e.team === 'home';
-            
-            if (e.type === 'goal') {
-              setScore(s => ({
-                ...s,
-                [e.team]: s[e.team as keyof typeof s] + 1
-              }));
-              
-              setPlayPhase('attack');
-              setActivePlayer({ team: e.team as 'home'|'away', index: 9 }); // st
-              
-              // Animate shot flying into the net
-              setTimeout(() => {
-                setBallTarget({ x: isHome ? 100 : 0, y: 50 });
-              }, 500);
-              
-              setActiveEvent({ message: `GOALLLL!!! - ${isHome ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: 'goal' });
-              
-              setTimeout(() => {
-                setActiveEvent(null);
-                setBallTarget(null);
-                // Reset to kickoff
-                setPlayPhase('buildup');
-                setActivePlayer({ team: isHome ? 'away' : 'home', index: 6 });
-              }, 3000);
-              
-            } else if (e.type === 'possession') {
-              setBallZone(e.team as 'neutral' | 'home' | 'away');
-              setPlayPhase('midfield');
-              setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7][Math.floor(Math.random()*3)] });
-              
-            } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
-              
-              if (e.type === 'corner') {
-                setPlayPhase('attack');
-                setActivePlayer({ team: e.team as 'home'|'away', index: 10 }); // RW takes it
-                setBallTarget({ x: isHome ? 100 : 0, y: 100 }); // Start at corner flag
-                
-                // Cross the ball into the box
-                setTimeout(() => {
-                  setBallTarget({ x: isHome ? 90 : 10, y: 50 }); // Center of box
-                }, 1000);
-                
-              } else if (e.type === 'save' || e.type === 'miss') {
-                setPlayPhase('attack');
-                setActivePlayer({ team: e.team as 'home'|'away', index: [8,9,10][Math.floor(Math.random()*3)] });
-                
-                // Animate shot
-                setTimeout(() => {
-                  const missY = e.type === 'miss' ? (Math.random() > 0.5 ? 30 : 70) : 50; 
-                  const saveX = isHome ? 98 : 2; 
-                  const missX = isHome ? 105 : -5; 
-                  setBallTarget({ x: e.type === 'save' ? saveX : missX, y: missY });
-                }, 500);
-                
-              } else if (e.type === 'free_kick') {
-                setPlayPhase('attack');
-                setActivePlayer({ team: e.team as 'home'|'away', index: 9 });
-                
-                // Animate free kick shot
-                setTimeout(() => {
-                  setBallTarget({ x: isHome ? 100 : 0, y: 50 }); 
-                }, 1000);
-                
-              } else if (e.type === 'foul' || e.type === 'yellow_card' || e.type === 'red_card') {
-                setPlayPhase('midfield');
-                // Foul occurs, fouled team gets ball
-                setActivePlayer({ team: isHome ? 'home' : 'away', index: [5,6,7][Math.floor(Math.random()*3)] });
-              }
-
-              setActiveEvent({ message: `${e.message} - ${isHome ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: e.type });
-              
-              setTimeout(() => {
-                setActiveEvent(null);
-                setBallTarget(null);
-              }, 2500);
-            }
-          });
-        }
-
-        return next;
-      });
-    }, MS_PER_MINUTE);
-
-    return () => clearInterval(timer);
-  }, [currentPhase, events, addedTime, homeTeamName, awayTeamName, onComplete]);
-
-  // Ball positioning logic based on zone or active player
-  const getBallPosition = () => {
-    if (ballTarget) {
-      return { left: `${ballTarget.x}%`, top: `${ballTarget.y}%` };
-    }
-    if (activePlayer) {
-      const isHome = activePlayer.team === 'home';
-      const p = isHome ? playerPositions.home[activePlayer.index] : playerPositions.away[activePlayer.index];
-      // Add slight offset so it sits at their feet (adjusting based on attack direction)
-      return { left: `${p.x + (isHome ? 1 : -1)}%`, top: `${p.y + 1}%` };
-    }
-    // Fallback if no active player
-    switch (ballZone) {
-      case 'home': return { left: '20%', top: '50%' }; // Deep in home territory (Away attacking)
-      case 'away': return { left: '80%', top: '50%' }; // Deep in away territory (Home attacking)
-      default: return { left: '50%', top: '50%' }; // Midfield
-    }
-  };
-
-  // Tactical State Machine: Runs every 1.5 seconds to calculate positional shifts and passes
-  useEffect(() => {
-    if (currentPhase === 'ft' || currentPhase === 'ht' || currentPhase === 'stats') return;
+    // Fix scaling for high DPI displays
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
     
-    const passInterval = setInterval(() => {
-      // 1. Determine Possession & Phase Shift
-      let nextActiveTeam = activePlayer?.team || 'home';
-      let nextActiveIndex = activePlayer?.index || 6;
-      let nextPhase = playPhase;
+    // Set actual size in memory (scaled to account for extra pixel density)
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    
+    // Normalize coordinate system to use css pixels
+    const ctx = canvas.getContext('2d');
+    ctx?.scale(dpr, dpr);
+    // Overwrite canvas width/height properties inside engine so it uses logical pixels
+    const logicalWidth = rect.width;
+    const logicalHeight = rect.height;
 
-      const keepsPossession = Math.random() > 0.15; // 85% chance to complete a pass
-
-      if (keepsPossession) {
-        // Move ball forward systematically
-        if (playPhase === 'buildup') {
-          nextPhase = 'midfield';
-          nextActiveIndex = [5, 6, 7][Math.floor(Math.random() * 3)]; // pass to Midfielders
-        } else if (playPhase === 'midfield') {
-          // 60% chance to attack, 40% to cycle midfield
-          if (Math.random() > 0.4) {
-            nextPhase = 'attack';
-            nextActiveIndex = [8, 9, 10][Math.floor(Math.random() * 3)]; // pass to Forwards
-          } else {
-            nextActiveIndex = [5, 6, 7, 1, 4][Math.floor(Math.random() * 5)]; // cycle with Mid or Fullbacks
+    engineRef.current = new MatchEngine(canvas, simulationScript, {
+      onMinute: (min: number) => setCurrentMinute(min),
+      onEvent: (e: any) => {
+        if (e) {
+          const isHome = e.team === 'home';
+          const teamName = isHome ? homeTeamName : awayTeamName;
+          if (e.type === 'goal') {
+            setScore(s => ({ ...s, [e.team]: s[e.team as keyof typeof s] + 1 }));
           }
-        } else if (playPhase === 'attack') {
-          // Cycle attack or drop back to midfield
-          if (Math.random() > 0.5) {
-            nextActiveIndex = [8, 9, 10][Math.floor(Math.random() * 3)];
-          } else {
-            nextPhase = 'midfield';
-            nextActiveIndex = [5, 6, 7][Math.floor(Math.random() * 3)];
-          }
-        }
-      } else {
-        // Turnover!
-        nextActiveTeam = nextActiveTeam === 'home' ? 'away' : 'home';
-        nextPhase = 'midfield'; // Reset phase on turnover
-        nextActiveIndex = [5, 6, 7, 2, 3][Math.floor(Math.random() * 5)]; // Intercepted by Mid or CB
-      }
-
-      setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
-      setPlayPhase(nextPhase);
-
-      // Get active player's rough coordinate for marking
-      let activeX = 50, activeY = 50;
-      if (nextActiveTeam === 'home') {
-        activeX = HOME_FORMATION[nextActiveIndex].x;
-        activeY = HOME_FORMATION[nextActiveIndex].y;
-        if (nextPhase === 'buildup') activeX += 5;
-        if (nextPhase === 'midfield') activeX += 15;
-        if (nextPhase === 'attack') activeX += 25;
-      } else {
-        activeX = AWAY_FORMATION[nextActiveIndex].x;
-        activeY = AWAY_FORMATION[nextActiveIndex].y;
-        if (nextPhase === 'buildup') activeX -= 5;
-        if (nextPhase === 'midfield') activeX -= 15;
-        if (nextPhase === 'attack') activeX -= 25;
-      }
-
-      // 2. Calculate Tactical Positional Coordinates for all 22 dots
-      const calculateTacticalPosition = (baseP: any, isHome: boolean, attackingTeam: string, phase: string) => {
-        let x = baseP.x;
-        let y = baseP.y;
-
-        const isAttacking = (isHome && attackingTeam === 'home') || (!isHome && attackingTeam === 'away');
-        const direction = isHome ? 1 : -1; // Home attacks right (+), Away attacks left (-)
-
-        if (isAttacking) {
-          // Attacking Team Expands and Pushes Forward
-          if (phase === 'buildup') x += direction * 5;
-          if (phase === 'midfield') x += direction * 15;
-          if (phase === 'attack') {
-            x += direction * 25;
-            // Wingers bomb down the flanks, Striker pushes the line
-            if (baseP.role === 'lw' || baseP.role === 'rw') x += direction * 10;
-          }
-          // Spread wide
-          if (baseP.y < 50) y -= 5;
-          if (baseP.y > 50) y += 5;
+          setActiveEvent({ 
+            message: `${e.message} - ${teamName.substring(0,3).toUpperCase()}`, 
+            type: e.type 
+          });
         } else {
-          // Defending Team Compresses and Drops Back
-          if (phase === 'buildup') x += direction * -5; // Press slightly
-          if (phase === 'midfield') x += direction * -15; // Drop into mid block
-          if (phase === 'attack') {
-            x += direction * -25; // Pack the box
-            // Defense line drops very deep
-            if (baseP.role === 'cb' || baseP.role === 'lb' || baseP.role === 'rb') x += direction * -10;
-          }
-          // Compress tight
-          if (baseP.y < 50) y += 8;
-          if (baseP.y > 50) y -= 8;
-
-          // MARKING & CHASING: If defender is within 25% pitch distance of the ball carrier, sprint to press/tackle
-          const dist = Math.sqrt(Math.pow(x - activeX, 2) + Math.pow(y - activeY, 2));
-          if (dist < 25 && baseP.role !== 'gk') {
-            x += (activeX - x) * 0.7; // Close 70% of the distance to the attacker
-            y += (activeY - y) * 0.7;
-          }
+          setActiveEvent(null);
         }
+      },
+      onPhaseChange: (phase: string) => {
+        setCurrentPhase(phase as any);
+      },
+      onComplete: () => {
+        // Handled via state transition to 'stats'
+      }
+    });
 
-        // Add slight organic variance so they don't look robotic
-        x += (Math.random() * 4 - 2);
-        y += (Math.random() * 4 - 2);
+    // Override engine's width/height to logical pixels so rendering scales properly
+    engineRef.current.width = logicalWidth;
+    engineRef.current.height = logicalHeight;
 
-        // Clamp to pitch boundaries
-        x = Math.max(3, Math.min(97, x));
-        y = Math.max(3, Math.min(97, y));
+    engineRef.current.start();
 
-        return { x, y };
-      };
+    return () => {
+      engineRef.current?.stop();
+    };
+  }, [simulationScript, homeTeamName, awayTeamName]);
 
-      setPlayerPositions({
-        home: HOME_FORMATION.map(p => calculateTacticalPosition(p, true, nextActiveTeam, nextPhase)),
-        away: AWAY_FORMATION.map(p => calculateTacticalPosition(p, false, nextActiveTeam, nextPhase))
-      });
-
-    }, 1500); // Check every 1.5s for smooth, deliberate passing
-
-    return () => clearInterval(passInterval);
-  }, [currentPhase, activePlayer, playPhase]);
+  // Handle window resize dynamically
+  useEffect(() => {
+    const handleResize = () => {
+      if (canvasRef.current && engineRef.current) {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx?.scale(dpr, dpr);
+        engineRef.current.width = rect.width;
+        engineRef.current.height = rect.height;
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <div className={cn(
