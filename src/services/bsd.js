@@ -238,7 +238,7 @@ export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {})
   if (!teamId) return [];
 
   const dTo = new Date();
-  const yearsBack = 1;
+  const yearsBack = opts.yearsBack || 1; // Respect passed-in yearsBack to prevent starvation
   const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
   const dateFrom = dFrom.toISOString().slice(0, 10);
   const dateTo = dTo.toISOString().slice(0, 10);
@@ -247,7 +247,8 @@ export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {})
     status: 'finished',
     date_from: dateFrom,
     date_to: dateTo,
-    team_id: teamId
+    team_id: teamId,
+    limit: n // Pass the limit parameter to fetch enough matches
   };
 
   let teamSearchText = teamName ? String(teamName).trim().toLowerCase() : '';
