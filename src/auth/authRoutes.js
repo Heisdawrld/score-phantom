@@ -837,20 +837,36 @@ router.post("/login", authLimiter, async (req, res) => {
         const user = result.rows?.[0];
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const storedHash = user.password_hash || user.password;
-    if (!storedHash)
-      return res.status(400).json({ error: "Account password not set. Please sign up again." });
+    if (!storedHash) {
+      // The user exists in the database (likely from a CSV import), but has no password set.
+      // Let's set their password right now so they can log in seamlessly!
+      const hashedPassword = await bcrypt.hash(String(password || ""), 10);
+      await db.execute({
+        sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
+        args: [hashedPassword, user.id]
+      });
+      // The password is now set and implicitly verified since they just "created" it
+    } else {
+      // Normal login check
+      const ok = await bcrypt.compare(String(password || ""), String(storedHash));
+      if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    }
 
-    const ok = await bcrypt.compare(String(password || ""), String(storedHash));
-    if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    // Refresh user object to ensure we have the latest state
+    const refresh = await db.execute({
+      sql: "SELECT * FROM users WHERE id = ? LIMIT 1",
+      args: [user.id]
+    });
+    const finalUser = refresh.rows?.[0];
 
-    await ensureReferralCode(user);
+    await ensureReferralCode(finalUser);
 
-    const token   = signToken(user);
-    const access  = computeAccessStatus(user);
+    const token   = signToken(finalUser);
+    const access  = computeAccessStatus(finalUser);
     const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
     return res.json({
       token,
-      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      user: { ...publicUser(finalUser), ...(isAdmin ? { is_admin: true } : {}) },
       has_access:    access.has_full_access,
       access_status: access.status,
     });
