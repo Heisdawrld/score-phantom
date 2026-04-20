@@ -186,32 +186,32 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
         setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
       }
 
-      // 2. Swarm Physics (Players drift toward the active zone)
+      // 2. Swarm Physics (Players drift toward the active zone calmly)
       // shiftX: negative pulls players left (home zone), positive pulls players right (away zone)
-      const shiftX = ballZone === 'home' ? -15 : ballZone === 'away' ? 15 : 0;
+      const shiftX = ballZone === 'home' ? -10 : ballZone === 'away' ? 10 : 0;
       
       setPlayerOffsets({
         home: HOME_FORMATION.map((p, i) => {
-          if (p.role === 'gk') return { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
-          // Active player aggressively seeks the ball
-          if (nextActiveTeam === 'home' && nextActiveIndex === i) return { x: shiftX * 0.8, y: Math.random() * 4 - 2 };
-          // Teammates and defenders drift organically
+          if (p.role === 'gk') return { x: (Math.random() * 0.5 - 0.25), y: (Math.random() * 0.5 - 0.25) };
+          // Active player aggressively seeks the ball, but smoothly
+          if (nextActiveTeam === 'home' && nextActiveIndex === i) return { x: shiftX * 0.5, y: (Math.random() * 2 - 1) };
+          // Teammates and defenders drift organically and slowly
           return { 
-            x: (shiftX * 0.5) + (Math.random() * 8 - 4), 
-            y: (Math.random() * 8 - 4) 
+            x: (shiftX * 0.3) + (Math.random() * 2 - 1), 
+            y: (Math.random() * 2 - 1) 
           };
         }),
         away: AWAY_FORMATION.map((p, i) => {
-          if (p.role === 'gk') return { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
-          if (nextActiveTeam === 'away' && nextActiveIndex === i) return { x: shiftX * 0.8, y: Math.random() * 4 - 2 };
+          if (p.role === 'gk') return { x: (Math.random() * 0.5 - 0.25), y: (Math.random() * 0.5 - 0.25) };
+          if (nextActiveTeam === 'away' && nextActiveIndex === i) return { x: shiftX * 0.5, y: (Math.random() * 2 - 1) };
           return { 
-            x: (shiftX * 0.5) + (Math.random() * 8 - 4), 
-            y: (Math.random() * 8 - 4) 
+            x: (shiftX * 0.3) + (Math.random() * 2 - 1), 
+            y: (Math.random() * 2 - 1) 
           };
         })
       });
 
-    }, 800); // Check every 800ms
+    }, 1500); // Slower, calmer check every 1500ms
 
     return () => clearInterval(passInterval);
   }, [currentPhase, ballZone, activePlayer]);
