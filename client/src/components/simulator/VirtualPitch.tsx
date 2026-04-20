@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Trophy, Clock, AlertCircle } from "lucide-react";
+import { Trophy, Clock, AlertCircle, Maximize, Minimize } from "lucide-react";
 
 import { TeamLogo } from '@/components/TeamLogo';
 
@@ -59,6 +59,15 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   
   // Player passing mechanics
   const [activePlayer, setActivePlayer] = useState<{ team: 'home' | 'away', index: number } | null>(null);
+
+  // Organic Swarm Movement Offsets
+  const [playerOffsets, setPlayerOffsets] = useState({
+    home: HOME_FORMATION.map(() => ({ x: 0, y: 0 })),
+    away: AWAY_FORMATION.map(() => ({ x: 0, y: 0 }))
+  });
+
+  // Expand View toggle
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const { events, addedTime, stats } = simulationScript;
 
@@ -152,30 +161,67 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   };
 
   // High-frequency interval for passing the ball between dots while in possession
+  // AND dynamically updating player offsets to swarm the ball zone
   useEffect(() => {
     if (currentPhase === 'ft' || currentPhase === 'ht' || currentPhase === 'stats') return;
     
     const passInterval = setInterval(() => {
-      // 40% chance to make a pass to another player in the same team
+      // 1. Pass Logic
+      let nextActiveTeam = activePlayer?.team || 'home';
+      let nextActiveIndex = activePlayer?.index || 6;
+
+      // 40% chance to make a pass or change active player
       if (Math.random() > 0.6) {
         if (ballZone === 'home') {
-          // Home zone means AWAY team is attacking
-          setActivePlayer({ team: 'away', index: Math.floor(Math.random() * 11) });
+          nextActiveTeam = 'away';
+          nextActiveIndex = Math.floor(Math.random() * 11);
         } else if (ballZone === 'away') {
-          // Away zone means HOME team is attacking
-          setActivePlayer({ team: 'home', index: Math.floor(Math.random() * 11) });
+          nextActiveTeam = 'home';
+          nextActiveIndex = Math.floor(Math.random() * 11);
         } else {
-          // Neutral zone, random passing
-          setActivePlayer({ team: Math.random() > 0.5 ? 'home' : 'away', index: Math.floor(Math.random() * 11) });
+          nextActiveTeam = Math.random() > 0.5 ? 'home' : 'away';
+          nextActiveIndex = Math.floor(Math.random() * 11);
         }
+        setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
       }
+
+      // 2. Swarm Physics (Players drift toward the active zone)
+      // shiftX: negative pulls players left (home zone), positive pulls players right (away zone)
+      const shiftX = ballZone === 'home' ? -15 : ballZone === 'away' ? 15 : 0;
+      
+      setPlayerOffsets({
+        home: HOME_FORMATION.map((p, i) => {
+          if (p.role === 'gk') return { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
+          // Active player aggressively seeks the ball
+          if (nextActiveTeam === 'home' && nextActiveIndex === i) return { x: shiftX * 0.8, y: Math.random() * 4 - 2 };
+          // Teammates and defenders drift organically
+          return { 
+            x: (shiftX * 0.5) + (Math.random() * 8 - 4), 
+            y: (Math.random() * 8 - 4) 
+          };
+        }),
+        away: AWAY_FORMATION.map((p, i) => {
+          if (p.role === 'gk') return { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
+          if (nextActiveTeam === 'away' && nextActiveIndex === i) return { x: shiftX * 0.8, y: Math.random() * 4 - 2 };
+          return { 
+            x: (shiftX * 0.5) + (Math.random() * 8 - 4), 
+            y: (Math.random() * 8 - 4) 
+          };
+        })
+      });
+
     }, 800); // Check every 800ms
 
     return () => clearInterval(passInterval);
-  }, [currentPhase, ballZone]);
+  }, [currentPhase, ballZone, activePlayer]);
 
   return (
-    <div className="w-full relative rounded-3xl overflow-hidden bg-[#1a2e1d] border border-white/10 aspect-[16/9] lg:aspect-[21/9] shadow-2xl flex flex-col">
+    <div className={cn(
+      "w-full relative bg-[#1a2e1d] flex flex-col transition-all duration-500",
+      isExpanded 
+        ? "fixed inset-0 z-50 rounded-none h-screen" 
+        : "rounded-3xl overflow-hidden border border-white/10 aspect-[16/9] lg:aspect-[21/9] shadow-2xl"
+    )}>
       {/* Top Scoreboard */}
       <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent pointer-events-none">
         
@@ -239,12 +285,11 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                 "absolute w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full z-10 border border-black shadow-lg",
                 activePlayer?.team === 'home' && activePlayer.index === i ? "bg-primary scale-125" : "bg-white"
               )}
-              initial={{ left: `${p.x}%`, top: `${p.y}%` }}
               animate={{ 
-                left: `${p.x + (Math.random() * 2 - 1)}%`, 
-                top: `${p.y + (Math.random() * 2 - 1)}%` 
+                left: `${Math.max(2, Math.min(98, p.x + playerOffsets.home[i].x))}%`, 
+                top: `${Math.max(2, Math.min(98, p.y + playerOffsets.home[i].y))}%` 
               }}
-              transition={{ duration: 2, repeat: Infinity, repeatType: "mirror" }}
+              transition={{ type: "spring", stiffness: 40, damping: 10 }}
               style={{ x: '-50%', y: '-50%' }}
             />
           ))}
@@ -257,12 +302,11 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                 "absolute w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full z-10 border border-black shadow-lg",
                 activePlayer?.team === 'away' && activePlayer.index === i ? "bg-blue-400 scale-125" : "bg-blue-600"
               )}
-              initial={{ left: `${p.x}%`, top: `${p.y}%` }}
               animate={{ 
-                left: `${p.x + (Math.random() * 2 - 1)}%`, 
-                top: `${p.y + (Math.random() * 2 - 1)}%` 
+                left: `${Math.max(2, Math.min(98, p.x + playerOffsets.away[i].x))}%`, 
+                top: `${Math.max(2, Math.min(98, p.y + playerOffsets.away[i].y))}%` 
               }}
-              transition={{ duration: 2, repeat: Infinity, repeatType: "mirror" }}
+              transition={{ type: "spring", stiffness: 40, damping: 10 }}
               style={{ x: '-50%', y: '-50%' }}
             />
           ))}
@@ -275,32 +319,32 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
             style={{ x: '-50%', y: '-50%' }}
           />
 
-          {/* Event Overlay (e.g. GOAL!, SAVED) */}
-          <AnimatePresence>
-            {activeEvent && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5, y: '-50%', x: '-50%' }}
-                animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
-                exit={{ opacity: 0, scale: 1.5, y: '-50%', x: '-50%' }}
-                className="absolute top-1/2 left-1/2 z-30 pointer-events-none"
-              >
-                <div className={cn(
-                  "backdrop-blur-md px-6 py-3 rounded-2xl border shadow-2xl",
-                  activeEvent.type === 'goal' ? 'bg-yellow-500/90 border-yellow-300' :
-                  activeEvent.type === 'corner' || activeEvent.type === 'free_kick' ? 'bg-blue-500/90 border-blue-300' :
-                  activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'bg-orange-500/90 border-orange-300' :
-                  'bg-black/80 border-white/20'
-                )}>
+          {/* Event Overlay (e.g. GOAL!, SAVED) - Now a sleek caption bar at bottom */}
+          <div className="absolute bottom-4 md:bottom-8 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
+            <AnimatePresence>
+              {activeEvent && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className={cn(
+                    "backdrop-blur-md px-4 py-1.5 rounded-full border shadow-lg max-w-full truncate",
+                    activeEvent.type === 'goal' ? 'bg-yellow-500/90 border-yellow-300' :
+                    activeEvent.type === 'corner' || activeEvent.type === 'free_kick' ? 'bg-blue-500/90 border-blue-300' :
+                    activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'bg-orange-500/90 border-orange-300' :
+                    'bg-black/80 border-white/20'
+                  )}
+                >
                   <span className={cn(
-                    "text-xl font-black whitespace-nowrap drop-shadow-md",
+                    "text-xs md:text-sm font-black uppercase tracking-wider",
                     activeEvent.type === 'goal' || activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'text-black' : 'text-white'
                   )}>
                     {activeEvent.message}
                   </span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 
@@ -354,13 +398,26 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
           </button>
         </motion.div>
       )}
-      {currentPhase !== 'ft' && (
-        <button 
+
+      {/* Expand/Collapse Button */}
+      {currentPhase !== 'ft' && currentPhase !== 'stats' && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="absolute bottom-4 right-4 md:bottom-8 md:right-8 z-40 bg-black/40 hover:bg-black/60 backdrop-blur-md p-2 rounded-xl text-white transition-all border border-white/10"
+          title={isExpanded ? "Collapse View" : "Expand View"}
+        >
+          {isExpanded ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+        </button>
+      )}
+
+      {/* Skip Button */}
+      {currentPhase !== 'ft' && currentPhase !== 'stats' && (
+        <button
           onClick={() => {
-            setCurrentPhase('ft');
+            setCurrentPhase('stats');
             setScore(simulationScript.finalScore);
           }}
-          className="absolute bottom-4 right-4 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold text-white transition-all border border-white/10"
+          className="absolute bottom-4 left-4 md:bottom-8 md:left-8 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold text-white transition-all border border-white/10"
         >
           Skip to End ⏭️
         </button>
