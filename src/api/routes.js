@@ -712,7 +712,12 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     });
   }
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today   = lagosDt.split(',')[0].trim();
+    const d = new Date();
+    const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+
     const mode = req.query.mode === 'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
@@ -724,12 +729,12 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
-            WHERE f.match_date LIKE ?
+            WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
               AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
             ORDER BY p.best_pick_probability DESC
             LIMIT 50`,
-      args: [`%${today}%`],
+      args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
     });
 
     const rows = pool.rows || [];
@@ -1110,7 +1115,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     const favoritesOnly = req.query.favorites === 'true';
 
     // Build date filter — include yesterday, today, tomorrow to avoid timezone gaps
-    let dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
+    const dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
     let args = [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`];
 
     // ── Step 1: Try to get picks from predictions_v2 ──────────────────────────
@@ -1305,24 +1310,29 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
 // ─── GET /value-bet-today — Best value edge pick of the day ──────────────────
 router.get("/value-bet-today", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today   = lagosDt.split(',')[0].trim();
+    const d = new Date();
+    const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     const result = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                    p.best_pick_implied_probability, p.best_pick_edge,
                    p.best_pick_score,
-                   f.tournament_name, f.match_date, f.enrichment_status
+                   f.tournament_name, f.match_date, f.enrichment_status,
+                   f.odds_home, f.odds_draw, f.odds_away, f.odds_over_25, f.odds_under_25, f.odds_btts_yes, f.odds_btts_no
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
-            WHERE f.match_date LIKE ?
+            WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
               AND p.best_pick_probability > 0.57
               AND f.enrichment_status IN ('deep', 'basic')
             ORDER BY COALESCE(p.best_pick_edge, 0) DESC,
                      COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC
             LIMIT 1`,
-      args: [`%${today}%`],
+      args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`]
     });
 
     const row = result.rows?.[0];

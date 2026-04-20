@@ -192,7 +192,7 @@ export default function Dashboard() {
     });
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment") === "success");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live" | "safe" | "value">("all");
+  const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live">("all");
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
@@ -233,11 +233,7 @@ export default function Dashboard() {
       );
     }
     if (activeGroupTab === "live") {
-      filtered = filtered.filter((f: any) => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(f.match_status || ''));
-    } else if (activeGroupTab === "safe") {
-      filtered = filtered.filter((f: any) => f.is_safe_bet);
-    } else if (activeGroupTab === "value") {
-      filtered = filtered.filter((f: any) => f.is_value_bet);
+      filtered = filtered.filter((f: any) => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN', 'inprogress', '1st_half', 'halftime', '2nd_half'].includes(f.match_status?.toUpperCase() || f.match_status || ''));
     } else if (activeGroupTab === "favorites") {
       try {
         const favs = JSON.parse((user as any)?.league_favorites || "[]");
@@ -389,7 +385,11 @@ export default function Dashboard() {
         <QuickActions
           onTopPicks={() => setLocation("/picks")}
           onAcca={() => setLocation("/acca")}
-          onLive={() => { setSelectedDate(dates[0]); setActiveGroupTab("live"); }}
+          onLive={() => {
+            setSelectedDate(dates[0]);
+            setActiveGroupTab("live");
+            document.getElementById('fixtures-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
           onValueBets={() => setLocation("/picks")}
         />
 
@@ -430,12 +430,10 @@ export default function Dashboard() {
         </div>
 
         {/* ── Tabs ── */}
-          <div className="flex gap-2 p-1 bg-white/[0.02] rounded-xl mt-4 overflow-x-auto hide-scrollbar touch-pan-x overscroll-x-contain">
-            <button onClick={() => setActiveGroupTab("all")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
-            <button onClick={() => setActiveGroupTab("live")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
-            <button onClick={() => setActiveGroupTab("safe")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "safe" ? "bg-green-500/20 text-green-400" : "text-white/40 hover:text-white/70"}`}>Safe</button>
-            <button onClick={() => setActiveGroupTab("value")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "value" ? "bg-amber-500/20 text-amber-400" : "text-white/40 hover:text-white/70"}`}>Value</button>
-            <button onClick={() => setActiveGroupTab("favorites")} className={`shrink-0 flex-1 px-3 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
+          <div id="fixtures-list" className="flex bg-black/40 backdrop-blur-md rounded-xl p-1.5 border border-white/5 shadow-lg overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory">
+            <button onClick={() => setActiveGroupTab("all")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
+            <button onClick={() => setActiveGroupTab("live")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
+            <button onClick={() => setActiveGroupTab("favorites")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
           </div>
 
         {/* ── Fixtures count ── */}
@@ -461,7 +459,11 @@ export default function Dashboard() {
           ) : leagues.length === 0 ? (
             <div className="text-center py-20 text-white/25 space-y-3">
               <Trophy className="w-12 h-12 mx-auto opacity-20" />
-              <p className="font-medium">No fixtures for {format(selectedDate, 'MMM d')}.</p>
+              <p className="font-medium">
+                {activeGroupTab === "live" ? "No live matches right now." :
+                 activeGroupTab === "favorites" ? "None of your favorite leagues have matches today." :
+                 `No fixtures for ${format(selectedDate, 'MMM d')}.`}
+              </p>
               <p className="text-xs opacity-60">{isSameDay(selectedDate, dates[0]) ? 'Fixtures loading — check back soon.' : 'No matches scheduled.'}</p>
             </div>
           ) : (

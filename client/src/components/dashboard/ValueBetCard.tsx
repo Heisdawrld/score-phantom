@@ -50,6 +50,26 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
 
   if (!data?.found) return null;
 
+  const getOddsForSelection = (market: string, selection: string) => {
+    if (!data) return null;
+    if (market === '1x2') {
+      if (selection === '1') return data.odds_home;
+      if (selection === 'X') return data.odds_draw;
+      if (selection === '2') return data.odds_away;
+    }
+    if (market === 'over_under_25') {
+      if (selection === 'OVER') return data.odds_over_25;
+      if (selection === 'UNDER') return data.odds_under_25;
+    }
+    if (market === 'btts') {
+      if (selection === 'YES') return data.odds_btts_yes;
+      if (selection === 'NO') return data.odds_btts_no;
+    }
+    return null;
+  };
+
+  const currentOdds = getOddsForSelection(data.best_pick_market, data.best_pick_selection);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -69,7 +89,14 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-white truncate">{data.homeTeam} vs {data.awayTeam}</p>
           <p className="text-[10px] text-white/30 mt-0.5">{data.tournament}</p>
-          <p className="text-xs font-bold text-amber-400 mt-1">{data.selection}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs font-bold text-amber-400">{data.selection}</p>
+            {currentOdds && (
+              <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                @{currentOdds.toFixed(2)}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2 shrink-0">
           <div className="text-center">
