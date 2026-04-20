@@ -314,11 +314,11 @@ function safeParseJson(val) {
 export async function buildAcca(rows, mode = 'safe') {
   const isSafeMode  = mode !== 'value';
   const minProb     = 0.50;
-  const targetMin   = 3;    // won't output below this
+  const targetMin   = 1;    // won't output below this (changed to 1 per user request)
   const targetMax   = 5;    // always aim for 5, never exceed
   const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];
-  const maxModerate = isSafeMode ? 1 : 2;
-  const maxUnders   = isSafeMode ? 1 : 2;
+  const maxModerate = isSafeMode ? 2 : 4; // Relaxed
+  const maxUnders   = isSafeMode ? 2 : 3; // Relaxed
 
   // ── Quality gates — best leagues with enough stats only ─────────────────
     // Since Layer 1 Eligibility now strictly whitelists only the 35 premium BSD leagues,
@@ -446,6 +446,34 @@ export async function buildAcca(rows, mode = 'safe') {
     }
   }
 
+  // ── Extreme Fallback ("By Force By Fire") ──────────────────────────────────
+  // If even candidates are exhausted and we still don't have 5, pull from raw rows.
+  // This guarantees we always show games if ANY predictions exist for today.
+  if (selected.length < 5) {
+    const sortedRows = [...rows].sort((a, b) => parseFloat(b.best_pick_probability || 0) - parseFloat(a.best_pick_probability || 0));
+    for (const row of sortedRows) {
+      if (selected.length >= 5) break;
+      if (row.no_safe_pick) continue;
+      if (selected.some(s => s.fixture_id === row.fixture_id)) continue;
+      
+      const prob = parseFloat(row.best_pick_probability || 0);
+      const mk = row.best_pick_market || '';
+      if (BLOCKED_MARKETS.has(mk.toLowerCase())) continue; // Still block terrible markets
+      
+      const pickOdds = resolvePickOdds(row);
+      if (!pickOdds || pickOdds < 1.05) continue; // Must have valid odds
+
+      const processed = {
+        ...row,
+        pickOdds,
+        riskLevel: computeRiskLevelFromRow(row),
+        scriptCat: categorizeScript(row.script_primary),
+        accaScore: scoreAccaCandidate(row, accuracyCache)
+      };
+      selected.push(processed);
+    }
+  }
+
   // ── Step 3: Hard validate — must have at least 1 attacking/result pick ────
   const ATTACKING_MARKETS = new Set(['home_win','away_win','double_chance_home','double_chance_away','dnb_home','dnb_away','btts_yes','over_15','over_25']);
   const hasResultPick = selected.some(p => ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
@@ -468,6 +496,7 @@ export async function buildAcca(rows, mode = 'safe') {
     }
   }
 
+  // ── Final output check ──────────────────────────────────────────────────────
   if (selected.length < targetMin) {
     return {
       accaType:           null,
@@ -475,7 +504,7 @@ export async function buildAcca(rows, mode = 'safe') {
       combinedConfidence: 0,
       riskLevel:          null,
       picks:              [],
-      message:            `Correlation/diversity filter reduced picks below minimum (have ${selected.length}, need ${targetMin})`,
+      message:            `Not enough qualifying fixtures (found ${selected.length}, need ${targetMin})`,
     };
   }
 
