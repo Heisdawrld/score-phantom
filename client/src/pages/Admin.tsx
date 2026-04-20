@@ -7,7 +7,7 @@
  * No ProtectedRoute, no shared auth state.
  */
 import React, { useState, useEffect, useCallback } from "react";
-import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X, Activity } from "lucide-react";
+import { Eye, EyeOff, LogOut, RefreshCw, Users, CreditCard, BarChart3, Settings, CheckCircle2, AlertCircle, Crown, Clock, Loader2, Shield, UserPlus, Link2, Copy, X, Activity, Send } from "lucide-react";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API = "";
@@ -1095,6 +1095,32 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                     Full Enrichment (200)
                   </button>
                 </div>
+              </div>
+
+              {/* Push Notifications */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3 sm:col-span-2">
+                <h3 className="text-sm font-bold text-white">Push Notifications</h3>
+                <p className="text-xs text-gray-500">Send a manual push notification to all subscribed users.</p>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = e.target as HTMLFormElement;
+                    const title = (form.elements.namedItem("title") as HTMLInputElement).value;
+                    const message = (form.elements.namedItem("message") as HTMLTextAreaElement).value;
+                    const url = (form.elements.namedItem("url") as HTMLInputElement).value;
+                    if (!title || !message) return;
+                    run(() => call("/api/admin/push-broadcast", { method: "POST", body: JSON.stringify({ title, message, url }) }), "Push notification broadcast started");
+                    form.reset();
+                  }}
+                  className="flex flex-col gap-3"
+                >
+                  <input type="text" name="title" placeholder="Notification Title (e.g. New Predictions Ready!)" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50" required />
+                  <textarea name="message" placeholder="Message body..." className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white h-20 resize-none focus:outline-none focus:border-primary/50" required></textarea>
+                  <input type="text" name="url" placeholder="URL to open on click (optional, default: /)" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50" />
+                  <button type="submit" className="w-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all flex items-center justify-center gap-2">
+                    <Send size={14} /> Send Broadcast
+                  </button>
+                </form>
               </div>
 
               {/* Fixtures */}
