@@ -1685,8 +1685,8 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
 
     // 7. Format output
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
-      market: m.id,
-      probability: m.probability,
+      market: m.marketKey,
+      probability: m.modelProbability,
       advisor_status: m.advisorStatus || 'GAMBLE'
     }));
 
