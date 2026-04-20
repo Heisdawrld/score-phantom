@@ -127,15 +127,17 @@ const TRIAL_DAILY_LIMIT = 15; // 15 predictions per day during free trial
 async function ensureDailyCountTable() {
   try {
     await db.execute(`
-    CREATE TABLE IF NOT EXISTS trial_daily_counts (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      date_str TEXT NOT NULL,
-      prediction_count INTEGER DEFAULT 0,
-      UNIQUE(user_id, date_str)
-    )
-  `);
-  } catch {}
+      CREATE TABLE IF NOT EXISTS trial_daily_counts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        date_str TEXT NOT NULL,
+        prediction_count INTEGER DEFAULT 0,
+        UNIQUE(user_id, date_str)
+      )
+    `);
+  } catch (err) {
+    console.error("ensureDailyCountTable error:", err);
+  }
 }
 ensureDailyCountTable();
 

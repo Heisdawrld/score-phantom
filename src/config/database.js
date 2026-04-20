@@ -274,12 +274,37 @@ async function runSchema() {
   // Backfill columns for push_tokens
   try {
     const ptTableInfo = await db.execute(`
-      SELECT column_name as name 
-      FROM information_schema.columns 
+      SELECT column_name as name
+      FROM information_schema.columns
       WHERE table_name = 'push_tokens'
     `);
     if (!ptTableInfo.rows.some((c) => c.name === 'updated_at')) {
       try { await db.execute(`ALTER TABLE push_tokens ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`); } catch(e) {}
+    }
+  } catch (e) {}
+
+  // Safe drop for legacy trial_daily_counts table migrated from SQLite
+  try {
+    const tdInfo = await db.execute(`
+      SELECT column_name as name
+      FROM information_schema.columns
+      WHERE table_name = 'trial_daily_counts'
+    `);
+    const tdCols = (tdInfo.rows || []).map((c) => c.name);
+    if (tdCols.includes('date') && !tdCols.includes('date_str')) {
+      await db.execute(`DROP TABLE trial_daily_counts`);
+      console.log("✅ Dropped legacy trial_daily_counts table (schema mismatch)");
+      
+      // Re-create the correct schema
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS trial_daily_counts (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          date_str TEXT NOT NULL,
+          prediction_count INTEGER DEFAULT 0,
+          UNIQUE(user_id, date_str)
+        )
+      `);
     }
   } catch (e) {}
 
