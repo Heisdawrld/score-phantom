@@ -170,8 +170,9 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
       let nextActiveTeam = activePlayer?.team || 'home';
       let nextActiveIndex = activePlayer?.index || 6;
 
-      // 40% chance to make a pass or change active player
-      if (Math.random() > 0.6) {
+      // Ensure ball always rests on a player, not an empty zone
+      // Higher chance to pass if they hold it too long
+      if (Math.random() > 0.4) {
         if (ballZone === 'home') {
           nextActiveTeam = 'away';
           nextActiveIndex = Math.floor(Math.random() * 11);
