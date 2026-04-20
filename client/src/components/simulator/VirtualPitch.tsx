@@ -39,23 +39,18 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
 
   const { stats } = simulationScript;
 
-  // Initialize Canvas Engine
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // Fix scaling for high DPI displays
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     
-    // Set actual size in memory (scaled to account for extra pixel density)
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     
-    // Normalize coordinate system to use css pixels
     const ctx = canvas.getContext('2d');
-    ctx?.scale(dpr, dpr);
-    // Overwrite canvas width/height properties inside engine so it uses logical pixels
+    ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
     const logicalWidth = rect.width;
     const logicalHeight = rect.height;
 
@@ -84,7 +79,6 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
       }
     });
 
-    // Override engine's width/height to logical pixels so rendering scales properly
     engineRef.current.width = logicalWidth;
     engineRef.current.height = logicalHeight;
 
@@ -95,7 +89,6 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
     };
   }, [simulationScript, homeTeamName, awayTeamName]);
 
-  // Handle window resize dynamically
   useEffect(() => {
     const handleResize = () => {
       if (canvasRef.current && engineRef.current) {
@@ -105,7 +98,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         const ctx = canvas.getContext('2d');
-        ctx?.scale(dpr, dpr);
+        ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
         engineRef.current.width = rect.width;
         engineRef.current.height = rect.height;
       }
@@ -113,6 +106,15 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (currentPhase !== 'ft') return;
+    const t = setTimeout(() => {
+      setScore(simulationScript.finalScore);
+      setCurrentPhase('stats');
+    }, 3500);
+    return () => clearTimeout(t);
+  }, [currentPhase, simulationScript.finalScore]);
 
   return (
     <div className={cn(
@@ -166,59 +168,13 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
         </div>
       </div>
 
-      {/* The 2D Pitch */}
       {currentPhase !== 'stats' && (
         <div className="flex-1 relative w-full h-full bg-[#1a2e1d] overflow-hidden">
-          {/* Pitch markings */}
-          <div className="absolute inset-4 border-2 border-white/20" />
-          <div className="absolute top-4 bottom-4 left-1/2 w-0.5 bg-white/20 -translate-x-1/2" />
-          <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/20 rounded-full -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute top-1/2 left-4 w-16 h-32 border-2 border-l-0 border-white/20 -translate-y-1/2" />
-          <div className="absolute top-1/2 right-4 w-16 h-32 border-2 border-r-0 border-white/20 -translate-y-1/2" />
-
-          {/* Home Players */}
-          {HOME_FORMATION.map((p, i) => (
-            <motion.div
-              key={p.id}
-              className={cn(
-                "absolute w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full z-10 border border-black shadow-lg",
-                activePlayer?.team === 'home' && activePlayer.index === i ? "bg-primary scale-125" : "bg-white"
-              )}
-              animate={{ 
-                left: `${playerPositions.home[i].x}%`, 
-                top: `${playerPositions.home[i].y}%` 
-              }}
-              transition={{ type: "spring", stiffness: 40, damping: 10 }}
-              style={{ x: '-50%', y: '-50%' }}
-            />
-          ))}
-
-          {/* Away Players */}
-          {AWAY_FORMATION.map((p, i) => (
-            <motion.div
-              key={p.id}
-              className={cn(
-                "absolute w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full z-10 border border-black shadow-lg",
-                activePlayer?.team === 'away' && activePlayer.index === i ? "bg-blue-400 scale-125" : "bg-blue-600"
-              )}
-              animate={{ 
-                left: `${playerPositions.away[i].x}%`, 
-                top: `${playerPositions.away[i].y}%` 
-              }}
-              transition={{ type: "spring", stiffness: 40, damping: 10 }}
-              style={{ x: '-50%', y: '-50%' }}
-            />
-          ))}
-
-          {/* The Ball */}
-          <motion.div
-            className="absolute w-3 h-3 md:w-4 md:h-4 bg-yellow-300 rounded-full shadow-[0_0_15px_rgba(253,224,71,0.8)] z-20 border border-yellow-600"
-            animate={getBallPosition()}
-            transition={{ type: "spring", stiffness: 60, damping: 12 }}
-            style={{ x: '-50%', y: '-50%' }}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full block"
           />
 
-          {/* Event Overlay (e.g. GOAL!, SAVED) - Now a sleek caption bar at bottom */}
           <div className="absolute bottom-2 left-0 right-0 flex justify-center z-30 pointer-events-none px-2">
             <AnimatePresence>
               {activeEvent && (
