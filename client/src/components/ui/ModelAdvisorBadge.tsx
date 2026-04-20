@@ -36,7 +36,7 @@ export function ModelAdvisorBadge({ status, className, showLabel = true }: Model
         >
           <Dices className="w-4 h-4 text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
         </motion.div>
-        {showLabel && <span className="text-[10px] font-bold text-amber-500 tracking-[0.15em] uppercase drop-shadow-[0_0_3px_rgba(245,158,11,0.3)]">Gamble It</span>}
+        {showLabel && <span className="text-[10px] font-bold text-amber-500 tracking-[0.15em] uppercase drop-shadow-[0_0_3px_rgba(245,158,11,0.3)]">Playable Edge</span>}
       </div>
     );
   }

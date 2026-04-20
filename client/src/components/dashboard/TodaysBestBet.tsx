@@ -91,11 +91,11 @@ export function TodaysBestBet({ pick, onView }: { pick: any; onView: () => void 
           />
         </div>
 
-        {/* Stats row: Model Prob / Edge */}
+        {/* Stats row: Phantom Score / Edge */}
         <div className="flex gap-2 mb-4">
           <div className="flex-1 bg-white/[0.04] rounded-xl p-2.5 text-center border border-white/[0.06]">
             <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-0.5">Model Prob</p>
-            <p className="text-lg font-black text-primary tabular-nums">{prob.toFixed(0)}%</p>
+            <p className="text-lg font-black text-white/80 tabular-nums">{prob.toFixed(0)}%</p>
           </div>
           <div className={cn(
             "flex-1 rounded-xl p-2.5 text-center border",
@@ -108,7 +108,7 @@ export function TodaysBestBet({ pick, onView }: { pick: any; onView: () => void 
           </div>
           <div className="flex-1 bg-white/[0.04] rounded-xl p-2.5 text-center border border-white/[0.06]">
             <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-0.5">Score</p>
-            <p className="text-lg font-black text-white tabular-nums">{composite.toFixed(0)}</p>
+            <p className="text-lg font-black text-primary tabular-nums">{composite.toFixed(0)}</p>
           </div>
         </div>
 

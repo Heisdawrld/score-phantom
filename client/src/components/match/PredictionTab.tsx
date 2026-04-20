@@ -168,30 +168,29 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
              </button>
           </div>
 
-          {/* Badges row */}
+          {/* Badges row: Verdict, Risk, Style */}
           <div className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
-            <ConfidenceBadge value={conf} size="md" />
-            <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-wide">
-              {edgeLabel}
+            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
+              {rec.score >= 70 ? 'LOW RISK' : rec.score >= 50 ? 'MEDIUM RISK' : 'HIGH RISK'}
             </span>
             {rec.isSafeBet && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 uppercase tracking-wide">
-                SAFE BET
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
+                CONTROL
               </span>
             )}
             {rec.isValueBet && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> VALUE BET
+                <Sparkles className="w-3 h-3" /> VALUE
               </span>
             )}
           </div>
 
-          {/* Confidence label */}
+          {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[9px] text-white/25 uppercase tracking-wider">Conf:</span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
             <span className={cn("text-[10px] font-black uppercase", confLevel === "HIGH" ? "text-primary" : confLevel === "MEDIUM" ? "text-blue-400" : "text-amber-400")}>
-              CONFIDENCE {confLevel}
+              {confLevel === "HIGH" ? "ELITE" : confLevel === "MEDIUM" ? "SOLID" : "FRAGILE"}
             </span>
           </div>
 
@@ -205,11 +204,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
             </div>
             {/* Confidence ring */}
             <ConfidenceRing
-              value={conf}
+              value={rec.score || conf}
               size={80}
               strokeWidth={4.5}
               showLabel
-              label="MODEL PROBABILITY"
+              label="PHANTOM SCORE"
             />
           </div>
 
@@ -217,18 +216,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           {hasValue && edgePct != null && (
             <div className="flex items-center gap-2 mt-2 mb-3">
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
-                {edgeLabel}
+                ACTIONABLE EDGE
               </span>
               <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
             </div>
           )}
 
-          {/* ── MATCH SCRIPT ── */}
+          {/* ── PHANTOM DECISION STACK ── */}
           {scriptLabel && (
             <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-white/30">→</span>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Match Script</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
