@@ -312,8 +312,8 @@ export default function Login() {
                   </AnimatePresence>
 
                   <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3">
-                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
-                    <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData({ ...formData, password: v })} error={errors.password} />
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData(prev => ({ ...prev, password: v }))} error={errors.password} />
 
 
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={loginMutation.isPending}
@@ -375,8 +375,8 @@ export default function Login() {
                     )}
                   </AnimatePresence>
                   <form onSubmit={handleEmailSignUp} className="flex flex-col gap-3">
-                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
-                    <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData({ ...formData, password: v }); setErrors({ ...errors, password: undefined }); }} error={errors.password} />
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData(prev => ({ ...prev, password: v })); setErrors(prev => ({ ...prev, password: undefined })); }} error={errors.password} />
                     <PasswordInput label="Confirm Password" value={confirmPassword} onChange={(v) => { setConfirmPassword(v); setConfirmPasswordError(""); }} error={confirmPasswordError} />
                     <div>
                       <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
