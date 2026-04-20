@@ -1589,6 +1589,9 @@ router.get("/teams", requireAuth, async (req, res) => {
     const result = await db.execute(`
       SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, tournament_id as league_id, tournament_name as league_name
       FROM fixtures
+      UNION
+      SELECT DISTINCT away_team_id as team_id, away_team_name as team_name, tournament_id as league_id, tournament_name as league_name
+      FROM fixtures
       ORDER BY team_name ASC
     `);
     
