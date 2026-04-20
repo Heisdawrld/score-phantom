@@ -128,10 +128,11 @@ async function ensureDailyCountTable() {
   try {
     await db.execute(`
     CREATE TABLE IF NOT EXISTS trial_daily_counts (
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
-      date TEXT NOT NULL,
-      count INTEGER DEFAULT 0,
-      PRIMARY KEY (user_id, date)
+      date_str TEXT NOT NULL,
+      prediction_count INTEGER DEFAULT 0,
+      UNIQUE(user_id, date_str)
     )
   `);
   } catch {}
@@ -142,7 +143,7 @@ async function getTodayCount(userId) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
   try {
     const r = await db.execute({
-      sql: `SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
+      sql: `SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
     return { count: Number(r.rows?.[0]?.count || 0), today };
@@ -155,9 +156,9 @@ async function incrementAndCheckDailyCount(userId, limit) {
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const result = await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1
-            RETURNING count`,
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1
+            RETURNING prediction_count as count`,
       args: [userId, today],
     });
     const newCount = result.rows[0].count;
@@ -167,7 +168,8 @@ async function incrementAndCheckDailyCount(userId, limit) {
       return { allowed: false, today };
     }
     return { allowed: true, today };
-  } catch {
+  } catch (err) {
+    console.error("Error in incrementAndCheckDailyCount:", err);
     return { allowed: false, today: null };
   }
 }
@@ -175,20 +177,24 @@ async function incrementAndCheckDailyCount(userId, limit) {
 async function incrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1`,
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1`,
       args: [userId, today],
     });
-  } catch {}
+  } catch (err) {
+    console.error("Error in incrementDailyCount:", err);
+  }
 }
 
 async function decrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `UPDATE trial_daily_counts SET count = MAX(count - 1, 0) WHERE user_id = ? AND date = ?`,
+      sql: `UPDATE trial_daily_counts SET prediction_count = GREATEST(prediction_count - 1, 0) WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
-  } catch {}
+  } catch (err) {
+    console.error("Error in decrementDailyCount:", err);
+  }
 }
 
 // ─── Middleware: requireAdmin ──────────────────────────────────────────────────
@@ -1438,7 +1444,7 @@ export function createTrialLimitGuard(trialDailyLimit = 15) {
     try {
       const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
       const r = await db.execute({
-        sql: "SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?",
+        sql: "SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?",
         args: [req.user.id, today]
       });
       const currentCount = Number(r.rows?.[0]?.count || 0);
