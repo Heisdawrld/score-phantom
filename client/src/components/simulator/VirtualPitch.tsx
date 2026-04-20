@@ -57,13 +57,14 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   const [ballZone, setBallZone] = useState<'neutral' | 'home' | 'away'>('neutral');
   const [activeEvent, setActiveEvent] = useState<{ message: string; type: string } | null>(null);
   
-  // Player passing mechanics
+  // Player passing & tactical mechanics
   const [activePlayer, setActivePlayer] = useState<{ team: 'home' | 'away', index: number } | null>(null);
+  const [playPhase, setPlayPhase] = useState<'buildup' | 'midfield' | 'attack'>('midfield');
 
-  // Organic Swarm Movement Offsets
-  const [playerOffsets, setPlayerOffsets] = useState({
-    home: HOME_FORMATION.map(() => ({ x: 0, y: 0 })),
-    away: AWAY_FORMATION.map(() => ({ x: 0, y: 0 }))
+  // Exact calculated coordinates for all 22 players
+  const [playerPositions, setPlayerPositions] = useState({
+    home: HOME_FORMATION.map(p => ({ x: p.x, y: p.y })),
+    away: AWAY_FORMATION.map(p => ({ x: p.x, y: p.y }))
   });
 
   // Expand View toggle
@@ -122,16 +123,24 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
               setActiveEvent({ message: `GOALLLL!!! - ${e.team === 'home' ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: 'goal' });
               setTimeout(() => setActiveEvent(null), 3000);
             } else if (e.type === 'possession') {
-              setBallZone(e.team as 'neutral' | 'home' | 'away');
-              // Set possession to a random midfielder
-              setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7][Math.floor(Math.random()*3)] });
-            } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
-              // Snap ball depending on event
-              if (e.type === 'corner') {
-                setActivePlayer({ team: e.team as 'home'|'away', index: [8,10][Math.floor(Math.random()*2)] }); // wingers take corners
-              } else if (e.type === 'save' || e.type === 'miss') {
-                setActivePlayer({ team: e.team as 'home'|'away', index: [8,9,10][Math.floor(Math.random()*3)] }); // forwards shoot
-              }
+                setBallZone(e.team as 'neutral' | 'home' | 'away');
+                setPlayPhase('midfield');
+                setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7][Math.floor(Math.random()*3)] });
+              } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
+                // Snap ball depending on event
+                if (e.type === 'corner') {
+                  setPlayPhase('attack');
+                  setActivePlayer({ team: e.team as 'home'|'away', index: [8,10][Math.floor(Math.random()*2)] }); // wingers take corners
+                } else if (e.type === 'save' || e.type === 'miss') {
+                  setPlayPhase('attack');
+                  setActivePlayer({ team: e.team as 'home'|'away', index: [8,9,10][Math.floor(Math.random()*3)] }); // forwards shoot
+                } else if (e.type === 'free_kick') {
+                  setPlayPhase('attack');
+                  setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7,9][Math.floor(Math.random()*4)] });
+                } else if (e.type === 'foul' || e.type === 'yellow_card') {
+                  setPlayPhase('midfield');
+                  setActivePlayer({ team: e.team === 'home' ? 'away' : 'home', index: [5,6,7][Math.floor(Math.random()*3)] });
+                }
               setActiveEvent({ message: `${e.message} - ${e.team === 'home' ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: e.type });
               setTimeout(() => setActiveEvent(null), 2500);
             }
@@ -148,9 +157,10 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   // Ball positioning logic based on zone or active player
   const getBallPosition = () => {
     if (activePlayer) {
-      const playerObj = activePlayer.team === 'home' ? HOME_FORMATION[activePlayer.index] : AWAY_FORMATION[activePlayer.index];
-      // Add slight offset so it sits at their feet
-      return { left: `${playerObj.x + 1}%`, top: `${playerObj.y + 2}%` };
+      const isHome = activePlayer.team === 'home';
+      const p = isHome ? playerPositions.home[activePlayer.index] : playerPositions.away[activePlayer.index];
+      // Add slight offset so it sits at their feet (adjusting based on attack direction)
+      return { left: `${p.x + (isHome ? 1 : -1)}%`, top: `${p.y + 1}%` };
     }
     // Fallback if no active player
     switch (ballZone) {
@@ -160,61 +170,104 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
     }
   };
 
-  // High-frequency interval for passing the ball between dots while in possession
-  // AND dynamically updating player offsets to swarm the ball zone
+  // Tactical State Machine: Runs every 1.5 seconds to calculate positional shifts and passes
   useEffect(() => {
     if (currentPhase === 'ft' || currentPhase === 'ht' || currentPhase === 'stats') return;
     
     const passInterval = setInterval(() => {
-      // 1. Pass Logic
+      // 1. Determine Possession & Phase Shift
       let nextActiveTeam = activePlayer?.team || 'home';
       let nextActiveIndex = activePlayer?.index || 6;
+      let nextPhase = playPhase;
 
-      // Ensure ball always rests on a player, not an empty zone
-      // Higher chance to pass if they hold it too long
-      if (Math.random() > 0.4) {
-        if (ballZone === 'home') {
-          nextActiveTeam = 'away';
-          nextActiveIndex = Math.floor(Math.random() * 11);
-        } else if (ballZone === 'away') {
-          nextActiveTeam = 'home';
-          nextActiveIndex = Math.floor(Math.random() * 11);
-        } else {
-          nextActiveTeam = Math.random() > 0.5 ? 'home' : 'away';
-          nextActiveIndex = Math.floor(Math.random() * 11);
+      const keepsPossession = Math.random() > 0.15; // 85% chance to complete a pass
+
+      if (keepsPossession) {
+        // Move ball forward systematically
+        if (playPhase === 'buildup') {
+          nextPhase = 'midfield';
+          nextActiveIndex = [5, 6, 7][Math.floor(Math.random() * 3)]; // pass to Midfielders
+        } else if (playPhase === 'midfield') {
+          // 60% chance to attack, 40% to cycle midfield
+          if (Math.random() > 0.4) {
+            nextPhase = 'attack';
+            nextActiveIndex = [8, 9, 10][Math.floor(Math.random() * 3)]; // pass to Forwards
+          } else {
+            nextActiveIndex = [5, 6, 7, 1, 4][Math.floor(Math.random() * 5)]; // cycle with Mid or Fullbacks
+          }
+        } else if (playPhase === 'attack') {
+          // Cycle attack or drop back to midfield
+          if (Math.random() > 0.5) {
+            nextActiveIndex = [8, 9, 10][Math.floor(Math.random() * 3)];
+          } else {
+            nextPhase = 'midfield';
+            nextActiveIndex = [5, 6, 7][Math.floor(Math.random() * 3)];
+          }
         }
-        setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
+      } else {
+        // Turnover!
+        nextActiveTeam = nextActiveTeam === 'home' ? 'away' : 'home';
+        nextPhase = 'midfield'; // Reset phase on turnover
+        nextActiveIndex = [5, 6, 7, 2, 3][Math.floor(Math.random() * 5)]; // Intercepted by Mid or CB
       }
 
-      // 2. Swarm Physics (Players drift toward the active zone calmly)
-      // shiftX: negative pulls players left (home zone), positive pulls players right (away zone)
-      const shiftX = ballZone === 'home' ? -10 : ballZone === 'away' ? 10 : 0;
-      
-      setPlayerOffsets({
-        home: HOME_FORMATION.map((p, i) => {
-          if (p.role === 'gk') return { x: (Math.random() * 0.5 - 0.25), y: (Math.random() * 0.5 - 0.25) };
-          // Active player aggressively seeks the ball, but smoothly
-          if (nextActiveTeam === 'home' && nextActiveIndex === i) return { x: shiftX * 0.5, y: (Math.random() * 2 - 1) };
-          // Teammates and defenders drift organically and slowly
-          return { 
-            x: (shiftX * 0.3) + (Math.random() * 2 - 1), 
-            y: (Math.random() * 2 - 1) 
-          };
-        }),
-        away: AWAY_FORMATION.map((p, i) => {
-          if (p.role === 'gk') return { x: (Math.random() * 0.5 - 0.25), y: (Math.random() * 0.5 - 0.25) };
-          if (nextActiveTeam === 'away' && nextActiveIndex === i) return { x: shiftX * 0.5, y: (Math.random() * 2 - 1) };
-          return { 
-            x: (shiftX * 0.3) + (Math.random() * 2 - 1), 
-            y: (Math.random() * 2 - 1) 
-          };
-        })
+      setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
+      setPlayPhase(nextPhase);
+
+      // 2. Calculate Tactical Positional Coordinates for all 22 dots
+      const calculateTacticalPosition = (baseP: any, isHome: boolean, attackingTeam: string, phase: string) => {
+        let x = baseP.x;
+        let y = baseP.y;
+
+        const isAttacking = (isHome && attackingTeam === 'home') || (!isHome && attackingTeam === 'away');
+        const direction = isHome ? 1 : -1; // Home attacks right (+), Away attacks left (-)
+
+        if (isAttacking) {
+          // Attacking Team Expands and Pushes Forward
+          if (phase === 'buildup') x += direction * 5;
+          if (phase === 'midfield') x += direction * 15;
+          if (phase === 'attack') {
+            x += direction * 25;
+            // Wingers bomb down the flanks, Striker pushes the line
+            if (baseP.role === 'lw' || baseP.role === 'rw') x += direction * 10;
+          }
+          // Spread wide
+          if (baseP.y < 50) y -= 5;
+          if (baseP.y > 50) y += 5;
+        } else {
+          // Defending Team Compresses and Drops Back
+          if (phase === 'buildup') x += direction * -5; // Press slightly
+          if (phase === 'midfield') x += direction * -15; // Drop into mid block
+          if (phase === 'attack') {
+            x += direction * -25; // Pack the box
+            // Defense line drops very deep
+            if (baseP.role === 'cb' || baseP.role === 'lb' || baseP.role === 'rb') x += direction * -10;
+          }
+          // Compress tight
+          if (baseP.y < 50) y += 8;
+          if (baseP.y > 50) y -= 8;
+        }
+
+        // Add slight organic variance so they don't look robotic
+        x += (Math.random() * 4 - 2);
+        y += (Math.random() * 4 - 2);
+
+        // Clamp to pitch boundaries
+        x = Math.max(3, Math.min(97, x));
+        y = Math.max(3, Math.min(97, y));
+
+        return { x, y };
+      };
+
+      setPlayerPositions({
+        home: HOME_FORMATION.map(p => calculateTacticalPosition(p, true, nextActiveTeam, nextPhase)),
+        away: AWAY_FORMATION.map(p => calculateTacticalPosition(p, false, nextActiveTeam, nextPhase))
       });
 
-    }, 1500); // Slower, calmer check every 1500ms
+    }, 1500); // Check every 1.5s for smooth, deliberate passing
 
     return () => clearInterval(passInterval);
-  }, [currentPhase, ballZone, activePlayer]);
+  }, [currentPhase, activePlayer, playPhase]);
 
   return (
     <div className={cn(
@@ -287,8 +340,8 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                 activePlayer?.team === 'home' && activePlayer.index === i ? "bg-primary scale-125" : "bg-white"
               )}
               animate={{ 
-                left: `${Math.max(2, Math.min(98, p.x + playerOffsets.home[i].x))}%`, 
-                top: `${Math.max(2, Math.min(98, p.y + playerOffsets.home[i].y))}%` 
+                left: `${playerPositions.home[i].x}%`, 
+                top: `${playerPositions.home[i].y}%` 
               }}
               transition={{ type: "spring", stiffness: 40, damping: 10 }}
               style={{ x: '-50%', y: '-50%' }}
@@ -304,8 +357,8 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                 activePlayer?.team === 'away' && activePlayer.index === i ? "bg-blue-400 scale-125" : "bg-blue-600"
               )}
               animate={{ 
-                left: `${Math.max(2, Math.min(98, p.x + playerOffsets.away[i].x))}%`, 
-                top: `${Math.max(2, Math.min(98, p.y + playerOffsets.away[i].y))}%` 
+                left: `${playerPositions.away[i].x}%`, 
+                top: `${playerPositions.away[i].y}%` 
               }}
               transition={{ type: "spring", stiffness: 40, damping: 10 }}
               style={{ x: '-50%', y: '-50%' }}
