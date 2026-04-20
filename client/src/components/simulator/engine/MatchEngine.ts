@@ -31,7 +31,7 @@ export class MatchEngine {
   activeEvent: any = null;
   eventTimer: number = 0;
   
-  constructor(canvas: HTMLCanvasElement, script: any, callbacks: any) {
+  constructor(canvas: HTMLCanvasElement, script: any, callbacks: any, homeFormation: any[], awayFormation: any[]) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.script = script;
@@ -41,28 +41,21 @@ export class MatchEngine {
     this.height = canvas.height;
     
     this.ball = new Ball(50, 50);
-    this.initPlayers();
+    this.initPlayers(homeFormation, awayFormation);
   }
 
-  initPlayers() {
-    // Basic 4-3-3 coordinates (Home attacks right)
-    const hCoords = [
-      {r:'gk', x:5, y:50}, {r:'def', x:20, y:20}, {r:'def', x:15, y:40}, {r:'def', x:15, y:60}, {r:'def', x:20, y:80},
-      {r:'mid', x:35, y:30}, {r:'mid', x:30, y:50}, {r:'mid', x:35, y:70},
-      {r:'fwd', x:60, y:20}, {r:'fwd', x:65, y:50}, {r:'fwd', x:60, y:80}
-    ];
-    
-    hCoords.forEach((c, i) => {
-      this.players.push(new Player(`h${i}`, 'home', c.r as any, c.x, c.y));
+  initPlayers(homeFormation: any[], awayFormation: any[]) {
+    // Load exact formations from VirtualPitch.tsx
+    homeFormation.forEach((c) => {
+      this.players.push(new Player(c.id, 'home', c.role as any, c.x, c.y));
     });
     
-    // Away (attacks left)
-    hCoords.forEach((c, i) => {
-      this.players.push(new Player(`a${i}`, 'away', c.r as any, 100-c.x, c.y));
+    awayFormation.forEach((c) => {
+      this.players.push(new Player(c.id, 'away', c.role as any, c.x, c.y));
     });
 
     // Start with home ball
-    const hMid = this.players.find(p => p.id === 'h6')!;
+    const hMid = this.players.find(p => p.team === 'home' && (p.role === 'cm' || p.role === 'cdm')) || this.players[5];
     hMid.hasBall = true;
     this.ball.owner = hMid;
     this.ball.state = 'controlled';
@@ -163,7 +156,7 @@ export class MatchEngine {
     this.players.forEach(p => p.hasBall = false);
     
     if (e.type === 'goal') {
-      const st = this.players.find(p => p.team === e.team && p.role === 'fwd')!;
+      const st = this.players.find(p => p.team === e.team && (p.role === 'st' || p.role === 'lw' || p.role === 'rw')) || this.players.find(p => p.team === e.team)!;
       this.ball.pos = st.pos.copy();
       this.ball.shoot(new Vec2(isHome ? 100 : 0, 50), 60);
       this.tacticalPhase = 'attack';
@@ -172,7 +165,7 @@ export class MatchEngine {
       const cornerX = isHome ? 100 : 0;
       const cornerY = 100;
       this.ball.pos = new Vec2(cornerX, cornerY);
-      const winger = this.players.find(p => p.team === e.team && p.role === 'fwd')!;
+      const winger = this.players.find(p => p.team === e.team && (p.role === 'rw' || p.role === 'lw')) || this.players.find(p => p.team === e.team)!;
       winger.pos = new Vec2(cornerX, cornerY);
       
       // Cross ball in 1s
@@ -183,7 +176,7 @@ export class MatchEngine {
       this.tacticalPhase = 'attack';
       
     } else if (e.type === 'save' || e.type === 'miss') {
-      const fwd = this.players.find(p => p.team === e.team && p.role === 'fwd')!;
+      const fwd = this.players.find(p => p.team === e.team && (p.role === 'st' || p.role === 'lw' || p.role === 'rw')) || this.players.find(p => p.team === e.team)!;
       this.ball.pos = fwd.pos.copy();
       
       const targetY = e.type === 'miss' ? (Math.random()>0.5 ? 30:70) : 50;
@@ -191,13 +184,13 @@ export class MatchEngine {
       this.tacticalPhase = 'attack';
       
     } else if (e.type === 'possession' || e.type === 'foul' || e.type === 'yellow_card') {
-      const mid = this.players.find(p => p.team === e.team && p.role === 'mid')!;
+      const mid = this.players.find(p => p.team === e.team && (p.role === 'cm' || p.role === 'cdm')) || this.players.find(p => p.team === e.team)!;
       this.ball.owner = mid;
       this.ball.state = 'controlled';
       mid.hasBall = true;
       this.tacticalPhase = 'midfield';
     } else if (e.type === 'free_kick') {
-      const mid = this.players.find(p => p.team === e.team && p.role === 'mid')!;
+      const mid = this.players.find(p => p.team === e.team && (p.role === 'cm' || p.role === 'st')) || this.players.find(p => p.team === e.team)!;
       this.ball.pos = mid.pos.copy();
       // Shoot over wall
       setTimeout(() => {
@@ -209,12 +202,6 @@ export class MatchEngine {
   }
 
   updateAI(dt: number) {
-    // Determine tactical center of gravity
-    let cogX = 50;
-    if (this.tacticalPhase === 'buildup') cogX = this.activeTeam === 'home' ? 30 : 70;
-    if (this.tacticalPhase === 'midfield') cogX = 50;
-    if (this.tacticalPhase === 'attack') cogX = this.activeTeam === 'home' ? 80 : 20;
-
     // Normal play logic if no hard-coded event is animating
     if (!this.activeEvent) {
       if (this.ball.state === 'controlled') {
@@ -225,8 +212,8 @@ export class MatchEngine {
           
           // Tactical progression
           let targets = teammates;
-          if (this.tacticalPhase === 'buildup') targets = teammates.filter(p => p.role === 'mid' || p.role === 'def');
-          if (this.tacticalPhase === 'midfield') targets = teammates.filter(p => p.role === 'fwd' || p.role === 'mid');
+          if (this.tacticalPhase === 'buildup') targets = teammates.filter(p => p.role === 'cm' || p.role === 'cdm' || p.role === 'cb' || p.role === 'lb' || p.role === 'rb');
+          if (this.tacticalPhase === 'midfield') targets = teammates.filter(p => p.role === 'st' || p.role === 'lw' || p.role === 'rw' || p.role === 'cm' || p.role === 'cam');
           
           const targetPlayer = targets[Math.floor(Math.random() * targets.length)] || teammates[0];
           
@@ -235,8 +222,8 @@ export class MatchEngine {
           this.ball.passTo(targetPlayer.pos, 40, 0); // 40 speed
           
           // Shift Phase
-          if (targetPlayer.role === 'fwd') this.tacticalPhase = 'attack';
-          else if (targetPlayer.role === 'mid') this.tacticalPhase = 'midfield';
+          if (targetPlayer.role === 'st' || targetPlayer.role === 'lw' || targetPlayer.role === 'rw' || targetPlayer.role === 'cam') this.tacticalPhase = 'attack';
+          else if (targetPlayer.role === 'cm' || targetPlayer.role === 'cdm') this.tacticalPhase = 'midfield';
           else this.tacticalPhase = 'buildup';
         }
       } else if (this.ball.state === 'passing' || this.ball.state === 'free') {
@@ -259,52 +246,88 @@ export class MatchEngine {
       }
     }
 
-    // Update Player Positions (A* abstraction - Steering)
+    // Determine nearest defender to the ball for pressing
+    let nearestDefender: Player | null = null;
+    let minDefDist = 999;
+    this.players.forEach(p => {
+      if (p.team !== this.activeTeam && p.role !== 'gk') {
+        const d = p.pos.dist(this.ball.pos);
+        if (d < minDefDist) {
+          minDefDist = d;
+          nearestDefender = p;
+        }
+      }
+    });
+
+    // Update Player Positions (Rigid Tactical Shapes + Pressing)
     this.players.forEach(p => {
       let target = p.basePos.copy();
       
       const isAttacking = p.team === this.activeTeam;
       const dir = p.team === 'home' ? 1 : -1;
 
-      // Tactical Formation Shifting
-      if (isAttacking) {
-        if (this.tacticalPhase === 'buildup') target.x += dir * 10;
-        if (this.tacticalPhase === 'midfield') target.x += dir * 25;
-        if (this.tacticalPhase === 'attack') {
-          target.x += dir * 40;
-          if (p.role === 'fwd') target.x += dir * 10; // push line
+      // GK Logic - Sweeper Keeper
+      if (p.role === 'gk') {
+        target.x = p.team === 'home' ? 5 : 95;
+        // Track the ball's Y slightly to cover angles
+        target.y = 50 + (this.ball.pos.y - 50) * 0.3;
+        
+        // Push up slightly if team is attacking in final third
+        if (isAttacking && this.tacticalPhase === 'attack') {
+          target.x += dir * 10;
         }
-        // Spread wide
-        if (target.y < 50) target.y -= 10;
-        if (target.y > 50) target.y += 10;
-      } else {
-        // Defending shape compresses
-        if (this.tacticalPhase === 'buildup') target.x += dir * -5;
-        if (this.tacticalPhase === 'midfield') target.x += dir * -20;
-        if (this.tacticalPhase === 'attack') {
-          target.x += dir * -40; // drop deep
-          if (p.role === 'def') target.x += dir * -15; // park bus
+      } 
+      else {
+        // Outfield Players
+        if (isAttacking) {
+          // Attacking shape
+          if (this.tacticalPhase === 'buildup') {
+            target.x += dir * 10;
+          } else if (this.tacticalPhase === 'midfield') {
+            target.x += dir * 25;
+            if (p.role === 'lb' || p.role === 'rb') target.x += dir * 15; // Fullbacks overlap
+          } else if (this.tacticalPhase === 'attack') {
+            target.x += dir * 40;
+            if (p.role === 'lw' || p.role === 'rw' || p.role === 'st') target.x += dir * 15; // Forwards push the line
+            if (p.role === 'lb' || p.role === 'rb') target.x += dir * 25; // Fullbacks bomb down
+            if (p.role === 'cb') target.x -= dir * 10; // CBs stay back to cover counters
+          }
+          
+          // Spread wide in attack
+          if (p.role === 'lw' || p.role === 'lb') target.y = Math.max(5, target.y - 15);
+          if (p.role === 'rw' || p.role === 'rb') target.y = Math.min(95, target.y + 15);
+
+        } else {
+          // Defending shape (Rigid block)
+          if (this.tacticalPhase === 'buildup') {
+            target.x += dir * -5; // High block
+          } else if (this.tacticalPhase === 'midfield') {
+            target.x += dir * -15; // Mid block
+          } else if (this.tacticalPhase === 'attack') {
+            target.x += dir * -35; // Low block (Park the bus)
+            if (p.role === 'st') target.x += dir * 15; // Striker stays slightly higher for counters
+          }
+          
+          // Compress center when defending
+          if (target.y < 50) target.y += 10;
+          if (target.y > 50) target.y -= 10;
+
+          // Single-man Pressing: Only the closest defender breaks the line to press
+          if (p === nearestDefender && minDefDist < 20 && this.ball.state !== 'shooting') {
+            target = this.ball.pos.copy();
+          }
         }
-        // Compress center
-        if (target.y < 50) target.y += 15;
-        if (target.y > 50) target.y -= 15;
       }
 
-      // Physics: Chasing the ball if defending and close
-      if (!isAttacking && this.ball.state !== 'shooting' && p.role !== 'gk') {
-        const distToBall = p.pos.dist(this.ball.pos);
-        if (distToBall < 20) {
-          target = this.ball.pos.copy(); // Press the ball!
-        }
-      }
-      
       // If receiving a pass, run to the ball
       if (isAttacking && this.ball.state === 'passing') {
          const distToBall = p.pos.dist(this.ball.pos);
          if (distToBall < 15) target = this.ball.pos.copy();
       }
 
-      p.update(dt, target);
+      // Teammates for separation physics
+      const teammates = this.players.filter(t => t.team === p.team);
+      p.update(dt, target, teammates);
     });
   }
 

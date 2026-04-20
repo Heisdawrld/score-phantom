@@ -11,7 +11,7 @@ export class Vec2 {
 }
 
 export type TeamType = 'home' | 'away';
-export type PlayerRole = 'gk' | 'def' | 'mid' | 'fwd';
+export type PlayerRole = 'gk' | 'cb' | 'lb' | 'rb' | 'cdm' | 'cm' | 'cam' | 'lw' | 'rw' | 'st';
 
 export class Player {
   id: string;
@@ -31,21 +31,47 @@ export class Player {
     this.basePos = new Vec2(bx, by);
     this.pos = new Vec2(bx, by);
     this.vel = new Vec2(0, 0);
-    // Speed varies slightly by role (fwds faster than defs)
-    this.speed = role === 'fwd' ? 8 : role === 'mid' ? 7 : role === 'def' ? 6 : 4;
+    // Speed varies slightly by role
+    this.speed = (role === 'lw' || role === 'rw' || role === 'st') ? 9 : 
+                 (role === 'cm' || role === 'cam' || role === 'lb' || role === 'rb') ? 8 : 
+                 (role === 'cb' || role === 'cdm') ? 7 : 5; // gk
   }
 
-  update(dt: number, target: Vec2) {
+  update(dt: number, target: Vec2, teammates: Player[]) {
     // Steer towards target
     const desired = target.sub(this.pos);
     const d = desired.mag();
     
+    let steer = new Vec2(0, 0);
     if (d > 0.5) {
-      const steer = desired.norm().mul(this.speed);
-      // Simple acceleration
-      this.vel = this.vel.add(steer.sub(this.vel).mul(dt * 5)); 
-    } else {
-      this.vel = this.vel.mul(0.8); // Friction
+      steer = desired.norm().mul(this.speed);
+    }
+    
+    // Separation: Don't cluster with teammates
+    let separation = new Vec2(0, 0);
+    let count = 0;
+    for (const other of teammates) {
+      if (other.id !== this.id) {
+        const dist = this.pos.dist(other.pos);
+        if (dist > 0 && dist < 4) { // 4% pitch width threshold
+          const diff = this.pos.sub(other.pos).norm().mul(1 / dist); // Stronger push if closer
+          separation = separation.add(diff);
+          count++;
+        }
+      }
+    }
+    
+    if (count > 0) {
+      separation = separation.mul(10); // weight of separation
+      steer = steer.add(separation);
+    }
+    
+    // Simple acceleration
+    this.vel = this.vel.add(steer.sub(this.vel).mul(dt * 5)); 
+    
+    // Friction
+    if (d <= 0.5 && count === 0) {
+      this.vel = this.vel.mul(0.8); 
     }
     
     this.pos = this.pos.add(this.vel.mul(dt));

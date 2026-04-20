@@ -175,7 +175,8 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
             className="absolute inset-0 w-full h-full block"
           />
 
-          <div className="absolute bottom-2 left-0 right-0 flex justify-center z-30 pointer-events-none px-2">
+          {/* Event Overlay (e.g. GOAL!, SAVED) - Sleek caption bar at bottom */}
+          <div className="absolute bottom-10 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
             <AnimatePresence>
               {activeEvent && (
                 <motion.div
@@ -183,7 +184,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
                   className={cn(
-                    "backdrop-blur-md px-3 py-1 rounded-lg border shadow-lg max-w-[92%] truncate",
+                    "backdrop-blur-md px-3 py-1 md:px-4 md:py-1.5 rounded-full border shadow-lg max-w-[85%] md:max-w-full truncate",
                     activeEvent.type === 'goal' ? 'bg-yellow-500/90 border-yellow-300' :
                     activeEvent.type === 'corner' || activeEvent.type === 'free_kick' ? 'bg-blue-500/90 border-blue-300' :
                     activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'bg-orange-500/90 border-orange-300' :
@@ -191,7 +192,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
                   )}
                 >
                   <span className={cn(
-                    "text-[10px] md:text-sm font-black uppercase tracking-wider",
+                    "text-[9px] md:text-xs font-black uppercase tracking-widest",
                     activeEvent.type === 'goal' || activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'text-black' : 'text-white'
                   )}>
                     {activeEvent.message}
