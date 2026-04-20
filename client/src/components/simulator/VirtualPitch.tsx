@@ -60,6 +60,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   // Player passing & tactical mechanics
   const [activePlayer, setActivePlayer] = useState<{ team: 'home' | 'away', index: number } | null>(null);
   const [playPhase, setPlayPhase] = useState<'buildup' | 'midfield' | 'attack'>('midfield');
+  const [ballTarget, setBallTarget] = useState<{x: number, y: number} | null>(null);
 
   // Exact calculated coordinates for all 22 players
   const [playerPositions, setPlayerPositions] = useState({
@@ -113,36 +114,82 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
         const currentEvents = events.filter(e => e.minute === next);
         if (currentEvents.length > 0) {
           currentEvents.forEach(e => {
+            const isHome = e.team === 'home';
+            
             if (e.type === 'goal') {
               setScore(s => ({
                 ...s,
                 [e.team]: s[e.team as keyof typeof s] + 1
               }));
-              // For a goal, snap ball to the striker or just central goal area
+              
+              setPlayPhase('attack');
               setActivePlayer({ team: e.team as 'home'|'away', index: 9 }); // st
-              setActiveEvent({ message: `GOALLLL!!! - ${e.team === 'home' ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: 'goal' });
-              setTimeout(() => setActiveEvent(null), 3000);
+              
+              // Animate shot flying into the net
+              setTimeout(() => {
+                setBallTarget({ x: isHome ? 100 : 0, y: 50 });
+              }, 500);
+              
+              setActiveEvent({ message: `GOALLLL!!! - ${isHome ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: 'goal' });
+              
+              setTimeout(() => {
+                setActiveEvent(null);
+                setBallTarget(null);
+                // Reset to kickoff
+                setPlayPhase('buildup');
+                setActivePlayer({ team: isHome ? 'away' : 'home', index: 6 });
+              }, 3000);
+              
             } else if (e.type === 'possession') {
-                setBallZone(e.team as 'neutral' | 'home' | 'away');
+              setBallZone(e.team as 'neutral' | 'home' | 'away');
+              setPlayPhase('midfield');
+              setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7][Math.floor(Math.random()*3)] });
+              
+            } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
+              
+              if (e.type === 'corner') {
+                setPlayPhase('attack');
+                setActivePlayer({ team: e.team as 'home'|'away', index: 10 }); // RW takes it
+                setBallTarget({ x: isHome ? 100 : 0, y: 100 }); // Start at corner flag
+                
+                // Cross the ball into the box
+                setTimeout(() => {
+                  setBallTarget({ x: isHome ? 90 : 10, y: 50 }); // Center of box
+                }, 1000);
+                
+              } else if (e.type === 'save' || e.type === 'miss') {
+                setPlayPhase('attack');
+                setActivePlayer({ team: e.team as 'home'|'away', index: [8,9,10][Math.floor(Math.random()*3)] });
+                
+                // Animate shot
+                setTimeout(() => {
+                  const missY = e.type === 'miss' ? (Math.random() > 0.5 ? 30 : 70) : 50; 
+                  const saveX = isHome ? 98 : 2; 
+                  const missX = isHome ? 105 : -5; 
+                  setBallTarget({ x: e.type === 'save' ? saveX : missX, y: missY });
+                }, 500);
+                
+              } else if (e.type === 'free_kick') {
+                setPlayPhase('attack');
+                setActivePlayer({ team: e.team as 'home'|'away', index: 9 });
+                
+                // Animate free kick shot
+                setTimeout(() => {
+                  setBallTarget({ x: isHome ? 100 : 0, y: 50 }); 
+                }, 1000);
+                
+              } else if (e.type === 'foul' || e.type === 'yellow_card' || e.type === 'red_card') {
                 setPlayPhase('midfield');
-                setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7][Math.floor(Math.random()*3)] });
-              } else if (['save', 'miss', 'corner', 'foul', 'free_kick', 'yellow_card', 'red_card'].includes(e.type)) {
-                // Snap ball depending on event
-                if (e.type === 'corner') {
-                  setPlayPhase('attack');
-                  setActivePlayer({ team: e.team as 'home'|'away', index: [8,10][Math.floor(Math.random()*2)] }); // wingers take corners
-                } else if (e.type === 'save' || e.type === 'miss') {
-                  setPlayPhase('attack');
-                  setActivePlayer({ team: e.team as 'home'|'away', index: [8,9,10][Math.floor(Math.random()*3)] }); // forwards shoot
-                } else if (e.type === 'free_kick') {
-                  setPlayPhase('attack');
-                  setActivePlayer({ team: e.team as 'home'|'away', index: [5,6,7,9][Math.floor(Math.random()*4)] });
-                } else if (e.type === 'foul' || e.type === 'yellow_card') {
-                  setPlayPhase('midfield');
-                  setActivePlayer({ team: e.team === 'home' ? 'away' : 'home', index: [5,6,7][Math.floor(Math.random()*3)] });
-                }
-              setActiveEvent({ message: `${e.message} - ${e.team === 'home' ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: e.type });
-              setTimeout(() => setActiveEvent(null), 2500);
+                // Foul occurs, fouled team gets ball
+                setActivePlayer({ team: isHome ? 'home' : 'away', index: [5,6,7][Math.floor(Math.random()*3)] });
+              }
+
+              setActiveEvent({ message: `${e.message} - ${isHome ? homeTeamName.substring(0,3).toUpperCase() : awayTeamName.substring(0,3).toUpperCase()}`, type: e.type });
+              
+              setTimeout(() => {
+                setActiveEvent(null);
+                setBallTarget(null);
+              }, 2500);
             }
           });
         }
@@ -156,6 +203,9 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
 
   // Ball positioning logic based on zone or active player
   const getBallPosition = () => {
+    if (ballTarget) {
+      return { left: `${ballTarget.x}%`, top: `${ballTarget.y}%` };
+    }
     if (activePlayer) {
       const isHome = activePlayer.team === 'home';
       const p = isHome ? playerPositions.home[activePlayer.index] : playerPositions.away[activePlayer.index];
@@ -214,6 +264,22 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
       setActivePlayer({ team: nextActiveTeam, index: nextActiveIndex });
       setPlayPhase(nextPhase);
 
+      // Get active player's rough coordinate for marking
+      let activeX = 50, activeY = 50;
+      if (nextActiveTeam === 'home') {
+        activeX = HOME_FORMATION[nextActiveIndex].x;
+        activeY = HOME_FORMATION[nextActiveIndex].y;
+        if (nextPhase === 'buildup') activeX += 5;
+        if (nextPhase === 'midfield') activeX += 15;
+        if (nextPhase === 'attack') activeX += 25;
+      } else {
+        activeX = AWAY_FORMATION[nextActiveIndex].x;
+        activeY = AWAY_FORMATION[nextActiveIndex].y;
+        if (nextPhase === 'buildup') activeX -= 5;
+        if (nextPhase === 'midfield') activeX -= 15;
+        if (nextPhase === 'attack') activeX -= 25;
+      }
+
       // 2. Calculate Tactical Positional Coordinates for all 22 dots
       const calculateTacticalPosition = (baseP: any, isHome: boolean, attackingTeam: string, phase: string) => {
         let x = baseP.x;
@@ -246,6 +312,13 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
           // Compress tight
           if (baseP.y < 50) y += 8;
           if (baseP.y > 50) y -= 8;
+
+          // MARKING & CHASING: If defender is within 25% pitch distance of the ball carrier, sprint to press/tackle
+          const dist = Math.sqrt(Math.pow(x - activeX, 2) + Math.pow(y - activeY, 2));
+          if (dist < 25 && baseP.role !== 'gk') {
+            x += (activeX - x) * 0.7; // Close 70% of the distance to the attacker
+            y += (activeY - y) * 0.7;
+          }
         }
 
         // Add slight organic variance so they don't look robotic
