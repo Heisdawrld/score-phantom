@@ -48,7 +48,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       db.execute(`SELECT COUNT(*) as count FROM users`),
       db.execute(`SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at FROM users`),
       db.execute({
-        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND paid_at LIKE ?`,
+        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND CAST(paid_at AS TEXT) LIKE ?`,
         args: [`${todayStart}%`],
       }),
       db.execute(`SELECT DISTINCT user_id, amount FROM payments WHERE status = 'verified'`),
