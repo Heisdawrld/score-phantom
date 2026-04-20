@@ -252,6 +252,8 @@ export default function PhantomLab() {
                   <VirtualPitch
                     homeTeamName={selectedMatch!.homeTeamName}
                     awayTeamName={selectedMatch!.awayTeamName}
+                    homeTeamId={selectedMatch!.homeTeamId}
+                    awayTeamId={selectedMatch!.awayTeamId}
                     simulationScript={simulation.simulation.simulation_script}
                     managers={simulation.simulation.managers}
                     onComplete={() => setSimulationState('completed')}

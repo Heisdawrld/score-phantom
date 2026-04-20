@@ -163,6 +163,41 @@ export function generateSimulationTimeline(simVector, simXg, simScript, homeMana
   let added2 = 3 + Math.floor(Math.random() * 4);
   if (chaos > 0.7) added2 += 2; // More chaos = more stoppage time
 
+  // 7. Compile Match Stats for Post-Match Screen
+  const stats = {
+    home: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
+    away: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
+    possession: { home: 50, away: 50 }
+  };
+
+  let homePoss = 0;
+  let awayPoss = 0;
+
+  events.forEach(e => {
+    if (e.team !== 'home' && e.team !== 'away') return;
+    
+    const s = stats[e.team];
+    if (e.type === 'goal' || e.type === 'save' || e.type === 'miss') s.shots++;
+    if (e.type === 'goal' || e.type === 'save') s.shotsOnTarget++;
+    if (e.type === 'corner') s.corners++;
+    if (e.type === 'foul') s.fouls++;
+    if (e.type === 'yellow_card') s.yellowCards++;
+    if (e.type === 'possession') {
+      if (e.team === 'home') homePoss++;
+      else awayPoss++;
+    }
+  });
+
+  const totalPoss = homePoss + awayPoss;
+  if (totalPoss > 0) {
+    stats.possession.home = Math.round((homePoss / totalPoss) * 100);
+    stats.possession.away = 100 - stats.possession.home;
+  } else {
+    // Fallback if no possession events triggered
+    stats.possession.home = Math.round(homeDom * 100);
+    stats.possession.away = 100 - stats.possession.home;
+  }
+
   return {
     events,
     addedTime: {
@@ -172,6 +207,7 @@ export function generateSimulationTimeline(simVector, simXg, simScript, homeMana
     finalScore: {
       home: homeGoals,
       away: awayGoals
-    }
+    },
+    stats
   };
 }
