@@ -142,21 +142,22 @@ async function ensureDailyCountTable() {
 ensureDailyCountTable();
 
 async function getTodayCount(userId) {
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
   try {
     const r = await db.execute({
       sql: `SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
     return { count: Number(r.rows?.[0]?.count || 0), today };
-  } catch {
+  } catch (err) {
+    console.error("getTodayCount error:", err);
     return { count: 0, today };
   }
 }
 
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
     const result = await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
             ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1
