@@ -83,6 +83,11 @@ export default function MatchCenter() {
       queryKey: ["/api/matches", fixtureId],
       queryFn: () => fetchApi("/matches/" + fixtureId),
       staleTime: 30 * 1000,
+      refetchInterval: (query) => {
+        const d = query?.state?.data as any;
+        const status = d?.fixture?.match_status || "";
+        return ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(status) ? 30000 : false;
+      },
       enabled: !!fixtureId,
     });
   const d = data as any;

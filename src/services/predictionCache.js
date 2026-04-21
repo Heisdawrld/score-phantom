@@ -193,7 +193,7 @@ export async function ensureFixtureData(fixtureId) {
         meta.unavailable_players = liveData.unavailable_players;
       }
       
-      const lineupData = await fetchPredictedLineup(fixture.bsd_event_api_id);
+      const lineupData = await fetchPredictedLineup(fixture.id);
       if (lineupData?.lineups) {
         meta.predicted_lineup = lineupData.lineups;
       }
