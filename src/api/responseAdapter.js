@@ -110,22 +110,23 @@ function mapTacticalFit(tacticalFitScore) {
 // Fallback for any cached picks that predate the new engine.
 function resolveRiskLevel(pick) {
   if (pick?.riskLevel) return pick.riskLevel;
-  // Heuristic fallback from probability + market key
-  const prob = safeNum(pick?.modelProbability, 0);
-  const mk   = (pick?.marketKey || '').toLowerCase();
+  // Use final engine score if available, otherwise fallback to raw probability
+  const score = safeNum(pick?.finalScore, pick?.modelProbability || 0);
+  const mk = (pick?.marketKey || '').toLowerCase();
   const isStable = ['under_35','under_25','double_chance_home','double_chance_away',
-                    'home_under_15','away_under_15','dnb_home','dnb_away'].includes(mk);
-  if (prob >= 0.72 && isStable) return 'SAFE';
-  if (prob >= 0.65) return 'MODERATE';
-  return 'AGGRESSIVE';
+                    'home_under_15','away_under_15','dnb_home','dnb_away','1x2'].includes(mk);
+  if (score >= 0.72 && isStable) return 'SAFE';
+  if (score >= 0.60) return 'MODERATE';
+  return 'HIGH RISK';
 }
 
 function resolveEdgeLabel(pick) {
   if (pick?.edgeLabel) return pick.edgeLabel;
-  const prob = safeNum(pick?.modelProbability, 0);
+  const score = safeNum(pick?.finalScore, pick?.modelProbability || 0);
   const risk = resolveRiskLevel(pick);
-  if (prob >= 0.70) return risk === 'SAFE' ? 'STRONG EDGE (SAFE)' : 'STRONG EDGE (AGGRESSIVE)';
-  if (prob >= 0.62) return 'LEAN';
+  if (score >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'STRONG EDGE (RISKY)';
+  if (score >= 0.60) return 'MODERATE EDGE';
+  if (score >= 0.50) return 'LEAN';
   return 'NO EDGE';
 }
 
@@ -285,10 +286,10 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
   const rawPct = parseFloat((probability * 100).toFixed(1));
   const modelConf = mapModelConfidence(probability, dataCompletenessScore);
-  
-  const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
-  const confNum = confMap[modelConf] || 30;
-  const compositeScore = parseFloat(((edgeScore * 0.5 + (confNum / 100) * 0.3 + probability * 0.2) * 100).toFixed(1));
+
+  // The engine computes an exact 0-1 finalScore in scoreMarketCandidates.js
+  // that already accounts for probability, edge, predictability, and tactical fit.
+  const compositeScore = parseFloat((safeNum(pick.finalScore, probability) * 100).toFixed(1));
 
   return {
     market: mapMarketName(pick.marketKey),
@@ -303,6 +304,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     riskLevel: resolveRiskLevel(pick),
     edgeLabel: resolveEdgeLabel(pick),
     reasons: (pick.reasons || []).map(humanizeReasonCode),
+    advisor_status: pick.advisor_status || "GAMBLE",
     no_edge: !!(pick.edge != null && pick.edge <= 0),
   };
 }
@@ -410,9 +412,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
     const modelConf = mapModelConfidence(probability, dataCompletenessScore);
     
-    const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
-    const confNum = confMap[modelConf] || 30;
-    const compositeScore = parseFloat(((edgeScore * 0.5 + (confNum / 100) * 0.3 + probability * 0.2) * 100).toFixed(1));
+    const compositeScore = parseFloat((safeNum(bestPick.finalScore, probability) * 100).toFixed(1));
 
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
@@ -427,6 +427,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       riskLevel: resolveRiskLevel(bestPick),
       edgeLabel: resolveEdgeLabel(bestPick),
       reasons: humanReasonCodes,
+      advisor_status: bestPick.advisor_status || "GAMBLE",
       no_edge: false,
       isSafeBet: bestPick.isSafeBet || false,
       isValueBet: bestPick.isValueBet || false,
@@ -443,6 +444,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       tacticalFit: "WEAK",
       valueRating: "WEAK",
       reasons: [noSafePickReason || "Insufficient edge or data quality"],
+      advisor_status: "AVOID",
       no_edge: true,
     };
   }

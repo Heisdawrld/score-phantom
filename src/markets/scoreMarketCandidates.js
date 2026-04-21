@@ -220,10 +220,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       accuracyCache
     );
 
-    // AI Advisor Logic
-    let advisorStatus = "GAMBLE";
     const prob = safeNum(candidate.modelProbability, 0);
-    
+
     // Calculate predictability score from available feature vector fields
     // Higher completeness, lower chaos, lower upset risk = higher predictability
     const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
@@ -231,12 +229,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    if (predScore > 0.65 && prob > 0.75) {
-      advisorStatus = "FIRE";
-    } else if (predScore < 0.40 || prob < 0.60) {
-      advisorStatus = "AVOID";
-    }
-
+    // AI Advisor Logic
     // Rescaled weights to sum to 1.0
     const finalScore =
       0.30 * modelConfidenceScore + // Boosted weight for raw probability
@@ -253,6 +246,17 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       0.08 * repetitionPenalty -
       diversityPenalty -
       starvationPenalty;
+
+    const clampedFinalScore = clamp(finalScore, -0.5, 1.0);
+
+    let advisorStatus = "GAMBLE";
+    if (clampedFinalScore >= 0.72 && prob >= 0.68) {
+      advisorStatus = "FIRE";
+    } else if (clampedFinalScore >= 0.60 && prob >= 0.60) {
+      advisorStatus = "GAMBLE";
+    } else {
+      advisorStatus = "AVOID";
+    }
 
     return {
       ...candidate,
