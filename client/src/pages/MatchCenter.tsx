@@ -67,7 +67,8 @@ const TABS = [
 
 // ── Main MatchCenter ────────────────────────────────────────────────────────
 
-export default function MatchCenter({ params }: any) {
+export default function MatchCenter() {
+  const params = useParams();
   const fixtureId = params?.id;
   const [, setLocation] = useLocation();
   const { user, isPremium, isLoading: authLoading } = useAccess();
