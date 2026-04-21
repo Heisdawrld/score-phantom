@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { useLocation } from 'wouter';
-import { useAuth } from '@/hooks/use-auth';
+import { useAccess } from '@/hooks/use-access';
 import { ChevronLeft, Zap, Crown, Lock, RefreshCw, Target, TrendingUp, AlertTriangle, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -26,8 +26,7 @@ function formatAccaMarket(key: string): string {
 
 export default function DailyAcca() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === 'active' || (user as any)?.subscription_active || (user as any)?.is_admin;
+  const { user, isPremium, isLoading: authLoading } = useAccess();
   const [stake, setStake] = useState(1000);
 
   const { data, isLoading, error, refetch } = useQuery({

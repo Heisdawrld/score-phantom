@@ -5,7 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
@@ -71,8 +71,7 @@ const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
+  const { user, isPremium, isLoading: authLoading } = useAccess();
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
   const savedScrollRef = useRef(0);

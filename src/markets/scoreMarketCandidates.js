@@ -250,9 +250,9 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const clampedFinalScore = clamp(finalScore, -0.5, 1.0);
 
     let advisorStatus = "GAMBLE";
-    if (clampedFinalScore >= 0.68 && prob >= 0.65) {
+    if (clampedFinalScore >= 0.72 && prob >= 0.68) {
       advisorStatus = "FIRE";
-    } else if (clampedFinalScore >= 0.55 && prob >= 0.55) {
+    } else if (clampedFinalScore >= 0.60 && prob >= 0.60) {
       advisorStatus = "GAMBLE";
     } else {
       advisorStatus = "AVOID";

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, lazy, Suspense, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,13 +67,10 @@ const TABS = [
 
 // ── Main MatchCenter ────────────────────────────────────────────────────────
 
-export default function MatchCenter() {
-  const params = useParams();
-  const fixtureId = params.id;
+export default function MatchCenter({ params }: any) {
+  const fixtureId = params?.id;
   const [, setLocation] = useLocation();
-  const { data: user } = useAuth();
-  // isPremium represents full access to predictions (either active subscription or active trial)
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.trial_active || (user as any)?.is_admin;
+  const { user, isPremium, isLoading: authLoading } = useAccess();
   const [tab, setTab] = useState("Prediction");
 
   // Scroll to top when MatchCenter loads

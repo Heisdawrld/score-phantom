@@ -517,37 +517,13 @@ router.post("/push-broadcast", adminLimiter, requireAdmin, async (req, res) => {
     const { title, message, url } = req.body;
     if (!title || !message) return res.status(400).json({ error: "Title and message are required" });
 
-    const result = await db.execute("SELECT DISTINCT user_id FROM push_subscriptions");
-    const userIds = result.rows.map(r => r.user_id);
+    const { broadcastPush } = await import("../services/pushService.js");
+    const result = await broadcastPush({ title, body: message, url: url || "/" });
     
-    if (userIds.length === 0) {
-      return res.json({ success: true, sentCount: 0, message: "No active push subscriptions found" });
-    }
-
-    const { sendPushNotification } = await import("../services/notifications.js");
-    let sentCount = 0;
-
-    const payload = {
-      title,
-      body: message,
-      url: url || "/",
-      icon: "/android-chrome-192x192.png",
-      badge: "/android-chrome-192x192.png"
-    };
-
-    for (const uid of userIds) {
-      try {
-        const success = await sendPushNotification(uid, payload);
-        if (success) sentCount++;
-      } catch (err) {
-        console.warn(`Failed to push to user ${uid}:`, err.message);
-      }
-    }
-
-    return res.json({ success: true, sentCount, totalSubscriptions: userIds.length });
+    return res.json({ success: true, sentCount: result.sent });
   } catch (err) {
-    console.error("Push broadcast error:", err);
-    return res.status(500).json({ error: err.message });
+    console.error("[Admin Push] Failed:", err);
+    res.status(500).json({ error: "Failed to broadcast push notifications" });
   }
 });
 

@@ -115,8 +115,8 @@ function resolveRiskLevel(pick) {
   const mk = (pick?.marketKey || '').toLowerCase();
   const isStable = ['under_35','under_25','double_chance_home','double_chance_away',
                     'home_under_15','away_under_15','dnb_home','dnb_away','1x2'].includes(mk);
-  if (score >= 0.68 && isStable) return 'SAFE';
-  if (score >= 0.55) return 'MODERATE';
+  if (score >= 0.72 && isStable) return 'SAFE';
+  if (score >= 0.60) return 'MODERATE';
   return 'HIGH RISK';
 }
 
@@ -124,9 +124,9 @@ function resolveEdgeLabel(pick) {
   if (pick?.edgeLabel) return pick.edgeLabel;
   const score = safeNum(pick?.finalScore, pick?.modelProbability || 0);
   const risk = resolveRiskLevel(pick);
-  if (score >= 0.68) return risk === 'SAFE' ? 'STRONG EDGE' : 'STRONG EDGE (RISKY)';
-  if (score >= 0.58) return 'MODERATE EDGE';
-  if (score >= 0.52) return 'LEAN';
+  if (score >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'STRONG EDGE (RISKY)';
+  if (score >= 0.60) return 'MODERATE EDGE';
+  if (score >= 0.50) return 'LEAN';
   return 'NO EDGE';
 }
 

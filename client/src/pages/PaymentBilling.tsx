@@ -1,4 +1,4 @@
-import { useAuth } from '@/hooks/use-auth';
+import { useAccess } from "@/hooks/use-access";
 import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
 import { ChevronLeft, CreditCard, Crown, Zap, Shield, HelpCircle, AlertCircle, ArrowRight } from 'lucide-react';
@@ -6,11 +6,7 @@ import { motion } from 'framer-motion';
 
 export default function PaymentBilling() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useAuth();
-  
-  const isPremium = user?.access_status === 'active' || (user as any)?.subscription_active;
-  const isTrial = user?.access_status === 'trial';
-  const isExpired = user?.access_status === 'expired';
+  const { user, isPremium, isTrial, isLoading } = useAccess();
   
   const trialEnd = (user as any)?.trial_ends_at ? new Date((user as any).trial_ends_at) : null;
   const premEnd = (user as any)?.subscription_expires_at ? new Date((user as any).subscription_expires_at) : null;

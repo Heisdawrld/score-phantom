@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { format, addDays, isSameDay } from "date-fns";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { useFixtures } from "@/hooks/use-fixtures";
 import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
@@ -144,7 +144,7 @@ function fifaToEmoji(fifaCode: string): string {
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { data: user, isLoading: authLoading, refetch: refetchAuth } = useAuth();
+  const { isPremium, user, isLoading: authLoading, refetch: refetchAuth } = useAccess();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const queryClient = useQueryClient();
@@ -207,7 +207,6 @@ export default function Dashboard() {
   const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
   const trackStats = (trackData as any)?.overallStats || null;
 
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
   const isTrial = user?.access_status === "trial";
   const isExpired = user?.access_status === "expired";
 

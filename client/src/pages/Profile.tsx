@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth, useLogout } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -21,7 +22,7 @@ const P_FEATS = [
 ];
 
 export default function Profile() {
-  const { data: user } = useAuth();
+  const { user, isPremium, isTrial, isLoading } = useAccess();
   const logout = useLogout();
   const [, nav] = useLocation();
   const { toast } = useToast();
@@ -45,8 +46,6 @@ export default function Profile() {
     }
   };
 
-  const isPremium = (user as any)?.access_status === "active";
-  const isTrial = (user as any)?.access_status === "trial";
   const isExpired = (user as any)?.access_status === "expired";
 
   const email = (user as any)?.email || "";

@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 
 import { ChevronLeft, Star, Plus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -19,8 +19,7 @@ const POPULAR_LEAGUES = [
 
 export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active;
+  const { user, isPremium, isLoading: authLoading } = useAccess();
   useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
   if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
   const { toast } = useToast();
