@@ -284,14 +284,20 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
   const rawPct = parseFloat((probability * 100).toFixed(1));
+  const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+  
+  const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
+  const confNum = confMap[modelConf] || 30;
+  const compositeScore = parseFloat(((edgeScore * 0.5 + (confNum / 100) * 0.3 + probability * 0.2) * 100).toFixed(1));
 
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
     probability_pct: capProbabilityPct(pick.marketKey, rawPct),
+    score: compositeScore,
     edgeScore,
-    modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
+    modelConfidence: modelConf,
     tacticalFit: mapTacticalFit(tacticalFitScore),
     valueRating: mapValueRating(edgeScore),
     riskLevel: resolveRiskLevel(pick),
@@ -402,13 +408,20 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
 
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
+    const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+    
+    const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
+    const confNum = confMap[modelConf] || 30;
+    const compositeScore = parseFloat(((edgeScore * 0.5 + (confNum / 100) * 0.3 + probability * 0.2) * 100).toFixed(1));
+
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
       probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
+      score: compositeScore, // Expose the Composite Score directly as 'score'
       edgeScore,
-      modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
+      modelConfidence: modelConf,
       tacticalFit: mapTacticalFit(tacticalFitScore),
       valueRating: mapValueRating(edgeScore),
       riskLevel: resolveRiskLevel(bestPick),
@@ -424,6 +437,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       pick: "No Clear Edge",
       probability: 0,
       probability_pct: 0,
+      score: 0,
       edgeScore: 0,
       modelConfidence: "LOW",
       tacticalFit: "WEAK",

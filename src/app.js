@@ -34,6 +34,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Trust proxy for Render deployment to fix express-rate-limit IP detection
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 
 // CORS - allow APP_URL and onrender.com

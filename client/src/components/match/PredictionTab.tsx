@@ -106,7 +106,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   }
 
   const rec = (data as any)?.predictions?.recommendation || {};
-  const conf = Math.round((rec.probability || 0) * 100);
+  const conf = rec.score || Math.round((rec.probability || 0) * 100);
   const backups = (data as any)?.predictions?.backup_picks || [];
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
@@ -360,7 +360,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>
           <div className="flex flex-col gap-2">
             {backups.slice(0, 3).map((p: any, i: number) => {
-              const bpConf = Math.round((p.probability || 0) * 100);
+              const bpConf = p.score || Math.round((p.probability || 0) * 100);
               const tier = getConfidenceTier(bpConf);
               return (
                 <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
@@ -372,7 +372,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-black text-primary tabular-nums">{bpConf}%</span>
+                    <span className="text-sm font-black text-primary tabular-nums">{bpConf.toFixed(0)}%</span>
                     <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border", tier.cls)}>{tier.label}</span>
                   </div>
                 </div>
