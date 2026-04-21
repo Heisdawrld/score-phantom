@@ -854,7 +854,7 @@ router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res)
       " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
       " FROM users u" +
       " INNER JOIN partner_commissions pc ON pc.referrer_user_id = u.id AND pc.partner_id IS NULL" +
-      " GROUP BY u.id HAVING total_commission > 0 ORDER BY pending_commission DESC"
+      " GROUP BY u.id HAVING COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) > 0 ORDER BY pending_commission DESC"
     );
     return res.json({ commissions: result.rows || [] });
   } catch (err) { console.error("[Admin/standard-commissions]", err); return res.status(500).json({ error: err.message }); }
