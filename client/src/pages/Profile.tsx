@@ -23,6 +23,9 @@ const P_FEATS = [
 
 export default function Profile() {
   const { user, isPremium, isTrial, isLoading } = useAccess();
+  // isSubscribed = actual paying subscriber (not just trial)
+  const isSubscribed = (user as any)?.subscription_active === true
+    || (user as any)?.access_status === "active";
   const logout = useLogout();
   const [, nav] = useLocation();
   const { toast } = useToast();
@@ -102,12 +105,12 @@ export default function Profile() {
             <p className="text-lg font-black text-white capitalize truncate">{dn}</p>
             <p className="text-xs text-white/35 truncate">{email}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {isPremium && (
+              {isSubscribed && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-0.5">
                   <Crown size={10} /> PREMIUM
                 </span>
               )}
-              {isTrial && (
+              {isTrial && !isSubscribed && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2.5 py-0.5">
                   <Zap size={10} /> FREE TRIAL
                 </span>
@@ -170,8 +173,8 @@ export default function Profile() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <CreditCard size={14} className={isPremium ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400"} />
-                <p className={"text-xs font-black uppercase tracking-widest " + (isPremium ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400")}>
-                  {isPremium ? "Premium Plan" : isTrial ? "Free Trial" : "Trial Expired"}
+                <p className={"text-xs font-black uppercase tracking-widest " + (isSubscribed ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400")}>
+                  {isSubscribed ? "Premium Plan" : isTrial ? "Free Trial" : "Trial Expired"}
                 </p>
               </div>
               {!isPremium && (
@@ -204,10 +207,17 @@ export default function Profile() {
 
           <div className="px-4 pb-4 border-t border-white/[0.04] pt-3">
             <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">
-              {isPremium ? "Your access" : "Premium unlocks"}
+              {isSubscribed ? "Your access" : isTrial ? "Trial access" : "Premium unlocks"}
             </p>
             <div className="grid grid-cols-1 gap-1.5">
-              {P_FEATS.map(({ i: Icon, l }, idx) => (
+              {[
+                { i: Zap, l: isSubscribed ? "Unlimited predictions — no daily cap" : isTrial ? "15 predictions per day" : "Unlimited predictions — no daily cap" },
+                { i: TrendingUp, l: "Real odds + value bet detection" },
+                { i: Crown, l: "Daily ACCA Builder" },
+                { i: Star, l: "PhantomChat — deep match analysis" },
+                { i: BarChart2, l: "Top Picks ranked by edge strength" },
+                { i: Shield, l: "Full track record & results history" },
+              ].map(({ i: Icon, l }, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <div className={"w-4 h-4 rounded flex items-center justify-center shrink-0 " + (isPremium ? "text-primary" : "text-white/15")}>
                     {isPremium ? <CheckCircle size={12} /> : <Lock size={10} />}

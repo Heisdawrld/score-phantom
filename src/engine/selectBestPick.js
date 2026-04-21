@@ -33,28 +33,41 @@ const VOLATILE_MARKETS = new Set([
 export function computeRiskLevel(pick, features, script) {
   if (!pick) return 'AGGRESSIVE';
 
-  const prob       = safeNum(pick.modelProbability, 0);
-  const chaos      = safeNum(features?.matchChaosScore, 0.5);
-  const upsetRisk  = safeNum(features?.upsetRiskScore, 0.5);
-  const marketKey  = pick.marketKey || '';
-  const isStable   = STABLE_MARKETS.has(marketKey);
-  const isVolatile = VOLATILE_MARKETS.has(marketKey);
+  const prob        = safeNum(pick.modelProbability, 0);
+  const chaos       = safeNum(features?.matchChaosScore, 0.5);
+  const marketKey   = pick.marketKey || '';
+  const isStable    = STABLE_MARKETS.has(marketKey);
+  const isVolatile  = VOLATILE_MARKETS.has(marketKey);
   const scriptPrimary = script?.primary || '';
-  const isChaotic  = scriptPrimary === 'chaotic_unreliable' ||
-                     scriptPrimary === 'open_end_to_end';
+  const isChaotic   = scriptPrimary === 'chaotic_unreliable' ||
+                      scriptPrimary === 'open_end_to_end';
 
-  // SAFE: high prob + stable market + low chaos
-  if (prob >= 0.72 && isStable && chaos < 0.45 && upsetRisk < 0.45) return 'SAFE';
-  // Also SAFE: very high probability on any non-volatile market, very calm game
-  if (prob >= 0.78 && !isVolatile && chaos < 0.35) return 'SAFE';
+  // ── Probability is the PRIMARY driver ────────────────────────────────────
+  // A high-confidence pick should NEVER be labelled HIGH RISK.
+  // Risk reflects how certain the model is, not the market type alone.
 
-  // AGGRESSIVE: chaotic game, or high chaos, or volatile market without strong backing
-  if (isChaotic) return 'AGGRESSIVE';
-  if (chaos >= 0.65 || upsetRisk >= 0.65) return 'AGGRESSIVE';
-  if (isVolatile && prob < 0.70) return 'AGGRESSIVE';
+  // Very high confidence (≥74%) → SAFE unless extreme chaos
+  if (prob >= 0.74) {
+    if (isChaotic && chaos >= 0.80) return 'MODERATE'; // extreme chaos downgrade
+    return 'SAFE';
+  }
 
-  // MODERATE: everything in between
-  return 'MODERATE';
+  // Good confidence (65-74%) → SAFE on stable markets, MODERATE elsewhere
+  if (prob >= 0.65) {
+    if (isChaotic && chaos >= 0.72) return 'AGGRESSIVE';
+    if (isStable && chaos < 0.55) return 'SAFE';
+    return 'MODERATE';
+  }
+
+  // Moderate confidence (58-65%) → MODERATE unless chaotic
+  if (prob >= 0.58) {
+    if (isChaotic || chaos >= 0.68) return 'AGGRESSIVE';
+    if (isVolatile) return 'AGGRESSIVE';
+    return 'MODERATE';
+  }
+
+  // Low confidence (<58%) → always AGGRESSIVE (HIGH RISK)
+  return 'AGGRESSIVE';
 }
 
 // ── Edge label classification ─────────────────────────────────────────────────
@@ -71,12 +84,12 @@ export function computeRiskLevel(pick, features, script) {
 export function computeEdgeLabel(pick, riskLevel) {
   const prob = safeNum(pick?.modelProbability, 0);
 
-  if (prob >= 0.70) {
-    return riskLevel === 'SAFE'
-      ? 'STRONG EDGE (SAFE)'
-      : 'STRONG EDGE (AGGRESSIVE)';
+  if (prob >= 0.74) {
+    // Both SAFE and MODERATE at this probability = strong edge, just differ in consistency
+    return riskLevel === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
   }
-  if (prob >= 0.62) return 'LEAN';
+  if (prob >= 0.65) return 'MODERATE EDGE';
+  if (prob >= 0.55) return 'LEAN';
   return 'NO EDGE';
 }
 

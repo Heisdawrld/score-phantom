@@ -110,24 +110,42 @@ function mapTacticalFit(tacticalFitScore) {
 // Fallback for any cached picks that predate the new engine.
 function resolveRiskLevel(pick) {
   if (pick?.riskLevel) return pick.riskLevel;
-  // Use final engine score if available, otherwise fallback to raw probability
-  const score = safeNum(pick?.finalScore, pick?.modelProbability || 0);
-  const mk = (pick?.marketKey || '').toLowerCase();
-  const isStable = ['under_35','under_25','double_chance_home','double_chance_away',
-                    'home_under_15','away_under_15','dnb_home','dnb_away','1x2'].includes(mk);
-  if (score >= 0.72 && isStable) return 'SAFE';
-  if (score >= 0.60) return 'MODERATE';
-  return 'HIGH RISK';
+  // Fallback for cached picks that predate the new engine
+  const prob = safeNum(pick?.modelProbability, pick?.finalScore || 0);
+  if (prob >= 0.74) return 'SAFE';
+  if (prob >= 0.58) return 'MODERATE';
+  return 'AGGRESSIVE'; // was incorrectly 'HIGH RISK' — must match engine enum
 }
 
 function resolveEdgeLabel(pick) {
   if (pick?.edgeLabel) return pick.edgeLabel;
-  const score = safeNum(pick?.finalScore, pick?.modelProbability || 0);
+  const prob = safeNum(pick?.modelProbability, pick?.finalScore || 0);
   const risk = resolveRiskLevel(pick);
-  if (score >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'STRONG EDGE (RISKY)';
-  if (score >= 0.60) return 'MODERATE EDGE';
-  if (score >= 0.50) return 'LEAN';
+  if (prob >= 0.74) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
+  if (prob >= 0.65) return 'MODERATE EDGE';
+  if (prob >= 0.55) return 'LEAN';
   return 'NO EDGE';
+}
+
+/**
+ * Compute advisor status coherently from probability + risk + edge.
+ * Replaces the old default of "GAMBLE" on every prediction.
+ *
+ * BET   = high confidence, engine recommends placing
+ * WATCH = moderate confidence, worth monitoring odds
+ * PASS  = low confidence, don’t bet but track
+ * GAMBLE = very low confidence, speculative only
+ */
+function computeAdvisorStatus(probability, riskLevel, edgeScore) {
+  const prob = safeNum(probability, 0);
+  const edge = safeNum(edgeScore, 0);
+
+  if (prob >= 0.72 && riskLevel === 'SAFE') return 'BET';
+  if (prob >= 0.70 && riskLevel !== 'AGGRESSIVE') return 'BET';
+  if (prob >= 0.65 && edge >= 0.05) return 'BET';
+  if (prob >= 0.62) return 'WATCH';
+  if (prob >= 0.55) return 'PASS';
+  return 'GAMBLE';
 }
 
 function mapValueRating(edgeScore) {
@@ -291,6 +309,9 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   // that already accounts for probability, edge, predictability, and tactical fit.
   const compositeScore = parseFloat((safeNum(pick.finalScore, probability) * 100).toFixed(1));
 
+  const riskLvl    = resolveRiskLevel(pick);
+  const edgeLbl    = resolveEdgeLabel(pick);
+
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
@@ -302,10 +323,10 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     modelConfidence: modelConf,
     tacticalFit: mapTacticalFit(tacticalFitScore),
     valueRating: mapValueRating(edgeScore),
-    riskLevel: resolveRiskLevel(pick),
-    edgeLabel: resolveEdgeLabel(pick),
+    riskLevel: riskLvl,
+    edgeLabel: edgeLbl,
     reasons: (pick.reasons || []).map(humanizeReasonCode),
-    advisor_status: pick.advisor_status || "GAMBLE",
+    advisor_status: pick.advisor_status || computeAdvisorStatus(probability, riskLvl, edgeScore),
     no_edge: !!(pick.edge != null && pick.edge <= 0),
   };
 }
@@ -415,21 +436,24 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     
     const compositeScore = parseFloat((safeNum(bestPick.finalScore, probability) * 100).toFixed(1));
 
+    const riskLvl2   = resolveRiskLevel(bestPick);
+    const edgeLbl2   = resolveEdgeLabel(bestPick);
+
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
       probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
       phantom_score_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
-      score: compositeScore, // Expose the Composite Score directly as 'score'
+      score: compositeScore,
       edgeScore,
       modelConfidence: modelConf,
       tacticalFit: mapTacticalFit(tacticalFitScore),
       valueRating: mapValueRating(edgeScore),
-      riskLevel: resolveRiskLevel(bestPick),
-      edgeLabel: resolveEdgeLabel(bestPick),
+      riskLevel: riskLvl2,
+      edgeLabel: edgeLbl2,
       reasons: humanReasonCodes,
-      advisor_status: bestPick.advisor_status || "GAMBLE",
+      advisor_status: bestPick.advisor_status || computeAdvisorStatus(probability, riskLvl2, edgeScore),
       no_edge: false,
       isSafeBet: bestPick.isSafeBet || false,
       isValueBet: bestPick.isValueBet || false,
