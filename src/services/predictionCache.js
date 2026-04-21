@@ -24,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.7.0'; // Bumped: fixed risk/edge/advisor tag alignment
+const CURRENT_ENGINE_VERSION = '2.8.0'; // Bumped: Phantom Score blend (prob*0.55 + score*0.45)
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 

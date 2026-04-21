@@ -105,46 +105,41 @@ function mapTacticalFit(tacticalFitScore) {
   return "WEAK";
 }
 
-// ── Risk / Edge label passthrough ─────────────────────────────────────────────
-// riskLevel and edgeLabel are attached by selectBestPick — pass them through.
-// Fallback for any cached picks that predate the new engine.
-function resolveRiskLevel(pick) {
-  if (pick?.riskLevel) return pick.riskLevel;
-  // Fallback for cached picks that predate the new engine
-  const prob = safeNum(pick?.modelProbability, pick?.finalScore || 0);
-  if (prob >= 0.74) return 'SAFE';
-  if (prob >= 0.58) return 'MODERATE';
-  return 'AGGRESSIVE'; // was incorrectly 'HIGH RISK' — must match engine enum
+function resolveRiskLevel(pick, phantomScore) {
+  // Use Phantom Score (blended) for risk classification — more honest than raw probability
+  const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
+  if (ps >= 0.72) return 'SAFE';
+  if (ps >= 0.60) return 'MODERATE';
+  return 'AGGRESSIVE';
 }
 
-function resolveEdgeLabel(pick) {
-  if (pick?.edgeLabel) return pick.edgeLabel;
-  const prob = safeNum(pick?.modelProbability, pick?.finalScore || 0);
-  const risk = resolveRiskLevel(pick);
-  if (prob >= 0.74) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
-  if (prob >= 0.65) return 'MODERATE EDGE';
-  if (prob >= 0.55) return 'LEAN';
+function resolveEdgeLabel(pick, phantomScore) {
+  const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
+  const risk = resolveRiskLevel(pick, phantomScore);
+  if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
+  if (ps >= 0.65) return 'MODERATE EDGE';
+  if (ps >= 0.55) return 'LEAN';
   return 'NO EDGE';
 }
 
 /**
- * Compute advisor status coherently from probability + risk + edge.
- * Replaces the old default of "GAMBLE" on every prediction.
+ * Compute advisor status from Phantom Score (blended confidence).
+ * More honest than using raw probability — accounts for data quality, volatility, etc.
  *
  * BET   = high confidence, engine recommends placing
  * WATCH = moderate confidence, worth monitoring odds
- * PASS  = low confidence, don’t bet but track
+ * PASS  = low confidence, don't bet but track
  * GAMBLE = very low confidence, speculative only
  */
-function computeAdvisorStatus(probability, riskLevel, edgeScore) {
-  const prob = safeNum(probability, 0);
+function computeAdvisorStatus(phantomScore, riskLevel, edgeScore) {
+  const ps = safeNum(phantomScore, 0);
   const edge = safeNum(edgeScore, 0);
 
-  if (prob >= 0.72 && riskLevel === 'SAFE') return 'BET';
-  if (prob >= 0.70 && riskLevel !== 'AGGRESSIVE') return 'BET';
-  if (prob >= 0.65 && edge >= 0.05) return 'BET';
-  if (prob >= 0.62) return 'WATCH';
-  if (prob >= 0.55) return 'PASS';
+  if (ps >= 0.72 && riskLevel === 'SAFE') return 'BET';
+  if (ps >= 0.68 && riskLevel !== 'AGGRESSIVE') return 'BET';
+  if (ps >= 0.63 && edge >= 0.05) return 'BET';
+  if (ps >= 0.58) return 'WATCH';
+  if (ps >= 0.50) return 'PASS';
   return 'GAMBLE';
 }
 
@@ -302,22 +297,30 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   // fall back to ranking score only when no odds data exists
   const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
-  const rawPct = parseFloat((probability * 100).toFixed(1));
+  const rawProbPct = parseFloat((probability * 100).toFixed(1));
   const modelConf = mapModelConfidence(probability, dataCompletenessScore);
 
   // The engine computes an exact 0-1 finalScore in scoreMarketCandidates.js
   // that already accounts for probability, edge, predictability, and tactical fit.
-  const compositeScore = parseFloat((safeNum(pick.finalScore, probability) * 100).toFixed(1));
+  const compositeRaw = safeNum(pick.finalScore, probability);
+  const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
 
-  const riskLvl    = resolveRiskLevel(pick);
-  const edgeLbl    = resolveEdgeLabel(pick);
+  // ── Phantom Score: blended confidence metric ────────────────────────────
+  // Combines raw probability (what math says) with composite score (what reality says).
+  // This prevents 87% probability from showing when the actual composite confidence is 70.
+  const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
+  const phantomScorePct = parseFloat((phantomScoreRaw * 100).toFixed(1));
+
+  // Risk and advisor now derive from Phantom Score — more honest than raw probability
+  const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
+  const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
 
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
-    probability_pct: capProbabilityPct(pick.marketKey, rawPct),
-    phantom_score_pct: capProbabilityPct(pick.marketKey, rawPct),
+    probability_pct: rawProbPct,
+    phantom_score_pct: phantomScorePct,
     score: compositeScore,
     edgeScore,
     modelConfidence: modelConf,
@@ -326,8 +329,11 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     riskLevel: riskLvl,
     edgeLabel: edgeLbl,
     reasons: (pick.reasons || []).map(humanizeReasonCode),
-    advisor_status: pick.advisor_status || computeAdvisorStatus(probability, riskLvl, edgeScore),
+    advisor_status: pick.advisor_status || computeAdvisorStatus(phantomScoreRaw, riskLvl, edgeScore),
     no_edge: !!(pick.edge != null && pick.edge <= 0),
+    // Flags for UI to distinguish between picks
+    isSafeBet: phantomScorePct >= 72 && riskLvl === 'SAFE',
+    isValueBet: edgeScore >= 0.05 && phantomScorePct >= 60,
   };
 }
 

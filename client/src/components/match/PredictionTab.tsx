@@ -152,12 +152,20 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   return (
     <div className="flex flex-col gap-4">
       {/* ── RECOMMENDATION CARD ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-[#1a3526]"
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 24 }}
+        className="relative rounded-2xl overflow-hidden border border-[#1a3526]"
         style={{ background: "linear-gradient(135deg, #0a1f15 0%, #060f0b 100%)" }}>
         <SpiralWatermark />
         <div className="relative p-5">
           {/* Header */}
-          <div className="flex items-center justify-between mb-3">
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex items-center justify-between mb-3">
              <div className="flex items-center gap-2">
                <span className="text-primary text-sm">🎯</span>
                <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
@@ -172,10 +180,14 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
              }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
                 <Share2 size={14} className="text-white/50 hover:text-white" />
              </button>
-          </div>
+          </motion.div>
 
           {/* Badges row: Verdict, Risk, Style */}
-          <div className="flex flex-wrap gap-2 mb-3">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
             <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
               {riskPill}
@@ -190,7 +202,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 <Sparkles className="w-3 h-3" /> VALUE
               </span>
             )}
-          </div>
+          </motion.div>
 
           {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1">
@@ -202,10 +214,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
 
           {/* OUR BEST BET */}
           <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Our Best Bet</p>
-          <div className="flex items-start justify-between gap-3 mb-1">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
+            className="flex items-start justify-between gap-3 mb-1">
             <div className="flex-1">
               <p className="text-2xl font-black text-white uppercase leading-tight">
                 {rec.pick || "No clear pick"}
+              </p>
+              {/* Model probability secondary stat */}
+              <p className="text-[10px] text-white/25 mt-1.5 tabular-nums">
+                Model: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
               </p>
             </div>
             {/* Confidence ring */}
@@ -216,16 +236,20 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
               showLabel
               label="PHANTOM SCORE"
             />
-          </div>
+          </motion.div>
 
           {/* Edge vs bookmakers */}
           {hasValue && edgePct != null && (
-            <div className="flex items-center gap-2 mt-2 mb-3">
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
                 ACTIONABLE EDGE
               </span>
               <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
-            </div>
+            </motion.div>
           )}
 
           {/* ── PHANTOM DECISION STACK ── */}
@@ -358,7 +382,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── OTHER GOOD OPTIONS ── */}
       {backups.length > 0 && (
