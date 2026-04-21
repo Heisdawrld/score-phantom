@@ -71,7 +71,7 @@ const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
-  const { user, isPremium, isLoading: authLoading } = useAccess();
+  const { user, isSubscribed, isLoading: authLoading } = useAccess();
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
   const savedScrollRef = useRef(0);
@@ -81,7 +81,7 @@ export default function TopPicksToday() {
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
-    enabled: !authLoading && !!isPremium,
+    enabled: !authLoading && !!isSubscribed,
   });
 
   useScrollRestoration("top_picks", !isLoading);
@@ -90,7 +90,7 @@ export default function TopPicksToday() {
   const { data: resultsData } = useQuery({
     queryKey: ["pick-results-7d"],
     queryFn: () => fetchApi("/track-record?days=7"),
-    enabled: !authLoading && !!isPremium,
+    enabled: !authLoading && !!isSubscribed,
     staleTime: 10 * 60 * 1000,
   });
   const weekStats = (resultsData as any)?.overallStats || null;
@@ -108,7 +108,7 @@ export default function TopPicksToday() {
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  if (!isPremium) {
+  if (!isSubscribed) {
     return (
       <div className="min-h-screen bg-background">
         <Header />

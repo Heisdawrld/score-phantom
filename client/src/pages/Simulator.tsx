@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function PhantomLab() {
   const [, setLocation] = useLocation();
-  const { user, isPremium, isLoading: authLoading } = useAccess();
+  const { user, isSubscribed, isLoading: authLoading } = useAccess();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<{
@@ -62,7 +62,7 @@ export default function PhantomLab() {
     }
   });
 
-  if (!isPremium) {
+  if (!isSubscribed) {
     return (
       <div className='min-h-screen bg-background pb-20'>
         <Header />

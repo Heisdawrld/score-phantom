@@ -26,13 +26,13 @@ function formatAccaMarket(key: string): string {
 
 export default function DailyAcca() {
   const [, setLocation] = useLocation();
-  const { user, isPremium, isLoading: authLoading } = useAccess();
+  const { user, isSubscribed, isLoading: authLoading } = useAccess();
   const [stake, setStake] = useState(1000);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/acca'],
     queryFn: () => fetchApi('/acca'),
-    enabled: !!isPremium && !authLoading,
+    enabled: !!isSubscribed && !authLoading,
     staleTime: 15 * 60 * 1000,
   });
 
@@ -40,7 +40,7 @@ export default function DailyAcca() {
   const { data: trData } = useQuery({
     queryKey: ['/api/acca-results'],
     queryFn: () => fetchApi('/track-record?days=30'),
-    enabled: !!isPremium,
+    enabled: !!isSubscribed,
     staleTime: 10 * 60 * 1000,
   });
   const accaStats = (trData as any)?.overallStats || null;
@@ -84,7 +84,7 @@ export default function DailyAcca() {
             </h1>
             <p className='text-xs text-white/35 mt-0.5'>Smart auto-generated accumulator</p>
           </div>
-          {isPremium && (
+          {isSubscribed && (
             <button onClick={() => refetch()} className='p-2 hover:bg-white/5 rounded-xl transition text-white/30 hover:text-white'>
               <RefreshCw className='w-4 h-4' />
             </button>
@@ -92,7 +92,7 @@ export default function DailyAcca() {
         </div>
 
         {/* ── Not Premium ── */}
-        {!isPremium ? (
+        {!isSubscribed ? (
           <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
             <div className="blur-sm select-none pointer-events-none p-5 space-y-4 opacity-50">
               <div className="bg-white/5 rounded-2xl p-4 border border-white/8">

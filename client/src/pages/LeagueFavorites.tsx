@@ -19,9 +19,9 @@ const POPULAR_LEAGUES = [
 
 export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
-  const { user, isPremium, isLoading: authLoading } = useAccess();
-  useEffect(() => { if (!authLoading && !isPremium) setLocation("/paywall"); }, [authLoading, isPremium]);
-  if (authLoading || !isPremium) return <div className="min-h-screen bg-background" />;
+  const { user, isSubscribed, isLoading: authLoading } = useAccess();
+  useEffect(() => { if (!authLoading && !isSubscribed) setLocation("/paywall"); }, [authLoading, isSubscribed]);
+  if (authLoading || !isSubscribed) return <div className="min-h-screen bg-background" />;
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
