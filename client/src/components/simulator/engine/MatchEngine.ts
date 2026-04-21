@@ -54,11 +54,16 @@ export class MatchEngine {
       this.players.push(new Player(c.id, 'away', c.role as any, c.x, c.y));
     });
 
-    // Start with home ball
-    const hMid = this.players.find(p => p.team === 'home' && (p.role === 'cm' || p.role === 'cdm')) || this.players[5];
-    hMid.hasBall = true;
-    this.ball.owner = hMid;
-    this.ball.state = 'controlled';
+    // Start with home ball — safe fallback chain so this never crashes
+    const hMid = 
+      this.players.find(p => p.team === 'home' && (p.role === 'cm' || p.role === 'cdm')) ||
+      this.players.find(p => p.team === 'home' && p.role !== 'gk') ||
+      this.players.find(p => p.team === 'home');
+    if (hMid) {
+      hMid.hasBall = true;
+      this.ball.owner = hMid;
+      this.ball.state = 'controlled';
+    }
     this.activeTeam = 'home';
   }
 
