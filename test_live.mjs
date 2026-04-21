@@ -59,7 +59,7 @@ async function run() {
     console.log(`   subscription_active: ${u.subscription_active}`);
   }
 
-  const token = trial.token || prem.token;
+  const token = prem.token || trial.token;
 
   // ── TEST 3: Fixtures API ─────────────────────────────────────────
   console.log('\n── TEST 3: FIXTURES ──');
