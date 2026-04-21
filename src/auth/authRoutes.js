@@ -287,18 +287,22 @@ function publicUser(user) {
   if (user.own_referral_code) { user.own_referral_code = user.own_referral_code; } // Just to be safe
   const access = computeAccessStatus(user);
   return {
-    id:                    user.id,
-    email:                 user.email,
-    username:              user.username,
-    status:                user.status,
-    trial_ends_at:         user.trial_ends_at,
-    premium_expires_at:    user.premium_expires_at,
+    id:                      user.id,
+    email:                   user.email,
+    username:                user.username,
+    status:                  user.status,
+    trial_ends_at:           user.trial_ends_at,
+    premium_expires_at:      user.premium_expires_at,
     subscription_expires_at: user.subscription_expires_at,
-    subscription_code:     user.subscription_code,
-    has_access:            access.has_full_access,
-    access_status:         access.status,
-    email_verified:        user.email_verified === 1 || user.email_verified === true,
-    own_referral_code:     user.own_referral_code || null,
+    subscription_code:       user.subscription_code,
+    has_access:              access.has_full_access,
+    access_status:           access.status,
+    // Explicit access flags so the frontend hook can read them directly
+    trial_active:            access.trial_active,
+    subscription_active:     access.subscription_active,
+    has_full_access:         access.has_full_access,
+    email_verified:          user.email_verified === 1 || user.email_verified === true,
+    own_referral_code:       user.own_referral_code || null,
   };
 }
 
