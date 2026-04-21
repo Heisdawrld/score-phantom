@@ -223,6 +223,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
   // ── Advanced Odds & Manager Data (Layer 4) ─────────────────────────────────
   const advancedOdds = meta?.odds_data || null;
+  const polymarketOdds = meta?.polymarket_odds || null;
   const homeManager = meta?.home_manager || null;
   const awayManager = meta?.away_manager || null;
 
@@ -325,6 +326,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
     // Layer 4: Advanced Tactical & AI Odds (from BSD embedded endpoints)
     advancedOdds,
+    polymarketOdds,
     homeManager,
     awayManager,
   };

@@ -75,36 +75,73 @@ function applyOddsAnchor(homeXg, awayXg, fv) {
   return { homeXg: homeXg*scale, awayXg: awayXg*scale };
 }
 
-// Stage F.2 (Layer 4): Advanced Tactical & AI Odds (from BSD embedded endpoints)
+// Stage F.2 (Layer 4): Advanced Tactical & Polymarket Odds (from BSD embedded endpoints)
 function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
   let hXg = homeXg;
   let aXg = awayXg;
+  let multiplierDebug = [];
 
-  // AI Probability & Movement from Odds API
-  if (fv.advancedOdds) {
-    const aiProb = fv.advancedOdds.ai_probability;
-    if (aiProb) {
-      if (aiProb.home && aiProb.home > 0.5) hXg *= 1.05; // 5% boost for AI confidence
-      if (aiProb.away && aiProb.away > 0.5) aXg *= 1.05;
-    }
-    const movement = fv.advancedOdds.movement;
-    if (movement) {
-      if (movement.home === 'dropping') hXg *= 1.03; // Smart money on home
-      if (movement.away === 'dropping') aXg *= 1.03;
+  // Polymarket Baseline Anchoring (Replaces generic AI Odds)
+  if (fv.polymarketOdds && fv.polymarketOdds.odds && fv.polymarketOdds.odds.over_under) {
+    const polyOver25 = fv.polymarketOdds.odds.over_under.over_25;
+    if (polyOver25) {
+       // Reverse-engineer expected goals from Polymarket's O2.5 probability
+       // P(X > 2.5) = 1 - (P(0) + P(1) + P(2))
+       // Approximation: λ ≈ -2.1 * ln(1 - P(O2.5))
+       const sharpTotalXg = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - polyOver25)));
+       const currentTotal = hXg + aXg;
+       
+       // Blend 40% Sharp Money / 60% Model
+       const blendedTotal = (currentTotal * 0.60) + (sharpTotalXg * 0.40);
+       const scale = Math.max(0.5, blendedTotal) / Math.max(0.5, currentTotal);
+       
+       hXg *= scale;
+       aXg *= scale;
+       multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)})->Scale(${scale.toFixed(2)})`);
     }
   }
 
-  // Tactical Styles from Manager API
-  if (fv.homeManager && fv.homeManager.tactical_styles) {
-    const styles = Array.isArray(fv.homeManager.tactical_styles) ? fv.homeManager.tactical_styles.join(' ').toLowerCase() : String(fv.homeManager.tactical_styles).toLowerCase();
-    if (styles.includes('attacking') || styles.includes('high press')) hXg *= 1.04;
-    if (styles.includes('defensive') || styles.includes('park the bus')) hXg *= 0.95;
+  // Tactical Fingerprint Multipliers (Manager Profiles)
+  const applyTactics = (manager, isHome) => {
+    if (!manager) return 1.0;
+    let mult = 1.0;
+    const styles = Array.isArray(manager.tactical_styles) 
+      ? manager.tactical_styles.map(s => s.code || s.name).join(' ').toLowerCase() 
+      : String(manager.tactical_styles || '').toLowerCase();
+    
+    const isTerrorist = styles.includes('terrorist') || styles.includes('anti-football') || styles.includes('park the bus');
+    const isAttacking = styles.includes('positional') || styles.includes('gegenpressing') || styles.includes('attacking');
+    const highLine = manager.defensive_line === 'high';
+    
+    if (isTerrorist) {
+      mult *= 0.85; // Drags total match xG down
+      multiplierDebug.push(`${isHome?'H':'A'} Terrorist(0.85)`);
+    } else if (isAttacking) {
+      mult *= 1.05;
+      multiplierDebug.push(`${isHome?'H':'A'} Attacking(1.05)`);
+    }
+
+    return mult;
+  };
+
+  const hMult = applyTactics(fv.homeManager, true);
+  const aMult = applyTactics(fv.awayManager, false);
+
+  hXg *= hMult;
+  aXg *= aMult;
+
+  // Cross-matchup vulnerabilities
+  if (fv.homeManager?.defensive_line === 'high' && (fv.awayManager?.team_style === 'direct' || fv.awayManager?.team_style === 'counter')) {
+     aXg *= 1.10; // High line exposed to counter
+     multiplierDebug.push(`A-Counter vs H-HighLine(1.10)`);
   }
-  
-  if (fv.awayManager && fv.awayManager.tactical_styles) {
-    const styles = Array.isArray(fv.awayManager.tactical_styles) ? fv.awayManager.tactical_styles.join(' ').toLowerCase() : String(fv.awayManager.tactical_styles).toLowerCase();
-    if (styles.includes('attacking') || styles.includes('high press')) aXg *= 1.04;
-    if (styles.includes('defensive') || styles.includes('park the bus')) aXg *= 0.95;
+  if (fv.awayManager?.defensive_line === 'high' && (fv.homeManager?.team_style === 'direct' || fv.homeManager?.team_style === 'counter')) {
+     hXg *= 1.10;
+     multiplierDebug.push(`H-Counter vs A-HighLine(1.10)`);
+  }
+
+  if (multiplierDebug.length > 0) {
+    console.log(`[xG] Tactical/Sharp Adjustments: ${multiplierDebug.join(', ')}`);
   }
 
   return { homeXg: hXg, awayXg: aXg };

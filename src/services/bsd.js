@@ -368,6 +368,19 @@ export async function fetchEventOdds(eventApiId) {
   }
 }
 
+export async function fetchPolymarketOdds(eventApiId) {
+  if (!eventApiId) return null;
+  try {
+    const data = await bsdFetch('/odds/polymarket/', { event: eventApiId });
+    if (data?.results && data.results.length > 0) {
+      return data.results[0];
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function fetchManagerByTeamId(teamId) {
   if (!teamId) return null;
   const data = await bsdFetch('/managers/', { team_id: teamId });

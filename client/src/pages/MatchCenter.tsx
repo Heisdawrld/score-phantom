@@ -201,7 +201,7 @@ export default function MatchCenter() {
                   {tab === "Prediction" && <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />}
                   {tab === "Stats" && <StatsTab d={d} />}
                   {tab === "Pitch" && <PitchTab matchData={d} />}
-                  {tab === "Lineups" && <LineupsTab matchData={d} />}
+                  {tab === "Lineups" && <LineupsTab matchData={d} fixtureId={fixtureId} />}
                   {tab === "League" && <LeagueTab d={d} />}
                   {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />}
                 </Suspense>

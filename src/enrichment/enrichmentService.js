@@ -26,6 +26,7 @@ import {
   extractOddsFromEvent,
   normaliseEventToForm,
   normaliseStandingsRow,
+  fetchPolymarketOdds,
 } from '../services/bsd.js';
 import { buildTeamProfile, profileCompleteness } from '../services/teamProfileBuilder.js';
 import db from '../config/database.js';
@@ -357,6 +358,7 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
   const awayMomentum = computeMomentum(awayFormFinal, fixture.away_team_name);
   let lineupModifier = null;
   let oddsData = null;
+  let polymarketOdds = null;
   let homeManager = null;
   let awayManager = null;
   try { 
@@ -370,6 +372,11 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
   try {
     oddsData = await fetchEventOdds(fixture.id);
   } catch (_) {}
+
+  try {
+    polymarketOdds = await fetchPolymarketOdds(fixture.id);
+  } catch (_) {}
+
   try {
     if (fixture.home_team_id) homeManager = await fetchManagerByTeamId(fixture.home_team_id);
     if (fixture.away_team_id) awayManager = await fetchManagerByTeamId(fixture.away_team_id);
@@ -378,5 +385,7 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
   if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) { completeness.score = Math.min(0.80, completeness.score + 0.15); completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial'; completeness.checks.hasBsdFormStats = true; }
   const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
   console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' bsdStats=' + (bsdHomeFormStats ? 'YES' : 'no') + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
-  return { h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings, homeMomentum, awayMomentum, lineupModifier, completeness, homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile, matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups, average_positions, momentum, bsdHomeFormStats, bsdAwayFormStats, refereeData, injuries, oddsData, homeManager, awayManager, odds: basicOdds };
+  return { h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings, homeMomentum, awayMomentum, lineupModifier, completeness, homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile, matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups, average_positions, momentum, bsdHomeFormStats, bsdAwayFormStats, refereeData, injuries, oddsData,
+    polymarketOdds,
+    homeManager, awayManager, odds: basicOdds };
 }

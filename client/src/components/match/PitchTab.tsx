@@ -6,7 +6,7 @@ import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, ReferenceLine } from "recharts";
 
 const RISK_LABELS: Record<string, string> = {
   SAFE: 'Stable',
@@ -50,6 +50,14 @@ export function PitchTab({ matchData }: any) {
   // Sort timeline chronologically
   timelineEvents.sort((a, b) => (a.minute || 0) - (b.minute || 0));
 
+  // Build chart data from momentum
+  const chartData = momentum.map((m: any) => ({
+    minute: m.minute,
+    value: m.value,
+    home: m.value > 0 ? m.value : 0,
+    away: m.value < 0 ? Math.abs(m.value) : 0,
+  }));
+
   return (
     <div className="flex flex-col gap-4">
       {/* ── LIVE SCORE & MINUTE ── */}
@@ -80,29 +88,29 @@ export function PitchTab({ matchData }: any) {
       {/* ── LIVE MOMENTUM ── */}
       <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
         <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Live Match Momentum</p>
-        <div className="h-32 flex items-end gap-1 relative overflow-hidden border-b border-white/10">
-          {/* Central zero line */}
-          <div className="absolute left-0 right-0 top-1/2 h-px bg-white/10" />
-          
+        <div className="h-32 w-full mt-2">
           {momentum && momentum.length > 0 ? (
-            momentum.map((m: any, i: number) => {
-              const height = Math.min(Math.abs(m.value), 100);
-              const isHome = m.value > 0;
-              return (
-                <div key={i} className="flex-1 flex flex-col justify-end h-full relative group">
-                  <div 
-                    className={cn("w-full transition-all duration-300", isHome ? "bg-primary" : "bg-blue-500")}
-                    style={{ 
-                      height: `${height/2}%`,
-                      position: 'absolute',
-                      top: isHome ? `${50 - height/2}%` : '50%'
-                    }}
-                  />
-                </div>
-              );
-            })
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorAway" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="minute" hide />
+                <YAxis domain={[-100, 100]} hide />
+                <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="home" stroke="#10b981" fillOpacity={1} fill="url(#colorHome)" isAnimationActive={false} />
+                <Area type="monotone" dataKey="value" stroke="none" fill="url(#colorAway)" isAnimationActive={false} activeDot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-white/30 font-medium">
+            <div className="h-full flex items-center justify-center text-xs text-white/30 font-medium">
               Momentum data not available for this match
             </div>
           )}

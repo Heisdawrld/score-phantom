@@ -334,6 +334,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     // Flags for UI to distinguish between picks
     isSafeBet: phantomScorePct >= 72 && riskLvl === 'SAFE',
     isValueBet: edgeScore >= 0.05 && phantomScorePct >= 60,
+    isSharpValue: pick.isSharpValue || false,
   };
 }
 
@@ -463,6 +464,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       no_edge: false,
       isSafeBet: bestPick.isSafeBet || false,
       isValueBet: bestPick.isValueBet || false,
+      isSharpValue: bestPick.isSharpValue || false,
     };
   } else {
     recommendation = {

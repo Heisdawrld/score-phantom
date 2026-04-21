@@ -15,9 +15,12 @@ export function runProbabilityPipeline(features, script) {
   refineScriptPostXg(script, xg); // validate script against actual xG
   const scoreMatrix = buildScoreMatrix(xg.homeExpectedGoals, xg.awayExpectedGoals);
   const rawProbs = deriveMarketProbabilities(scoreMatrix);
+
+  // Compute shifts vs Layer 1 (pure Poisson)
   const baseScoreMatrix = buildScoreMatrix(xg.baseHomeXg, xg.baseAwayXg);
   const baseProbs = deriveMarketProbabilities(baseScoreMatrix);
   const { shiftMap, maxShift, maxShiftMarket } = computeLayer2Shifts(rawProbs, baseProbs);
-  const calibratedProbs = calibrateProbabilities(rawProbs, script);
+
+  const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds);
   return { xg, rawProbs, baseProbs, calibratedProbs, shiftMap, maxShift, maxShiftMarket };
 }

@@ -175,6 +175,12 @@ async function runSchema() {
       home_team TEXT,
       away_team TEXT,
       prediction_json TEXT,
+      home_manager_tactics TEXT,
+      away_manager_tactics TEXT,
+      polymarket_home_prob REAL,
+      polymarket_draw_prob REAL,
+      polymarket_away_prob REAL,
+      is_sharp_value BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -262,12 +268,32 @@ async function runSchema() {
   // Backfill columns for predictions_v2
   try {
     const p2TableInfo = await db.execute(`
-      SELECT column_name as name 
-      FROM information_schema.columns 
+      SELECT column_name as name
+      FROM information_schema.columns
       WHERE table_name = 'predictions_v2'
     `);
-    if (!p2TableInfo.rows.some((c) => c.name === 'prediction_json')) {
+    const p2Cols = p2TableInfo.rows.map(c => c.name);
+    
+    if (!p2Cols.includes('prediction_json')) {
       try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`); } catch(e) {}
+    }
+    if (!p2Cols.includes('home_manager_tactics')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN home_manager_tactics TEXT`); } catch(e) {}
+    }
+    if (!p2Cols.includes('away_manager_tactics')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN away_manager_tactics TEXT`); } catch(e) {}
+    }
+    if (!p2Cols.includes('polymarket_home_prob')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_home_prob REAL`); } catch(e) {}
+    }
+    if (!p2Cols.includes('polymarket_draw_prob')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_draw_prob REAL`); } catch(e) {}
+    }
+    if (!p2Cols.includes('polymarket_away_prob')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_away_prob REAL`); } catch(e) {}
+    }
+    if (!p2Cols.includes('is_sharp_value')) {
+      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN is_sharp_value BOOLEAN DEFAULT FALSE`); } catch(e) {}
     }
     // Fix confidence_volatility type: SQLite stored as REAL but should be TEXT for pg
     try {

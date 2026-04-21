@@ -31,6 +31,12 @@ export async function initPredictionsTable() {
       prediction_json TEXT,
       home_team TEXT,
       away_team TEXT,
+      home_manager_tactics TEXT,
+      away_manager_tactics TEXT,
+      polymarket_home_prob REAL,
+      polymarket_draw_prob REAL,
+      polymarket_away_prob REAL,
+      is_sharp_value INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -53,6 +59,12 @@ export async function initPredictionsTable() {
     "ALTER TABLE predictions_v2 ADD COLUMN confidence_value TEXT",
     "ALTER TABLE predictions_v2 ADD COLUMN confidence_volatility TEXT",
     "ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN home_manager_tactics TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN away_manager_tactics TEXT",
+    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_home_prob REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_draw_prob REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_away_prob REAL",
+    "ALTER TABLE predictions_v2 ADD COLUMN is_sharp_value INTEGER DEFAULT 0",
   ];
   for (const sql of migrations) {
     try { await db.execute(sql); } catch (_) { /* column already exists */ }
@@ -94,7 +106,9 @@ export async function savePrediction(predictionResult) {
           confidence_model, confidence_value, confidence_volatility,
           explanation_json, explanation_text, reason_codes,
           no_safe_pick, no_safe_pick_reason, backup_picks_json,
-          home_team, away_team,
+          home_team, away_team, prediction_json,
+          home_manager_tactics, away_manager_tactics,
+          polymarket_home_prob, polymarket_draw_prob, polymarket_away_prob, is_sharp_value,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?,
@@ -104,7 +118,9 @@ export async function savePrediction(predictionResult) {
           ?, ?, ?,
           ?, ?, ?,
           ?, ?, ?,
+          ?, ?, ?,
           ?, ?,
+          ?, ?, ?, ?,
           ?, ?
         ) ON CONFLICT (fixture_id) DO UPDATE SET
           model_version = EXCLUDED.model_version,
@@ -129,8 +145,15 @@ export async function savePrediction(predictionResult) {
           no_safe_pick = EXCLUDED.no_safe_pick,
           no_safe_pick_reason = EXCLUDED.no_safe_pick_reason,
           backup_picks_json = EXCLUDED.backup_picks_json,
+          prediction_json = EXCLUDED.prediction_json,
           home_team = EXCLUDED.home_team,
           away_team = EXCLUDED.away_team,
+          home_manager_tactics = EXCLUDED.home_manager_tactics,
+          away_manager_tactics = EXCLUDED.away_manager_tactics,
+          polymarket_home_prob = EXCLUDED.polymarket_home_prob,
+          polymarket_draw_prob = EXCLUDED.polymarket_draw_prob,
+          polymarket_away_prob = EXCLUDED.polymarket_away_prob,
+          is_sharp_value = EXCLUDED.is_sharp_value,
           updated_at = EXCLUDED.updated_at
       `,
       args: [
@@ -159,6 +182,13 @@ export async function savePrediction(predictionResult) {
         JSON.stringify(r.backupPicks || []),
         r.homeTeam || null,
         r.awayTeam || null,
+        JSON.stringify(r),
+        JSON.stringify(r.features?.homeManager || null),
+        JSON.stringify(r.features?.awayManager || null),
+        r.features?.polymarketOdds?.odds?.['1x2']?.home || null,
+        r.features?.polymarketOdds?.odds?.['1x2']?.draw || null,
+        r.features?.polymarketOdds?.odds?.['1x2']?.away || null,
+        bp?.isSharpValue ? 1 : 0,
         r.createdAt || now,
         r.updatedAt || now,
       ],

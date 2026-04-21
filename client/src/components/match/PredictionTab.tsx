@@ -130,6 +130,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
   const edgePct = impliedPct != null ? (phantomScore - impliedPct) : null;
   const hasValue = edgePct != null && edgePct > 2;
+  const isSharpValue = rec.isSharpValue === true;
   const betLink = oddsData?.betLinkSportybet || null;
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
@@ -144,6 +145,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     tier.label === "GOOD" ? "text-blue-400" :
     "text-amber-400";
   const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";
+
+  const homeManager = (data as any)?.features?.homeManager || null;
+  const awayManager = (data as any)?.features?.awayManager || null;
+  const polyOdds = (data as any)?.features?.polymarketOdds || null;
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -197,9 +202,14 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 CONTROL
               </span>
             )}
-            {rec.isValueBet && (
+            {rec.isValueBet && !isSharpValue && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> VALUE
+              </span>
+            )}
+            {isSharpValue && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
+                <TrendingUp className="w-3 h-3" /> SHARP VALUE
               </span>
             )}
           </motion.div>
@@ -239,7 +249,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           </motion.div>
 
           {/* Edge vs bookmakers */}
-          {hasValue && edgePct != null && (
+          {isSharpValue ? (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
+                SHARP MONEY ALERT
+              </span>
+              <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
+            </motion.div>
+          ) : hasValue && edgePct != null ? (
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
@@ -250,7 +271,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
               </span>
               <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
             </motion.div>
-          )}
+          ) : null}
 
           {/* ── PHANTOM DECISION STACK ── */}
           {scriptLabel && (
@@ -286,6 +307,105 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                   <div className="text-center">
                     <p className="text-sm font-black text-blue-400 tabular-nums">{matchResult.away}%</p>
                     <p className="text-[8px] text-white/25 uppercase">Away</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── POLYMARKET SHARP ODDS ── */}
+          {polyOdds?.odds?.['1x2'] && (
+            <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Polymarket Sharp Money</span>
+                {isSharpValue && <TrendingUp size={12} className="text-[#E5F522]" />}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Home (1)</p>
+                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].home * 100)}%</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Draw (X)</p>
+                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].draw * 100)}%</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Away (2)</p>
+                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].away * 100)}%</p>
+                </div>
+              </div>
+              <p className="text-[9px] text-white/20 mt-2 italic text-center">Global sharp money implied probabilities</p>
+            </div>
+          )}
+
+          {/* ── TACTICAL MATCHUP ── */}
+          {(homeManager || awayManager) && (
+            <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-4">Tactical Matchup</p>
+              
+              <div className="flex items-start justify-between gap-4">
+                {/* Home Manager */}
+                <div className="flex-1 text-center">
+                  <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                    {homeManager ? (
+                      <img src={`https://sports.bzzoiro.com/img/manager/${homeManager.id}/`} alt={homeManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{homeManager?.short_name || homeManager?.name || "Unknown"}</p>
+                  <p className="text-[9px] text-white/30 uppercase">{homeManager?.preferred_formation || "Unknown"}</p>
+                  
+                  {homeManager?.tactical_styles?.[0] && (
+                    <div className="mt-2 inline-flex flex-col items-center gap-1">
+                      <span className="text-lg">{homeManager.tactical_styles[0].emoji}</span>
+                      <span className="text-[9px] text-white/50">{homeManager.tactical_styles[0].name}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-center justify-center pt-4 opacity-30">
+                  <span className="text-[10px] font-black italic">VS</span>
+                </div>
+
+                {/* Away Manager */}
+                <div className="flex-1 text-center">
+                  <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                    {awayManager ? (
+                      <img src={`https://sports.bzzoiro.com/img/manager/${awayManager.id}/`} alt={awayManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{awayManager?.short_name || awayManager?.name || "Unknown"}</p>
+                  <p className="text-[9px] text-white/30 uppercase">{awayManager?.preferred_formation || "Unknown"}</p>
+                  
+                  {awayManager?.tactical_styles?.[0] && (
+                    <div className="mt-2 inline-flex flex-col items-center gap-1">
+                      <span className="text-lg">{awayManager.tactical_styles[0].emoji}</span>
+                      <span className="text-[9px] text-white/50">{awayManager.tactical_styles[0].name}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tactical Stats Comparison */}
+              {(homeManager?.avg_possession || awayManager?.avg_possession) && (
+                <div className="mt-4 pt-4 border-t border-white/[0.05] flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60">{homeManager?.avg_possession?.toFixed(1) || "-"}%</span>
+                    <span className="text-white/30 uppercase">Possession</span>
+                    <span className="font-bold text-white/60">{awayManager?.avg_possession?.toFixed(1) || "-"}%</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60 capitalize">{homeManager?.defensive_line || "-"}</span>
+                    <span className="text-white/30 uppercase">Def. Line</span>
+                    <span className="font-bold text-white/60 capitalize">{awayManager?.defensive_line || "-"}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60">{homeManager?.pressing_intensity?.toFixed(2) || "-"}</span>
+                    <span className="text-white/30 uppercase">Press Intensity</span>
+                    <span className="font-bold text-white/60">{awayManager?.pressing_intensity?.toFixed(2) || "-"}</span>
                   </div>
                 </div>
               )}
