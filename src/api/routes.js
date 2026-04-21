@@ -191,7 +191,7 @@ async function incrementDailyCount(userId, today) {
 async function decrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `UPDATE trial_daily_counts SET prediction_count = MAX(prediction_count - 1, 0) WHERE user_id = $1 AND date_str = $2`,
+      sql: `UPDATE trial_daily_counts SET prediction_count = GREATEST(prediction_count - 1, 0) WHERE user_id = $1 AND date_str = $2`,
       args: [userId, today],
     });
   } catch (err) {

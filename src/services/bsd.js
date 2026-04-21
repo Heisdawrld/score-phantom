@@ -305,10 +305,10 @@ export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamNa
 
   const target = Number(opts.target ?? 10);
 
-  const firstPassCount = Math.max(100, target * 10); // increased from 50
+  const firstPassCount = Math.max(50, target * 5); // reduced from 100 to cut API calls
   const [homeEvents1, awayEvents1] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamId, homeTeamName, firstPassCount, { yearsBack: 3 }), // increased from 2
-    fetchTeamRecentEvents(awayTeamId, awayTeamName, firstPassCount, { yearsBack: 3 }),
+    fetchTeamRecentEvents(homeTeamId, homeTeamName, firstPassCount, { yearsBack: 2 }),
+    fetchTeamRecentEvents(awayTeamId, awayTeamName, firstPassCount, { yearsBack: 2 }),
   ]);
 
   const aIds1 = new Set((awayEvents1 || []).map(e => e.id));
@@ -316,10 +316,10 @@ export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamNa
   const h2h1Norm = h2h1.map(e => normaliseEventToForm(e)).filter(Boolean);
   if (h2h1Norm.length >= Math.min(5, target)) return h2h1Norm.slice(0, target);
 
-  const deepCount = Math.max(300, target * 25); // increased from 200
+  const deepCount = Math.max(60, target * 6); // reduced from 300 to cut API load
   const [homeEvents2, awayEvents2] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamId, homeTeamName, deepCount, { yearsBack: 15 }), // increased from 10
-    fetchTeamRecentEvents(awayTeamId, awayTeamName, deepCount, { yearsBack: 15 }),
+    fetchTeamRecentEvents(homeTeamId, homeTeamName, deepCount, { yearsBack: 4 }), // reduced from 15
+    fetchTeamRecentEvents(awayTeamId, awayTeamName, deepCount, { yearsBack: 4 }),
   ]);
 
   // Build a set of event IDs from the away team's matches for fast lookup

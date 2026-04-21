@@ -165,7 +165,7 @@ async function runSchema() {
       best_pick_score REAL,
       confidence_model TEXT,
       confidence_value REAL,
-      confidence_volatility REAL,
+      confidence_volatility TEXT,
       explanation_json TEXT,
       explanation_text TEXT,
       reason_codes TEXT,
@@ -269,6 +269,10 @@ async function runSchema() {
     if (!p2TableInfo.rows.some((c) => c.name === 'prediction_json')) {
       try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`); } catch(e) {}
     }
+    // Fix confidence_volatility type: SQLite stored as REAL but should be TEXT for pg
+    try {
+      await db.execute(`ALTER TABLE predictions_v2 ALTER COLUMN confidence_volatility TYPE TEXT USING confidence_volatility::TEXT`);
+    } catch(e) {} // ignore if already TEXT or if column doesn't exist yet
   } catch (e) {}
 
   // Backfill columns for push_tokens

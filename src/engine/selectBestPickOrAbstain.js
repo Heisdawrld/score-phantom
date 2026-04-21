@@ -42,8 +42,8 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
   const top  = ranked[0];
   const topProb = safeNum(top.modelProbability, 0);
 
-  // B. Probability floor (restored to 0.55 to allow value edge picks)
-  if (topProb < 0.55) return abstain('Best pick probability too low (' + (topProb*100).toFixed(1) + '% < 55% floor)', 'LOW_PROBABILITY');
+  // B. Probability floor — 0.50 minimum to show trial users more predictions
+  if (topProb < 0.50) return abstain('Best pick probability too low (' + (topProb*100).toFixed(1) + '% < 50% floor)', 'LOW_PROBABILITY');
 
   // C. Separation check (top two too close)
   if (ranked.length >= 2) {
