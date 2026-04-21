@@ -221,6 +221,11 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const lineupModifier = meta?.lineupModifier || null;
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
+  // ── Advanced Odds & Manager Data (Layer 4) ─────────────────────────────────
+  const advancedOdds = meta?.odds_data || null;
+  const homeManager = meta?.home_manager || null;
+  const awayManager = meta?.away_manager || null;
+
   // ── INJURY & BSD LINEUP INJECTION ──────────────────────────────────────────
   const missingPlayers = meta?.unavailable_players || null;
   const predictedLineups = meta?.predicted_lineup || null;
@@ -317,5 +322,10 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     impliedHomeProb,
     impliedAwayProb,
     impliedOver25,
+
+    // Layer 4: Advanced Tactical & AI Odds (from BSD embedded endpoints)
+    advancedOdds,
+    homeManager,
+    awayManager,
   };
 }

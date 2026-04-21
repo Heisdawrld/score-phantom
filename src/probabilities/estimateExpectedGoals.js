@@ -75,6 +75,41 @@ function applyOddsAnchor(homeXg, awayXg, fv) {
   return { homeXg: homeXg*scale, awayXg: awayXg*scale };
 }
 
+// Stage F.2 (Layer 4): Advanced Tactical & AI Odds (from BSD embedded endpoints)
+function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
+  let hXg = homeXg;
+  let aXg = awayXg;
+
+  // AI Probability & Movement from Odds API
+  if (fv.advancedOdds) {
+    const aiProb = fv.advancedOdds.ai_probability;
+    if (aiProb) {
+      if (aiProb.home && aiProb.home > 0.5) hXg *= 1.05; // 5% boost for AI confidence
+      if (aiProb.away && aiProb.away > 0.5) aXg *= 1.05;
+    }
+    const movement = fv.advancedOdds.movement;
+    if (movement) {
+      if (movement.home === 'dropping') hXg *= 1.03; // Smart money on home
+      if (movement.away === 'dropping') aXg *= 1.03;
+    }
+  }
+
+  // Tactical Styles from Manager API
+  if (fv.homeManager && fv.homeManager.tactical_styles) {
+    const styles = Array.isArray(fv.homeManager.tactical_styles) ? fv.homeManager.tactical_styles.join(' ').toLowerCase() : String(fv.homeManager.tactical_styles).toLowerCase();
+    if (styles.includes('attacking') || styles.includes('high press')) hXg *= 1.04;
+    if (styles.includes('defensive') || styles.includes('park the bus')) hXg *= 0.95;
+  }
+  
+  if (fv.awayManager && fv.awayManager.tactical_styles) {
+    const styles = Array.isArray(fv.awayManager.tactical_styles) ? fv.awayManager.tactical_styles.join(' ').toLowerCase() : String(fv.awayManager.tactical_styles).toLowerCase();
+    if (styles.includes('attacking') || styles.includes('high press')) aXg *= 1.04;
+    if (styles.includes('defensive') || styles.includes('park the bus')) aXg *= 0.95;
+  }
+
+  return { homeXg: hXg, awayXg: aXg };
+}
+
 // Stage G: Hard caps — per-team [0.2,2.5], total [0.8,4.5]
 function capXg(homeXg, awayXg, baseHome, baseAway) {
   const cap = (h,a) => { h=clamp(h,0.2,2.5); a=clamp(a,0.2,2.5); const t=h+a; if(t>4.5){const s=4.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;a*=s;} return {h,a}; };
@@ -101,5 +136,9 @@ export function estimateExpectedGoals(fv, script) {
   const baseHomeXg = homeXg, baseAwayXg = awayXg; // L1 snapshot before form/odds boosts
   ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
-  return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
+  ({ homeXg, awayXg } = applyAdvancedTacticalAI(homeXg, awayXg, fv));
+  
+  // Destructure returned objects safely before returning
+  const capped = capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
+  return capped;
 }

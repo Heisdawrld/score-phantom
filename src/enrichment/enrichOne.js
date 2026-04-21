@@ -102,7 +102,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
         data.odds.away ?? null,
         data.odds.btts_yes ?? null,
         data.odds.btts_no ?? null,
-        data.odds.over_under ? JSON.stringify(data.odds.over_under) : null,
+        data.odds.over_under ?? null,
       ],
     });
   }
