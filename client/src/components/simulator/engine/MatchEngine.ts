@@ -89,26 +89,29 @@ export class MatchEngine {
   update(dt: number) {
     if (this.currentPhase === 'ht') {
       this.realTimeElapsed += dt * 1000;
-      if (this.realTimeElapsed > 5000) { // 5 sec halftime
+      if (this.realTimeElapsed > 5000) { // 5 sec halftime break
         this.currentPhase = 'h2';
         this.gameMinute = 45;
         this.realTimeElapsed = 0;
+        this.callbacks.onPhaseChange('h2');
       }
       return;
     }
 
     // Advance Game Clock
     this.realTimeElapsed += dt * 1000;
-    const newMinute = Math.floor(this.realTimeElapsed / this.REAL_MS_PER_GAME_MINUTE);
-    
+    const rawMinute = Math.floor(this.realTimeElapsed / this.REAL_MS_PER_GAME_MINUTE);
+    // In h2, realTimeElapsed resets to 0 at kickoff — offset by 45 to continue from 45'
+    const newMinute = this.currentPhase === 'h2' ? rawMinute + 45 : rawMinute;
+
     // Check Phase Transitions
-    if (this.currentPhase === 'h1' && newMinute > 45 + this.script.addedTime.half1) {
+    if (this.currentPhase === 'h1' && newMinute >= 45 + this.script.addedTime.half1) {
       this.currentPhase = 'ht';
       this.realTimeElapsed = 0;
       this.callbacks.onPhaseChange('ht');
       return;
     }
-    if (this.currentPhase === 'h2' && newMinute > 90 + this.script.addedTime.half2) {
+    if (this.currentPhase === 'h2' && newMinute >= 90 + this.script.addedTime.half2) {
       this.currentPhase = 'ft';
       this.callbacks.onPhaseChange('ft');
       this.callbacks.onComplete();
@@ -125,7 +128,7 @@ export class MatchEngine {
     // AI Physics Loop
     this.updateAI(dt);
     this.ball.update(dt);
-    
+
     // Handle Event Animations (Goals, Corners, etc)
     if (this.activeEvent) {
       this.eventTimer -= dt;

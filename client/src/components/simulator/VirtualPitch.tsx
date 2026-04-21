@@ -50,6 +50,7 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
   const [score, setScore] = useState({ home: 0, away: 0 });
   const [activeEvent, setActiveEvent] = useState<{ message: string; type: string } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showHtBanner, setShowHtBanner] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<MatchEngine | null>(null);
@@ -93,6 +94,11 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
         },
         onPhaseChange: (phase: string) => {
           setCurrentPhase(phase as any);
+          if (phase === 'ht') {
+            setShowHtBanner(true);
+            // Hide banner after 4s so second half starts cleanly
+            setTimeout(() => setShowHtBanner(false), 4000);
+          }
         },
         onComplete: () => {
           // Handled via state transition to 'stats'
@@ -168,11 +174,18 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
           <div className="bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/15 flex items-center gap-1 shadow-[0_0_16px_rgba(0,0,0,0.45)]">
             <Clock className={cn("w-3 h-3", currentPhase === 'ft' || currentPhase === 'stats' ? "text-white/50" : "text-primary animate-pulse")} />
             <span className="text-sm md:text-lg font-black text-white tabular-nums min-w-[28px] text-center font-display leading-none">
-              {currentPhase === 'stats' ? 'FT' : `${currentMinute}'`}
+              {currentPhase === 'stats' || currentPhase === 'ft' ? 'FT' :
+               currentPhase === 'ht' ? 'HT' :
+               currentPhase === 'h1' && currentMinute > 45 ? `45+${currentMinute - 45}'` :
+               currentPhase === 'h2' && currentMinute > 90 ? `90+${currentMinute - 90}'` :
+               `${currentMinute}'`}
             </span>
           </div>
           <span className="text-[8px] text-primary/90 font-black uppercase tracking-widest mt-1 bg-black/35 px-2 py-0.5 rounded border border-primary/20">
-            {currentPhase === 'ht' ? 'HALF TIME' : currentPhase === 'ft' || currentPhase === 'stats' ? 'FULL TIME' : 'LIVE SIMULATION'}
+            {currentPhase === 'ht' ? 'HALF TIME' :
+             currentPhase === 'h2' ? '2ND HALF' :
+             currentPhase === 'ft' || currentPhase === 'stats' ? 'FULL TIME' :
+             '1ST HALF'}
           </span>
         </div>
 
@@ -198,27 +211,63 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
             className="absolute inset-0 w-full h-full block"
           />
 
-          {/* Event Overlay (e.g. GOAL!, SAVED) - Sleek caption bar at bottom */}
-          <div className="absolute bottom-10 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
-            <AnimatePresence>
-              {activeEvent && (
+          {/* FM23-style Halftime Banner Overlay */}
+          <AnimatePresence>
+            {showHtBanner && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+                className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm"
+              >
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  className="w-full bg-primary/90 py-3 flex flex-col items-center gap-1"
+                >
+                  <span className="text-black font-black text-xl md:text-3xl tracking-[0.3em] uppercase">Half Time</span>
+                  <span className="text-black/60 text-xs font-bold tracking-widest uppercase">Second Half Kicks Off Shortly</span>
+                </motion.div>
+                <div className="flex gap-8 mt-6">
+                  <div className="text-center">
+                    <p className="text-4xl font-black text-white tabular-nums">{score.home}</p>
+                    <p className="text-xs text-white/40 uppercase tracking-widest mt-1">{homeTeamName.substring(0,3).toUpperCase()}</p>
+                  </div>
+                  <div className="text-2xl font-black text-white/30 self-center">—</div>
+                  <div className="text-center">
+                    <p className="text-4xl font-black text-blue-400 tabular-nums">{score.away}</p>
+                    <p className="text-xs text-white/40 uppercase tracking-widest mt-1">{awayTeamName.substring(0,3).toUpperCase()}</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Event Overlay — caption bar centered above bottom controls */}
+          <div className="absolute bottom-16 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
+            <AnimatePresence>
+              {activeEvent && !showHtBanner && (
+                <motion.div
+                  key={activeEvent.message}
+                  initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                   className={cn(
-                    "backdrop-blur-md px-3 py-1 md:px-4 md:py-1.5 rounded-full border shadow-lg max-w-[85%] md:max-w-full truncate",
-                    activeEvent.type === 'goal' ? 'bg-yellow-500/90 border-yellow-300' :
+                    "backdrop-blur-md px-3 py-1.5 md:px-5 md:py-2 rounded-full border shadow-lg max-w-[85%] md:max-w-full truncate",
+                    activeEvent.type === 'goal' ? 'bg-yellow-400/95 border-yellow-200 shadow-yellow-400/30' :
                     activeEvent.type === 'corner' || activeEvent.type === 'free_kick' ? 'bg-blue-500/90 border-blue-300' :
                     activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'bg-orange-500/90 border-orange-300' :
                     'bg-black/80 border-white/20'
                   )}
                 >
                   <span className={cn(
-                    "text-[9px] md:text-xs font-black uppercase tracking-widest",
+                    "text-[10px] md:text-xs font-black uppercase tracking-widest",
                     activeEvent.type === 'goal' || activeEvent.type === 'foul' || activeEvent.type === 'yellow_card' ? 'text-black' : 'text-white'
                   )}>
-                    {activeEvent.message}
+                    {activeEvent.type === 'goal' ? '⚽ ' : ''}{activeEvent.message}
                   </span>
                 </motion.div>
               )}
@@ -293,10 +342,11 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
       {currentPhase !== 'ft' && currentPhase !== 'stats' && (
         <button
           onClick={() => {
+            engineRef.current?.stop(); // Stop engine first
             setCurrentPhase('stats');
             setScore(simulationScript.finalScore);
           }}
-          className="absolute bottom-10 left-2 md:bottom-8 md:left-8 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all border border-white/10"
+          className="absolute bottom-2 left-2 md:bottom-4 md:left-4 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all border border-white/10"
         >
           Skip to End ⏭️
         </button>
