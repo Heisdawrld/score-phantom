@@ -97,6 +97,8 @@ function getBadMarketPenalty(candidate, featureVector) {
 
   if (marketKey === 'home_over_05') return 0.9;
   if (marketKey === 'away_over_05') return 0.9;
+  // Team-goal unders: statistically valid but niche/confusing — heavy deprioritization
+  if (marketKey === 'home_under_15' || marketKey === 'away_under_15') return 0.45;
   if (marketKey === 'win_either_half_home' || marketKey === 'win_either_half_away') return 0.3;
 
   // Draw No Bet: structurally inflated (= win / (win+draw)), deflate excess above 0.60

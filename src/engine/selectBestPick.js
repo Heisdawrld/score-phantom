@@ -9,8 +9,12 @@ import { safeNum } from '../utils/math.js';
 const STABLE_MARKETS = new Set([
   'under_35', 'under_25',
   'double_chance_home', 'double_chance_away',
-  'home_under_15', 'away_under_15',
   'dnb_home', 'dnb_away',
+]);
+
+/** Team-goal unders — niche, confusing for users, deprioritized from best picks */
+const DEPRIORITIZED_MARKETS = new Set([
+  'home_under_15', 'away_under_15',
 ]);
 
 /**
@@ -99,7 +103,9 @@ function annotatePick(pick, features, script) {
   if (!pick) return pick;
   const riskLevel = computeRiskLevel(pick, features, script);
   const edgeLabel = computeEdgeLabel(pick, riskLevel);
-  return { ...pick, riskLevel, edgeLabel };
+  // Deprioritized markets get a flag so the UI can still show them but they rank lower
+  const isDeprioritized = DEPRIORITIZED_MARKETS.has(pick.marketKey);
+  return { ...pick, riskLevel, edgeLabel, isDeprioritized };
 }
 
 // ── Main selector ────────────────────────────────────────────────────────────

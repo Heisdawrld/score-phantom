@@ -461,7 +461,11 @@ export async function buildAcca(rows, mode = 'safe') {
       if (BLOCKED_MARKETS.has(mk.toLowerCase())) continue; // Still block terrible markets
       
       const pickOdds = resolvePickOdds(row);
-      if (!pickOdds || pickOdds < 1.05) continue; // Must have valid odds
+      if (!pickOdds || pickOdds < 1.05) {
+        // No real odds — derive implied odds from probability
+        const prob = parseFloat(row.best_pick_probability || 0);
+        if (prob <= 0) continue;
+      }
 
       const processed = {
         ...row,
@@ -541,7 +545,8 @@ export async function buildAcca(rows, mode = 'safe') {
         enrichmentStatus: p.enrichment_status,
         dataQuality:      p.data_quality,
         // Resolved odds for the actual pick (all markets covered)
-        pickOdds:         resolvedOdds,
+        // If no real odds available, derive implied odds from model probability
+        pickOdds:         resolvedOdds || parseFloat((1 / Math.max(parseFloat(p.best_pick_probability || 0.5), 0.1) * 0.95).toFixed(2)),
         // Raw odds columns for display
         oddsHome: parseFloat(p.odds_home || p.home || 0) || null,
         oddsAway: parseFloat(p.odds_away || p.away || 0) || null,
