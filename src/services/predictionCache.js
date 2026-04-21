@@ -24,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.6.0'; // Bumped for injury & lineup injection
+const CURRENT_ENGINE_VERSION = '2.7.0'; // Bumped: fixed risk/edge/advisor tag alignment
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
