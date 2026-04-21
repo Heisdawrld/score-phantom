@@ -359,6 +359,15 @@ export async function fetchPredictedLineup(eventApiId) {
   return await bsdFetch(`/predicted-lineup/${eventApiId}/`);
 }
 
+export async function fetchEventOdds(eventApiId) {
+  if (!eventApiId) return null;
+  try {
+    return await bsdFetch('/odds/', { event: eventApiId });
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function fetchManagerByTeamId(teamId) {
   if (!teamId) return null;
   const data = await bsdFetch('/managers/', { team_id: teamId });

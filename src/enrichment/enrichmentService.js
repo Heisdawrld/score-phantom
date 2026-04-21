@@ -19,6 +19,8 @@ import {
   fetchTeamRecentEvents,
   fetchStandings,
   fetchPredictedLineup,
+  fetchEventOdds,
+  fetchManagerByTeamId,
   fetchEventDetail,
   normaliseBsdLineup,
   normaliseEventToForm,
@@ -304,10 +306,16 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
   let eventDetail = null, bsdH2H = [], bsdHomeFormStats = null, bsdAwayFormStats = null;
   let actualHomeXg = null, actualAwayXg = null, matchStats = null, matchEvents = null;
   let shotmap = null, refereeData = null, injuries = null;
+  let lineups = null, incidents = null, average_positions = null, momentum = null;
   try {
     const eventId = fixture.id || fixture.match_id;
-    eventDetail = await fetchEventDetail(eventId, false);
+    eventDetail = await fetchEventDetail(eventId, true);
     if (eventDetail) {
+      shotmap = eventDetail.shotmap || null;
+      lineups = eventDetail.lineups || null;
+      matchEvents = eventDetail.incidents || null;
+      average_positions = eventDetail.average_positions || null;
+      momentum = eventDetail.momentum || null;
       const h2hBlock = eventDetail.head_to_head;
       if (h2hBlock && h2hBlock.recent_matches && h2hBlock.recent_matches.length > 0) {
         bsdH2H = h2hBlock.recent_matches.map(m => ({ home: m.home || '', away: m.away || '', score: m.score || null, date: m.date || '', competition: '' })).filter(m => m.score);
@@ -345,10 +353,27 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
   const homeMomentum = computeMomentum(homeFormFinal, fixture.home_team_name);
   const awayMomentum = computeMomentum(awayFormFinal, fixture.away_team_name);
   let lineupModifier = null;
-  try { const rawLineup = await fetchPredictedLineup(fixture.id); lineupModifier = parseLineupModifier(normaliseBsdLineup(rawLineup)); } catch (_) {}
+  let oddsData = null;
+  let homeManager = null;
+  let awayManager = null;
+  try { 
+    const rawLineup = await fetchPredictedLineup(fixture.id); 
+    const normalisedLineup = normaliseBsdLineup(rawLineup);
+    lineupModifier = parseLineupModifier(normalisedLineup); 
+    if (!lineups && normalisedLineup) {
+      lineups = normalisedLineup;
+    }
+  } catch (_) {}
+  try {
+    oddsData = await fetchEventOdds(fixture.id);
+  } catch (_) {}
+  try {
+    if (fixture.home_team_id) homeManager = await fetchManagerByTeamId(fixture.home_team_id);
+    if (fixture.away_team_id) awayManager = await fetchManagerByTeamId(fixture.away_team_id);
+  } catch (_) {}
   const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier });
   if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) { completeness.score = Math.min(0.80, completeness.score + 0.15); completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial'; completeness.checks.hasBsdFormStats = true; }
   const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
   console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' bsdStats=' + (bsdHomeFormStats ? 'YES' : 'no') + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
-  return { h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings, homeMomentum, awayMomentum, lineupModifier, completeness, homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile, matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, bsdHomeFormStats, bsdAwayFormStats, refereeData, injuries, odds: null };
+  return { h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings, homeMomentum, awayMomentum, lineupModifier, completeness, homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile, matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups, average_positions, momentum, bsdHomeFormStats, bsdAwayFormStats, refereeData, injuries, oddsData, homeManager, awayManager, odds: null };
 }

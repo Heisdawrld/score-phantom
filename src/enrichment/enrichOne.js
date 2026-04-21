@@ -127,6 +127,12 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     actualHomeXg: data?.actualHomeXg ?? null,
     actualAwayXg: data?.actualAwayXg ?? null,
     shotmap: data?.shotmap ?? null,
+    lineups: data?.lineups ?? null,
+    average_positions: data?.average_positions ?? null,
+    momentum: data?.momentum ?? null,
+    odds_data: data?.oddsData ?? null,
+    home_manager: data?.homeManager ?? null,
+    away_manager: data?.awayManager ?? null,
   };
 
   // Derive enrichment_status and data_quality from completeness tier
