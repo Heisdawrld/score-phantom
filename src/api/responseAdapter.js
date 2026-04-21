@@ -296,6 +296,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
     probability_pct: capProbabilityPct(pick.marketKey, rawPct),
+    phantom_score_pct: capProbabilityPct(pick.marketKey, rawPct),
     score: compositeScore,
     edgeScore,
     modelConfidence: modelConf,
@@ -419,6 +420,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
       probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
+      phantom_score_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
       score: compositeScore, // Expose the Composite Score directly as 'score'
       edgeScore,
       modelConfidence: modelConf,
@@ -438,6 +440,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       pick: "No Clear Edge",
       probability: 0,
       probability_pct: 0,
+      phantom_score_pct: 0,
       score: 0,
       edgeScore: 0,
       modelConfidence: "LOW",

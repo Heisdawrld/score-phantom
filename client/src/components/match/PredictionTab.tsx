@@ -106,7 +106,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   }
 
   const rec = (data as any)?.predictions?.recommendation || {};
-  const conf = rec.score || Math.round((rec.probability || 0) * 100);
+  const phantomScore = rec.phantom_score_pct ?? rec.probability_pct ?? Math.round((rec.probability || 0) * 100);
+  const tier = getConfidenceTier(phantomScore);
   const backups = (data as any)?.predictions?.backup_picks || [];
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
@@ -127,17 +128,22 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     : pickLo.includes("win") ? oddsData.away
     : null;
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
-  const edgePct = impliedPct != null ? (conf - impliedPct) : null;
+  const edgePct = impliedPct != null ? (phantomScore - impliedPct) : null;
   const hasValue = edgePct != null && edgePct > 2;
   const betLink = oddsData?.betLinkSportybet || null;
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
-  const riskLabel = rec.riskLevel || (conf >= 75 ? "SAFE" : conf >= 60 ? "MODERATE" : "AGGRESSIVE");
+  const riskLabel = (rec.riskLevel || (phantomScore >= 68 ? "SAFE" : phantomScore >= 58 ? "MODERATE" : "AGGRESSIVE")).toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
-  const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE" : conf >= 60 ? "MODERATE EDGE" : "LEAN");
-  const confLevel = (rec.modelConfidence || (conf >= 75 ? "HIGH" : conf >= 60 ? "MEDIUM" : "LOW")).toUpperCase();
+  const edgeLabel = rec.edgeLabel || (phantomScore >= 68 ? "STRONG EDGE" : phantomScore >= 58 ? "MODERATE EDGE" : "LEAN");
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
+  const verdictColor =
+    tier.label === "ELITE" ? "text-primary" :
+    tier.label === "STRONG" ? "text-primary" :
+    tier.label === "GOOD" ? "text-blue-400" :
+    "text-amber-400";
+  const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -160,7 +166,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 if (navigator.share) {
                    navigator.share({
                       title: "ScorePhantom Edge",
-                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${conf}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
+                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${phantomScore}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
                    }).catch(()=>{});
                 }
              }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
@@ -172,7 +178,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <div className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
             <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
-              {rec.score >= 70 ? 'LOW RISK' : rec.score >= 50 ? 'MEDIUM RISK' : 'HIGH RISK'}
+              {riskPill}
             </span>
             {rec.isSafeBet && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
@@ -189,8 +195,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
-            <span className={cn("text-[10px] font-black uppercase", confLevel === "HIGH" ? "text-primary" : confLevel === "MEDIUM" ? "text-blue-400" : "text-amber-400")}>
-              {confLevel === "HIGH" ? "ELITE" : confLevel === "MEDIUM" ? "SOLID" : "FRAGILE"}
+            <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
+              {tier.label}
             </span>
           </div>
 
@@ -204,7 +210,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
             </div>
             {/* Confidence ring */}
             <ConfidenceRing
-              value={rec.score || conf}
+              value={phantomScore}
               size={80}
               strokeWidth={4.5}
               showLabel
@@ -360,7 +366,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>
           <div className="flex flex-col gap-2">
             {backups.slice(0, 3).map((p: any, i: number) => {
-              const bpConf = p.score || Math.round((p.probability || 0) * 100);
+              const bpConf = p.phantom_score_pct ?? p.probability_pct ?? Math.round((p.probability || 0) * 100);
               const tier = getConfidenceTier(bpConf);
               return (
                 <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">

@@ -1,6 +1,5 @@
 import { useAuth, useLogout } from '@/hooks/use-auth';
 import { useNotifications } from '@/hooks/use-notifications';
-import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
 import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle, Check, X, Edit2 } from 'lucide-react';
@@ -18,7 +17,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { permission, enableNotifications } = useNotifications();
-  const pushNotifications = usePushNotifications();
+  const isPushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
 
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -176,14 +175,14 @@ export default function Settings() {
                           <p className="text-xs text-white/40 mt-0.5">Get notified before matches start.</p>
                        </div>
                     </div>
-                    {pushNotifications.isSupported ? (
-                      pushNotifications.isSubscribed ? (
+                    {isPushSupported ? (
+                      permission === 'granted' ? (
                         <span className='text-sm font-medium text-primary px-3 py-1 bg-primary/10 rounded-full border border-primary/20'>
                           Active
                         </span>
                       ) : (
                         <button
-                          onClick={() => pushNotifications.subscribeToNotifications()}
+                          onClick={() => enableNotifications()}
                           className='text-sm font-medium text-white px-4 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-colors'
                         >
                           Enable
