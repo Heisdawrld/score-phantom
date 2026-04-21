@@ -133,10 +133,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
-  const riskLabel = rec.riskLevel || (conf >= 75 ? "SAFE" : conf >= 60 ? "MODERATE" : "AGGRESSIVE");
+  const riskLabel = rec.riskLevel || (conf >= 68 ? "SAFE" : conf >= 55 ? "MODERATE" : "HIGH RISK");
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
-  const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE" : conf >= 60 ? "MODERATE EDGE" : "LEAN");
-  const confLevel = (rec.modelConfidence || (conf >= 75 ? "HIGH" : conf >= 60 ? "MEDIUM" : "LOW")).toUpperCase();
+  const edgeLabel = rec.edgeLabel || (conf >= 68 ? "STRONG EDGE" : conf >= 58 ? "MODERATE EDGE" : "LEAN");
+  const confLevel = (rec.modelConfidence || (conf >= 68 ? "HIGH" : conf >= 55 ? "MEDIUM" : "LOW")).toUpperCase();
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
 
   // Match result probabilities

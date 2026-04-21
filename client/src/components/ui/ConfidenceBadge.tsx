@@ -7,8 +7,8 @@ interface ConfidenceBadgeProps {
 }
 
 const TIERS = [
-  { min: 75, label: "ELITE",  cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-  { min: 60, label: "STRONG", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" },
+  { min: 68, label: "ELITE",  cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  { min: 58, label: "STRONG", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" },
   { min: 50, label: "GOOD",   cls: "bg-blue-500/10 text-blue-400 border-blue-500/25" },
   { min: 0,  label: "LEAN",   cls: "bg-amber-500/10 text-amber-400 border-amber-500/25" },
 ];
