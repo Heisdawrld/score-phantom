@@ -161,10 +161,10 @@ async function incrementAndCheckDailyCount(userId, limit) {
     const result = await db.execute({
       sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES ($1, $2, 1)
             ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1
-            RETURNING prediction_count as count`,
+            RETURNING prediction_count`,
       args: [userId, today],
     });
-    const newCount = result.rows[0].count;
+    const newCount = result.rows[0].prediction_count;
     if (newCount > limit) {
       // Revert the increment since they hit the limit
       await decrementDailyCount(userId, today);
@@ -192,7 +192,7 @@ async function incrementDailyCount(userId, today) {
 async function decrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `UPDATE trial_daily_counts SET prediction_count = GREATEST(prediction_count - 1, 0) WHERE user_id = $1 AND date_str = $2`,
+      sql: `UPDATE trial_daily_counts SET prediction_count = MAX(prediction_count - 1, 0) WHERE user_id = $1 AND date_str = $2`,
       args: [userId, today],
     });
   } catch (err) {
