@@ -13,6 +13,11 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
     .replace(/\s+/g, '_')
     .replace(/\//g, '_');
 
+  const homeName = String(homeTeamName || '').toLowerCase().trim();
+  const awayName = String(awayTeamName || '').toLowerCase().trim();
+  const isHomePick = homeName && sel.includes(homeName);
+  const isAwayPick = awayName && sel.includes(awayName);
+
   // Canonical team-goal markets must be checked BEFORE generic over/under
   if (mkt === 'home_over_05') return homeScore > 0.5 ? 'win' : 'loss';
   if (mkt === 'home_over_15') return homeScore > 1.5 ? 'win' : 'loss';
@@ -61,15 +66,23 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
   }
 
   if (mkt === 'match_result' || mkt === 'result' || mkt === '1x2') {
-    if (sel === '1' || sel.includes('home win')) return homeScore > awayScore ? 'win' : 'loss';
-    if (sel === '2' || sel.includes('away win')) return awayScore > homeScore ? 'win' : 'loss';
+    if (sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
+    if (sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
     if (sel === 'x' || sel.includes('draw')) return homeScore === awayScore ? 'win' : 'loss';
   }
 
   if (mkt === 'double_chance') {
-    if (sel.includes('1x') || sel.includes('home or draw')) return homeScore >= awayScore ? 'win' : 'loss';
-    if (sel.includes('x2') || sel.includes('draw or away') || sel.includes('or draw')) return awayScore >= homeScore ? 'win' : 'loss';
-    if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
+    if (sel.includes('12') || sel.includes('home or away')) {
+      return homeScore !== awayScore ? 'win' : 'loss';
+    }
+  
+    if (sel.includes('1x') || sel.includes('home or draw') || (isHomePick && sel.includes('draw'))) {
+      return homeScore >= awayScore ? 'win' : 'loss';
+    }
+  
+    if (sel.includes('x2') || sel.includes('draw or away') || (isAwayPick && sel.includes('draw'))) {
+      return awayScore >= homeScore ? 'win' : 'loss';
+    }
   }
 
   if (mkt === 'home_team_goals') {
