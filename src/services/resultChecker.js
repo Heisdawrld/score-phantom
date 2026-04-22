@@ -4,42 +4,55 @@ import { fetchFixturesByDate } from './bsd.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
+
   const total = homeScore + awayScore;
-  const sel = (selection || '').toLowerCase().trim();
-  const mkt = (market || '').toLowerCase().trim();
-  const homeName = (homeTeamName || '').toLowerCase().trim();
-  const awayName = (awayTeamName || '').toLowerCase().trim();
-  const isHomePick = homeName && sel.includes(homeName);
-  const isAwayPick = awayName && sel.includes(awayName);
-  if (mkt.includes('over') || mkt.includes('under')) {
-    const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return total > parseFloat(om[1]) ? 'win' : 'loss';
-    const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return total < parseFloat(um[1]) ? 'win' : 'loss';
+  const sel = String(selection || '').toLowerCase().trim();
+  const mkt = String(market || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/\//g, '_');
+
+  // Canonical team-goal markets must be checked BEFORE generic over/under
+  if (mkt === 'home_over_05') return homeScore > 0.5 ? 'win' : 'loss';
+  if (mkt === 'home_over_15') return homeScore > 1.5 ? 'win' : 'loss';
+  if (mkt === 'home_over_25') return homeScore > 2.5 ? 'win' : 'loss';
+  if (mkt === 'home_under_15') return homeScore < 1.5 ? 'win' : 'loss';
+
+  if (mkt === 'away_over_05') return awayScore > 0.5 ? 'win' : 'loss';
+  if (mkt === 'away_over_15') return awayScore > 1.5 ? 'win' : 'loss';
+  if (mkt === 'away_over_25') return awayScore > 2.5 ? 'win' : 'loss';
+  if (mkt === 'away_under_15') return awayScore < 1.5 ? 'win' : 'loss';
+
+  if (mkt === 'btts_yes') return homeScore > 0 && awayScore > 0 ? 'win' : 'loss';
+  if (mkt === 'btts_no') return homeScore > 0 && awayScore > 0 ? 'loss' : 'win';
+
+  if (mkt === 'home_win') return homeScore > awayScore ? 'win' : 'loss';
+  if (mkt === 'away_win') return awayScore > homeScore ? 'win' : 'loss';
+  if (mkt === 'draw') return homeScore === awayScore ? 'win' : 'loss';
+
+  if (mkt === 'double_chance_home') return homeScore >= awayScore ? 'win' : 'loss'; // 1X
+  if (mkt === 'double_chance_away') return awayScore >= homeScore ? 'win' : 'loss'; // X2
+
+  if (mkt === 'dnb_home') return homeScore > awayScore ? 'win' : homeScore === awayScore ? 'void' : 'loss';
+  if (mkt === 'dnb_away') return awayScore > homeScore ? 'win' : homeScore === awayScore ? 'void' : 'loss';
+
+  if (mkt === 'win_either_half_home') return homeScore > awayScore ? 'win' : 'loss';
+  if (mkt === 'win_either_half_away') return awayScore > homeScore ? 'win' : 'loss';
+
+  // Generic totals AFTER team-specific markets
+  const om = sel.match(/over\s+(\d+\.?\d*)/i);
+  if (mkt.startsWith('over_') || (mkt.includes('over') && om)) {
+    const line = om ? parseFloat(om[1]) : parseFloat(mkt.replace('over_', '').replace('_', '.'));
+    return total > line ? 'win' : 'loss';
   }
-  if (mkt.includes('both teams') || mkt === 'btts') {
-    const btts = homeScore > 0 && awayScore > 0;
-    if (sel.includes('not to score') || sel === 'no') return btts ? 'loss' : 'win';
-    return btts ? 'win' : 'loss';
+
+  const um = sel.match(/under\s+(\d+\.?\d*)/i);
+  if (mkt.startsWith('under_') || (mkt.includes('under') && um)) {
+    const line = um ? parseFloat(um[1]) : parseFloat(mkt.replace('under_', '').replace('_', '.'));
+    return total < line ? 'win' : 'loss';
   }
-  if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result')) {
-    if (sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
-    if (sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
-    if (sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
-  }
-  if (mkt.includes('double chance')) {
-    if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
-    if (sel.includes('1x') || sel.includes('home or draw') || sel.includes('home') || sel.includes('1') || isHomePick) return homeScore >= awayScore ? 'win' : 'loss';
-    if (sel.includes('x2') || sel.includes('draw or away') || sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore >= homeScore ? 'win' : 'loss';
-    return homeScore >= awayScore ? 'win' : 'loss';
-  }
-  if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
-    if (sel.includes('home') || sel.includes('1') || isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
-    if (sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
-  }
-  if (mkt.includes('home team goals') || mkt.includes('away team goals')) {
-    const goals = mkt.includes('home') ? homeScore : awayScore;
-    const om2 = sel.match(/over\s+(\d+\.?\d*)/i); if (om2) return goals > parseFloat(om2[1]) ? 'win' : 'loss';
-    const um2 = sel.match(/under\s+(\d+\.?\d*)/i); if (um2) return goals < parseFloat(um2[1]) ? 'win' : 'loss';
-  }
+
   return 'void';
 }
 
