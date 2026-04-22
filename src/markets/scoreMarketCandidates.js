@@ -174,7 +174,15 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       ? clamp(rawEdge * 5, -1, 1) // Scale edge to useful range
       : 0;
 
-    const tacticalFitScore = getTacticalFit(candidate.marketKey, scriptOutput);
+    let tacticalFitScore = getTacticalFit(candidate.marketKey, scriptOutput);
+    if (fv.tacticalMatchup) {
+      // Blend the old script fit with the new unified matchup engine
+      const tm = fv.tacticalMatchup;
+      if (candidate.marketKey.includes('home') && tm.homeStyleEdge > 0) tacticalFitScore += 0.2;
+      if (candidate.marketKey.includes('away') && tm.awayStyleEdge > 0) tacticalFitScore += 0.2;
+      if (candidate.marketKey.includes('over') && tm.transitionRisk === 'high') tacticalFitScore += 0.2;
+      tacticalFitScore = clamp(tacticalFitScore, 0, 1);
+    }
     const badMarketPenalty = getBadMarketPenalty(candidate, featureVector);
 
     // Form/momentum score: reward picks that align with recent team performance
@@ -233,7 +241,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
 
     // AI Advisor Logic
     // Rescaled weights to sum to 1.0
-    const finalScore =
+    let finalScore =
       0.30 * modelConfidenceScore + // Boosted weight for raw probability
       0.20 * edgeScore +
       0.15 * tacticalFitScore +
@@ -248,6 +256,25 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       0.08 * repetitionPenalty -
       diversityPenalty -
       starvationPenalty;
+
+    // ── Apply Advanced Market Context (Consensus & EV) ──
+    const bsdPred = fv.bsdPrediction || null;
+    if (bsdPred && candidate.marketKey === bsdPred.prediction) {
+      finalScore += 0.10; // Boost picks that match the broader market consensus
+      candidate.isEnsembleMatch = true;
+    } else if (bsdPred && bsdPred.prediction) {
+      finalScore -= 0.05; // Small penalty for disagreeing with market consensus
+      candidate.isModelConflict = true;
+    }
+
+    if (candidate.impliedProbability > 0 && candidate.edge >= 0.05) {
+      finalScore += 0.08; // Additional lift for strong EV
+      candidate.evRating = 'HIGH';
+    } else if (candidate.impliedProbability > 0 && candidate.edge >= 0.02) {
+      candidate.evRating = 'MEDIUM';
+    } else {
+      candidate.evRating = 'LOW';
+    }
 
     const clampedFinalScore = clamp(finalScore, -0.5, 1.0);
 

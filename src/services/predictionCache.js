@@ -24,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.8.0'; // Bumped: Phantom Score blend (prob*0.55 + score*0.45)
+const CURRENT_ENGINE_VERSION = '2.8.4'; // Bumped: Aggregate missing-player stats for stable xG dampening
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -189,11 +189,26 @@ export async function ensureFixtureData(fixtureId) {
   try {
     if (fixture.bsd_event_api_id) {
       const liveData = await bsdFetch(`/events/${fixture.id}/`);
-      if (liveData?.unavailable_players) {
-        meta.unavailable_players = liveData.unavailable_players;
-      }
       
-      const lineupData = await fetchPredictedLineup(fixture.id);
+      async function attachMissingPlayerStats(players = []) {
+        return Promise.all(
+          players.map(async (p) => {
+            const playerId = p?.player?.id || p?.id || null;
+            const stats = playerId ? await fetchPlayerStats(playerId) : null;
+            return { ...p, stats };
+          })
+        );
+      }
+
+      if (liveData?.unavailable_players) {
+        meta.unavailable_players = {
+          home: await attachMissingPlayerStats(liveData.unavailable_players.home || []),
+          away: await attachMissingPlayerStats(liveData.unavailable_players.away || []),
+        };
+      }
+
+      const eventApiId = fixture.bsd_event_api_id || null;
+      const lineupData = eventApiId ? await fetchPredictedLineup(eventApiId) : null;
       if (lineupData?.lineups) {
         meta.predicted_lineup = lineupData.lineups;
       }
@@ -209,24 +224,18 @@ export async function ensureFixtureData(fixtureId) {
 
 async function savePredictionToCache(fixtureId, prediction, engineResult) {
   const rec = prediction || {};
-  const bestPick = rec.predictions?.recommendation;
-  const gameScript = rec.gameScript || {};
-  const dataQuality = rec.dataQuality || {};
-
-  // Volatility: convert numeric score to string label
-  const volRaw = gameScript.volatility || 'MEDIUM';
-  const volStr = typeof volRaw === 'number'
-    ? (volRaw >= 0.7 ? 'high' : volRaw >= 0.4 ? 'medium' : 'low')
-    : String(volRaw).toLowerCase();
-
-  const noSafePick = !bestPick || bestPick.market === 'No Edge' || !bestPick.pick || bestPick.pick === 'No Clear Edge' ? 1 : 0;
+  const bp = engineResult?.bestPick || null;
+  const conf = engineResult?.confidence || {};
+  const script = engineResult?.script || {};
+  const volStr = String(conf.volatility || 'medium').toLowerCase();
+  const noSafePick = !bp || engineResult?.noSafePick ? 1 : 0;
 
   try {
     // Write prediction_json blob
     await db.execute({
       sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
       args: [
-        JSON.stringify({ prediction, engineResult: null, engineVersion: CURRENT_ENGINE_VERSION }),
+        JSON.stringify({ prediction, engineResult, engineVersion: CURRENT_ENGINE_VERSION }),
         String(fixtureId),
       ],
     });
@@ -247,23 +256,22 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         updated_at            = ?
       WHERE fixture_id = ?`,
       args: [
-        noSafePick ? null : (bestPick?.market    || null),
-        noSafePick ? null : (bestPick?.pick       || null),
-        noSafePick ? null : (bestPick?.probability != null ? bestPick.probability : null),
-        noSafePick ? null : (bestPick?.compositeScore ?? bestPick?.edgeScore ?? bestPick?.score ?? null),
-        noSafePick ? null : (bestPick?.modelConfidence || null),
+        noSafePick ? null : (bp?.marketKey || null),
+        noSafePick ? null : (bp?.selection || null),
+        noSafePick ? null : (bp?.modelProbability ?? null),
+        noSafePick ? null : (bp?.finalScore ?? null),
+        noSafePick ? null : (conf?.model || null),
         volStr,
-        gameScript.script || null,
+        script.primary || null,
         noSafePick,
-        rec.fixture?.homeTeam || null,
-        rec.fixture?.awayTeam || null,
+        engineResult?.homeTeam || rec.fixture?.homeTeam || null,
+        engineResult?.awayTeam || rec.fixture?.awayTeam || null,
         new Date().toISOString(),
         String(fixtureId),
       ],
     });
-    console.log(`[predictionCache] Flat columns written for fixture ${fixtureId}`);
   } catch (err) {
-    console.error('[predictionCache] savePredictionToCache failed:', err.message);
+    console.error(`[predictionCache] Error saving prediction ${fixtureId}:`, err.message);
   }
 }
 

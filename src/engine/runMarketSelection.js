@@ -46,7 +46,7 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
 
   // ── Stage 3b: Build + score candidates ─────────────────────────────────────
   const candidates         = buildMarketCandidates(calibratedProbs, odds);
-  const candidatesWithEdge = computeImpliedProbabilities(candidates, odds);
+  const candidatesWithEdge = computeImpliedProbabilities(candidates, odds, features);
   const recentMarkets      = await getRecentMarkets(fixtureId, 24);
 
   // Fetch accuracy cache (non-blocking — null = neutral, engine unaffected)

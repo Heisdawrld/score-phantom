@@ -17,7 +17,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
     const ctx = await preparePredictionContext(fixtureId, rawData);
     const probs = runProbabilityPipeline(ctx.features, ctx.script);
     const selection = await runMarketSelection({ calibratedProbs: probs.calibratedProbs, odds: ctx.odds, script: ctx.script, features: ctx.features, fixtureId, shiftMap: probs.shiftMap, maxShift: probs.maxShift, maxShiftMarket: probs.maxShiftMarket });
-    return finalizePredictionResult({ fixtureId, homeTeamName: ctx.homeTeamName, awayTeamName: ctx.awayTeamName, script: ctx.script, xg: probs.xg, calibratedProbs: probs.calibratedProbs, features: ctx.features, selection });
+    return finalizePredictionResult({ fixtureId, homeTeamName: ctx.homeTeamName, awayTeamName: ctx.awayTeamName, script: ctx.script, xg: probs.xg, calibratedProbs: probs.calibratedProbs, features: ctx.features, selection, tacticalMatchup: ctx.tacticalMatchup });
   } catch (err) {
     console.error("[runPredictionEngine] Error:", err.message, err.stack);
     return {

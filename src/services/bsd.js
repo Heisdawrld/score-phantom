@@ -362,10 +362,93 @@ export async function fetchPredictedLineup(eventApiId) {
 export async function fetchEventOdds(eventApiId) {
   if (!eventApiId) return null;
   try {
-    return await bsdFetch('/odds/', { event: eventApiId });
+    const data = await bsdFetch('/odds/compare/', { event: eventApiId });
+    if (!data?.markets) return null;
+
+    const oneX2 = data.markets['1x2'] || {};
+    const btts = data.markets['btts'] || {};
+    const ou25 = data.markets['over_under_25'] || {};
+
+    return {
+      home_win: oneX2[data.event?.home_team || data.home_team]?.best_odds ?? null,
+      draw: oneX2['Draw']?.best_odds ?? null,
+      away_win: oneX2[data.event?.away_team || data.away_team]?.best_odds ?? null,
+      btts_yes: btts['Yes']?.best_odds ?? null,
+      btts_no: btts['No']?.best_odds ?? null,
+      over_25: ou25['Over 2.5']?.best_odds ?? null,
+      under_25: ou25['Under 2.5']?.best_odds ?? null,
+    };
   } catch (err) {
     return null;
   }
+}
+
+export async function fetchBestOdds(eventId) {
+  return fetchEventOdds(eventId);
+}
+
+export async function fetchPlayerStats(playerId) {
+  if (!playerId) return null;
+
+  const data = await bsdFetch('/player-stats/', { player: playerId, limit: 8 });
+  const rows = Array.isArray(data?.results) ? data.results : [];
+  if (!rows.length) return null;
+
+  const xg = rows.reduce((sum, row) => sum + Number(row.expected_goals || 0), 0);
+  const assists = rows.reduce((sum, row) => sum + Number(row.expected_assists || 0), 0);
+  const minutes = rows.reduce((sum, row) => sum + Number(row.minutes || 0), 0);
+
+  return { xg, assists, minutes };
+}
+
+function normalizePredictionRow(exact) {
+  const rawPred = String(exact?.predicted_result || '').toUpperCase();
+
+  let canonicalPrediction = null;
+  if (rawPred === '1' || rawPred === 'H' || rawPred === 'HOME') canonicalPrediction = 'home_win';
+  else if (rawPred === '2' || rawPred === 'A' || rawPred === 'AWAY') canonicalPrediction = 'away_win';
+  else if (rawPred === 'X' || rawPred === 'D' || rawPred === 'DRAW') canonicalPrediction = 'draw';
+  else if (rawPred.includes('OVER')) canonicalPrediction = 'over_25';
+  else if (rawPred.includes('UNDER')) canonicalPrediction = 'under_25';
+  else if (rawPred.includes('BTTS') || rawPred.includes('YES')) canonicalPrediction = 'btts_yes';
+
+  return {
+    prediction: canonicalPrediction || null,
+    homeWinProb: exact.prob_home_win || null,
+    drawProb: exact.prob_draw || null,
+    awayWinProb: exact.prob_away_win || null,
+    expectedHomeGoals: exact.expected_home_goals || null,
+    expectedAwayGoals: exact.expected_away_goals || null,
+  };
+}
+
+export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
+  if (!eventId || !matchDateIso) return null;
+
+  const date = String(matchDateIso).slice(0, 10);
+  const limit = 50;
+  let offset = 0;
+
+  while (offset < 500) {
+    const data = await bsdFetch('/predictions/', {
+      date_from: date,
+      date_to: date,
+      limit,
+      offset,
+      tz: 'UTC',
+    });
+
+    const rows = Array.isArray(data?.results) ? data.results : [];
+    const exact = rows.find(r => String(r.event?.id ?? r.event) === String(eventId));
+    if (exact) {
+      return normalizePredictionRow(exact);
+    }
+
+    if (!data?.next || rows.length === 0) break;
+    offset += limit;
+  }
+
+  return null;
 }
 
 export async function fetchPolymarketOdds(eventApiId) {

@@ -9,6 +9,8 @@ function flattenFeatureVector(fv) {
   const vf = fv.volatilityFeatures || {};
   const cf = fv.contextFeatures || {};
   const tc = fv.tableContext || {};
+  const inf = fv.injuryFeatures || {};
+  const blf = fv.bsdLineupFeatures || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -91,6 +93,11 @@ function flattenFeatureVector(fv) {
 
     homeWinRate: safeNum(hf.win_rate, 0.4),
     awayWinRate: safeNum(af.win_rate, 0.35),
+
+    homeMissingXgImpact: safeNum(inf.homeMissingXgImpact, 0),
+    awayMissingXgImpact: safeNum(inf.awayMissingXgImpact, 0),
+    homePredictedStrength: safeNum(blf.homePredictedStrength, 1.0),
+    awayPredictedStrength: safeNum(blf.awayPredictedStrength, 1.0),
 
     homeWeightedPts,
     awayWeightedPts,
@@ -187,6 +194,13 @@ function flattenFeatureVector(fv) {
 
     // New predictability metric
     predictability_score: fv.predictability_score ?? 0.5,
+
+    advancedOdds: fv.advancedOdds || null,
+    polymarketOdds: fv.polymarketOdds || null,
+    homeManager: fv.homeManager || null,
+    awayManager: fv.awayManager || null,
+    bsdPrediction: fv.bsdPrediction || null,
+    bestOdds: fv.bestOdds || null,
   };
 }
 
