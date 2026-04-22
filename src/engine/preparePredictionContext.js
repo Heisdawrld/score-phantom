@@ -14,7 +14,7 @@ export async function preparePredictionContext(fixtureId, rawData) {
   const homeTeamName = normalized.homeTeamName || rawData?.fixture?.home_team_name || "";
   const awayTeamName = normalized.awayTeamName || rawData?.fixture?.away_team_name || "";
   const odds = normalized.odds || rawData?.odds || null;
-  const rawFeatures = await buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds);
+  const rawFeatures = await buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds, rawData?.meta || null);
   const features = flattenFeatureVector(rawFeatures);
   const tacticalMatchup = computeTacticalMatchup(features);
   features.tacticalMatchup = tacticalMatchup;

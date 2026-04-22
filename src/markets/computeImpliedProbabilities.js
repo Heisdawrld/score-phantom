@@ -71,15 +71,18 @@ export function computeImpliedProbabilities(candidates, oddsSnapshot, features) 
 
     // Look for advanced odds if basic odds are missing
     const adv = features?.advancedOdds || null;
-    if (adv && adv.markets && adv.markets[candidate.marketKey]) {
-      const bk = Object.values(adv.markets[candidate.marketKey])[0];
-      if (bk && bk.implied_probability) {
-        return {
-          ...candidate,
-          impliedProbability: bk.implied_probability,
-          edge: (candidate.modelProbability - bk.implied_probability),
-        };
-      }
+    const advOdds = lookupOdds(candidate.marketKey, adv);
+
+    if (advOdds && advOdds > 1.0) {
+      const impliedProbability = parseFloat((1 / advOdds).toFixed(4));
+      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
+
+      return {
+        ...candidate,
+        impliedProbability,
+        edge,
+        bookmakerOdds: advOdds,
+      };
     }
 
     return { ...candidate, impliedProbability: null, edge: null };

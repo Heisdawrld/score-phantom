@@ -15,7 +15,7 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchPredictedLineup, bsdFetch } from './bsd.js';
+import { fetchPredictedLineup, bsdFetch, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
 // Odds are now sourced from fixture_odds table (written at seed time from BSD events)
 // No external odds service needed.
 
@@ -208,9 +208,16 @@ export async function ensureFixtureData(fixtureId) {
       }
 
       const eventApiId = fixture.bsd_event_api_id || null;
-      const lineupData = eventApiId ? await fetchPredictedLineup(eventApiId) : null;
-      if (lineupData?.lineups) {
-        meta.predicted_lineup = lineupData.lineups;
+      if (eventApiId) {
+        const [lineupData, bestOdds, bsdPrediction] = await Promise.all([
+          fetchPredictedLineup(eventApiId),
+          fetchBestOdds(eventApiId),
+          fetchBzzoiroPrediction(eventApiId, fixture.match_date),
+        ]);
+
+        if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
+        if (bestOdds) meta.best_odds = bestOdds;
+        if (bsdPrediction) meta.bsd_prediction = bsdPrediction;
       }
     }
   } catch (err) {

@@ -173,13 +173,15 @@ function extractLineupModifiers(lineupModifier) {
  * @param {object|null} odds
  * @returns {object} full feature vector
  */
-export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null) {
-  const [h2hRaw, homeFormRaw, awayFormRaw, meta] = await Promise.all([
+export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null, metaOverride = null) {
+  const [h2hRaw, homeFormRaw, awayFormRaw, dbMeta] = await Promise.all([
     getMatches(fixtureId, 'h2h'),
     getMatches(fixtureId, 'home_form'),
     getMatches(fixtureId, 'away_form'),
     getFixtureMeta(fixtureId),
   ]);
+
+  const meta = metaOverride || dbMeta || {};
 
   const standings = Array.isArray(meta?.standings) ? meta.standings : [];
   const standingsMap = buildStandingsMap(standings);
@@ -226,6 +228,8 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const polymarketOdds = meta?.polymarket_odds || null;
   const homeManager = meta?.home_manager || null;
   const awayManager = meta?.away_manager || null;
+  const bsdPrediction = meta?.bsd_prediction || null;
+  const bestOdds = meta?.best_odds || null;
 
   // ── INJURY & BSD LINEUP INJECTION ──────────────────────────────────────────
   const missingPlayers = meta?.unavailable_players || null;
@@ -329,5 +333,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     polymarketOdds,
     homeManager,
     awayManager,
+    bsdPrediction,
+    bestOdds,
   };
 }
