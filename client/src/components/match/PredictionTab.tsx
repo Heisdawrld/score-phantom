@@ -158,6 +158,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const homeManager = (data as any)?.features?.homeManager || null;
   const awayManager = (data as any)?.features?.awayManager || null;
   const polyOdds = (data as any)?.features?.polymarketOdds || null;
+  const tacticalMatchup = (data as any)?.features?.tacticalMatchup || rec?.tacticalMatchup || null;
+  const hasTacticalPanel = !!tacticalMatchup || !!homeManager || !!awayManager;
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -244,7 +246,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
               </p>
               {/* Model probability secondary stat */}
               <p className="text-[10px] text-white/25 mt-1.5 tabular-nums">
-                Model: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
+                Raw Model: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
               </p>
             </div>
             {/* Confidence ring */}
@@ -348,55 +350,70 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           )}
 
           {/* ── TACTICAL MATCHUP ── */}
-          {(homeManager || awayManager) && (
+          {hasTacticalPanel && (
             <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-4">Tactical Matchup</p>
-              
-              <div className="flex items-start justify-between gap-4">
-                {/* Home Manager */}
-                <div className="flex-1 text-center">
-                  <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
-                    {homeManager ? (
-                      <img src={`https://sports.bzzoiro.com/img/manager/${homeManager.id}/`} alt={homeManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
-                    )}
-                  </div>
-                  <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{homeManager?.short_name || homeManager?.name || "Unknown"}</p>
-                  <p className="text-[9px] text-white/30 uppercase">{homeManager?.preferred_formation || "Unknown"}</p>
-                  
-                  {homeManager?.tactical_styles?.[0] && (
-                    <div className="mt-2 inline-flex flex-col items-center gap-1">
-                      <span className="text-lg">{homeManager.tactical_styles[0].emoji}</span>
-                      <span className="text-[9px] text-white/50">{homeManager.tactical_styles[0].name}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center pt-4 opacity-30">
-                  <span className="text-[10px] font-black italic">VS</span>
-                </div>
-
-                {/* Away Manager */}
-                <div className="flex-1 text-center">
-                  <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
-                    {awayManager ? (
-                      <img src={`https://sports.bzzoiro.com/img/manager/${awayManager.id}/`} alt={awayManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
-                    )}
-                  </div>
-                  <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{awayManager?.short_name || awayManager?.name || "Unknown"}</p>
-                  <p className="text-[9px] text-white/30 uppercase">{awayManager?.preferred_formation || "Unknown"}</p>
-                  
-                  {awayManager?.tactical_styles?.[0] && (
-                    <div className="mt-2 inline-flex flex-col items-center gap-1">
-                      <span className="text-lg">{awayManager.tactical_styles[0].emoji}</span>
-                      <span className="text-[9px] text-white/50">{awayManager.tactical_styles[0].name}</span>
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Tactical Matchup</p>
+                {tacticalMatchup?.tacticalConfidence && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">
+                    Conf: {tacticalMatchup.tacticalConfidence.toUpperCase()}
+                  </span>
+                )}
               </div>
+
+              {tacticalMatchup?.summary && (
+                <p className="text-[11px] text-white/60 leading-snug mb-4">
+                  {tacticalMatchup.summary}
+                </p>
+              )}
+
+              {(homeManager || awayManager) && (
+                <div className="flex items-start justify-between gap-4">
+                  {/* Home Manager */}
+                  <div className="flex-1 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                      {homeManager ? (
+                        <img src={`https://sports.bzzoiro.com/img/manager/${homeManager.id}/`} alt={homeManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{homeManager?.short_name || homeManager?.name || "Unknown"}</p>
+                    <p className="text-[9px] text-white/30 uppercase">{homeManager?.preferred_formation || "Unknown"}</p>
+                    
+                    {homeManager?.tactical_styles?.[0] && (
+                      <div className="mt-2 inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">{homeManager.tactical_styles[0].emoji}</span>
+                        <span className="text-[9px] text-white/50">{homeManager.tactical_styles[0].name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center pt-4 opacity-30">
+                    <span className="text-[10px] font-black italic">VS</span>
+                  </div>
+
+                  {/* Away Manager */}
+                  <div className="flex-1 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                      {awayManager ? (
+                        <img src={`https://sports.bzzoiro.com/img/manager/${awayManager.id}/`} alt={awayManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{awayManager?.short_name || awayManager?.name || "Unknown"}</p>
+                    <p className="text-[9px] text-white/30 uppercase">{awayManager?.preferred_formation || "Unknown"}</p>
+                    
+                    {awayManager?.tactical_styles?.[0] && (
+                      <div className="mt-2 inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">{awayManager.tactical_styles[0].emoji}</span>
+                        <span className="text-[9px] text-white/50">{awayManager.tactical_styles[0].name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Tactical Stats Comparison */}
               {(homeManager?.avg_possession || awayManager?.avg_possession) && (
