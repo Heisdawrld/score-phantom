@@ -10,7 +10,9 @@ The ScorePhantom ML engine currently leverages a significant portion of the Bzzo
 - **Fetch:** Create `fetchBzzoiroPrediction(eventId)` in `src/services/bsd.js`.
 - **Enrichment:** Call this endpoint in `enrichmentService.js` during the standard enrichment pipeline and store the result in the fixture's `meta` object.
 - **Engine Integration:** In `finalizePredictionResult.js` or `runMarketSelection.js`, compare ScorePhantom's `bestPick` with Bzzoiro's prediction.
-- **Outcome:** If both models agree on the same market/selection (e.g., both predict Home Win), boost the `confidence` score and set `dataQuality.tier` to "Guaranteed" or apply a specific "Ensemble Match" flag.
+- **Outcome:** 
+  - **Agreement:** If both models agree on the same market/selection (e.g., both predict Home Win), boost the `confidence` score and set `dataQuality.tier` to "Guaranteed" or apply a specific "Ensemble Match" flag.
+  - **Disagreement:** If the models disagree (e.g., ScorePhantom predicts Home Win, Bzzoiro predicts Draw), the engine will **trust ScorePhantom's math first** but will apply a `volatilityPenalty` to the pick's confidence score. If the discrepancy is severe, it will downgrade the pick from `SAFE` to `MODERATE` or `HIGH RISK`. The frontend will display an "AI Conflict" badge to warn the user that the two models disagree.
 
 ## 2. Advanced Player Profiling
 **Endpoint:** `/api/player-stats/` & `/api/players/`
