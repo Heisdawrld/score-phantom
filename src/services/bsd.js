@@ -439,7 +439,11 @@ export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
     });
 
     const rows = Array.isArray(data?.results) ? data.results : [];
-    const exact = rows.find(r => String(r.event?.id ?? r.event) === String(eventId));
+    const exact = rows.find((r) => {
+      const event = r.event || {};
+      return String(event.id ?? r.event) === String(eventId)
+        || String(event.api_id ?? '') === String(eventId);
+    });
     if (exact) {
       return normalizePredictionRow(exact);
     }
