@@ -139,11 +139,20 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || (phantomScore >= 68 ? "STRONG EDGE" : phantomScore >= 58 ? "MODERATE EDGE" : "LEAN");
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
+  
+  // Use the engine's advisor status directly for the verdict, falling back to tier logic only if missing
+  const verdictLabel = rec.advisor_status === 'AVOID' ? 'AVOID' 
+    : rec.advisor_status === 'WATCH' ? 'WATCH'
+    : rec.advisor_status === 'PLAYABLE' ? 'PLAYABLE'
+    : rec.advisor_status === 'FIRE' ? 'STRONG'
+    : tier.label;
+
   const verdictColor =
-    tier.label === "ELITE" ? "text-primary" :
-    tier.label === "STRONG" ? "text-primary" :
-    tier.label === "GOOD" ? "text-blue-400" :
-    "text-amber-400";
+    verdictLabel === "STRONG" ? "text-primary" :
+    verdictLabel === "PLAYABLE" ? "text-blue-400" :
+    verdictLabel === "WATCH" ? "text-amber-400" :
+    "text-red-400";
+    
   const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";
 
   const homeManager = (data as any)?.features?.homeManager || null;
@@ -218,7 +227,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
             <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
-              {tier.label}
+              {verdictLabel}
             </span>
           </div>
 
