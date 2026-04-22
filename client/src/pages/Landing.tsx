@@ -50,7 +50,7 @@ export default function Landing() {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[80vw] h-[60vh] bg-primary/10 blur-[120px] opacity-60 rounded-full mix-blend-screen" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vh] bg-blue-500/5 blur-[100px] rounded-full mix-blend-screen" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
       {/* ── NAV ─────────────────────────────────────────────── */}
