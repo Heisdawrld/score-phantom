@@ -53,6 +53,44 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
     return total < line ? 'win' : 'loss';
   }
 
+  // ── LEGACY LABELS COMPATIBILITY ──
+  if (mkt === 'both_teams_to_score' || mkt === 'btts') {
+    const btts = homeScore > 0 && awayScore > 0;
+    if (sel.includes('no') || sel.includes('not')) return btts ? 'loss' : 'win';
+    return btts ? 'win' : 'loss';
+  }
+
+  if (mkt === 'match_result' || mkt === 'result' || mkt === '1x2') {
+    if (sel === '1' || sel.includes('home win')) return homeScore > awayScore ? 'win' : 'loss';
+    if (sel === '2' || sel.includes('away win')) return awayScore > homeScore ? 'win' : 'loss';
+    if (sel === 'x' || sel.includes('draw')) return homeScore === awayScore ? 'win' : 'loss';
+  }
+
+  if (mkt === 'double_chance') {
+    if (sel.includes('1x') || sel.includes('home or draw')) return homeScore >= awayScore ? 'win' : 'loss';
+    if (sel.includes('x2') || sel.includes('draw or away') || sel.includes('or draw')) return awayScore >= homeScore ? 'win' : 'loss';
+    if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
+  }
+
+  if (mkt === 'home_team_goals') {
+    const hom = sel.match(/over\s+(\d+\.?\d*)/i);
+    if (hom) return homeScore > parseFloat(hom[1]) ? 'win' : 'loss';
+    const hum = sel.match(/under\s+(\d+\.?\d*)/i);
+    if (hum) return homeScore < parseFloat(hum[1]) ? 'win' : 'loss';
+  }
+
+  if (mkt === 'away_team_goals') {
+    const aom = sel.match(/over\s+(\d+\.?\d*)/i);
+    if (aom) return awayScore > parseFloat(aom[1]) ? 'win' : 'loss';
+    const aum = sel.match(/under\s+(\d+\.?\d*)/i);
+    if (aum) return awayScore < parseFloat(aum[1]) ? 'win' : 'loss';
+  }
+
+  if (mkt === 'win_either_half') {
+    if (sel.includes('home') || sel.includes(homeTeamName?.toLowerCase() || '')) return homeScore > awayScore ? 'win' : 'loss';
+    if (sel.includes('away') || sel.includes(awayTeamName?.toLowerCase() || '')) return awayScore > homeScore ? 'win' : 'loss';
+  }
+
   return 'void';
 }
 
