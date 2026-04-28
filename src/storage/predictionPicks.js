@@ -1,5 +1,5 @@
 import db from '../config/database.js';
-import { didHeadlinePickMateriallyChange as didMaterialChange } from './predictionPicksMaterialChange.js';
+import { didHeadlinePickMateriallyChange as didMaterialChange, computePickMaterialSignature } from './predictionPicksMaterialChange.js';
 
 let _initialized = false;
 let _initPromise = null;
@@ -23,13 +23,16 @@ async function initPredictionPicksTable() {
       implied_probability REAL,
       edge REAL,
       model_probability REAL,
+      material_signature TEXT,
       phantom_score REAL,
       volatility_score REAL
     )
   `);
 
+  await db.execute(`ALTER TABLE prediction_picks ADD COLUMN IF NOT EXISTS material_signature TEXT`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`);
+  await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);
 }
 
 async function ensureInit() {
@@ -43,7 +46,7 @@ export async function getLatestPredictionPick({ fixtureId, predictionSource }) {
   const r = await db.execute({
     sql: `
       SELECT id, fixture_id, engine_version, prediction_source, generated_at, kickoff_at,
-             market_key, selection, bookmaker_odds, implied_probability, edge, model_probability
+             market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, material_signature
       FROM prediction_picks
       WHERE fixture_id = ? AND prediction_source = ?
       ORDER BY generated_at DESC
@@ -54,24 +57,43 @@ export async function getLatestPredictionPick({ fixtureId, predictionSource }) {
   return r.rows?.[0] || null;
 }
 
+async function getPickIdBySignature({ fixtureId, predictionSource, materialSignature }) {
+  const r = await db.execute({
+    sql: `
+      SELECT id
+      FROM prediction_picks
+      WHERE fixture_id = ? AND prediction_source = ? AND material_signature = ?
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `,
+    args: [String(fixtureId), String(predictionSource), String(materialSignature)],
+  });
+  const id = r.rows?.[0]?.id;
+  return id != null ? Number(id) : null;
+}
+
 export async function insertPredictionPickIfMaterialChange(pick) {
   await ensureInit();
   const fixtureId = String(pick.fixture_id);
   const predictionSource = String(pick.prediction_source);
+  const materialSignature = computePickMaterialSignature(pick);
 
   const latest = await getLatestPredictionPick({ fixtureId, predictionSource });
-  if (!didHeadlinePickMateriallyChange(latest, pick)) return null;
+  if (!didHeadlinePickMateriallyChange(latest, pick)) {
+    return latest?.id != null ? Number(latest.id) : null;
+  }
 
   const res = await db.execute({
     sql: `
       INSERT INTO prediction_picks
         (fixture_id, engine_version, prediction_source, generated_at, kickoff_at,
-         market_key, selection, bookmaker_odds, implied_probability, edge, model_probability,
+         market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, material_signature,
          phantom_score, volatility_score)
       VALUES
         (?, ?, ?, ?, ?,
-         ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?, ?,
          ?, ?)
+      ON CONFLICT (fixture_id, prediction_source, material_signature) DO NOTHING
       RETURNING id
     `,
     args: [
@@ -86,11 +108,13 @@ export async function insertPredictionPickIfMaterialChange(pick) {
       pick.implied_probability,
       pick.edge,
       pick.model_probability,
+      materialSignature,
       pick.phantom_score ?? null,
       pick.volatility_score ?? null,
     ],
   });
 
   const id = res.rows?.[0]?.id;
-  return id != null ? Number(id) : null;
+  if (id != null) return Number(id);
+  return await getPickIdBySignature({ fixtureId, predictionSource, materialSignature });
 }

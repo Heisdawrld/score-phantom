@@ -197,6 +197,7 @@ async function runSchema() {
       implied_probability REAL,
       edge REAL,
       model_probability REAL,
+      material_signature TEXT,
       phantom_score REAL,
       volatility_score REAL
     )`,
@@ -220,6 +221,7 @@ async function runSchema() {
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
   ];
 
@@ -254,6 +256,16 @@ async function runSchema() {
   const hasPickId = pred2Info.rows.some((col) => col.name === "pick_id");
   if (!hasPickId) {
     await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN pick_id INTEGER`);
+  }
+
+  const ppInfo = await db.execute(`
+    SELECT column_name as name
+    FROM information_schema.columns
+    WHERE table_name = 'prediction_picks'
+  `);
+  const hasSig = ppInfo.rows.some((col) => col.name === "material_signature");
+  if (!hasSig) {
+    await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
   }
 
   // Backfill columns added for country flags, team logos, and odds

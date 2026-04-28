@@ -1,5 +1,19 @@
 import { safeNum } from '../utils/math.js';
 
+function normalizeOdds(odds) {
+  if (odds == null) return null;
+  const n = safeNum(odds, NaN);
+  if (!Number.isFinite(n)) return null;
+  return Number(n.toFixed(4));
+}
+
+export function computePickMaterialSignature(pick) {
+  const market = String(pick?.market_key || '').toLowerCase();
+  const selection = String(pick?.selection || '');
+  const odds = normalizeOdds(pick?.bookmaker_odds);
+  return `${market}|${selection}|${odds == null ? 'null' : odds}`;
+}
+
 export function didHeadlinePickMateriallyChange(prevPick, nextPick) {
   if (!prevPick) return true;
   if (!nextPick) return false;
@@ -12,10 +26,9 @@ export function didHeadlinePickMateriallyChange(prevPick, nextPick) {
   const nextSel = String(nextPick.selection || '');
   if (prevSel !== nextSel) return true;
 
-  const prevOdds = safeNum(prevPick.bookmaker_odds, 0);
-  const nextOdds = safeNum(nextPick.bookmaker_odds, 0);
+  const prevOdds = normalizeOdds(prevPick.bookmaker_odds);
+  const nextOdds = normalizeOdds(nextPick.bookmaker_odds);
   if (prevOdds !== nextOdds) return true;
 
   return false;
 }
-
