@@ -73,6 +73,19 @@ async function main() {
     LIMIT 30
   `, []);
 
+  const byConfidence = await queryBuckets(`
+    SELECT
+      COALESCE(NULLIF(po.model_confidence,''), 'unknown') AS confidence_band,
+      COUNT(*)::int AS total_picks,
+      ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
+      ROUND(AVG(po.best_pick_odds)::numeric, 3) AS avg_odds,
+      ROUND(SUM(po.profit_units)::numeric, 3) AS total_profit_units,
+      ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
+    ${baseWhere}
+    GROUP BY COALESCE(NULLIF(po.model_confidence,''), 'unknown')
+    ORDER BY total_picks DESC
+  `, []);
+
   const rawRows = await queryBuckets(`
     SELECT po.best_pick_odds, po.result_status, po.stake_units, po.profit_units
     ${baseWhere}
@@ -104,6 +117,8 @@ async function main() {
   console.table(byMarket);
   console.log('\n=== By League (top 30 by volume) ===');
   console.table(byLeague);
+  console.log('\n=== By Confidence Band ===');
+  console.table(byConfidence);
   console.log('\n=== By Odds Band ===');
   console.table(byOddsBand);
 }
@@ -112,4 +127,3 @@ main().catch((err) => {
   console.error('[marketCalibrationReport] Failed:', err.message);
   process.exit(1);
 });
-

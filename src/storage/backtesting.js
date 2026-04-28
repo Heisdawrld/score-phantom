@@ -1,5 +1,6 @@
 import db from '../config/database.js';
 import { evaluatePrediction as sharedEvaluatePrediction } from '../services/resultChecker.js';
+import { computeProfitUnits } from './profitUnits.js';
 
 /**
  * Backtesting System
@@ -78,38 +79,84 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
  * Store an evaluated outcome.
  */
 export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, homeTeamName, awayTeamName) {
+  const fid = String(fixtureId);
+
+  let snapshot = null;
+  try {
+    const r = await db.execute({
+      sql: `
+        SELECT id, market_key, selection, model_probability, bookmaker_odds
+        FROM prediction_picks
+        WHERE fixture_id = ?
+          AND prediction_source = 'pre_match'
+          AND kickoff_at IS NOT NULL
+          AND generated_at < kickoff_at
+        ORDER BY generated_at DESC
+        LIMIT 1
+      `,
+      args: [fid],
+    });
+    snapshot = r.rows?.[0] || null;
+  } catch (_) {}
+
+  const market = snapshot?.market_key || prediction.best_pick_market;
+  const selection = snapshot?.selection || prediction.best_pick_selection;
+  const probability = snapshot?.model_probability ?? prediction.best_pick_probability ?? 0;
+  const odds = snapshot?.bookmaker_odds ?? null;
+
   const outcome = evaluatePrediction(
-    prediction.best_pick_market,
-    prediction.best_pick_selection,
+    market,
+    selection,
     homeScore, awayScore,
     homeTeamName, awayTeamName
   );
+  const resultStatus = outcome;
+  const stakeUnits = 1;
+  const profitUnits = computeProfitUnits(resultStatus, odds, stakeUnits);
   try {
     await db.execute({
       sql: `INSERT INTO prediction_outcomes
         (fixture_id, home_team, away_team, match_date, tournament,
-         predicted_market, predicted_selection, predicted_probability,
-         model_confidence, home_score, away_score, full_score, outcome, evaluated_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+         pick_id, predicted_market, predicted_selection, predicted_probability,
+         best_pick_odds, stake_units, profit_units,
+         model_confidence, home_score, away_score, full_score, outcome, result_status, evaluated_at, created_at)
+        VALUES (?,?,?,?,?,
+                ?,?,?,?,?,?,
+                ?,?,
+                ?,?,?,?, ?, ?, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT (fixture_id) DO UPDATE SET
+          pick_id = EXCLUDED.pick_id,
+          predicted_market = EXCLUDED.predicted_market,
+          predicted_selection = EXCLUDED.predicted_selection,
+          predicted_probability = EXCLUDED.predicted_probability,
+          best_pick_odds = EXCLUDED.best_pick_odds,
+          stake_units = EXCLUDED.stake_units,
+          profit_units = EXCLUDED.profit_units,
+          model_confidence = EXCLUDED.model_confidence,
           home_score = EXCLUDED.home_score,
           away_score = EXCLUDED.away_score,
           full_score = EXCLUDED.full_score,
           outcome = EXCLUDED.outcome,
+          result_status = EXCLUDED.result_status,
           evaluated_at = CURRENT_TIMESTAMP`,
       args: [
-        String(fixtureId),
+        fid,
         prediction.home_team || '',
         prediction.away_team || '',
         prediction.match_date || '',
         prediction.tournament || '',
-        prediction.best_pick_market || '',
-        prediction.best_pick_selection || '',
-        parseFloat(prediction.best_pick_probability || 0),
+        snapshot?.id != null ? Number(snapshot.id) : null,
+        market || '',
+        selection || '',
+        parseFloat(probability || 0),
+        odds != null ? parseFloat(odds) : null,
+        stakeUnits,
+        profitUnits,
         prediction.confidence_model || '',
         homeScore, awayScore,
         `${homeScore}-${awayScore}`,
         outcome,
+        resultStatus,
       ]
     });
     console.log(`[Backtest] fixture=${fixtureId} ${prediction.best_pick_selection} -> ${homeScore}-${awayScore} = ${outcome}`);

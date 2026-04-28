@@ -159,27 +159,34 @@ export async function checkResults(dateStr) {
 
   const predRes = await db.execute({
     sql: `
-      SELECT DISTINCT ON (pp.fixture_id)
-        pp.id               AS pick_id,
-        pp.fixture_id       AS fixture_id,
-        pp.market_key       AS predicted_market,
-        pp.selection        AS predicted_selection,
-        pp.model_probability AS predicted_probability,
-        pp.bookmaker_odds   AS best_pick_odds,
-        pp.generated_at     AS generated_at,
-        pp.kickoff_at       AS kickoff_at,
+      SELECT
         f.id                AS id,
         f.home_team_name    AS home_team_name,
         f.away_team_name    AS away_team_name,
         f.match_date        AS match_date,
-        f.tournament_name   AS tournament_name
-      FROM prediction_picks pp
-      JOIN fixtures f ON f.id = pp.fixture_id
+        f.tournament_name   AS tournament_name,
+        p.best_pick_market  AS best_pick_market,
+        p.best_pick_selection AS best_pick_selection,
+        p.best_pick_probability AS best_pick_probability,
+        p.confidence_model  AS confidence_model,
+        pp.id               AS pick_id,
+        pp.market_key       AS pick_market_key,
+        pp.selection        AS pick_selection,
+        pp.model_probability AS pick_model_probability,
+        pp.bookmaker_odds   AS pick_bookmaker_odds
+      FROM fixtures f
+      JOIN predictions_v2 p ON p.fixture_id = f.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (fixture_id)
+          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, generated_at, kickoff_at
+        FROM prediction_picks
+        WHERE prediction_source = 'pre_match'
+          AND kickoff_at IS NOT NULL
+          AND generated_at < kickoff_at
+        ORDER BY fixture_id, generated_at DESC
+      ) pp ON pp.fixture_id = f.id
       WHERE f.match_date LIKE ?
-        AND pp.prediction_source = 'pre_match'
-        AND pp.kickoff_at IS NOT NULL
-        AND pp.generated_at < pp.kickoff_at
-    ORDER BY pp.fixture_id, pp.generated_at DESC
+        AND p.best_pick_selection IS NOT NULL
     `,
     args: ['%' + date + '%'],
   });
@@ -206,10 +213,15 @@ export async function checkResults(dateStr) {
       continue;
     }
 
-    const outcome = evaluatePrediction(fix.predicted_market, fix.predicted_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
+    const market = fix.pick_market_key || fix.best_pick_market;
+    const selection = fix.pick_selection || fix.best_pick_selection;
+    const probability = fix.pick_model_probability ?? fix.best_pick_probability ?? 0;
+    const bestPickOdds = fix.pick_bookmaker_odds ?? null;
+
+    const outcome = evaluatePrediction(market, selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     const resultStatus = outcome;
     const stakeUnits = 1;
-    const profitUnits = computeProfitUnits(resultStatus, fix.best_pick_odds, stakeUnits);
+    const profitUnits = computeProfitUnits(resultStatus, bestPickOdds, stakeUnits);
     try {
       await db.execute({ 
         sql: `
@@ -231,6 +243,14 @@ export async function checkResults(dateStr) {
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
           ON CONFLICT (fixture_id) DO UPDATE SET
+            pick_id = EXCLUDED.pick_id,
+            predicted_market = EXCLUDED.predicted_market,
+            predicted_selection = EXCLUDED.predicted_selection,
+            predicted_probability = EXCLUDED.predicted_probability,
+            best_pick_odds = EXCLUDED.best_pick_odds,
+            stake_units = EXCLUDED.stake_units,
+            profit_units = EXCLUDED.profit_units,
+            model_confidence = EXCLUDED.model_confidence,
             home_score = EXCLUDED.home_score,
             away_score = EXCLUDED.away_score,
             full_score = EXCLUDED.full_score,
@@ -245,13 +265,13 @@ export async function checkResults(dateStr) {
           fix.match_date,
           fix.tournament_name,
           fix.pick_id != null ? Number(fix.pick_id) : null,
-          fix.predicted_market,
-          fix.predicted_selection,
-          parseFloat(fix.predicted_probability || 0),
-          fix.best_pick_odds != null ? parseFloat(fix.best_pick_odds) : null,
+          market,
+          selection,
+          parseFloat(probability || 0),
+          bestPickOdds != null ? parseFloat(bestPickOdds) : null,
           stakeUnits,
           profitUnits,
-          null,
+          fix.confidence_model || null,
           score.home,
           score.away,
           score.home + '-' + score.away,
