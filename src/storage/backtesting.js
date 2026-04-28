@@ -85,7 +85,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   try {
     const r = await db.execute({
       sql: `
-        SELECT id, market_key, selection, model_probability, bookmaker_odds
+        SELECT id, market_key, selection, model_probability, bookmaker_odds, model_confidence
         FROM prediction_picks
         WHERE fixture_id = ?
           AND prediction_source = 'pre_match'
@@ -103,6 +103,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   const selection = snapshot?.selection || prediction.best_pick_selection;
   const probability = snapshot?.model_probability ?? prediction.best_pick_probability ?? 0;
   const odds = snapshot?.bookmaker_odds ?? null;
+  const confidenceBand = snapshot ? (snapshot.model_confidence ?? null) : (prediction.confidence_model || '');
 
   const outcome = evaluatePrediction(
     market,
@@ -152,7 +153,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
         odds != null ? parseFloat(odds) : null,
         stakeUnits,
         profitUnits,
-        prediction.confidence_model || '',
+        confidenceBand,
         homeScore, awayScore,
         `${homeScore}-${awayScore}`,
         outcome,

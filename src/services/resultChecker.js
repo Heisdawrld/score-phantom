@@ -173,12 +173,13 @@ export async function checkResults(dateStr) {
         pp.market_key       AS pick_market_key,
         pp.selection        AS pick_selection,
         pp.model_probability AS pick_model_probability,
-        pp.bookmaker_odds   AS pick_bookmaker_odds
+        pp.bookmaker_odds   AS pick_bookmaker_odds,
+        pp.model_confidence AS pick_model_confidence
       FROM fixtures f
       JOIN predictions_v2 p ON p.fixture_id = f.id
       LEFT JOIN (
         SELECT DISTINCT ON (fixture_id)
-          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, generated_at, kickoff_at
+          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence, generated_at, kickoff_at
         FROM prediction_picks
         WHERE prediction_source = 'pre_match'
           AND kickoff_at IS NOT NULL
@@ -217,6 +218,7 @@ export async function checkResults(dateStr) {
     const selection = fix.pick_selection || fix.best_pick_selection;
     const probability = fix.pick_model_probability ?? fix.best_pick_probability ?? 0;
     const bestPickOdds = fix.pick_bookmaker_odds ?? null;
+    const confidenceBand = fix.pick_id != null ? (fix.pick_model_confidence ?? null) : (fix.confidence_model || null);
 
     const outcome = evaluatePrediction(market, selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     const resultStatus = outcome;
@@ -271,7 +273,7 @@ export async function checkResults(dateStr) {
           bestPickOdds != null ? parseFloat(bestPickOdds) : null,
           stakeUnits,
           profitUnits,
-          fix.confidence_model || null,
+          confidenceBand,
           score.home,
           score.away,
           score.home + '-' + score.away,

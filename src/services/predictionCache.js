@@ -376,6 +376,7 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
       implied_probability: bp.impliedProbability ?? null,
       edge: bp.edge ?? null,
       model_probability: bp.modelProbability ?? null,
+      model_confidence: engineResult?.confidence?.model || null,
       phantom_score: null,
       volatility_score: engineResult?.script?.volatilityScore ?? null,
     });

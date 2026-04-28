@@ -123,7 +123,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
 
   const pickRes = await db.execute({
     sql: `
-      SELECT id, market_key, selection, model_probability, bookmaker_odds
+      SELECT id, market_key, selection, model_probability, bookmaker_odds, model_confidence
       FROM prediction_picks
       WHERE fixture_id = ?
         AND prediction_source = 'pre_match'
@@ -140,6 +140,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const selection = pick?.selection || row.best_pick_selection;
   const probability = pick?.model_probability ?? row.best_pick_probability ?? 0;
   const odds = pick?.bookmaker_odds ?? null;
+  const confidenceBand = pick ? (pick.model_confidence ?? null) : (row.confidence_model || null);
 
   const outcome = evaluatePrediction(market, selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
   const resultStatus = outcome;
@@ -194,7 +195,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
       odds != null ? parseFloat(odds) : null,
       stakeUnits,
       profitUnits,
-      row.confidence_model || null,
+      confidenceBand,
       homeScore,
       awayScore,
       homeScore + '-' + awayScore,
