@@ -12,7 +12,7 @@ raw data → features → game-state model → probability model → market scor
 2. **Form Computation** — last 5/10 results, goals, clean sheets, xG trends
 3. **Game Script Classification** — classifies each match into one of 6 scripts (dominant home, open end-to-end, tight low-event, etc.)
 4. **Poisson Expected Goals** — calculates expected home/away goals using adjusted lambdas
-5. **Market Scoring** — scores every market (1X2, BTTS, Over/Under, team goals, handicaps, double chance, DNB)
+5. **Market Scoring** — scores markets the engine currently generates (1X2, BTTS, Over/Under, team goals, double chance, win either half)
 6. **Value Detection** — compares model probability against market odds to find mispriced outcomes
 7. **Smart Pick Selection** — returns the single strongest edge, not just "who wins"
 
@@ -35,10 +35,10 @@ Each prediction includes 3 confidence dimensions:
 
 ## 🔒 Access Tiers
 
-| Feature | Free Trial (3 days) | Premium |
+| Feature | Free Trial (7 days) | Premium |
 |---------|:-------------------:|:-------:|
 | Browse all fixtures | ✅ | ✅ |
-| Match predictions | ✅ 5/day | ✅ Unlimited |
+| Match predictions | ✅ 15/day | ✅ Unlimited |
 | Game scripts + reason codes | ✅ | ✅ |
 | Confidence breakdown | ✅ | ✅ |
 | Stats tab (H2H, form, standings) | ❌ | ✅ |
