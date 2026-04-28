@@ -1,6 +1,7 @@
 // resultChecker.js — Checks match results using BSD (Bzzoiro Sports Data)
 import db from '../config/database.js';
 import { fetchFixturesByDate } from './bsd.js';
+import { computeProfitUnits } from '../storage/profitUnits.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -156,7 +157,39 @@ export async function checkResults(dateStr) {
     }
   } catch(buildErr) { console.warn('[ResultChecker] Auto-build warning:', buildErr.message); }
 
-  const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
+  const predRes = await db.execute({
+    sql: `
+      SELECT
+        f.id                AS id,
+        f.home_team_name    AS home_team_name,
+        f.away_team_name    AS away_team_name,
+        f.match_date        AS match_date,
+        f.tournament_name   AS tournament_name,
+        p.best_pick_market  AS best_pick_market,
+        p.best_pick_selection AS best_pick_selection,
+        p.best_pick_probability AS best_pick_probability,
+        p.confidence_model  AS confidence_model,
+        pp.id               AS pick_id,
+        pp.market_key       AS pick_market_key,
+        pp.selection        AS pick_selection,
+        pp.model_probability AS pick_model_probability,
+        pp.bookmaker_odds   AS pick_bookmaker_odds
+      FROM fixtures f
+      JOIN predictions_v2 p ON p.fixture_id = f.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (fixture_id)
+          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, generated_at, kickoff_at
+        FROM prediction_picks
+        WHERE prediction_source = 'pre_match'
+          AND kickoff_at IS NOT NULL
+          AND generated_at < kickoff_at
+        ORDER BY fixture_id, generated_at DESC
+      ) pp ON pp.fixture_id = f.id
+      WHERE f.match_date LIKE ?
+        AND p.best_pick_selection IS NOT NULL
+    `,
+    args: ['%' + date + '%'],
+  });
   const fixtures = predRes.rows || [];
   console.log('[ResultChecker] Found', fixtures.length, 'predictions to check for', date);
   if (!fixtures.length) return { checked: 0, date, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
@@ -180,11 +213,71 @@ export async function checkResults(dateStr) {
       continue;
     }
 
-    const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
+    const market = fix.pick_market_key || fix.best_pick_market;
+    const selection = fix.pick_selection || fix.best_pick_selection;
+    const probability = fix.pick_model_probability ?? fix.best_pick_probability ?? 0;
+    const bestPickOdds = fix.pick_bookmaker_odds ?? null;
+
+    const outcome = evaluatePrediction(market, selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
+    const resultStatus = outcome;
+    const stakeUnits = 1;
+    const profitUnits = computeProfitUnits(resultStatus, bestPickOdds, stakeUnits);
     try {
       await db.execute({ 
-        sql: 'INSERT INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (fixture_id) DO UPDATE SET home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, full_score=EXCLUDED.full_score, outcome=EXCLUDED.outcome, evaluated_at=CURRENT_TIMESTAMP', 
-        args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score.home, score.away, score.home + '-' + score.away, outcome] 
+        sql: `
+          INSERT INTO prediction_outcomes (
+            fixture_id, home_team, away_team, match_date, tournament,
+            pick_id, predicted_market, predicted_selection, predicted_probability,
+            best_pick_odds, stake_units, profit_units,
+            model_confidence,
+            home_score, away_score, full_score,
+            outcome, result_status,
+            evaluated_at, created_at
+          ) VALUES (
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?,
+            ?, ?, ?,
+            ?, ?,
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (fixture_id) DO UPDATE SET
+            pick_id = EXCLUDED.pick_id,
+            predicted_market = EXCLUDED.predicted_market,
+            predicted_selection = EXCLUDED.predicted_selection,
+            predicted_probability = EXCLUDED.predicted_probability,
+            best_pick_odds = EXCLUDED.best_pick_odds,
+            stake_units = EXCLUDED.stake_units,
+            profit_units = EXCLUDED.profit_units,
+            model_confidence = EXCLUDED.model_confidence,
+            home_score = EXCLUDED.home_score,
+            away_score = EXCLUDED.away_score,
+            full_score = EXCLUDED.full_score,
+            outcome = EXCLUDED.outcome,
+            result_status = EXCLUDED.result_status,
+            evaluated_at = CURRENT_TIMESTAMP
+        `,
+        args: [
+          fid,
+          fix.home_team_name,
+          fix.away_team_name,
+          fix.match_date,
+          fix.tournament_name,
+          fix.pick_id != null ? Number(fix.pick_id) : null,
+          market,
+          selection,
+          parseFloat(probability || 0),
+          bestPickOdds != null ? parseFloat(bestPickOdds) : null,
+          stakeUnits,
+          profitUnits,
+          fix.confidence_model || null,
+          score.home,
+          score.away,
+          score.home + '-' + score.away,
+          outcome,
+          resultStatus,
+        ] 
       });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;

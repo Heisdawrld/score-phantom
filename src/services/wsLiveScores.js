@@ -2,6 +2,7 @@ import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
 import { fetchLiveMatches } from './bsd.js';
+import { computeProfitUnits } from '../storage/profitUnits.js';
 
 const sseClients = new Set();
 let pollTimer = null;
@@ -119,10 +120,87 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const row = pred.rows?.[0];
   if (!row || !row.best_pick_selection) return;
   if (!f) return;
-  const outcome = evaluatePrediction(row.best_pick_market, row.best_pick_selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
+
+  const pickRes = await db.execute({
+    sql: `
+      SELECT id, market_key, selection, model_probability, bookmaker_odds
+      FROM prediction_picks
+      WHERE fixture_id = ?
+        AND prediction_source = 'pre_match'
+        AND kickoff_at IS NOT NULL
+        AND generated_at < kickoff_at
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `,
+    args: [fixtureId],
+  });
+  const pick = pickRes.rows?.[0] || null;
+
+  const market = pick?.market_key || row.best_pick_market;
+  const selection = pick?.selection || row.best_pick_selection;
+  const probability = pick?.model_probability ?? row.best_pick_probability ?? 0;
+  const odds = pick?.bookmaker_odds ?? null;
+
+  const outcome = evaluatePrediction(market, selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
+  const resultStatus = outcome;
+  const stakeUnits = 1;
+  const profitUnits = computeProfitUnits(resultStatus, odds, stakeUnits);
+
   await db.execute({ 
-    sql: 'INSERT INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (fixture_id) DO UPDATE SET home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, full_score=EXCLUDED.full_score, outcome=EXCLUDED.outcome, evaluated_at=CURRENT_TIMESTAMP', 
-    args: [fixtureId, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, row.best_pick_market, row.best_pick_selection, parseFloat(row.best_pick_probability || 0), row.confidence_model || '', homeScore, awayScore, homeScore + '-' + awayScore, outcome] 
+    sql: `
+      INSERT INTO prediction_outcomes (
+        fixture_id, home_team, away_team, match_date, tournament,
+        pick_id, predicted_market, predicted_selection, predicted_probability,
+        best_pick_odds, stake_units, profit_units,
+        model_confidence,
+        home_score, away_score, full_score,
+        outcome, result_status,
+        evaluated_at, created_at
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?,
+        ?, ?, ?,
+        ?, ?,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (fixture_id) DO UPDATE SET
+        pick_id = EXCLUDED.pick_id,
+        predicted_market = EXCLUDED.predicted_market,
+        predicted_selection = EXCLUDED.predicted_selection,
+        predicted_probability = EXCLUDED.predicted_probability,
+        best_pick_odds = EXCLUDED.best_pick_odds,
+        stake_units = EXCLUDED.stake_units,
+        profit_units = EXCLUDED.profit_units,
+        model_confidence = EXCLUDED.model_confidence,
+        home_score = EXCLUDED.home_score,
+        away_score = EXCLUDED.away_score,
+        full_score = EXCLUDED.full_score,
+        outcome = EXCLUDED.outcome,
+        result_status = EXCLUDED.result_status,
+        evaluated_at = CURRENT_TIMESTAMP
+    `, 
+    args: [
+      fixtureId,
+      f.home_team_name,
+      f.away_team_name,
+      f.match_date,
+      f.tournament_name,
+      pick?.id != null ? Number(pick.id) : null,
+      market,
+      selection,
+      parseFloat(probability || 0),
+      odds != null ? parseFloat(odds) : null,
+      stakeUnits,
+      profitUnits,
+      row.confidence_model || null,
+      homeScore,
+      awayScore,
+      homeScore + '-' + awayScore,
+      outcome,
+      resultStatus,
+    ] 
   });
   console.log('[WS] Auto-result: ' + f.home_team_name + ' vs ' + f.away_team_name + ' -> ' + outcome + ' (' + homeScore + '-' + awayScore + ')');
   // Send push notification for win/loss result
