@@ -1,5 +1,5 @@
 import { safeNum, clamp } from '../utils/math.js';
-import { scoreControlModel } from './archive/scoreControlModel.js';
+import { scoreControlModel } from './scoreControlModel.js';
 
 export function classifyMatchScript(featureVector) {
   const fv = featureVector || {};
@@ -119,4 +119,3 @@ export function classifyMatchScript(featureVector) {
     _scores: scores,
   };
 }
-
