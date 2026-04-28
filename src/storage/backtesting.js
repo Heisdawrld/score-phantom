@@ -17,9 +17,13 @@ export async function initBacktestingTable() {
         match_date TEXT,
         tournament TEXT,
         -- Prediction
+        pick_id INTEGER,
         predicted_market TEXT,
         predicted_selection TEXT,
         predicted_probability REAL,
+        best_pick_odds REAL,
+        stake_units REAL DEFAULT 1,
+        profit_units REAL,
         model_confidence TEXT,
         -- Result
         home_score INTEGER,
@@ -27,13 +31,36 @@ export async function initBacktestingTable() {
         full_score TEXT,
         -- Outcome
         outcome TEXT,
+        result_status TEXT,
         evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    const colRes = await db.execute(`
+      SELECT column_name as name
+      FROM information_schema.columns
+      WHERE table_name = 'prediction_outcomes'
+    `);
+    const cols = (colRes.rows || []).map((r) => r.name);
+
+    const migrations = [
+      ['pick_id',        `ALTER TABLE prediction_outcomes ADD COLUMN pick_id INTEGER`],
+      ['best_pick_odds', `ALTER TABLE prediction_outcomes ADD COLUMN best_pick_odds REAL`],
+      ['stake_units',    `ALTER TABLE prediction_outcomes ADD COLUMN stake_units REAL DEFAULT 1`],
+      ['profit_units',   `ALTER TABLE prediction_outcomes ADD COLUMN profit_units REAL`],
+      ['result_status',  `ALTER TABLE prediction_outcomes ADD COLUMN result_status TEXT`],
+    ];
+    for (const [col, sql] of migrations) {
+      if (!cols.includes(col)) {
+        try { await db.execute(sql); } catch (_) {}
+      }
+    }
+
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_fixture ON prediction_outcomes(fixture_id)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_market ON prediction_outcomes(predicted_market)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_outcome ON prediction_outcomes(outcome)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_pick_id ON prediction_outcomes(pick_id)`);
     console.log('[Backtest] Table initialized');
   } catch (err) {
     console.error('[Backtest] Init error:', err.message);
