@@ -121,6 +121,13 @@ function extractProfileFeatures(profile) {
       profileOver15Rate: null,
       homeWinRate: null,
       awayWinRate: null,
+      statsMatchesAvailable: 0,
+      avgPossession: null,
+      avgShotsFor: null,
+      avgShotsOnTargetFor: null,
+      avgDangerousAttacksFor: null,
+      avgCornersFor: null,
+      avgOpponentShotsOnTargetAllowed: null,
     };
   }
 
@@ -134,6 +141,13 @@ function extractProfileFeatures(profile) {
     profileOver15Rate: safeNum(profile.over15Rate, null),
     homeWinRate: safeNum(profile.homeWinRate, null),
     awayWinRate: safeNum(profile.awayWinRate, null),
+    statsMatchesAvailable: safeNum(profile.matchesAnalyzed, 0),
+    avgPossession: safeNum(profile.avgPossession ?? profile.possession ?? null, null),
+    avgShotsFor: safeNum(profile.avgShotsFor ?? profile.avgShots ?? null, null),
+    avgShotsOnTargetFor: safeNum(profile.avgShotsOnTargetFor ?? profile.avgShotsOnTarget ?? null, null),
+    avgDangerousAttacksFor: safeNum(profile.avgDangerousAttacksFor ?? profile.avgDangerousAttacks ?? null, null),
+    avgCornersFor: safeNum(profile.avgCornersFor ?? profile.avgCorners ?? null, null),
+    avgOpponentShotsOnTargetAllowed: safeNum(profile.avgOpponentShotsOnTargetAllowed ?? profile.avgShotsOnTargetAgainst ?? null, null),
   };
 }
 
@@ -146,8 +160,8 @@ function extractLineupModifiers(lineupModifier) {
       hasLineup: false,
       homeLineupComplete: null,
       awayLineupComplete: null,
-      homeAttackerCount: null,
-      awayAttackerCount: null,
+      homeAttackers: null,
+      awayAttackers: null,
       homeHasKeeper: null,
       awayHasKeeper: null,
     };
@@ -156,8 +170,8 @@ function extractLineupModifiers(lineupModifier) {
     hasLineup: true,
     homeLineupComplete: lineupModifier.homeLineupConfirmed || false,
     awayLineupComplete: lineupModifier.awayLineupConfirmed || false,
-    homeAttackerCount: lineupModifier.homeAttackers || null,
-    awayAttackerCount: lineupModifier.awayAttackers || null,
+    homeAttackers: lineupModifier.homeAttackers || null,
+    awayAttackers: lineupModifier.awayAttackers || null,
     homeHasKeeper: lineupModifier.homeHasKeeper ?? true,
     awayHasKeeper: lineupModifier.awayHasKeeper ?? true,
   };

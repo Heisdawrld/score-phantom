@@ -1,6 +1,6 @@
 # ⚽ ScorePhantom — Data-Driven Football Prediction Engine
 
-Premium football prediction web app with a multi-stage prediction engine with game script analysis, Poisson modelling, market scoring, and real-odds value detection.
+Premium football prediction web app with a multi-stage prediction engine with game script analysis, Poisson modelling, market scoring, and odds-based edge detection (when priced odds are available).
 
 ## 🧠 How the Prediction Engine Works
 
@@ -67,7 +67,7 @@ npm start
 ## 📁 Project Structure
 
 ```
-├── index.html                          # Single-page frontend (CSS + JS inline)
+├── client/                             # Vite + React frontend
 ├── src/
 │   ├── app.js                          # Express server
 │   ├── api/routes.js                   # API endpoints
@@ -77,10 +77,8 @@ npm start
 │   ├── services/flutterwave.js         # Flutterwave V3 payment
 │   ├── features/computeFeatures.js     # Feature extraction
 │   ├── enrichment/enrichOne.js         # Data enrichment
-│   ├── services/livescore.js           # Live score API
+│   ├── services/bsd.js                 # BSD/Bzzoiro API integration
 │   └── config/database.js              # Database connection
-├── public/
-│   └── logo.png
 └── package.json
 ```
 
@@ -89,16 +87,21 @@ npm start
 1. Push to GitHub
 2. Connect repo to Render
 3. Set environment variables in Render dashboard
-4. Build command: `npm install`
+4. Build command: `npm install && npm run build`
 5. Start command: `npm start`
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `GROQ_API_KEY` | Groq API key for AI evaluation |
-| `DATABASE_URL` | Turso/LibSQL database URL |
+| `DATABASE_URL` | Postgres connection string |
+| `BSD_API_KEY` | BSD/Bzzoiro API key |
 | `JWT_SECRET` | Secret for JWT tokens |
-| `APIFY_TOKEN` | Apify token for data enrichment |
+| `APP_URL` | Public app URL (used for links + CORS) |
+| `GROQ_API_KEY` | Groq API key for AI explanations |
+| `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave public key |
 | `FLUTTERWAVE_SECRET_KEY` | Flutterwave secret key |
-| `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave public key + webhook hash |
+| `FLUTTERWAVE_ENCRYPTION_KEY` | Flutterwave encryption key |
+| `FLUTTERWAVE_WEBHOOK_HASH` | Flutterwave webhook secret hash |
+| `RESEND_API_KEY` | Resend API key for email |
+| `RESEND_FROM_EMAIL` | Verified sender address for Resend |

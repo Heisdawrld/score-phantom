@@ -24,6 +24,8 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: BSD_API_KEY
+        sync: false
       - key: APP_URL
         sync: false
       - key: FLUTTERWAVE_PUBLIC_KEY
@@ -34,7 +36,7 @@ services:
         sync: false
       - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
-      - key: SENDGRID_API_KEY
+      - key: RESEND_API_KEY
         sync: false
-      - key: EMAIL_FROM
+      - key: RESEND_FROM_EMAIL
         sync: false
