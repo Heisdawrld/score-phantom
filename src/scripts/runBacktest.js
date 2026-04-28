@@ -2,7 +2,7 @@ import 'dotenv/config';
 import db from "../config/database.js";
 import { fetchFixturesByRange } from '../services/bsd.js';
 import { flattenFeatureVector } from '../features/flattenFeatureVector.js';
-import { classifyMatchScript } from '../scripts/archive/classifyMatchScript.js';
+import { classifyMatchScript } from '../scripts/classifyMatchScript.js';
 import { estimateExpectedGoals } from '../probabilities/estimateExpectedGoals.js';
 import { buildScoreMatrix, deriveMarketProbabilities } from '../probabilities/poisson.js';
 import { calibrateProbabilities } from '../probabilities/calibrateProbabilities.js';

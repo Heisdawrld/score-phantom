@@ -1,5 +1,6 @@
 import { safeNum } from '../utils/math.js';
 import { computeRiskLevel, computeEdgeLabel } from './selectBestPick.js';
+import { isHeadlineEligibleMarket } from '../markets/marketRegistry.js';
 
 function annotate(pick, fv, script) {
   if (!pick) return pick;
@@ -10,6 +11,7 @@ function annotate(pick, fv, script) {
 
 function isPricedCandidate(candidate) {
   if (!candidate) return false;
+  if (!isHeadlineEligibleMarket(candidate.marketKey)) return false;
   const bookmakerOdds = safeNum(candidate.bookmakerOdds, 0);
   if (bookmakerOdds > 1.0) return true;
   const impliedProbability = safeNum(candidate.impliedProbability, 0);

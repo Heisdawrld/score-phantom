@@ -241,34 +241,52 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
 
     // AI Advisor Logic
     // Rescaled weights to sum to 1.0
-    let finalScore =
-      0.30 * modelConfidenceScore + // Boosted weight for raw probability
-      0.20 * edgeScore +
-      0.15 * tacticalFitScore +
-      0.15 * predScore + // Predictability acts as a safety anchor
-      0.10 * dataSupportScore +
-      0.05 * historicalAccuracyScore +
-      0.05 * formMomentumScore +
-      diversityBonus -
-      0.22 * volatilityPenalty -
-      0.15 * scriptMismatchPenalty -
-      0.14 * badMarketPenalty -
-      0.08 * repetitionPenalty -
-      diversityPenalty -
+    const modelScore = 0.30 * modelConfidenceScore;
+    const marketEdgeScore = 0.20 * edgeScore;
+    const tacticalFitComponent = 0.15 * tacticalFitScore;
+    const predictabilityScore = 0.15 * predScore;
+    const dataSupportComponent = 0.10 * dataSupportScore;
+    const historicalAccuracyComponent = 0.05 * historicalAccuracyScore;
+    const formMomentumComponent = 0.05 * formMomentumScore;
+
+    const riskPenaltyScore =
+      (0.22 * volatilityPenalty) +
+      (0.15 * scriptMismatchPenalty) +
       starvationPenalty;
 
+    const productPenaltyScore =
+      (0.14 * badMarketPenalty) +
+      (0.08 * repetitionPenalty) +
+      diversityPenalty;
+
+    let finalScore =
+      modelScore +
+      marketEdgeScore +
+      tacticalFitComponent +
+      predictabilityScore +
+      dataSupportComponent +
+      historicalAccuracyComponent +
+      formMomentumComponent +
+      diversityBonus -
+      riskPenaltyScore -
+      productPenaltyScore;
+
     // ── Apply Advanced Market Context (Consensus & EV) ──
+    let contextAdjustmentScore = 0;
     const bsdPred = fv.bsdPrediction || null;
     if (bsdPred && candidate.marketKey === bsdPred.prediction) {
-      finalScore += 0.10; // Boost picks that match the broader market consensus
+      finalScore += 0.10;
+      contextAdjustmentScore += 0.10;
       candidate.isEnsembleMatch = true;
     } else if (bsdPred && bsdPred.prediction) {
-      finalScore -= 0.05; // Small penalty for disagreeing with market consensus
+      finalScore -= 0.05;
+      contextAdjustmentScore -= 0.05;
       candidate.isModelConflict = true;
     }
 
     if (candidate.impliedProbability > 0 && candidate.edge >= 0.05) {
-      finalScore += 0.08; // Additional lift for strong EV
+      finalScore += 0.08;
+      contextAdjustmentScore += 0.08;
       candidate.evRating = 'HIGH';
     } else if (candidate.impliedProbability > 0 && candidate.edge >= 0.02) {
       candidate.evRating = 'MEDIUM';
@@ -289,6 +307,12 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
 
     return {
       ...candidate,
+      modelScore:              parseFloat(modelScore.toFixed(4)),
+      marketEdgeScore:         parseFloat(marketEdgeScore.toFixed(4)),
+      predictabilityScore:     parseFloat(predictabilityScore.toFixed(4)),
+      riskPenaltyScore:        parseFloat(riskPenaltyScore.toFixed(4)),
+      productPenaltyScore:     parseFloat(productPenaltyScore.toFixed(4)),
+      contextAdjustmentScore:  parseFloat(contextAdjustmentScore.toFixed(4)),
       tacticalFitScore:        parseFloat(tacticalFitScore.toFixed(3)),
       badMarketPenalty:        parseFloat(badMarketPenalty.toFixed(3)),
       repetitionPenalty:       parseFloat(repetitionPenalty.toFixed(3)),

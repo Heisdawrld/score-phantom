@@ -20,7 +20,7 @@ import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFea
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
 import { flattenFeatureVector } from "../features/flattenFeatureVector.js";
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
-import { classifyMatchScript } from "../scripts/archive/classifyMatchScript.js";
+import { classifyMatchScript } from "../scripts/classifyMatchScript.js";
 import { buildScoreMatrix, deriveMarketProbabilities } from "../probabilities/poisson.js";
 import { calibrateProbabilities } from "../probabilities/calibrateProbabilities.js";
 import { buildMarketCandidates } from "../markets/buildMarketCandidates.js";

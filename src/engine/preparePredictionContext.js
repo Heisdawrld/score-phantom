@@ -1,7 +1,7 @@
 import { normalizeFixture } from "../data/normalizeFixture.js";
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
 import { flattenFeatureVector } from "../features/flattenFeatureVector.js";
-import { classifyMatchScript } from "../scripts/archive/classifyMatchScript.js";
+import { classifyMatchScript } from "../scripts/classifyMatchScript.js";
 import { computeTacticalMatchup } from "../tactics/computeTacticalMatchup.js";
 
 /**
