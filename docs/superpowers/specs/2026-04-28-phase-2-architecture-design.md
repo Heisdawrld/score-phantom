@@ -16,9 +16,9 @@ Core runtime logic imports script functions from `src/scripts/archive/*`, which 
   - `src/scripts/classifyMatchScript.js`
   - `src/scripts/refineScriptPostXg.js`
 - Update imports:
-  - [preparePredictionContext.js](file:///workspace/src/engine/preparePredictionContext.js)
-  - [runProbabilityPipeline.js](file:///workspace/src/engine/runProbabilityPipeline.js)
-  - [routes.js](file:///workspace/src/api/routes.js) (simulation paths use script logic)
+  - `src/engine/preparePredictionContext.js`
+  - `src/engine/runProbabilityPipeline.js`
+  - `src/api/routes.js` (simulation paths use script logic)
 - Remove or deprecate:
   - `src/scripts/archive/classifyMatchScript.js`
   - `src/scripts/archive/refineScriptPostXg.js`
@@ -46,10 +46,10 @@ Core runtime logic imports script functions from `src/scripts/archive/*`, which 
 Some logic that is purely “presentation credibility” (caps, display labels, product constraints) currently influences internal candidate generation/scoring. This blends concerns and makes backtesting/accuracy calibration less trustworthy.
 
 **Files to change**
-- [buildMarketCandidates.js](file:///workspace/src/markets/buildMarketCandidates.js)
-- [responseAdapter.js](file:///workspace/src/api/responseAdapter.js)
+- `src/markets/buildMarketCandidates.js`
+- `src/api/responseAdapter.js`
 - Potentially (depending on where shaping logic lives):
-  - [finalizePredictionResult.js](file:///workspace/src/engine/finalizePredictionResult.js)
+  - `src/engine/finalizePredictionResult.js`
 
 **Behavior change**
 - Engine should emit:
@@ -82,8 +82,8 @@ Some logic that is purely “presentation credibility” (caps, display labels, 
 making it hard to explain why a market won.
 
 **Files to change**
-- [scoreMarketCandidates.js](file:///workspace/src/markets/scoreMarketCandidates.js)
-- (Optional if needed for UI exposure) [responseAdapter.js](file:///workspace/src/api/responseAdapter.js)
+- `src/markets/scoreMarketCandidates.js`
+- (Optional if needed for UI exposure) `src/api/responseAdapter.js`
 
 **Behavior change**
 Refactor scoring to compute and attach explicit components to each candidate:
@@ -119,11 +119,11 @@ Market support rules are scattered: candidate generation, implied odds mapping, 
 - Create:
   - `src/markets/marketRegistry.js`
 - Update:
-  - [buildMarketCandidates.js](file:///workspace/src/markets/buildMarketCandidates.js)
-  - [computeImpliedProbabilities.js](file:///workspace/src/markets/computeImpliedProbabilities.js)
-  - [pruneWeakCandidates.js](file:///workspace/src/engine/pruneWeakCandidates.js)
-  - [selectBestPickOrAbstain.js](file:///workspace/src/engine/selectBestPickOrAbstain.js)
-  - [responseAdapter.js](file:///workspace/src/api/responseAdapter.js)
+  - `src/markets/buildMarketCandidates.js`
+  - `src/markets/computeImpliedProbabilities.js`
+  - `src/engine/pruneWeakCandidates.js`
+  - `src/engine/selectBestPickOrAbstain.js`
+  - `src/api/responseAdapter.js`
 
 **Behavior change**
 Add a single shared registry object:
@@ -156,4 +156,3 @@ Phase 2 uses this registry to centralize “what is selectable/headline-eligible
 - Model truth is clearly separated from display shaping.
 - Market scoring is explainable via explicit component fields.
 - Market support rules are centralized via `marketRegistry.js`.
-

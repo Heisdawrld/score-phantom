@@ -13,25 +13,27 @@ Non-goals (explicitly deferred to later phases):
 
 ## Current State (Baseline)
 - The engine pipeline is gate → candidates → implied probabilities → score → prune → rank → select/abstain via:
-  - [runPredictionEngine.js](file:///workspace/src/engine/runPredictionEngine.js)
-  - [runMarketSelection.js](file:///workspace/src/engine/runMarketSelection.js)
-- Canonical candidates are generated in [buildMarketCandidates.js](file:///workspace/src/markets/buildMarketCandidates.js).
-- Implied probability/edge is computed in [computeImpliedProbabilities.js](file:///workspace/src/markets/computeImpliedProbabilities.js) from `oddsSnapshot` with a fallback to `features.advancedOdds`.
+  - `src/engine/runPredictionEngine.js`
+  - `src/engine/runMarketSelection.js`
+- Canonical candidates are generated in `src/markets/buildMarketCandidates.js`.
+- Implied probability/edge is computed in `src/markets/computeImpliedProbabilities.js` from `oddsSnapshot`.
+  - Note: the codebase may optionally support an `advancedOdds` fallback depending on the current `computeImpliedProbabilities` signature and its call sites. Phase 1 treats this as “verify baseline + harden”, not as guaranteed behavior.
 - “Script” logic is currently sourced from archive imports:
-  - [preparePredictionContext.js](file:///workspace/src/engine/preparePredictionContext.js)
-  - [runProbabilityPipeline.js](file:///workspace/src/engine/runProbabilityPipeline.js)
+  - `src/engine/preparePredictionContext.js`
+  - `src/engine/runProbabilityPipeline.js`
 
 ## Deliverables
 ### D1. Live meta override is authoritative end-to-end
 **Files to change**
-- [preparePredictionContext.js](file:///workspace/src/engine/preparePredictionContext.js)
-- [buildFeatureVector.js](file:///workspace/src/features/buildFeatureVector.js)
-- (If needed based on observed data flow) [predictionCache.js](file:///workspace/src/services/predictionCache.js)
+- `src/engine/preparePredictionContext.js`
+- `src/features/buildFeatureVector.js`
+- Upstream callers that construct the `rawData` object passed into `preparePredictionContext` (e.g., `src/services/predictionCache.js`, relevant API routes)
 
 **Behavior change**
-- Ensure `rawData.meta` (freshly enriched meta) is passed as `metaOverride` into `buildFeatureVector()` from `preparePredictionContext()`.
-- Ensure `buildFeatureVector()` uses `metaOverride || dbMeta || {}`.
-- Ensure any “live” enrichment injection (injuries, predicted lineups, BSD prediction, best odds) is present in `rawData.meta` at the time the engine is invoked, so that the override path is not a no-op.
+- The `metaOverride` pathway already exists; Phase 1 is to validate and harden that it is used in real executions:
+  - Verify the upstream caller consistently supplies fresh `rawData.meta` (not null) when live enrichment exists.
+  - Verify critical live fields are present inside `rawData.meta` (injuries, predicted lineups, best odds, BSD prediction, managers) so that downstream feature building cannot silently “miss” them.
+  - Add tests that prove `metaOverride` wins over `dbMeta` deterministically.
 
 **Acceptance criteria**
 - For any engine invocation where `rawData.meta` contains `unavailable_players` and/or `predicted_lineup`, the resulting flattened features must reflect those values even if the DB meta is stale.
@@ -55,9 +57,9 @@ If a candidate market is not priced (no `bookmakerOdds` and no reliable implied 
 - “Best Tip”, “Value Bet”, “Daily ACCA” blocks
 
 **Files to change**
-- [selectBestPickOrAbstain.js](file:///workspace/src/engine/selectBestPickOrAbstain.js)
-- [computeImpliedProbabilities.js](file:///workspace/src/markets/computeImpliedProbabilities.js)
-- [responseAdapter.js](file:///workspace/src/api/responseAdapter.js)
+- `src/engine/selectBestPickOrAbstain.js`
+- `src/markets/computeImpliedProbabilities.js`
+- `src/api/responseAdapter.js`
 
 **Behavior change**
 1. Extend candidate metadata to carry a normalized “priced” signal.
@@ -89,8 +91,8 @@ If a candidate market is not priced (no `bookmakerOdds` and no reliable implied 
 Phase 1 does not require full refactor, but it does require that “truth” is not silently mutated in the modeling layer.
 
 **Files to change**
-- [buildMarketCandidates.js](file:///workspace/src/markets/buildMarketCandidates.js) (target: remove candidate-level cap)
-- [responseAdapter.js](file:///workspace/src/api/responseAdapter.js) (target: apply display-only capping)
+- `src/markets/buildMarketCandidates.js` (target: remove candidate-level cap)
+- `src/api/responseAdapter.js` (target: apply display-only capping)
 
 **Behavior change**
 - Replace any candidate-level probability cap (e.g., `MAX_MODEL_PROBABILITY`) with:
@@ -116,4 +118,3 @@ No automatic destructive migration is required for Phase 1, but this phase shoul
 - Live meta override is proven to be used when present.
 - Engine cannot emit a headline pick for an unpriced market.
 - No modeling truth is silently capped in candidate generation (display-only shaping is explicitly isolated at the adapter boundary).
-
