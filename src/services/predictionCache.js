@@ -16,6 +16,7 @@ import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
 import { fetchPredictedLineup, bsdFetch, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
+import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
 // Odds are now sourced from fixture_odds table (written at seed time from BSD events)
 // No external odds service needed.
 
@@ -258,6 +259,7 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         confidence_volatility = ?,
         script_primary        = ?,
         no_safe_pick          = ?,
+        pick_id               = ?,
         home_team             = ?,
         away_team             = ?,
         updated_at            = ?
@@ -271,6 +273,7 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         volStr,
         script.primary || null,
         noSafePick,
+        engineResult?.pickId ?? null,
         engineResult?.homeTeam || rec.fixture?.homeTeam || null,
         engineResult?.awayTeam || rec.fixture?.awayTeam || null,
         new Date().toISOString(),
@@ -352,6 +355,33 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
 
   // ── Run the engine ────────────────────────────────────────────────────────
   const engineResult = await runPredictionEngine(fixtureId, bundle);
+
+  if (engineResult && !engineResult.noSafePick && engineResult.bestPick) {
+    const kickoffDate = fixture?.match_date ? new Date(fixture.match_date) : null;
+    const kickoffAt = kickoffDate && !isNaN(kickoffDate.getTime()) ? kickoffDate.toISOString() : null;
+    const now = new Date();
+    const generatedAt = now.toISOString();
+    const predictionSource = kickoffAt && now.getTime() < new Date(kickoffAt).getTime() ? 'pre_match' : 'post_match_backfill';
+
+    const bp = engineResult.bestPick;
+    const insertedId = await insertPredictionPickIfMaterialChange({
+      fixture_id: String(fixtureId),
+      engine_version: CURRENT_ENGINE_VERSION,
+      prediction_source: predictionSource,
+      generated_at: generatedAt,
+      kickoff_at: kickoffAt,
+      market_key: bp.marketKey || '',
+      selection: bp.selection || '',
+      bookmaker_odds: bp.bookmakerOdds ?? null,
+      implied_probability: bp.impliedProbability ?? null,
+      edge: bp.edge ?? null,
+      model_probability: bp.modelProbability ?? null,
+      phantom_score: null,
+      volatility_score: engineResult?.script?.volatilityScore ?? null,
+    });
+
+    if (insertedId != null) engineResult.pickId = insertedId;
+  }
 
   const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
   const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';

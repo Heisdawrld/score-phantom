@@ -184,6 +184,22 @@ async function runSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS prediction_picks (
+      id SERIAL PRIMARY KEY,
+      fixture_id TEXT NOT NULL,
+      engine_version TEXT NOT NULL,
+      prediction_source TEXT NOT NULL,
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      kickoff_at TIMESTAMPTZ,
+      market_key TEXT NOT NULL,
+      selection TEXT NOT NULL,
+      bookmaker_odds REAL,
+      implied_probability REAL,
+      edge REAL,
+      model_probability REAL,
+      phantom_score REAL,
+      volatility_score REAL
+    )`,
     `CREATE TABLE IF NOT EXISTS backtest_results (
       fixture_id TEXT PRIMARY KEY,
       league_id TEXT,
@@ -202,6 +218,8 @@ async function runSchema() {
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
   ];
 
@@ -226,6 +244,16 @@ async function runSchema() {
   const hasDataQuality = tableInfoQuery.rows.some((col) => col.name === "data_quality");
   if (!hasDataQuality) {
     await db.execute(`ALTER TABLE fixtures ADD COLUMN data_quality TEXT DEFAULT 'unknown'`);
+  }
+
+  const pred2Info = await db.execute(`
+    SELECT column_name as name
+    FROM information_schema.columns
+    WHERE table_name = 'predictions_v2'
+  `);
+  const hasPickId = pred2Info.rows.some((col) => col.name === "pick_id");
+  if (!hasPickId) {
+    await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN pick_id INTEGER`);
   }
 
   // Backfill columns added for country flags, team logos, and odds
