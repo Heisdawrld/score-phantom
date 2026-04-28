@@ -55,7 +55,7 @@ To satisfy both, Phase 3 introduces an append-only pick snapshot table and expli
 
 **New table: prediction_picks (append-only)**
 - One row per headline recommendation generation.
-- Never updated (insert-only).
+- Never updated (insert-only), and inserted only when the headline pick materially changes (to avoid noise).
 - Settlement and ROI/yield reporting use this table as the canonical source of pick-time odds.
 
 **Required fields**
@@ -81,6 +81,18 @@ To satisfy both, Phase 3 introduces an append-only pick snapshot table and expli
 **Acceptance criteria**
 - Every ROI row in `prediction_outcomes` can be traced to exactly one immutable pick snapshot row via `pick_id`.
 - ROI/yield report defaults to pre-match-only and cannot silently include post-match backfills.
+
+- There is no “rebuild spam”: repeated engine rebuilds that do not materially change the headline pick do not create new `prediction_picks` rows.
+
+**Material change definition (insert rule)**
+Insert a new `prediction_picks` row if any of the following changed vs the latest snapshot for the same fixture and `prediction_source`:
+- `market_key` changed, or
+- `selection` changed, or
+- `bookmaker_odds` changed, or
+- (optional) `model_probability` or `phantom_score` changed beyond a small threshold (define later if needed).
+
+Canonical settlement/reporting rule:
+- Settle and report against the latest valid `pre_match` snapshot before kickoff, from the meaningful-change snapshots only.
 
 ### D1. Extend prediction_outcomes to store pick-time odds + profit units
 **Files to change**
