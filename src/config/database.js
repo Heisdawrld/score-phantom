@@ -221,7 +221,6 @@ async function runSchema() {
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
   ];
 
@@ -267,6 +266,8 @@ async function runSchema() {
   if (!hasSig) {
     await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
   }
+
+  await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);
 
   // Backfill columns added for country flags, team logos, and odds
   const colMigrations = [
