@@ -31,6 +31,7 @@ import { computeTeamStrength } from './computeTeamStrength.js';
 import { computeContextFeatures } from './computeContextFeatures.js';
 import { computeVolatilityFeatures } from './computeVolatilityFeatures.js';
 import { computeMarketFeatures } from './computeMarketFeatures.js';
+import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     getFixtureMeta(fixtureId),
   ]);
 
-  const meta = metaOverride || dbMeta || {};
+  const meta = resolveFixtureMeta(metaOverride, dbMeta);
 
   const standings = Array.isArray(meta?.standings) ? meta.standings : [];
   const standingsMap = buildStandingsMap(standings);

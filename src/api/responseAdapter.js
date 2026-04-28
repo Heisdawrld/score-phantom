@@ -283,8 +283,11 @@ const NICHE_MARKETS = new Set([
   'away_over_05', 'away_over_15', 'away_over_25', 'away_under_15',
 ]);
 
+const DISPLAY_MAX_PROBABILITY_PCT = 87.0;
+
 function capProbabilityPct(marketKey, rawPct) {
   const key = (marketKey || '').toLowerCase();
+  if (rawPct > DISPLAY_MAX_PROBABILITY_PCT) return DISPLAY_MAX_PROBABILITY_PCT;
   if (NICHE_MARKETS.has(key) && rawPct > 93) return 93.0;
   return rawPct;
 }
