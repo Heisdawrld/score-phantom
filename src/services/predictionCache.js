@@ -17,15 +17,14 @@ import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
 import { fetchPredictedLineup, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
 import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
-// Odds are now sourced from fixture_odds table (written at seed time from BSD events)
-// No external odds service needed.
+// Odds are now sourced from fixture_odds table and live BSD v2 odds as fallback.
 
 // Cache is valid for 6 hours — predictions refresh each morning via automation
 const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.8.4'; // Bumped: Aggregate missing-player stats for stable xG dampening
+const CURRENT_ENGINE_VERSION = '2.8.5'; // Bumped: live BSD odds fallback + model-only pick labeling
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -36,6 +35,65 @@ function safeJsonParse(value, fallback = {}) {
     return JSON.parse(value);
   } catch {
     return fallback;
+  }
+}
+
+function hasAnyOdds(odds) {
+  if (!odds) return false;
+  if (Number(odds.home) > 1 || Number(odds.draw) > 1 || Number(odds.away) > 1) return true;
+  if (Number(odds.btts_yes) > 1 || Number(odds.btts_no) > 1) return true;
+  const ou = odds.over_under || {};
+  return Object.values(ou).some(v => Number(v) > 1);
+}
+
+function mapBestOddsToFixtureOdds(bestOdds) {
+  if (!bestOdds) return null;
+  const mapped = {
+    home: bestOdds.home_win ?? bestOdds.home ?? null,
+    draw: bestOdds.draw ?? null,
+    away: bestOdds.away_win ?? bestOdds.away ?? null,
+    btts_yes: bestOdds.btts_yes ?? null,
+    btts_no: bestOdds.btts_no ?? null,
+    over_under: {
+      over_1_5: bestOdds.over_15 ?? bestOdds.over_15_goals ?? null,
+      over_2_5: bestOdds.over_25 ?? bestOdds.over_25_goals ?? null,
+      over_3_5: bestOdds.over_35 ?? bestOdds.over_35_goals ?? null,
+      under_1_5: bestOdds.under_15 ?? bestOdds.under_15_goals ?? null,
+      under_2_5: bestOdds.under_25 ?? bestOdds.under_25_goals ?? null,
+      under_3_5: bestOdds.under_35 ?? bestOdds.under_35_goals ?? null,
+    },
+    betLinkSportybet: null,
+    betLinkBet365: null,
+  };
+  return hasAnyOdds(mapped) ? mapped : null;
+}
+
+async function upsertFixtureOdds(fixtureId, odds) {
+  if (!fixtureId || !hasAnyOdds(odds)) return;
+  try {
+    await db.execute({
+      sql: `INSERT INTO fixture_odds
+              (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (fixture_id) DO UPDATE SET
+              home = COALESCE(EXCLUDED.home, fixture_odds.home),
+              draw = COALESCE(EXCLUDED.draw, fixture_odds.draw),
+              away = COALESCE(EXCLUDED.away, fixture_odds.away),
+              btts_yes = COALESCE(EXCLUDED.btts_yes, fixture_odds.btts_yes),
+              btts_no = COALESCE(EXCLUDED.btts_no, fixture_odds.btts_no),
+              over_under = EXCLUDED.over_under`,
+      args: [
+        String(fixtureId),
+        odds.home ?? null,
+        odds.draw ?? null,
+        odds.away ?? null,
+        odds.btts_yes ?? null,
+        odds.btts_no ?? null,
+        JSON.stringify(odds.over_under || {}),
+      ],
+    });
+  } catch (err) {
+    console.warn(`[predictionCache] Failed to persist live BSD odds for ${fixtureId}:`, err.message);
   }
 }
 
@@ -181,7 +239,7 @@ export async function ensureFixtureData(fixtureId) {
     }
   }
 
-  // Odds are seeded from BSD at fixture seed time — just read from DB
+  // Read DB odds first, then fall back to live BSD v2 odds below.
   let odds = await getOdds(fixtureId);
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
@@ -218,11 +276,21 @@ export async function ensureFixtureData(fixtureId) {
           away: await attachMissingPlayerStats(lineupData.unavailable_players.away || []),
         };
       }
-      if (bestOdds) meta.best_odds = bestOdds;
+
+      const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
+      if (liveOdds) {
+        meta.best_odds = bestOdds;
+        if (!hasAnyOdds(odds)) {
+          odds = liveOdds;
+          console.log(`[predictionCache] Using live BSD odds fallback for fixture ${fixtureId}`);
+        }
+        await upsertFixtureOdds(fixtureId, liveOdds);
+      }
+
       if (bsdPrediction) meta.bsd_prediction = bsdPrediction;
     }
   } catch (err) {
-    console.error(`[predictionCache] Failed to fetch injuries/lineup for ${fixtureId}:`, err.message);
+    console.error(`[predictionCache] Failed to fetch injuries/lineup/odds for ${fixtureId}:`, err.message);
   }
 
   return { fixture, historyRows, odds, meta };
