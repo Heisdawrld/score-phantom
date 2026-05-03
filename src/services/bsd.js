@@ -469,7 +469,7 @@ export async function fetchPlayerStats(playerId) {
 
 export async function fetchManagerByTeamId(teamId) {
   if (!teamId) return null;
-  const data = await bsdFetch('/managers/', { current_team_id: teamId, limit: 1 });
+  const data = await bsdFetch('/managers/', { team_id: teamId, limit: 1 });
   return asArray(data)[0] || null;
 }
 
