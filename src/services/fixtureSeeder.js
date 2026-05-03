@@ -24,17 +24,19 @@ async function ensureColumns() {
   for (const sql of cols) { try { await db.execute(sql); } catch (_) {} }
 }
 
-// The 35 exact leagues officially covered by BSD for ML and advanced stats.
-const BSD_PREMIUM_LEAGUES = new Set([
-  'africa cup of nations 2025', 'caf champions league', 'pro league', 'brasileirão serie a',
-  'brasileirão serie b', 'copa do brasil', 'parva liga', 'championship', 'premier league',
-  'champions league', 'europa league', 'ligue 1', 'bundesliga', 'stoiximan super league',
-  'international friendly games', 'world cup 2026', 'serie a', 'liga mx apertura',
-  'liga mx clausura', 'eredivisie', 'nigeria premier football league', 'ekstraklasa',
-  'liga portugal betclic', 'superliga', 'saudi pro league', 'scottish premiership',
-  'copa libertadores', 'copa sudamericana', 'la liga', 'liga f', 'segunda división',
-  'allsvenskan', 'super league', 'trendyol super lig', 'mls'
-]);
+function getAllowedLeagueNames() {
+  return new Set(
+    String(process.env.BSD_ALLOWED_LEAGUES || '')
+      .split(',')
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isLeagueAllowed(tournamentName, allowedLeagues) {
+  if (!allowedLeagues || allowedLeagues.size === 0) return true;
+  return allowedLeagues.has(String(tournamentName || '').toLowerCase().trim());
+}
 
 export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = false, log = console.log } = {}) {
   await ensureColumns();
@@ -47,6 +49,14 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
     await db.execute('DELETE FROM teams');
     await db.execute('DELETE FROM tournaments');
   }
+
+  const allowedLeagues = getAllowedLeagueNames();
+  if (allowedLeagues.size > 0) {
+    log('[Seeder] BSD_ALLOWED_LEAGUES active — seeding only: ' + [...allowedLeagues].join(', '));
+  } else {
+    log('[Seeder] BSD_ALLOWED_LEAGUES empty — seeding all leagues returned by BSD.');
+  }
+
   const allBsdEvents = [];
   const now = new Date();
   for (let i = startOffset; i <= startOffset + days; i++) {
@@ -60,17 +70,16 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
   }
 
   log('[Seeder] Total: ' + allBsdEvents.length + ' events. Normalising + inserting...');
-  let inserted = 0, failed = 0, oddsWritten = 0;
+  let inserted = 0, failed = 0, oddsWritten = 0, skippedByLeagueFilter = 0;
 
   for (const event of allBsdEvents) {
       try {
         const f = normaliseBsdEventToFixture(event);
         if (!f) continue;
 
-        // LAYER 1 ELIGIBILITY: Only allow matches from the 35 officially covered leagues
-        const tourneyName = (f.tournament_name || '').toLowerCase().trim();
-        if (!BSD_PREMIUM_LEAGUES.has(tourneyName)) {
-          continue; // Throw junk matches in the trash before DB insertion
+        if (!isLeagueAllowed(f.tournament_name, allowedLeagues)) {
+          skippedByLeagueFilter++;
+          continue;
         }
 
         await db.batch([
@@ -128,6 +137,6 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
     }
   }
 
-  log(`[Seeder] Done! Inserted: ${inserted} | Odds written: ${oddsWritten} | Failed: ${failed}`);
-  return { inserted, failed, oddsWritten, total: allBsdEvents.length };
+  log(`[Seeder] Done! Inserted: ${inserted} | Odds written: ${oddsWritten} | Failed: ${failed} | Skipped by league filter: ${skippedByLeagueFilter}`);
+  return { inserted, failed, oddsWritten, skippedByLeagueFilter, total: allBsdEvents.length };
 }
