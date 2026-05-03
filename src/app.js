@@ -96,6 +96,64 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
   }
 });
 
+// Rich admin engine report. Registered before adminRoutes to guarantee a stable
+// control-room payload even if older adminRoutes.js has a simpler engine-stats route.
+app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
+  try {
+    const { getAccuracySummary } = await import('./storage/accuracyCache.js');
+    const summary = await getAccuracySummary();
+    const topMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 8);
+    const weakMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 8);
+    const topLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 10);
+    const weakLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 10);
+
+    let predictionCounts = { total: 0, fire: 0, gamble: 0, avoid: 0, no_safe: 0 };
+    try {
+      const r = await db.execute(`
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN advisor_status = 'FIRE' THEN 1 ELSE 0 END) AS fire,
+          SUM(CASE WHEN advisor_status = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
+          SUM(CASE WHEN advisor_status = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
+          SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
+        FROM predictions_v2
+      `);
+      predictionCounts = {
+        total: Number(r.rows?.[0]?.total || 0),
+        fire: Number(r.rows?.[0]?.fire || 0),
+        gamble: Number(r.rows?.[0]?.gamble || 0),
+        avoid: Number(r.rows?.[0]?.avoid || 0),
+        no_safe: Number(r.rows?.[0]?.no_safe || 0),
+      };
+    } catch (e) {
+      predictionCounts.error = e.message;
+    }
+
+    return res.json({
+      status: 'ok',
+      generatedAt: new Date().toISOString(),
+      predictionCounts,
+      totalOutcomes: summary.totalOutcomes || 0,
+      cacheAge: summary.cacheAge,
+      marketBreakdown: summary.marketBreakdown || [],
+      marketScriptCombos: summary.marketScriptCombos || [],
+      leagueMarketBreakdown: summary.leagueMarketBreakdown || [],
+      topMarkets,
+      weakMarkets,
+      topLeagueMarkets,
+      weakLeagueMarkets,
+      recommendations: [
+        weakLeagueMarkets.length ? 'Review restricted league-market combos before trusting them in ACCA.' : 'No league-market weakness detected yet.',
+        (summary.totalOutcomes || 0) < 50 ? 'Learning sample is still small; calibration will remain conservative.' : 'Outcome sample is large enough for stronger calibration reads.',
+        'Use FIRE picks for premium surfacing and keep GAMBLE picks separate from ACCA unless volatility is low.',
+      ],
+    });
+  } catch (err) {
+    console.error('[Admin Engine Stats] failed:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.use("/api/admin", requireAdminSecret, adminRoutes);
 app.use("/api/track-record", trackRecordRoutes);
 
