@@ -37,6 +37,7 @@ const SCRIPT_DESCRIPTIONS = {
 };
 
 const REASON_LABELS = {
+  MODEL_ONLY_NO_ODDS:                 "Model-only pick — no bookmaker odds were available for this market",
   home_strength_gap_high:          "Home side maintains a dominant baseline quality advantage",
   away_strength_advantage:         "Away side projects superior baseline metrics",
   massive_table_gap:               "Significant structural disparity in league standings",
@@ -102,6 +103,7 @@ function resolveRiskLevel(pick, phantomScore) {
 }
 
 function resolveEdgeLabel(pick, phantomScore) {
+  if (pick?.modelOnly || pick?.isModelOnly) return 'MODEL-ONLY';
   const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
   const risk = resolveRiskLevel(pick, phantomScore);
   if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
@@ -130,7 +132,8 @@ function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore) {
   return computeAdvisorStatus(phantomScore, riskLevel, edgeScore);
 }
 
-function mapValueRating(edgeScore) {
+function mapValueRating(edgeScore, modelOnly = false) {
+  if (modelOnly) return "MODEL";
   const s = safeNum(edgeScore, 0);
   if (s >= 0.15) return "STRONG";
   if (s >= 0.08) return "GOOD";
@@ -238,8 +241,9 @@ function capProbabilityPct(marketKey, rawPct) {
 
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
+  const isModelOnly = !!(pick.modelOnly || pick.isModelOnly);
   const probability = safeNum(pick.modelProbability, 0);
-  const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
+  const edgeScore = isModelOnly ? 0 : (pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0));
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
   const rawProbPct = parseFloat((probability * 100).toFixed(1));
   const modelConf = mapModelConfidence(probability, dataCompletenessScore);
@@ -261,15 +265,17 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     edgeScore,
     modelConfidence: modelConf,
     tacticalFit: mapTacticalFit(tacticalFitScore),
-    valueRating: mapValueRating(edgeScore),
+    valueRating: mapValueRating(edgeScore, isModelOnly),
     riskLevel: riskLvl,
     edgeLabel: edgeLbl,
     reasons: (pick.reasons || []).map(humanizeReasonCode),
     advisor_status: advisorStatus,
     no_edge: !!(pick.edge != null && pick.edge <= 0),
-    isSafeBet: phantomScorePct >= 72 && riskLvl === 'SAFE',
-    isValueBet: edgeScore >= 0.05 && phantomScorePct >= 60,
-    isSharpValue: pick.isSharpValue || false,
+    modelOnly: isModelOnly,
+    isModelOnly,
+    isSafeBet: !isModelOnly && phantomScorePct >= 72 && riskLvl === 'SAFE',
+    isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
+    isSharpValue: !isModelOnly && (pick.isSharpValue || false),
   };
 }
 
@@ -350,8 +356,9 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
 
   let recommendation;
   if (bestPick && !noSafePick) {
+    const isModelOnly = !!(bestPick.modelOnly || bestPick.isModelOnly);
     const probability = safeNum(bestPick.modelProbability, 0);
-    const edgeScore = bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0);
+    const edgeScore = isModelOnly ? 0 : (bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0));
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
     const modelConf = mapModelConfidence(probability, dataCompletenessScore);
@@ -363,6 +370,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
     const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore);
 
+    const reasons = isModelOnly
+      ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
+      : humanReasonCodes;
+
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
@@ -373,15 +384,17 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       edgeScore,
       modelConfidence: modelConf,
       tacticalFit: mapTacticalFit(tacticalFitScore),
-      valueRating: mapValueRating(edgeScore),
+      valueRating: mapValueRating(edgeScore, isModelOnly),
       riskLevel: riskLvl2,
       edgeLabel: edgeLbl2,
-      reasons: humanReasonCodes,
+      reasons,
       advisor_status: advisorStatus,
       no_edge: false,
-      isSafeBet: bestPick.isSafeBet || false,
-      isValueBet: bestPick.isValueBet || false,
-      isSharpValue: bestPick.isSharpValue || false,
+      modelOnly: isModelOnly,
+      isModelOnly,
+      isSafeBet: !isModelOnly && (bestPick.isSafeBet || false),
+      isValueBet: !isModelOnly && (bestPick.isValueBet || false),
+      isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
     };
   } else {
     recommendation = {
