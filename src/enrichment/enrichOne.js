@@ -35,7 +35,6 @@ function normalizeMatch(match) {
  * and the fixtures.meta JSON field.
  */
 export async function storeEnrichment(fixtureId, data, markEnriched = true) {
-  // Clear and re-insert historical match rows
   await db.execute({
     sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
@@ -51,7 +50,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     const matches = Array.isArray(data?.[section.key]) ? data[section.key] : [];
 
     for (const match of matches) {
-      // Skip synthetic form records (from standings) — they bias the prediction engine
       if (match._synthetic) continue;
 
       const normalized = normalizeMatch(match);
@@ -81,10 +79,9 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     }
   }
 
-  // Store odds if present
   if (data?.odds) {
     await db.execute({
-        sql: `
+      sql: `
         INSERT INTO fixture_odds (
           fixture_id,
           home, draw, away,
@@ -107,7 +104,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     });
   }
 
-  // Store everything in fixtures.meta — including team profiles
   const meta = {
     standings: Array.isArray(data?.standings) ? data.standings : [],
     homeStats: data?.homeStats ?? null,
@@ -118,7 +114,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     completeness: data?.completeness ?? null,
     homeMomentum: data?.homeMomentum ?? null,
     awayMomentum: data?.awayMomentum ?? null,
-    // Keep form arrays in meta for backward compatibility
     h2h: Array.isArray(data?.h2h) ? data.h2h : [],
     homeForm: Array.isArray(data?.homeForm) ? data.homeForm : [],
     awayForm: Array.isArray(data?.awayForm) ? data.awayForm : [],
@@ -134,10 +129,17 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     polymarket_odds: data?.polymarketOdds ?? null,
     home_manager: data?.homeManager ?? null,
     away_manager: data?.awayManager ?? null,
+
+    // BSD v2 context kept for engine evolution and future feature use.
+    // These fields are optional and safe to be null when BSD has no coverage.
+    refereeData: data?.refereeData ?? null,
+    injuries: data?.injuries ?? null,
+    metadata: data?.metadata ?? null,
+    eventContext: data?.eventContext ?? null,
+    venue: data?.venue ?? null,
+    playerStats: Array.isArray(data?.playerStats) ? data.playerStats : [],
   };
 
-  // Derive enrichment_status and data_quality from completeness tier
-  const completenessScore = data?.completeness?.score ?? 0;
   const completenessTier = data?.completeness?.tier ?? 'thin';
   const tierMap = {
     rich:    { enrichment_status: 'deep',     data_quality: 'excellent' },
@@ -168,14 +170,13 @@ export async function enrichFixture(fixture) {
 
   const hasUsableData = (data.homeForm?.length > 0) || (data.awayForm?.length > 0);
 
-    if (!hasUsableData) {
-      console.warn(
-        `[enrichOne] No usable form data for fixture ${fixture.id} ` +
-        `(${fixture.home_team_name} vs ${fixture.away_team_name}) — marking as no_data to clear queue`
-      );
-    }
+  if (!hasUsableData) {
+    console.warn(
+      `[enrichOne] No usable form data for fixture ${fixture.id} ` +
+      `(${fixture.home_team_name} vs ${fixture.away_team_name}) — marking as no_data to clear queue`
+    );
+  }
 
-    // FIX: Always mark enriched=1 so the queue doesn't get permanently stuck in an infinite loop
-    await storeEnrichment(fixture.id, data, true);
-    return data;
+  await storeEnrichment(fixture.id, data, true);
+  return data;
 }
