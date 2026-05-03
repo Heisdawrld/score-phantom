@@ -12,6 +12,7 @@ import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
+import { requireAdminSecret, requireAdminAccess } from "./middlewares/adminGuard.js";
 import { seedFixtures } from './services/fixtureSeeder.js';
 import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
 import { getBudgetStatus } from './services/requestBudget.js';
@@ -63,7 +64,39 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api", routes);
 app.use("/api/auth", authRoutes);
-app.use("/api/admin", adminRoutes);
+
+// Accurate BSD v2 health check for the React admin panel. This route is registered
+// before adminRoutes so it overrides the older v1 health check inside adminRoutes.js.
+app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
+  try {
+    const checks = {};
+    try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
+    try {
+      const bsdKey = process.env.BSD_API_KEY || "";
+      if (!bsdKey) {
+        checks.bsd_api = "no_key";
+      } else {
+        const { fetchLeagues } = await import('./services/bsd.js');
+        const leagues = await fetchLeagues();
+        checks.bsd_api = leagues.length > 0 ? "ok" : "error:no_leagues";
+        checks.bsd_leagues = leagues.length;
+      }
+    } catch (e) {
+      checks.bsd_api = "fetch_error";
+      checks.bsd_error = e.message;
+    }
+    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
+    checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
+    checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
+    const allOk = Object.values(checks).every(v => typeof v !== 'string' || v === 'ok' || v.includes('configured'));
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.use("/api/admin", requireAdminSecret, adminRoutes);
 app.use("/api/track-record", trackRecordRoutes);
 
 // Duplicate /api/admin/seed removed — handled by adminRoutes.js
