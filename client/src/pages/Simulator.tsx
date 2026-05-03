@@ -266,6 +266,8 @@ export default function PhantomLab() {
                     <p className='text-sm font-medium text-white/90 leading-relaxed'>{simulation.simulation.shift_reason}</p>
                   </div>
 
+                  <SimulationDeltaPanel base={simulation.simulation.base_model} simulated={simulation.simulation.simulated_model} />
+
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                     <ModelCard title="Original Model" icon={<Shield className='w-4 h-4 text-white/30' />} model={simulation.simulation.base_model} muted />
                     <ModelCard title="Simulated Result" icon={<Zap className='w-4 h-4 text-primary animate-pulse' />} model={simulation.simulation.simulated_model} highlighted />
@@ -293,6 +295,78 @@ export default function PhantomLab() {
           setSimulationState('idle');
         }}
       />
+    </div>
+  );
+}
+
+function pct(n: number) {
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+}
+
+function getTopMarket(model: any) {
+  return (model?.markets || [])[0] || null;
+}
+
+function SimulationDeltaPanel({ base, simulated }: { base: any; simulated: any }) {
+  const baseHome = Number(base?.home_xg || 0);
+  const baseAway = Number(base?.away_xg || 0);
+  const simHome = Number(simulated?.home_xg || 0);
+  const simAway = Number(simulated?.away_xg || 0);
+  const homeDelta = simHome - baseHome;
+  const awayDelta = simAway - baseAway;
+  const totalDelta = (simHome + simAway) - (baseHome + baseAway);
+  const baseTop = getTopMarket(base);
+  const simTop = getTopMarket(simulated);
+  const probDelta = simTop && baseTop ? (Number(simTop.probability || 0) - Number(baseTop.probability || 0)) * 100 : null;
+
+  return (
+    <div className='rounded-3xl border border-white/10 bg-white/[0.03] p-5'>
+      <div className='flex items-center justify-between gap-3 mb-4'>
+        <div>
+          <p className='text-[10px] font-black text-primary uppercase tracking-[0.25em]'>Simulation Delta</p>
+          <p className='text-xs text-white/40 mt-1'>How the scenario changed the model output</p>
+        </div>
+        <div className='w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center'>
+          <TrendingUp className='w-5 h-5 text-primary' />
+        </div>
+      </div>
+
+      <div className='grid grid-cols-3 gap-2 mb-4'>
+        <DeltaTile label='Home xG' value={homeDelta} suffix='' />
+        <DeltaTile label='Away xG' value={awayDelta} suffix='' />
+        <DeltaTile label='Total xG' value={totalDelta} suffix='' />
+      </div>
+
+      {simTop && (
+        <div className='rounded-2xl bg-black/30 border border-white/5 p-4'>
+          <div className='flex items-start justify-between gap-4'>
+            <div>
+              <p className='text-[10px] text-white/30 uppercase tracking-wider mb-1'>Top simulated market</p>
+              <p className='text-sm font-display text-white tracking-wide'>{simTop.market}</p>
+              {baseTop?.market && baseTop.market !== simTop.market && (
+                <p className='text-[10px] text-amber-300/80 mt-1'>Market changed from {baseTop.market}</p>
+              )}
+            </div>
+            <div className='text-right'>
+              <p className='text-2xl font-display text-primary'>{(Number(simTop.probability || 0) * 100).toFixed(0)}%</p>
+              {probDelta !== null && <p className={cn('text-[10px] font-bold', probDelta >= 0 ? 'text-primary' : 'text-red-300')}>{pct(probDelta)}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeltaTile({ label, value }: { label: string; value: number; suffix?: string }) {
+  const up = value > 0.005;
+  const down = value < -0.005;
+  return (
+    <div className='rounded-2xl bg-white/[0.03] border border-white/[0.06] p-3 text-center'>
+      <p className='text-[9px] text-white/30 uppercase tracking-wider mb-1'>{label}</p>
+      <p className={cn('text-lg font-display', up ? 'text-primary' : down ? 'text-red-300' : 'text-white/45')}>
+        {up ? '+' : ''}{value.toFixed(2)}
+      </p>
     </div>
   );
 }
