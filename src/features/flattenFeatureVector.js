@@ -56,6 +56,9 @@ function flattenFeatureVector(fv) {
 
   return {
     fixtureId: fv.fixtureId,
+    leagueId: fv.leagueId || null,
+    tournamentName: fv.tournamentName || '',
+    categoryName: fv.categoryName || '',
     homeTeam: fv.homeTeam,
     awayTeam: fv.awayTeam,
     homeBaseRating,
