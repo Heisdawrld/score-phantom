@@ -223,6 +223,18 @@ export async function fetchStandings(leagueId, seasonId = null) {
   return asArray(data);
 }
 
+// ── Teams ────────────────────────────────────────────────────────────────────
+
+export async function fetchTeamDetail(teamId) {
+  if (!teamId) return null;
+  return await bsdFetch(`/teams/${teamId}/`);
+}
+
+export async function fetchTeamSquad(teamId) {
+  if (!teamId) return null;
+  return await bsdFetch(`/teams/${teamId}/squad/`);
+}
+
 // ── Events / fixtures ────────────────────────────────────────────────────────
 
 export async function fetchFixturesByDate(dateStr) {
@@ -334,18 +346,33 @@ export async function fetchEventDetail(eventId, full = false) {
 
   if (!full) return core;
 
-  const [statsData, incidentsData, oddsData, metadata, lineupData, playerStatsData] = await Promise.all([
+  const [statsData, incidentsData, oddsData, metadata, lineupData, playerStatsData, referee, venue] = await Promise.all([
     fetchEventStats(eventId).catch(() => null),
     fetchEventIncidents(eventId).catch(() => null),
     fetchEventOdds(eventId).catch(() => null),
     fetchEventMetadata(eventId).catch(() => null),
     fetchEventLineups(eventId).catch(() => null),
     fetchEventPlayerStats(eventId).catch(() => null),
+    event.referee_id ? fetchRefereeDetail(event.referee_id).catch(() => null) : Promise.resolve(null),
+    event.venue_id ? fetchVenueDetail(event.venue_id).catch(() => null) : Promise.resolve(null),
   ]);
 
   const stats = statsData?.stats || null;
   const homeStats = stats?.home || null;
   const awayStats = stats?.away || null;
+  const eventContext = {
+    weather: event.weather || null,
+    pitch_condition: event.pitch_condition ?? null,
+    attendance: event.attendance ?? null,
+    is_local_derby: event.is_local_derby ?? false,
+    is_neutral_ground: event.is_neutral_ground ?? false,
+    travel_distance_km: event.travel_distance_km ?? null,
+    venue_id: event.venue_id ?? null,
+    referee_id: event.referee_id ?? null,
+    home_coach_id: event.home_coach_id ?? null,
+    away_coach_id: event.away_coach_id ?? null,
+    live_websocket: event.live_websocket ?? false,
+  };
 
   return {
     ...core,
@@ -359,6 +386,9 @@ export async function fetchEventDetail(eventId, full = false) {
     lineups: lineupData?.lineups || null,
     unavailable_players: lineupData?.unavailable_players || null,
     metadata,
+    event_context: eventContext,
+    referee,
+    venue,
     player_stats: playerStatsData?.player_stats || playerStatsData?.results || [],
     odds_home: oddsData?.home_win ?? null,
     odds_draw: oddsData?.draw ?? null,
@@ -446,7 +476,7 @@ export async function fetchLiveMatches() {
   return attachLeagueObjects(events || []);
 }
 
-// ── Lineups / players / managers / referees ──────────────────────────────────
+// ── Lineups / players / managers / referees / venues ─────────────────────────
 
 export async function fetchPredictedLineup(eventId) {
   if (!eventId) return null;
@@ -473,11 +503,32 @@ export async function fetchManagerByTeamId(teamId) {
   return asArray(data)[0] || null;
 }
 
+export async function fetchManagerCareer(managerId) {
+  if (!managerId) return null;
+  return await bsdFetch(`/managers/${managerId}/career/`);
+}
+
+export async function fetchManagerMatches(managerId, params = {}) {
+  if (!managerId) return [];
+  const data = await bsdFetch(`/managers/${managerId}/matches/`, params);
+  return asArray(data);
+}
+
 export async function fetchReferees(leagueId) {
   const params = {};
   if (leagueId) params.league_id = leagueId;
   const data = await bsdFetch('/referees/', params);
   return asArray(data);
+}
+
+export async function fetchRefereeDetail(refereeId) {
+  if (!refereeId) return null;
+  return await bsdFetch(`/referees/${refereeId}/`);
+}
+
+export async function fetchVenueDetail(venueId) {
+  if (!venueId) return null;
+  return await bsdFetch(`/venues/${venueId}/`);
 }
 
 // ── v1 fallback-only endpoints ────────────────────────────────────────────────
