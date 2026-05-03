@@ -14,12 +14,8 @@ function fuzzyTeamMatch(a, b) {
  * buildFeatureVector.js
  *
  * Assembles all prediction features for a fixture.
- * Combines:
- *   - Historical form from historical_matches table
- *   - Team profiles (aggregated stats) from fixtures.meta
- *   - Standings + table context from fixtures.meta
- *   - Optional lineup modifier from fixtures.meta
- *   - Odds from fixture_odds table
+ * Combines historical form, team profiles, standings, lineup modifiers,
+ * odds, and league identity for calibration.
  */
 
 import db from '../config/database.js';
@@ -50,6 +46,18 @@ async function getFixtureMeta(fixtureId) {
     const row = result.rows?.[0];
     if (!row?.meta) return {};
     return typeof row.meta === 'object' ? row.meta : JSON.parse(row.meta);
+  } catch {
+    return {};
+  }
+}
+
+async function getFixtureContext(fixtureId) {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT tournament_id, tournament_name, category_name FROM fixtures WHERE id = ? LIMIT 1',
+      args: [fixtureId],
+    });
+    return result.rows?.[0] || {};
   } catch {
     return {};
   }
@@ -165,11 +173,12 @@ function extractLineupModifiers(lineupModifier) {
 }
 
 export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null, metaOverride = null) {
-  const [h2hRaw, homeFormRaw, awayFormRaw, dbMeta] = await Promise.all([
+  const [h2hRaw, homeFormRaw, awayFormRaw, dbMeta, fixtureContext] = await Promise.all([
     getMatches(fixtureId, 'h2h'),
     getMatches(fixtureId, 'home_form'),
     getMatches(fixtureId, 'away_form'),
     getFixtureMeta(fixtureId),
+    getFixtureContext(fixtureId),
   ]);
 
   const meta = resolveFixtureMeta(metaOverride, dbMeta);
@@ -270,6 +279,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
   return {
     fixtureId,
+    leagueId: fixtureContext?.tournament_id || null,
+    tournamentName: fixtureContext?.tournament_name || '',
+    categoryName: fixtureContext?.category_name || '',
     homeTeam: homeTeamName,
     awayTeam: awayTeamName,
     homeFormFeatures,
