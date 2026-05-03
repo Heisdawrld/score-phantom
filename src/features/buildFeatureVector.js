@@ -33,8 +33,6 @@ import { computeVolatilityFeatures } from './computeVolatilityFeatures.js';
 import { computeMarketFeatures } from './computeMarketFeatures.js';
 import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
 async function getMatches(fixtureId, type) {
   const result = await db.execute({
     sql: 'SELECT * FROM historical_matches WHERE fixture_id = ? AND type = ? ORDER BY date DESC',
@@ -56,8 +54,6 @@ async function getFixtureMeta(fixtureId) {
     return {};
   }
 }
-
-// ── Table context builder ─────────────────────────────────────────────────────
 
 function buildStandingsMap(standings = []) {
   const map = new Map();
@@ -103,12 +99,6 @@ function buildTableContext(homeTeamName, awayTeamName, standings, homeMomentum, 
   };
 }
 
-// ── Team profile features ─────────────────────────────────────────────────────
-
-/**
- * Extract prediction-relevant features from an aggregated team profile.
- * Returns null fields if profile is unavailable.
- */
 function extractProfileFeatures(profile) {
   if (!profile) {
     return {
@@ -151,9 +141,6 @@ function extractProfileFeatures(profile) {
   };
 }
 
-/**
- * Lineup modifier: adjust confidence flags based on lineup info.
- */
 function extractLineupModifiers(lineupModifier) {
   if (!lineupModifier) {
     return {
@@ -177,17 +164,6 @@ function extractLineupModifiers(lineupModifier) {
   };
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
-
-/**
- * Build the full feature vector for a fixture.
- *
- * @param {string} fixtureId
- * @param {string} homeTeamName
- * @param {string} awayTeamName
- * @param {object|null} odds
- * @returns {object} full feature vector
- */
 export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null, metaOverride = null) {
   const [h2hRaw, homeFormRaw, awayFormRaw, dbMeta] = await Promise.all([
     getMatches(fixtureId, 'h2h'),
@@ -206,39 +182,23 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     meta?.homeMomentum, meta?.awayMomentum
   );
 
-  // ── Core form features ─────────────────────────────────────────────────────
   const homeFormFeatures = computeFormFeatures(homeFormRaw, homeTeamName, standingsMap);
   const awayFormFeatures = computeFormFeatures(awayFormRaw, awayTeamName, standingsMap);
-
-  // ── Venue split features ───────────────────────────────────────────────────
   const splitFeatures = computeSplitFeatures(homeFormFeatures, awayFormFeatures);
-
-  // ── H2H features ───────────────────────────────────────────────────────────
   const h2hFeatures = computeH2HFeatures(h2hRaw, homeTeamName, awayTeamName);
-
-  // ── Team strength ──────────────────────────────────────────────────────────
   const teamStrength = computeTeamStrength(homeFormFeatures, awayFormFeatures, tableContext, standings);
-
-  // ── Context features ───────────────────────────────────────────────────────
   const contextFeatures = computeContextFeatures(tableContext, standings);
-
-  // ── Volatility features ────────────────────────────────────────────────────
   const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures);
-
-  // ── Market features ────────────────────────────────────────────────────────
   const marketFeatures = computeMarketFeatures(odds);
 
-  // ── Team profile features (form-derived) ───────────────────────────────────
   const homeProfile = meta?.homeProfile || meta?.homeStats || null;
   const awayProfile = meta?.awayProfile || meta?.awayStats || null;
   const homeProfileFeatures = extractProfileFeatures(homeProfile);
   const awayProfileFeatures = extractProfileFeatures(awayProfile);
 
-  // ── Lineup modifiers ───────────────────────────────────────────────────────
   const lineupModifier = meta?.lineupModifier || null;
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
-  // ── Advanced Odds & Manager Data (Layer 4) ─────────────────────────────────
   const advancedOdds = meta?.odds_data || null;
   const polymarketOdds = meta?.polymarket_odds || null;
   const homeManager = meta?.home_manager || null;
@@ -246,9 +206,14 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const bsdPrediction = meta?.bsd_prediction || null;
   const bestOdds = meta?.best_odds || null;
 
-  // ── INJURY & BSD LINEUP INJECTION ──────────────────────────────────────────
-  const missingPlayers = meta?.unavailable_players || null;
-  const predictedLineups = meta?.predicted_lineup || null;
+  const eventContext = meta?.eventContext || null;
+  const refereeData = meta?.refereeData || null;
+  const venue = meta?.venue || null;
+  const metadata = meta?.metadata || null;
+  const playerStats = Array.isArray(meta?.playerStats) ? meta.playerStats : [];
+
+  const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
+  const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
 
   const injuryFeatures = {
     homeKeyMissing: 0,
@@ -259,49 +224,42 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   };
 
   if (missingPlayers) {
-    injuryFeatures.homeMissingCount = missingPlayers.home?.length || 0;
-    injuryFeatures.awayMissingCount = missingPlayers.away?.length || 0;
+    const homeMissing = missingPlayers.home || [];
+    const awayMissing = missingPlayers.away || [];
+    injuryFeatures.homeMissingCount = missingPlayers.homeMissingCount ?? homeMissing.length;
+    injuryFeatures.awayMissingCount = missingPlayers.awayMissingCount ?? awayMissing.length;
 
-    // Use BSD API player roles to identify key missing players
-    // Key players are typically 'Starter', 'Captain', or 'Key'
     const isKeyPlayer = (p) => {
       const reason = (p.reason || '').toLowerCase();
       const status = (p.status || '').toLowerCase();
       return reason.includes('key') || reason.includes('starter') || status === 'suspended' || p.rating >= 7.0;
     };
 
-    injuryFeatures.homeKeyMissing = (missingPlayers.home || []).filter(isKeyPlayer).length;
-    injuryFeatures.awayKeyMissing = (missingPlayers.away || []).filter(isKeyPlayer).length;
-    
-    // Fallback heuristic if the API didn't provide rich role info but they have 4+ missing
+    injuryFeatures.homeKeyMissing = homeMissing.filter(isKeyPlayer).length;
+    injuryFeatures.awayKeyMissing = awayMissing.filter(isKeyPlayer).length;
     if (injuryFeatures.homeKeyMissing === 0 && injuryFeatures.homeMissingCount >= 4) injuryFeatures.homeKeyMissing = 1;
     if (injuryFeatures.awayKeyMissing === 0 && injuryFeatures.awayMissingCount >= 4) injuryFeatures.awayKeyMissing = 1;
   }
 
   const bsdLineupFeatures = {
     hasPredictedLineups: !!predictedLineups,
-    homePredictedStrength: 1.0, // Default multiplier
+    homePredictedStrength: 1.0,
     awayPredictedStrength: 1.0
   };
 
   if (predictedLineups) {
-    // If we have predicted lineups but high injury counts, we might penalize strength slightly
     if (injuryFeatures.homeKeyMissing > 0) bsdLineupFeatures.homePredictedStrength = 0.9;
     if (injuryFeatures.awayKeyMissing > 0) bsdLineupFeatures.awayPredictedStrength = 0.9;
   }
 
-  // ── Data completeness from enrichment ─────────────────────────────────────
   const completeness = meta?.completeness || null;
 
-  // Clean internal _teamGoals before returning
   delete homeFormFeatures._teamGoals;
   delete awayFormFeatures._teamGoals;
 
-  // ── Bookmaker implied probabilities (Layer 3 signal) ─────────────────────
-  // Convert decimal odds to implied probabilities for xG anchoring
   let impliedHomeProb = null;
   let impliedAwayProb = null;
-  let impliedOver25   = null;
+  let impliedOver25 = null;
   if (odds) {
     const margin = odds.home && odds.draw && odds.away
       ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
@@ -314,8 +272,6 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     fixtureId,
     homeTeam: homeTeamName,
     awayTeam: awayTeamName,
-
-    // Core feature groups (existing)
     homeFormFeatures,
     awayFormFeatures,
     splitFeatures,
@@ -325,30 +281,25 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     contextFeatures,
     volatilityFeatures,
     marketFeatures,
-
-    // Team profiles from form-derived data
     homeProfileFeatures,
     awayProfileFeatures,
-
-    // Lineup modifiers
     lineupFeatures,
     injuryFeatures,
     bsdLineupFeatures,
-
-    // Data completeness from enrichment layer
     enrichmentCompleteness: completeness,
-
-    // Layer 3: bookmaker-implied probabilities (when odds available)
     impliedHomeProb,
     impliedAwayProb,
     impliedOver25,
-
-    // Layer 4: Advanced Tactical & AI Odds (from BSD embedded endpoints)
     advancedOdds,
     polymarketOdds,
     homeManager,
     awayManager,
     bsdPrediction,
     bestOdds,
+    eventContext,
+    refereeData,
+    venue,
+    metadata,
+    playerStats,
   };
 }
