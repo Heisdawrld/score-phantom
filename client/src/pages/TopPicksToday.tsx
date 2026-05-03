@@ -6,7 +6,7 @@ import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAccess } from "@/hooks/use-access";
-import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock } from "lucide-react";
+import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock, CloudRain, AlertTriangle, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -33,7 +33,19 @@ interface Pick {
   dataQuality?: string;
   isSafeBet?: boolean;
   isValueBet?: boolean;
-  factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
+  advisor_status?: string;
+  factors?: {
+    form?: boolean;
+    h2h?: boolean;
+    xg?: boolean;
+    tactical?: boolean;
+    weather?: boolean;
+    injury?: boolean;
+    referee?: boolean;
+    venue?: boolean;
+    lineup?: boolean;
+    sharp?: boolean;
+  } | null;
 }
 
 function formatMarket(key: string): string {
@@ -56,10 +68,16 @@ function formatMarket(key: string): string {
   return map[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function FactorTag({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+function FactorTag({ icon, label, active, tone = "primary" }: { icon: React.ReactNode; label: string; active: boolean; tone?: "primary" | "blue" | "amber" | "green" }) {
   if (!active) return null;
+  const styles = {
+    primary: "text-primary border-primary/25 bg-primary/[0.06]",
+    blue: "text-blue-300 border-blue-400/25 bg-blue-400/[0.06]",
+    amber: "text-amber-300 border-amber-400/25 bg-amber-400/[0.06]",
+    green: "text-emerald-300 border-emerald-400/25 bg-emerald-400/[0.06]",
+  }[tone];
   return (
-    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold text-primary border-primary/25 bg-primary/[0.06]">
+    <span className={cn("inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold", styles)}>
       {icon}{label}
     </span>
   );
@@ -241,6 +259,7 @@ export default function TopPicksToday() {
               const quality = getConfidenceTier(pick.composite ?? pick.score * 100);
               const isTop3 = idx < 3;
               const isTop = idx === 0;
+              const isDeepData = ['deep', 'rich', 'excellent'].includes(String(pick.enrichment || pick.dataQuality || '').toLowerCase());
 
               return (
                 <motion.div
@@ -331,14 +350,18 @@ export default function TopPicksToday() {
                       </div>
 
                       {/* Analysis factor tags */}
-                      {pick.factors && (
-                        <div className="mt-2 flex items-center gap-1 flex-wrap">
-                          <FactorTag icon={<Activity className="w-2 h-2" />} label="Form" active={pick.factors.form} />
-                          <FactorTag icon={<Users className="w-2 h-2" />} label="H2H" active={pick.factors.h2h} />
-                          <FactorTag icon={<Zap className="w-2 h-2" />} label="xG" active={pick.factors.xg} />
-                          <FactorTag icon={<Brain className="w-2 h-2" />} label="Tactical" active={pick.factors.tactical} />
-                        </div>
-                      )}
+                      <div className="mt-2 flex items-center gap-1 flex-wrap">
+                        <FactorTag icon={<Activity className="w-2 h-2" />} label="Form" active={!!pick.factors?.form} />
+                        <FactorTag icon={<Users className="w-2 h-2" />} label="H2H" active={!!pick.factors?.h2h} />
+                        <FactorTag icon={<Zap className="w-2 h-2" />} label="xG" active={!!pick.factors?.xg} />
+                        <FactorTag icon={<Brain className="w-2 h-2" />} label="Tactical" active={!!pick.factors?.tactical} />
+                        <FactorTag icon={<Shield className="w-2 h-2" />} label="Deep Data" active={isDeepData} tone="green" />
+                        <FactorTag icon={<CloudRain className="w-2 h-2" />} label="Weather" active={!!pick.factors?.weather} tone="blue" />
+                        <FactorTag icon={<AlertTriangle className="w-2 h-2" />} label="Injury" active={!!pick.factors?.injury || !!pick.factors?.lineup} tone="amber" />
+                        <FactorTag icon={<MapPin className="w-2 h-2" />} label="Venue" active={!!pick.factors?.venue} tone="blue" />
+                        <FactorTag icon={<Shield className="w-2 h-2" />} label="Referee" active={!!pick.factors?.referee} tone="amber" />
+                        <FactorTag icon={<Sparkles className="w-2 h-2" />} label="Sharp" active={!!pick.factors?.sharp} tone="green" />
+                      </div>
 
                       {/* Composite score bar */}
                       <div className="mt-2.5 flex items-center gap-2">
