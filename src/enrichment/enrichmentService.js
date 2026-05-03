@@ -20,6 +20,7 @@ import {
   normaliseStandingsRow,
   fetchPolymarketOdds,
 } from '../services/bsd.js';
+import { normalizeEventStatsPayload } from '../services/bsdStatsNormalizer.js';
 import { buildTeamProfile } from '../services/teamProfileBuilder.js';
 import db from '../config/database.js';
 
@@ -188,7 +189,7 @@ function parseLineupModifier(rawLineup) {
   }
 }
 
-function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupModifier, matchEvents, eventContext, refereeData, venue }) {
+function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupModifier, matchEvents, eventContext, refereeData, venue, shotmap, momentum, matchStats }) {
   let score = 0;
   const checks = {};
   const homeCount = homeForm?.length || 0;
@@ -210,6 +211,9 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
 
   checks.hasEvents = !!(matchEvents && (Array.isArray(matchEvents) ? matchEvents.length > 0 : true));
   if (checks.hasEvents) score += 0.10;
+
+  checks.hasEventStats = !!(matchStats || (Array.isArray(shotmap) && shotmap.length) || (Array.isArray(momentum) && momentum.length));
+  if (checks.hasEventStats) score += 0.10;
 
   checks.hasContext = !!(
     eventContext?.weather ||
@@ -253,7 +257,7 @@ export async function fetchAndStoreEnrichment(fixture) {
   let eventDetail = null, bsdH2H = [], bsdHomeFormStats = null, bsdAwayFormStats = null;
   let actualHomeXg = null, actualAwayXg = null, matchStats = null, matchEvents = null;
   let shotmap = null, refereeData = null, injuries = null;
-  let lineups = null, average_positions = null, momentum = null;
+  let lineups = null, average_positions = null, momentum = null, xg_per_minute = null;
   let metadata = null, eventContext = null, venue = null, playerStats = [];
   let basicOdds = null;
 
@@ -261,12 +265,25 @@ export async function fetchAndStoreEnrichment(fixture) {
     const eventId = fixture.id || fixture.match_id;
     eventDetail = await fetchEventDetail(eventId, true);
     if (eventDetail) {
-      matchStats = eventDetail.stats || null;
-      shotmap = eventDetail.shotmap || null;
+      const normalizedEventStats = normalizeEventStatsPayload({
+        stats: eventDetail.stats || eventDetail.live_stats || null,
+        shotmap: eventDetail.shotmap || [],
+        momentum: eventDetail.momentum || [],
+        average_positions: eventDetail.average_positions || null,
+        xg_per_minute: eventDetail.xg_per_minute || [],
+        actual_home_xg: eventDetail.actual_home_xg,
+        actual_away_xg: eventDetail.actual_away_xg,
+        home_xg_live: eventDetail.home_xg_live,
+        away_xg_live: eventDetail.away_xg_live,
+      }, fixture.home_team_id, fixture.away_team_id);
+
+      matchStats = normalizedEventStats.matchStats || eventDetail.stats || null;
+      shotmap = normalizedEventStats.shotmap || [];
       lineups = eventDetail.lineups || null;
       matchEvents = eventDetail.incidents || null;
-      average_positions = eventDetail.average_positions || null;
-      momentum = eventDetail.momentum || null;
+      average_positions = normalizedEventStats.average_positions || eventDetail.average_positions || null;
+      momentum = normalizedEventStats.momentum || [];
+      xg_per_minute = normalizedEventStats.xg_per_minute || [];
       metadata = eventDetail.metadata || null;
       eventContext = eventDetail.event_context || null;
       venue = eventDetail.venue || null;
@@ -282,8 +299,8 @@ export async function fetchAndStoreEnrichment(fixture) {
 
       bsdHomeFormStats = eventDetail.home_form || null;
       bsdAwayFormStats = eventDetail.away_form || null;
-      actualHomeXg = eventDetail.actual_home_xg != null ? eventDetail.actual_home_xg : (eventDetail.home_xg_live != null ? eventDetail.home_xg_live : null);
-      actualAwayXg = eventDetail.actual_away_xg != null ? eventDetail.actual_away_xg : (eventDetail.away_xg_live != null ? eventDetail.away_xg_live : null);
+      actualHomeXg = normalizedEventStats.actualHomeXg != null ? normalizedEventStats.actualHomeXg : (eventDetail.actual_home_xg != null ? eventDetail.actual_home_xg : (eventDetail.home_xg_live != null ? eventDetail.home_xg_live : null));
+      actualAwayXg = normalizedEventStats.actualAwayXg != null ? normalizedEventStats.actualAwayXg : (eventDetail.actual_away_xg != null ? eventDetail.actual_away_xg : (eventDetail.away_xg_live != null ? eventDetail.away_xg_live : null));
 
       if (eventDetail.referee) {
         refereeData = {
@@ -380,7 +397,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     if (fixture.away_team_id) awayManager = await fetchManagerByTeamId(fixture.away_team_id);
   } catch (_) {}
 
-  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier, eventContext, refereeData, venue });
+  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier, eventContext, refereeData, venue, shotmap, momentum, matchStats });
   if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) {
     completeness.score = Math.min(0.80, completeness.score + 0.15);
     completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial';
@@ -388,14 +405,14 @@ export async function fetchAndStoreEnrichment(fixture) {
   }
 
   const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
-  console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' context=' + (eventContext ? 'YES' : 'no') + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
+  console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' context=' + (eventContext ? 'YES' : 'no') + ' stats=' + (matchStats ? 'YES' : 'no') + ' shotmap=' + ((shotmap || []).length) + ' momentum=' + ((momentum || []).length) + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
 
   return {
     h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings,
     homeMomentum, awayMomentum, lineupModifier, completeness,
     homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile,
     matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups,
-    average_positions, momentum, bsdHomeFormStats, bsdAwayFormStats,
+    average_positions, momentum, xg_per_minute, bsdHomeFormStats, bsdAwayFormStats,
     refereeData, injuries, metadata, eventContext, venue, playerStats,
     oddsData, polymarketOdds, homeManager, awayManager, odds: basicOdds,
   };
