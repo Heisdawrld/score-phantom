@@ -21,6 +21,14 @@ function riskColor(r: string) {
   return 'text-blue-400';
 }
 
+function getPlayerName(p: any) {
+  return p?.name || p?.player_name || p?.player?.name || p?.short_name || 'Unknown player';
+}
+
+function getMissingReason(p: any) {
+  return p?.reason || p?.status || p?.type || 'Unavailable';
+}
+
 export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureId?: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['predicted-lineup', fixtureId],
@@ -48,20 +56,30 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
     homeLineup = allPlayers.filter((p: any) => p.is_home);
     awayLineup = allPlayers.filter((p: any) => !p.is_home);
   } else if (data && data.lineups) {
-    homeLineup = data.lineups.home?.starters || [];
-    awayLineup = data.lineups.away?.starters || [];
+    homeLineup = data.lineups.home?.starters || data.lineups.home?.players || [];
+    awayLineup = data.lineups.away?.starters || data.lineups.away?.players || [];
     homeSubs = data.lineups.home?.substitutes || [];
     awaySubs = data.lineups.away?.substitutes || [];
     homeUnavailable = data.lineups.home?.unavailable || [];
     awayUnavailable = data.lineups.away?.unavailable || [];
-    homeFormation = data.lineups.home?.predicted_formation;
-    awayFormation = data.lineups.away?.predicted_formation;
+    homeFormation = data.lineups.home?.predicted_formation || data.lineups.home?.formation;
+    awayFormation = data.lineups.away?.predicted_formation || data.lineups.away?.formation;
   } else {
     homeLineup = matchData?.meta?.lineups?.home?.players || [];
     awayLineup = matchData?.meta?.lineups?.away?.players || [];
+    homeSubs = matchData?.meta?.lineups?.home?.substitutes || [];
+    awaySubs = matchData?.meta?.lineups?.away?.substitutes || [];
+    homeFormation = matchData?.meta?.lineups?.home?.formation || null;
+    awayFormation = matchData?.meta?.lineups?.away?.formation || null;
   }
 
+  // BSD v2 enrichment stores unavailable players in meta.injuries. Use it as a
+  // safe fallback when the fresh lineup endpoint has no unavailable block yet.
+  if (homeUnavailable.length === 0) homeUnavailable = matchData?.meta?.injuries?.home || [];
+  if (awayUnavailable.length === 0) awayUnavailable = matchData?.meta?.injuries?.away || [];
+
   const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
+  const hasMissingPlayers = homeUnavailable.length > 0 || awayUnavailable.length > 0;
 
   if (isLoading) {
     return (
@@ -121,37 +139,39 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
                   </ul>
                 </div>
              </div>
-
-             {(homeUnavailable.length > 0 || awayUnavailable.length > 0) && (
-               <div className="mt-4 pt-4 border-t border-white/[0.05]">
-                 <p className="text-[10px] font-black text-red-400/80 uppercase tracking-wider mb-3 flex items-center gap-1">
-                   <AlertCircle className="w-3 h-3" /> Missing Players
-                 </p>
-                 <div className="grid grid-cols-2 gap-4">
-                   <div>
-                     {homeUnavailable.map((p: any, i: number) => (
-                       <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
-                         <span className="text-white/70 font-medium">{p.name}</span>
-                         <span className="text-red-400/60">{p.reason}</span>
-                       </div>
-                     ))}
-                   </div>
-                   <div>
-                     {awayUnavailable.map((p: any, i: number) => (
-                       <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
-                         <span className="text-white/70 font-medium">{p.name}</span>
-                         <span className="text-red-400/60">{p.reason}</span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               </div>
-             )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-8 bg-black/20 rounded-xl">
              <Users className="w-8 h-8 text-white/10 mb-2" />
              <p className="text-xs text-white/30 font-medium">Lineups will be available closer to kick-off</p>
+          </div>
+        )}
+
+        {hasMissingPlayers && (
+          <div className="mt-4 pt-4 border-t border-white/[0.05]">
+            <p className="text-[10px] font-black text-red-400/80 uppercase tracking-wider mb-3 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> Missing Players
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.home_team_name || 'Home'}</p>
+                {homeUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : homeUnavailable.map((p: any, i: number) => (
+                  <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
+                    <span className="text-white/70 font-medium">{getPlayerName(p)}</span>
+                    <span className="text-red-400/60">{getMissingReason(p)}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.away_team_name || 'Away'}</p>
+                {awayUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : awayUnavailable.map((p: any, i: number) => (
+                  <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
+                    <span className="text-white/70 font-medium">{getPlayerName(p)}</span>
+                    <span className="text-red-400/60">{getMissingReason(p)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
