@@ -1,7 +1,7 @@
 import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
-import { fetchLiveMatches } from './bsd.js';
+import { fetchLiveMatches, fetchEventDetail } from './bsd.js';
 
 const sseClients = new Set();
 let pollTimer = null;
@@ -74,12 +74,13 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const f = fix.rows?.[0];
   
   if (f) {
-     // Check if we need to fetch the final event data from BSD
+     // Check if we need to fetch the final event data from BSD.
+     // Use fetchEventDetail(..., true) so this keeps working after the BSD v2 adapter
+     // moves rich fields into separate event sub-endpoints.
      let evt = finalEvent;
      if (!evt) {
         try {
-          const { bsdFetch } = await import('./bsd.js');
-          evt = await bsdFetch(`/events/${fixtureId}/`, { full: 'true' }, { cacheable: false });
+          evt = await fetchEventDetail(fixtureId, true);
         } catch(e) { /* ignore */ }
      }
      
@@ -166,8 +167,7 @@ async function pollLiveScores() {
         // Match disappeared from live feed! It probably finished.
         console.log(`[Live] Match ${oldFid} dropped from live feed. Fetching final status...`);
         try {
-          const { bsdFetch } = await import('./bsd.js');
-          const finalEvent = await bsdFetch(`/events/${oldFid}/`, { full: 'true' }, { cacheable: false });
+          const finalEvent = await fetchEventDetail(oldFid, true);
           if (finalEvent && (finalEvent.status === 'finished' || finalEvent.status === 'FT')) {
             console.log(`[Live] Match ${oldFid} confirmed finished! Score: ${finalEvent.home_score}-${finalEvent.away_score}`);
             await handleScoreUpdate({
