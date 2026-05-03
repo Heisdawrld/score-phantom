@@ -8,11 +8,27 @@ import { logRecommendedMarket } from "../storage/marketTracking.js";
  * Builds confidence profile, reason codes, assembles the result object,
  * persists to DB, logs market tracking. Returns the full prediction.
  */
-export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup }) {
+export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix }) {
   const { bestPick, backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
   const confidence = buildConfidenceProfile(bestPick, features);
-  // Pass bestPick.marketKey so reasons are filtered to support the chosen pick
   const reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
+
+  // ── Correct score probabilities from Poisson score matrix ───────────────
+  let correctScoreProbs = [];
+  if (scoreMatrix && scoreMatrix.length > 0) {
+    const maxGoals = scoreMatrix.length - 1;
+    const entries = [];
+    for (let h = 0; h <= maxGoals; h++) {
+      for (let a = 0; a <= maxGoals; a++) {
+        const prob = scoreMatrix[h]?.[a];
+        if (prob != null && prob > 0) {
+          entries.push({ score: `${h}-${a}`, home: h, away: a, probability: parseFloat(prob.toFixed(4)) });
+        }
+      }
+    }
+    // Sort by probability descending, take top 10
+    correctScoreProbs = entries.sort((x, y) => y.probability - x.probability).slice(0, 10);
+  }
 
   if (bestPick) {
     const prob = bestPick.modelProbability || 0;
@@ -52,6 +68,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     confidence,
     reasonCodes,
     rankedMarkets: rankedCandidates,
+    correctScoreProbs,
     topProbKey: topProbKey || null,
     features,
     featureEvidence,

@@ -144,10 +144,13 @@ function computeAdvisorStatus(phantomScore, riskLevel, edgeScore) {
 }
 
 function mapValueRating(edgeScore) {
+  // edgeScore is a betting edge (modelProbability - impliedProbability),
+  // typically ranging from -0.20 to +0.20. Previous thresholds (0.72/0.66/0.60)
+  // were probability-scale and would almost always return "WEAK". Fixed.
   const s = safeNum(edgeScore, 0);
-  if (s >= 0.72) return "STRONG";
-  if (s >= 0.66) return "GOOD";
-  if (s >= 0.60) return "FAIR";
+  if (s >= 0.15) return "STRONG";
+  if (s >= 0.08) return "GOOD";
+  if (s >= 0.04) return "FAIR";
   return "WEAK";
 }
 
@@ -387,14 +390,18 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const sp1Script = SCRIPT_MAP[sp2Script] || sp2Script;
   const volatilityScore = safeNum(script.volatilityScore, 0.5);
 
+  // classifyMatchScript does NOT return strengthGap/homeStrength/awayStrength.
+  // Read them from the feature vector instead.
+  const fv = featureVector || {};
+  const rawStrengthGap = safeNum(fv.homeStrengthGap, 0) - safeNum(fv.awayStrengthGap, 0);
   const gameScript = {
     script: sp1Script,
     label: SCRIPT_LABELS[sp1Script] || sp1Script.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     description: SCRIPT_DESCRIPTIONS[sp1Script] || "Standard match dynamics expected",
     volatility: mapVolatility(volatilityScore),
-    strengthGap: safeNum(script.strengthGap, 0),
-    homeStrength: safeNum(script.homeStrength, 0),
-    awayStrength: safeNum(script.awayStrength, 0),
+    strengthGap: parseFloat(rawStrengthGap.toFixed(3)),
+    homeStrength: safeNum(fv.homeAttackRating01 ?? fv.homeAvgScored, 0),
+    awayStrength: safeNum(fv.awayAttackRating01 ?? fv.awayAvgScored, 0),
   };
 
   // ── Model ────────────────────────────────────────────────────────────────
@@ -414,10 +421,12 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
 
   // ── Predictions: over_under (decimals 0-1) ──────────────────────────────
   const over_under = {
+    over_1_5: safeNum(cp.over15, 0.72),
+    under_1_5: safeNum(cp.under15, 0.28),
     over_2_5: safeNum(cp.over25, 0.45),
     under_2_5: safeNum(cp.under25, 0.55),
-    over_1_5: safeNum(cp.over15, 0.72),
     over_3_5: safeNum(cp.over35, 0.25),
+    under_3_5: safeNum(cp.under35, 0.75),
   };
 
   // ── Predictions: btts (decimals 0-1) ────────────────────────────────────
@@ -444,17 +453,22 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
     const modelConf = mapModelConfidence(probability, dataCompletenessScore);
     
-    const compositeScore = parseFloat((safeNum(bestPick.finalScore, probability) * 100).toFixed(1));
+    const compositeRaw = safeNum(bestPick.finalScore, probability);
+    const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
 
-    const riskLvl2   = resolveRiskLevel(bestPick);
-    const edgeLbl2   = resolveEdgeLabel(bestPick);
+    // Phantom Score: same blended formula as buildPickObject (55% prob + 45% composite)
+    const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
+    const phantomScorePct = capProbabilityPct(bestPick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
+
+    const riskLvl2   = resolveRiskLevel(bestPick, phantomScoreRaw);
+    const edgeLbl2   = resolveEdgeLabel(bestPick, phantomScoreRaw);
 
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
       probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
-      phantom_score_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
+      phantom_score_pct: phantomScorePct,
       score: compositeScore,
       edgeScore,
       modelConfidence: modelConf,

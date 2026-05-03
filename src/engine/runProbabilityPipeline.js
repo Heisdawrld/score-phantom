@@ -22,5 +22,5 @@ export function runProbabilityPipeline(features, script) {
   const { shiftMap, maxShift, maxShiftMarket } = computeLayer2Shifts(rawProbs, baseProbs);
 
   const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds);
-  return { xg, rawProbs, baseProbs, calibratedProbs, shiftMap, maxShift, maxShiftMarket };
+  return { xg, rawProbs, baseProbs, calibratedProbs, scoreMatrix, shiftMap, maxShift, maxShiftMarket };
 }
