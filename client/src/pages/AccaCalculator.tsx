@@ -48,10 +48,10 @@ export default function DailyAcca() {
   if (authLoading) return <div className='min-h-screen bg-background' />;
 
   const picks = data?.picks || [];
+  const insights = data?.insights || null;
+  const correlationWarnings = insights?.correlationWarnings || [];
+  const qualityMessage = data?.message || (picks.length > 0 ? 'Quality-first ACCA: ScorePhantom avoids forced filler selections.' : null);
   const combinedOdds = picks.reduce((acc: number, p: any) => {
-    // If the API returned valid odds for this specific market, use them.
-    // Otherwise, mathematically imply the true odds from the model's probability, 
-    // applying a standard 5% bookmaker margin (0.95).
     const o = p.pickOdds || (100 / Math.max(p.probability, 1)) * 0.95;
     return acc * parseFloat(o);
   }, 1);
@@ -60,7 +60,6 @@ export default function DailyAcca() {
     ? picks.reduce((s: number, p: any) => s + (p.probability || 0), 0) / picks.length
     : 0;
 
-  // Find weakest + strongest links
   const sorted = [...picks].sort((a: any, b: any) => (a.probability || 0) - (b.probability || 0));
   const weakestLink = sorted[0] || null;
   const strongestLink = sorted[sorted.length - 1] || null;
@@ -72,7 +71,6 @@ export default function DailyAcca() {
       </div>
       <Header />
       <div className="flex-1 w-full max-w-2xl mx-auto px-4 pb-24 relative z-10">
-        {/* ── Header ── */}
         <div className='flex items-center gap-3 pt-6 mb-6'>
           <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition'>
             <ChevronLeft className='w-5 h-5' />
@@ -91,7 +89,6 @@ export default function DailyAcca() {
           )}
         </div>
 
-        {/* ── Not Premium ── */}
         {!isSubscribed ? (
           <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
             <div className="blur-sm select-none pointer-events-none p-5 space-y-4 opacity-50">
@@ -148,11 +145,16 @@ export default function DailyAcca() {
           <div className='text-center py-16'>
             <Zap className='w-12 h-12 text-white/15 mx-auto mb-4' />
             <p className='text-white/50 font-semibold'>No ACCA picks available yet.</p>
-            <p className='text-white/25 text-sm mt-2'>Predictions are being built or there aren't enough high-confidence matches today. Check back later.</p>
+            <p className='text-white/25 text-sm mt-2'>{qualityMessage || "Predictions are being built or there aren't enough high-confidence matches today. Check back later."}</p>
+            {insights?.candidateCount != null && (
+              <div className='mt-5 mx-auto max-w-xs rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4'>
+                <p className='text-[10px] text-white/30 uppercase tracking-wider'>Engine Scan</p>
+                <p className='text-sm text-white/60 mt-1'>{insights.candidateCount} candidate(s) checked, {insights.selectedCount || 0} passed ACCA-grade filters.</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className='space-y-4'>
-            {/* ── Smart ACCA Summary ── */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -179,7 +181,6 @@ export default function DailyAcca() {
                   />
                 </div>
 
-                {/* Stake selector */}
                 <p className='text-[10px] text-white/30 mb-2 uppercase tracking-wider'>Stake (NGN)</p>
                 <div className='flex gap-2 mb-4'>
                   {[500, 1000, 2000, 5000].map(s => (
@@ -195,7 +196,6 @@ export default function DailyAcca() {
                   ))}
                 </div>
 
-                {/* Returns display */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3 text-center">
                     <p className="text-[9px] text-white/30 mb-1">Potential Return</p>
@@ -209,7 +209,18 @@ export default function DailyAcca() {
               </div>
             </motion.div>
 
-            {/* ── ACCA Picks ── */}
+            {qualityMessage && (
+              <div className='rounded-2xl border border-primary/15 bg-primary/[0.04] p-4'>
+                <div className='flex items-start gap-3'>
+                  <Shield className='w-4 h-4 text-primary mt-0.5 shrink-0' />
+                  <div>
+                    <p className='text-xs font-black text-primary uppercase tracking-wider'>Quality-first slip</p>
+                    <p className='text-xs text-white/55 mt-1 leading-relaxed'>{qualityMessage}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className='space-y-2'>
               {picks.map((pick: any, i: number) => {
                 const o = pick.pickOdds || (100 / Math.max(pick.probability, 1)) * 0.95;
@@ -225,12 +236,10 @@ export default function DailyAcca() {
                     className='p-4 rounded-2xl glass-card'
                   >
                     <div className='flex items-start gap-3'>
-                      {/* Rank number */}
                       <span className='w-8 h-8 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center text-xs font-black text-primary shrink-0'>
                         {i + 1}
                       </span>
 
-                      {/* Pick details */}
                       <div className='flex-1 min-w-0'>
                         <p className='font-bold text-sm text-white truncate'>
                           {pick.homeTeam} <span className='text-white/30'>vs</span> {pick.awayTeam}
@@ -242,9 +251,13 @@ export default function DailyAcca() {
                             {formatAccaMarket(pick.market)} — {pick.selection}
                           </span>
                         </div>
+                        <div className='flex flex-wrap gap-1.5 mt-2'>
+                          {pick.riskLevel && <span className='text-[9px] px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/35'>{pick.riskLevel}</span>}
+                          {pick.enrichmentStatus && <span className='text-[9px] px-2 py-0.5 rounded-full bg-primary/[0.08] border border-primary/15 text-primary/80'>{String(pick.enrichmentStatus).toUpperCase()}</span>}
+                          {pick.dataQuality && <span className='text-[9px] px-2 py-0.5 rounded-full bg-blue-500/[0.08] border border-blue-500/15 text-blue-300'>{String(pick.dataQuality).toUpperCase()}</span>}
+                        </div>
                       </div>
 
-                      {/* Odds + Prob */}
                       <div className='text-right shrink-0'>
                         <p className='text-lg font-black text-white tabular-nums'>{oddsFmt}</p>
                         <ConfidenceBadge value={prob} size="sm" className="mt-1" />
@@ -255,7 +268,6 @@ export default function DailyAcca() {
               })}
             </div>
 
-            {/* ── ACCA Insights ── */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -264,6 +276,18 @@ export default function DailyAcca() {
             >
               <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">ACCA Insights</p>
               <div className="flex flex-col gap-3">
+                {insights?.candidateCount != null && (
+                  <div className='grid grid-cols-2 gap-2'>
+                    <div className='rounded-xl bg-white/[0.03] border border-white/[0.05] p-3'>
+                      <p className='text-[9px] text-white/30 uppercase mb-1'>Candidates checked</p>
+                      <p className='text-lg font-black text-white'>{insights.candidateCount}</p>
+                    </div>
+                    <div className='rounded-xl bg-white/[0.03] border border-white/[0.05] p-3'>
+                      <p className='text-[9px] text-white/30 uppercase mb-1'>Passed filters</p>
+                      <p className='text-lg font-black text-primary'>{insights.selectedCount ?? picks.length}</p>
+                    </div>
+                  </div>
+                )}
                 {strongestLink && (
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -286,10 +310,19 @@ export default function DailyAcca() {
                     </div>
                   </div>
                 )}
+                {correlationWarnings.length > 0 && (
+                  <div className='rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-3'>
+                    <p className='text-[10px] font-black text-amber-300 uppercase tracking-wider mb-2'>Correlation Watch</p>
+                    <ul className='space-y-1'>
+                      {correlationWarnings.map((warning: string, i: number) => (
+                        <li key={i} className='text-[11px] text-amber-200/70'>• {warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </motion.div>
 
-            {/* ── Disclaimer ── */}
             <div className='rounded-2xl glass-card p-4 text-center'>
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <Shield className="w-3 h-3 text-white/15" />
