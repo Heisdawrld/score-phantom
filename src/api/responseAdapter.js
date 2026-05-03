@@ -9,8 +9,6 @@ function safeNum(val, fallback = 0) {
   return isNaN(n) ? fallback : n;
 }
 
-// ── Script name mapping: SP2 engine → SP1 frontend ──────────────────────────
-
 const SCRIPT_MAP = {
   dominant_home_pressure: "dominant_home",
   dominant_away_pressure: "dominant_away",
@@ -37,8 +35,6 @@ const SCRIPT_DESCRIPTIONS = {
   balanced_high_event: "Evenly matched teams with balanced play expected",
   chaotic: "Unpredictable match with high variance",
 };
-
-// ── Human-readable reason code labels ──────────────────────────────────────
 
 const REASON_LABELS = {
   home_strength_gap_high:          "Home side maintains a dominant baseline quality advantage",
@@ -78,20 +74,13 @@ const REASON_LABELS = {
 
 function humanizeReasonCode(code) {
   if (REASON_LABELS[code]) return REASON_LABELS[code];
-  // Fallback: prettify raw code
-  return code
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return code.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
-
-// ── Confidence / Fit / Value mappings ────────────────────────────────────────
 
 function mapModelConfidence(probability, dataCompletenessScore) {
   const p = safeNum(probability, 0);
-  // Penalise confidence when data is sparse
   const dataQuality = safeNum(dataCompletenessScore, 0.5);
   const penalisedP = dataQuality < 0.35 ? p * 0.88 : dataQuality < 0.55 ? p * 0.94 : p;
-
   if (penalisedP >= 0.78) return "HIGH";
   if (penalisedP >= 0.65) return "MEDIUM";
   if (penalisedP >= 0.56) return "LEAN";
@@ -106,7 +95,6 @@ function mapTacticalFit(tacticalFitScore) {
 }
 
 function resolveRiskLevel(pick, phantomScore) {
-  // Use Phantom Score (blended) for risk classification — more honest than raw probability
   const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
   if (ps >= 0.72) return 'SAFE';
   if (ps >= 0.60) return 'MODERATE';
@@ -123,30 +111,26 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Compute advisor status from Phantom Score (blended confidence).
- * More honest than using raw probability — accounts for data quality, volatility, etc.
- *
- * BET   = high confidence, engine recommends placing
- * WATCH = moderate confidence, worth monitoring odds
- * PASS  = low confidence, don't bet but track
- * GAMBLE = very low confidence, speculative only
+ * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
  */
 function computeAdvisorStatus(phantomScore, riskLevel, edgeScore) {
   const ps = safeNum(phantomScore, 0);
   const edge = safeNum(edgeScore, 0);
+  if (ps >= 0.68 && riskLevel !== 'AGGRESSIVE') return 'FIRE';
+  if (ps >= 0.63 && edge >= 0.04) return 'FIRE';
+  if (ps >= 0.55) return 'GAMBLE';
+  return 'AVOID';
+}
 
-  if (ps >= 0.72 && riskLevel === 'SAFE') return 'BET';
-  if (ps >= 0.68 && riskLevel !== 'AGGRESSIVE') return 'BET';
-  if (ps >= 0.63 && edge >= 0.05) return 'BET';
-  if (ps >= 0.58) return 'WATCH';
-  if (ps >= 0.50) return 'PASS';
-  return 'GAMBLE';
+function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'FIRE' || s === 'GAMBLE' || s === 'AVOID') return s;
+  if (s === 'BET' || s === 'PLAYABLE') return 'FIRE';
+  if (s === 'WATCH' || s === 'PASS') return 'GAMBLE';
+  return computeAdvisorStatus(phantomScore, riskLevel, edgeScore);
 }
 
 function mapValueRating(edgeScore) {
-  // edgeScore is a betting edge (modelProbability - impliedProbability),
-  // typically ranging from -0.20 to +0.20. Previous thresholds (0.72/0.66/0.60)
-  // were probability-scale and would almost always return "WEAK". Fixed.
   const s = safeNum(edgeScore, 0);
   if (s >= 0.15) return "STRONG";
   if (s >= 0.08) return "GOOD";
@@ -161,11 +145,6 @@ function mapVolatility(volatilityScore) {
   return "LOW";
 }
 
-// ── Pick label formatting ────────────────────────────────────────────────────
-
-// Direct lookup table for all internal marketKey values produced by buildMarketCandidates.
-// The selection field from that module is already perfectly formatted, but we want team names
-// substituted in for home/away references.
 const PICK_LABEL_MAP = {
   home_win:             (h)    => `${h || "Home"} Win`,
   away_win:             (h, a) => `${a || "Away"} Win`,
@@ -195,97 +174,59 @@ const PICK_LABEL_MAP = {
 
 function formatPickLabel(marketKey, selection, homeTeam, awayTeam) {
   if (!marketKey) return selection || "No Clear Edge";
-
   const key = (marketKey || "").toLowerCase().replace(/-/g, "_");
-
-  // Primary path: use the direct lookup table (covers all buildMarketCandidates keys)
-  if (PICK_LABEL_MAP[key]) {
-    return PICK_LABEL_MAP[key](homeTeam, awayTeam);
-  }
-
-  // Secondary path: legacy/external market keys (over_under category, 1x2, etc.)
+  if (PICK_LABEL_MAP[key]) return PICK_LABEL_MAP[key](homeTeam, awayTeam);
   const sel = (selection || "").toLowerCase().replace(/-/g, "_");
-
   if (key === "over_under" || key === "goals_ou") {
-    if (sel.startsWith("over_")) {
-      const val = sel.replace("over_", "").replace("_", ".");
-      return `Over ${val} Goals`;
-    }
-    if (sel.startsWith("under_")) {
-      const val = sel.replace("under_", "").replace("_", ".");
-      return `Under ${val} Goals`;
-    }
+    if (sel.startsWith("over_")) return `Over ${sel.replace("over_", "").replace("_", ".")} Goals`;
+    if (sel.startsWith("under_")) return `Under ${sel.replace("under_", "").replace("_", ".")} Goals`;
   }
-
   if (key === "1x2" || key === "match_winner") {
     if (sel === "home" || sel === "1") return `${homeTeam || "Home"} Win`;
     if (sel === "away" || sel === "2") return `${awayTeam || "Away"} Win`;
     if (sel === "draw" || sel === "x") return "Draw";
   }
-
   if (key === "double_chance") {
     if (sel === "1x" || sel === "home_draw") return `${homeTeam || "Home"} or Draw`;
     if (sel === "2x" || sel === "away_draw") return `${awayTeam || "Away"} or Draw`;
     if (sel === "12" || sel === "home_away") return "Home or Away Win";
   }
-
   if (key === "dnb" || key === "draw_no_bet") {
     if (sel === "home") return `${homeTeam || "Home"} Win (DNB)`;
     if (sel === "away") return `${awayTeam || "Away"} Win (DNB)`;
   }
-
   if (key === "asian_handicap" || key === "handicap") {
     if (sel.includes("home")) return `${homeTeam || "Home"} Handicap`;
     if (sel.includes("away")) return `${awayTeam || "Away"} Handicap`;
   }
-
   if (key === "win_either_half") {
     if (sel === "home") return `${homeTeam || "Home"} Win Either Half`;
     if (sel === "away") return `${awayTeam || "Away"} Win Either Half`;
   }
-
-  // Fallback: use raw selection string (may already be human-readable)
-  if (selection) {
-    return selection.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
+  if (selection) return selection.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return marketKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Market name mapping ─────────────────────────────────────────────────────
-
 function mapMarketName(marketKey) {
   const key = (marketKey || "").toLowerCase();
-  // Over/Under markets
   if (key === "over_under" || key === "goals_ou") return "Over/Under";
   if (key === "over_15" || key === "over_25" || key === "over_35") return "Over/Under";
   if (key === "under_25" || key === "under_35") return "Over/Under";
-  // BTTS
   if (key === "btts" || key === "btts_yes" || key === "btts_no" || key === "both_teams_to_score") return "Both Teams to Score";
-  // Match result
   if (key === "1x2" || key === "match_winner" || key === "home_win" || key === "away_win" || key === "draw") return "Match Result";
-  // Double Chance
   if (key === "double_chance" || key === "double_chance_home" || key === "double_chance_away") return "Double Chance";
-  // Draw No Bet
   if (key === "dnb" || key === "draw_no_bet" || key === "dnb_home" || key === "dnb_away") return "Draw No Bet";
-  // Asian Handicap
   if (key === "asian_handicap" || key === "handicap") return "Asian Handicap";
-  // Team goals (home/away over/under)
   if (key.startsWith("home_over_") || key.startsWith("home_under_")) return "Home Team Goals";
   if (key.startsWith("away_over_") || key.startsWith("away_under_")) return "Away Team Goals";
-  // Win Either Half
   if (key === "win_either_half_home" || key === "win_either_half_away") return "Win Either Half";
   return marketKey ? marketKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unknown";
 }
 
-// ── Build a candidate pick object (shared for recommendation + backups) ─────
-
-// Team-total markets (home/away over/under) are niche — cap displayed probability at 93%
-// to avoid misleading users with 95%+ confidence on low-liquidity markets.
 const NICHE_MARKETS = new Set([
   'home_over_05', 'home_over_15', 'home_over_25', 'home_under_15',
   'away_over_05', 'away_over_15', 'away_over_25', 'away_under_15',
 ]);
-
 const DISPLAY_MAX_PROBABILITY_PCT = 87.0;
 
 function capProbabilityPct(marketKey, rawPct) {
@@ -297,29 +238,18 @@ function capProbabilityPct(marketKey, rawPct) {
 
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
-
   const probability = safeNum(pick.modelProbability, 0);
-  // Use real betting edge (model prob - implied prob) when odds are available,
-  // fall back to ranking score only when no odds data exists
   const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
   const rawProbPct = parseFloat((probability * 100).toFixed(1));
   const modelConf = mapModelConfidence(probability, dataCompletenessScore);
-
-  // The engine computes an exact 0-1 finalScore in scoreMarketCandidates.js
-  // that already accounts for probability, edge, predictability, and tactical fit.
   const compositeRaw = safeNum(pick.finalScore, probability);
   const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
-
-  // ── Phantom Score: blended confidence metric ────────────────────────────
-  // Combines raw probability (what math says) with composite score (what reality says).
-  // This prevents 87% probability from showing when the actual composite confidence is 70.
   const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
   const phantomScorePct = parseFloat((phantomScoreRaw * 100).toFixed(1));
-
-  // Risk and advisor now derive from Phantom Score — more honest than raw probability
   const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
   const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
+  const advisorStatus = normalizeAdvisorStatus(pick.advisor_status, phantomScoreRaw, riskLvl, edgeScore);
 
   return {
     market: mapMarketName(pick.marketKey),
@@ -335,20 +265,14 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     riskLevel: riskLvl,
     edgeLabel: edgeLbl,
     reasons: (pick.reasons || []).map(humanizeReasonCode),
-    advisor_status: pick.advisor_status || computeAdvisorStatus(phantomScoreRaw, riskLvl, edgeScore),
+    advisor_status: advisorStatus,
     no_edge: !!(pick.edge != null && pick.edge <= 0),
-    // Flags for UI to distinguish between picks
     isSafeBet: phantomScorePct >= 72 && riskLvl === 'SAFE',
     isValueBet: edgeScore >= 0.05 && phantomScorePct >= 60,
     isSharpValue: pick.isSharpValue || false,
   };
 }
 
-// ── Main adapter ─────────────────────────────────────────────────────────────
-
-/**
- * Transform SP2 engine result to SP1 React frontend format.
- */
 export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const {
     fixtureId,
@@ -360,15 +284,11 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     allCandidates = [],
     noSafePick,
     noSafePickReason,
-    confidence = {},
     reasonCodes = [],
     rankedMarkets = [],
-    features,
-    dataQuality,
     correctScoreProbs,
   } = engineResult;
 
-  // Data completeness — read from flat feature vector passed through engine result
   const featureVector = engineResult?.features || {};
   const dataCompletenessScore = safeNum(
     featureVector.dataCompletenessScore ??
@@ -376,7 +296,6 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     engineResult?.volatilityFeatures?.dataCompletenessScore,
     0.5
   );
-  // Derive tier from score if enrichmentTier is missing (old enrichment records lack it)
   const enrichmentTier = featureVector.enrichmentTier || (() => {
     const s = dataCompletenessScore;
     if (s >= 0.8) return 'rich';
@@ -385,13 +304,9 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     return 'thin';
   })();
 
-  // ── Game Script ──────────────────────────────────────────────────────────
   const sp2Script = script.primary || "balanced";
   const sp1Script = SCRIPT_MAP[sp2Script] || sp2Script;
   const volatilityScore = safeNum(script.volatilityScore, 0.5);
-
-  // classifyMatchScript does NOT return strengthGap/homeStrength/awayStrength.
-  // Read them from the feature vector instead.
   const fv = featureVector || {};
   const rawStrengthGap = safeNum(fv.homeStrengthGap, 0) - safeNum(fv.awayStrengthGap, 0);
   const gameScript = {
@@ -404,22 +319,17 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     awayStrength: safeNum(fv.awayAttackRating01 ?? fv.awayAvgScored, 0),
   };
 
-  // ── Model ────────────────────────────────────────────────────────────────
   const lambdaHome = safeNum(expectedGoals.home, 1.2);
   const lambdaAway = safeNum(expectedGoals.away, 1.0);
   const totalXg = safeNum(expectedGoals.total, lambdaHome + lambdaAway);
-
   const model = { lambdaHome, lambdaAway, totalXg };
 
-  // ── Predictions: match_result (percentages 0-100) ────────────────────────
   const cp = calibratedProbs || {};
   const match_result = {
     home: parseFloat((safeNum(cp.homeWin, 0.35) * 100).toFixed(1)),
     draw: parseFloat((safeNum(cp.draw, 0.28) * 100).toFixed(1)),
     away: parseFloat((safeNum(cp.awayWin, 0.35) * 100).toFixed(1)),
   };
-
-  // ── Predictions: over_under (decimals 0-1) ──────────────────────────────
   const over_under = {
     over_1_5: safeNum(cp.over15, 0.72),
     under_1_5: safeNum(cp.under15, 0.28),
@@ -428,40 +338,30 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     over_3_5: safeNum(cp.over35, 0.25),
     under_3_5: safeNum(cp.under35, 0.75),
   };
-
-  // ── Predictions: btts (decimals 0-1) ────────────────────────────────────
   const btts = {
     yes: safeNum(cp.bttsYes, 0.45),
     no: safeNum(cp.bttsNo, 0.55),
   };
 
-  // ── Human-readable reasons ───────────────────────────────────────────────
   const humanReasonCodes = (reasonCodes || []).map(humanizeReasonCode);
-
-  // Add a data quality warning if completeness is low
   if (dataCompletenessScore < 0.4 && !humanReasonCodes.some(r => r.includes("Limited data"))) {
     humanReasonCodes.push("⚠️ Limited historical data — predictions carry higher uncertainty");
   }
 
-  // ── Recommendation ──────────────────────────────────────────────────────
   let recommendation;
   if (bestPick && !noSafePick) {
     const probability = safeNum(bestPick.modelProbability, 0);
     const edgeScore = bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0);
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
-
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
     const modelConf = mapModelConfidence(probability, dataCompletenessScore);
-    
     const compositeRaw = safeNum(bestPick.finalScore, probability);
     const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
-
-    // Phantom Score: same blended formula as buildPickObject (55% prob + 45% composite)
     const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
     const phantomScorePct = capProbabilityPct(bestPick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
-
-    const riskLvl2   = resolveRiskLevel(bestPick, phantomScoreRaw);
-    const edgeLbl2   = resolveEdgeLabel(bestPick, phantomScoreRaw);
+    const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
+    const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
+    const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore);
 
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
@@ -477,7 +377,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       riskLevel: riskLvl2,
       edgeLabel: edgeLbl2,
       reasons: humanReasonCodes,
-      advisor_status: bestPick.advisor_status || computeAdvisorStatus(probability, riskLvl2, edgeScore),
+      advisor_status: advisorStatus,
       no_edge: false,
       isSafeBet: bestPick.isSafeBet || false,
       isValueBet: bestPick.isValueBet || false,
@@ -501,17 +401,12 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     };
   }
 
-  // ── Backup Picks ────────────────────────────────────────────────────────
   const backup_picks = (backupPicks || []).slice(0, 5)
     .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore))
     .filter(Boolean);
-
-  // ── All Candidates ──────────────────────────────────────────────────────
   const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore))
     .filter(Boolean);
-
-  // ── Correct Score ───────────────────────────────────────────────────────
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({
     score: cs.score || `${cs.home}-${cs.away}`,
     probability: safeNum(cs.probability || cs.prob, 0),
