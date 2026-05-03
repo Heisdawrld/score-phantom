@@ -2,6 +2,7 @@ import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
 import { fetchLiveMatches, fetchEventDetail } from './bsd.js';
+import { normalizeEventStatsPayload } from './bsdStatsNormalizer.js';
 import { computeProfitUnits } from '../storage/profitUnits.js';
 
 const sseClients = new Set();
@@ -26,6 +27,51 @@ function broadcast(data) {
   }
 }
 
+function safeJsonParse(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function updateLiveFixtureMeta(fixtureId, finalOrLiveEvent, partialLiveStats = null) {
+  if (!fixtureId) return null;
+  try {
+    const existing = await db.execute({ sql: 'SELECT meta, home_team_id, away_team_id FROM fixtures WHERE id = ? LIMIT 1', args: [fixtureId] });
+    const row = existing.rows?.[0] || {};
+    const meta = safeJsonParse(row.meta, {});
+    const statsPayload = {
+      stats: finalOrLiveEvent?.stats || finalOrLiveEvent?.live_stats || partialLiveStats || null,
+      shotmap: finalOrLiveEvent?.shotmap || meta.shotmap || [],
+      momentum: finalOrLiveEvent?.momentum || meta.momentum || [],
+      average_positions: finalOrLiveEvent?.average_positions || meta.average_positions || null,
+      xg_per_minute: finalOrLiveEvent?.xg_per_minute || meta.xg_per_minute || [],
+      actual_home_xg: finalOrLiveEvent?.actual_home_xg,
+      actual_away_xg: finalOrLiveEvent?.actual_away_xg,
+      home_xg_live: finalOrLiveEvent?.home_xg_live,
+      away_xg_live: finalOrLiveEvent?.away_xg_live,
+    };
+    const normalized = normalizeEventStatsPayload(statsPayload, row.home_team_id, row.away_team_id);
+    const nextMeta = {
+      ...meta,
+      live: true,
+      lastLiveUpdateAt: new Date().toISOString(),
+      matchStats: normalized.matchStats || meta.matchStats || partialLiveStats || null,
+      live_stats: normalized.matchStats || partialLiveStats || meta.live_stats || null,
+      shotmap: (normalized.shotmap && normalized.shotmap.length) ? normalized.shotmap : (meta.shotmap || null),
+      momentum: (normalized.momentum && normalized.momentum.length) ? normalized.momentum : (meta.momentum || null),
+      xg_per_minute: (normalized.xg_per_minute && normalized.xg_per_minute.length) ? normalized.xg_per_minute : (meta.xg_per_minute || null),
+      average_positions: normalized.average_positions || meta.average_positions || null,
+      matchEvents: finalOrLiveEvent?.incidents || meta.matchEvents || null,
+      actualHomeXg: normalized.actualHomeXg ?? meta.actualHomeXg ?? null,
+      actualAwayXg: normalized.actualAwayXg ?? meta.actualAwayXg ?? null,
+    };
+    await db.execute({ sql: 'UPDATE fixtures SET meta = ? WHERE id = ?', args: [JSON.stringify(nextMeta), fixtureId] });
+    return nextMeta;
+  } catch (err) {
+    console.warn('[Live] Failed to update live fixture meta:', err.message);
+    return null;
+  }
+}
 
 async function notifyMatchSubscribers(fixtureId, homeTeam, awayTeam, homeScore, awayScore, minute) {
   try {
@@ -47,6 +93,7 @@ async function handleScoreUpdate(msg) {
     const fixtureId = String(msg.fixture_id || '');
     if (!fixtureId) return;
     await db.execute({ sql: 'UPDATE fixtures SET home_score = ?, away_score = ?, match_status = ?, live_minute = ? WHERE id = ?', args: [msg.home_score, msg.away_score, msg.status || 'LIVE', msg.minute || null, fixtureId] });
+    const liveMeta = await updateLiveFixtureMeta(fixtureId, msg.final_event || {}, msg.live_stats).catch(() => null);
     if (msg.home_score !== null && msg.away_score !== null) notifyMatchSubscribers(fixtureId, '', '', msg.home_score, msg.away_score, msg.minute).catch(()=>{});
     broadcast({ 
       type: 'score_update', 
@@ -56,7 +103,13 @@ async function handleScoreUpdate(msg) {
       status: msg.status, 
       minute: msg.minute,
       incidents: msg.incidents,
-      live_stats: msg.live_stats
+      live_stats: msg.live_stats,
+      meta: liveMeta ? {
+        momentum: liveMeta.momentum || null,
+        shotmap: liveMeta.shotmap || null,
+        matchStats: liveMeta.matchStats || null,
+        xg_per_minute: liveMeta.xg_per_minute || null,
+      } : null,
     });
     if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
         setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score, msg.final_event).catch(() => {}), 5000);
@@ -227,14 +280,21 @@ async function pollLiveScores() {
         const fid = String(m.id || '');
         if (!fid) continue;
         currentLiveIds.add(fid);
+        let fullLiveEvent = null;
+        try {
+          // Pull full sub-resource stats for live fixtures so the detail page/Pitch tab
+          // has current momentum, shotmap, incidents and xG when a user opens the match.
+          fullLiveEvent = await fetchEventDetail(fid, true);
+        } catch (_) {}
         await handleScoreUpdate({
           fixture_id: fid,
-          home_score: m.home_score ?? 0,
-          away_score: m.away_score ?? 0,
-          status:     m.status === 'finished' ? 'FT' : 'LIVE',
-          minute:     m.current_minute || null,
-          incidents:  m.incidents || [],
-          live_stats: m.live_stats || null
+          home_score: fullLiveEvent?.home_score ?? m.home_score ?? 0,
+          away_score: fullLiveEvent?.away_score ?? m.away_score ?? 0,
+          status:     (fullLiveEvent?.status === 'finished' || m.status === 'finished') ? 'FT' : 'LIVE',
+          minute:     fullLiveEvent?.current_minute || m.current_minute || null,
+          incidents:  fullLiveEvent?.incidents || m.incidents || [],
+          live_stats: fullLiveEvent?.live_stats || m.live_stats || null,
+          final_event: fullLiveEvent || null,
         }).catch(() => {});
       }
     }
