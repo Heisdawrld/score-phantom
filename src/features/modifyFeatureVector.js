@@ -7,32 +7,27 @@
 export function modifyFeatureVectorForSimulation(vector, modifiers) {
   if (!modifiers) return vector;
 
-  // Clone the vector to avoid mutating the original
   const simVector = { ...vector };
 
-  // Helper to safely multiply a field if it exists
   const mult = (field, factor) => {
     if (simVector[field] !== undefined && simVector[field] !== null) {
       simVector[field] *= factor;
     }
   };
 
-  // 1. Motivation Modifiers (Auto-calculated from feature vector)
-  // Derive motivation from recent form momentum and upset risk
   const homeMotivation = (simVector.homeMomentumScore || 50) / 100;
   const awayMotivation = (simVector.awayMomentumScore || 50) / 100;
-  
-  const hBoost = (homeMotivation - 0.5) * 0.15; // +/- 15%
+  const hBoost = (homeMotivation - 0.5) * 0.15;
   mult('homeAttackRating', 1 + hBoost);
   mult('homeAvgScored', 1 + hBoost);
   mult('homeAvgXgFor', 1 + hBoost);
   mult('homeHomeGoalsFor', 1 + hBoost);
-  mult('homeDefenseRating', 1 - hBoost); // Lower number = stronger defense
+  mult('homeDefenseRating', 1 - hBoost);
   mult('homeAvgConceded', 1 - hBoost);
   mult('homeAvgXgAgainst', 1 - hBoost);
   mult('homeHomeGoalsAgainst', 1 - hBoost);
 
-  const aBoost = (awayMotivation - 0.5) * 0.15; // +/- 15%
+  const aBoost = (awayMotivation - 0.5) * 0.15;
   mult('awayAttackRating', 1 + aBoost);
   mult('awayAvgScored', 1 + aBoost);
   mult('awayAvgXgFor', 1 + aBoost);
@@ -42,10 +37,8 @@ export function modifyFeatureVectorForSimulation(vector, modifiers) {
   mult('awayAvgXgAgainst', 1 - aBoost);
   mult('awayAwayGoalsAgainst', 1 - aBoost);
 
-  // 2. Injury Modifiers (Auto-calculated from feature vector's Key Absences)
   const hInjuries = simVector.homeKeyMissing || 0;
   if (hInjuries > 0) {
-    // Each key injury reduces offensive output by ~6% and worsens defense by ~6%
     const penalty = Math.min(hInjuries * 0.06, 0.4);
     mult('homeAttackRating', 1 - penalty);
     mult('homeAvgScored', 1 - penalty);
@@ -70,8 +63,7 @@ export function modifyFeatureVectorForSimulation(vector, modifiers) {
     mult('awayAwayGoalsAgainst', 1 + penalty);
   }
 
-  // 3. Weather Modifiers ('normal', 'rain', 'snow')
-  // Extreme weather tends to suppress goal scoring and increase chaos (draw probability)
+  // Weather modifiers also set the same context flags used by the production xG model.
   if (modifiers.weather === 'rain') {
     mult('homeAttackRating', 0.92);
     mult('awayAttackRating', 0.92);
@@ -80,6 +72,9 @@ export function modifyFeatureVectorForSimulation(vector, modifiers) {
     mult('homeHomeGoalsFor', 0.92);
     mult('awayAwayGoalsFor', 0.92);
     mult('matchChaosScore', 1.15);
+    simVector.hasBadWeather = true;
+    simVector.hasBadPitch = true;
+    simVector.eventContext = { ...(simVector.eventContext || {}), weather: 'rain', pitch_condition: 'wet' };
   } else if (modifiers.weather === 'snow') {
     mult('homeAttackRating', 0.85);
     mult('awayAttackRating', 0.85);
@@ -88,35 +83,39 @@ export function modifyFeatureVectorForSimulation(vector, modifiers) {
     mult('homeHomeGoalsFor', 0.85);
     mult('awayAwayGoalsFor', 0.85);
     mult('matchChaosScore', 1.30);
+    simVector.hasBadWeather = true;
+    simVector.hasBadPitch = true;
+    simVector.eventContext = { ...(simVector.eventContext || {}), weather: 'snow', pitch_condition: 'heavy' };
+  } else {
+    simVector.hasBadWeather = false;
   }
 
-  // 4. Lineup Strength / Rotation Risk
   if (modifiers.lineupStrength === 'rotated') {
     mult('homeAttackRating', 0.90);
     mult('homeDefenseRating', 1.10);
     mult('awayAttackRating', 0.90);
     mult('awayDefenseRating', 1.10);
-    
     mult('homeAvgScored', 0.90);
     mult('awayAvgScored', 0.90);
     mult('homeHomeGoalsFor', 0.90);
     mult('awayAwayGoalsFor', 0.90);
-    
     simVector.rotationRiskHome = 0.5;
     simVector.rotationRiskAway = 0.5;
+    simVector.homePredictedStrength = Math.min(simVector.homePredictedStrength ?? 1, 0.93);
+    simVector.awayPredictedStrength = Math.min(simVector.awayPredictedStrength ?? 1, 0.93);
   } else if (modifiers.lineupStrength === 'heavily_rotated') {
     mult('homeAttackRating', 0.75);
     mult('homeDefenseRating', 1.25);
     mult('awayAttackRating', 0.75);
     mult('awayDefenseRating', 1.25);
-    
     mult('homeAvgScored', 0.75);
     mult('awayAvgScored', 0.75);
     mult('homeHomeGoalsFor', 0.75);
     mult('awayAwayGoalsFor', 0.75);
-    
     simVector.rotationRiskHome = 0.9;
     simVector.rotationRiskAway = 0.9;
+    simVector.homePredictedStrength = Math.min(simVector.homePredictedStrength ?? 1, 0.82);
+    simVector.awayPredictedStrength = Math.min(simVector.awayPredictedStrength ?? 1, 0.82);
   }
 
   return simVector;
