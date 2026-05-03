@@ -15,7 +15,7 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchPredictedLineup, bsdFetch, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
+import { fetchPredictedLineup, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
 import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
 // Odds are now sourced from fixture_odds table (written at seed time from BSD events)
 // No external odds service needed.
@@ -186,40 +186,40 @@ export async function ensureFixtureData(fixtureId) {
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 
-  // ── INJECT LIVE INJURIES AND PREDICTED LINEUPS ──
+  // ── INJECT LIVE INJURIES, LINEUPS, BEST ODDS AND BSD PREDICTION ──
   try {
-    if (fixture.bsd_event_api_id) {
-      const liveData = await bsdFetch(`/events/${fixture.id}/`);
-      
+    // BSD v2 event sub-resources use the internal event id, which is fixture.id.
+    // Older rows may have bsd_event_api_id set to an external api_id, so do not use
+    // that for v2 lineups/odds. Keep it only as a legacy prediction fallback key.
+    const bsdInternalEventId = fixture.id ? String(fixture.id) : null;
+    const legacyPredictionEventId = fixture.bsd_event_api_id || bsdInternalEventId;
+
+    if (bsdInternalEventId) {
       async function attachMissingPlayerStats(players = []) {
         return Promise.all(
           players.map(async (p) => {
-            const playerId = p?.player?.id || p?.id || null;
+            const playerId = p?.player?.id || p?.player_id || p?.id || null;
             const stats = playerId ? await fetchPlayerStats(playerId) : null;
             return { ...p, stats };
           })
         );
       }
 
-      if (liveData?.unavailable_players) {
+      const [lineupData, bestOdds, bsdPrediction] = await Promise.all([
+        fetchPredictedLineup(bsdInternalEventId),
+        fetchBestOdds(bsdInternalEventId),
+        fetchBzzoiroPrediction(legacyPredictionEventId, fixture.match_date),
+      ]);
+
+      if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
+      if (lineupData?.unavailable_players) {
         meta.unavailable_players = {
-          home: await attachMissingPlayerStats(liveData.unavailable_players.home || []),
-          away: await attachMissingPlayerStats(liveData.unavailable_players.away || []),
+          home: await attachMissingPlayerStats(lineupData.unavailable_players.home || []),
+          away: await attachMissingPlayerStats(lineupData.unavailable_players.away || []),
         };
       }
-
-      const eventApiId = fixture.bsd_event_api_id || null;
-      if (eventApiId) {
-        const [lineupData, bestOdds, bsdPrediction] = await Promise.all([
-          fetchPredictedLineup(eventApiId),
-          fetchBestOdds(eventApiId),
-          fetchBzzoiroPrediction(eventApiId, fixture.match_date),
-        ]);
-
-        if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
-        if (bestOdds) meta.best_odds = bestOdds;
-        if (bsdPrediction) meta.bsd_prediction = bsdPrediction;
-      }
+      if (bestOdds) meta.best_odds = bestOdds;
+      if (bsdPrediction) meta.bsd_prediction = bsdPrediction;
     }
   } catch (err) {
     console.error(`[predictionCache] Failed to fetch injuries/lineup for ${fixtureId}:`, err.message);
