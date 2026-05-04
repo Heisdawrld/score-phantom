@@ -49,8 +49,7 @@ export async function initBasketballTables() {
     point REAL,
     implied_probability REAL,
     last_update TEXT,
-    fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(league_key, odds_event_id, bookmaker, market_key, selection, COALESCE(point, -9999))
+    fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_predictions (
@@ -80,6 +79,7 @@ export async function initBasketballTables() {
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_games_league_time ON basketball_games(league_key, start_time)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_odds_game ON basketball_odds(league_key, game_id, market_key)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_odds_event ON basketball_odds(league_key, odds_event_id, bookmaker, market_key, selection, point)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_predictions_game ON basketball_predictions(league_key, game_id)`);
 }
 
@@ -183,19 +183,25 @@ export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
   const game = await findBasketballGameByOddsEvent(leagueKey, oddsEventId);
   const gameId = game?.id || null;
   let inserted = 0;
+
   for (const m of markets || []) {
     const implied = m.price && Number(m.price) > 1 ? 1 / Number(m.price) : null;
+    const point = m.point ?? null;
     try {
+      await db.execute({
+        sql: `DELETE FROM basketball_odds
+              WHERE league_key = ?
+                AND odds_event_id = ?
+                AND bookmaker = ?
+                AND market_key = ?
+                AND selection = ?
+                AND ((point IS NULL AND ? IS NULL) OR point = ?)`,
+        args: [leagueKey, oddsEventId, m.bookmaker, m.market_key, m.selection, point, point],
+      });
       await db.execute({
         sql: `INSERT INTO basketball_odds
           (league_key, game_id, odds_event_id, bookmaker, bookmaker_title, market_key, selection, price, point, implied_probability, last_update, fetched_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(league_key, odds_event_id, bookmaker, market_key, selection, COALESCE(point, -9999)) DO UPDATE SET
-            game_id = COALESCE(EXCLUDED.game_id, basketball_odds.game_id),
-            price = EXCLUDED.price,
-            implied_probability = EXCLUDED.implied_probability,
-            last_update = EXCLUDED.last_update,
-            fetched_at = EXCLUDED.fetched_at`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           leagueKey,
           gameId,
@@ -205,7 +211,7 @@ export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
           m.market_key,
           m.selection,
           m.price,
-          m.point ?? null,
+          point,
           implied,
           m.last_update || null,
           new Date().toISOString(),
