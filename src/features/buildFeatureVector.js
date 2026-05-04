@@ -21,6 +21,7 @@ function fuzzyTeamMatch(a, b) {
 import db from '../config/database.js';
 import { safeNum } from '../utils/math.js';
 import { computeFormFeatures } from './computeFormFeatures.js';
+import { computeLastMatchMemory } from './computeLastMatchMemory.js';
 import { computeSplitFeatures } from './computeSplitFeatures.js';
 import { computeH2HFeatures } from './computeH2HFeatures.js';
 import { computeTeamStrength } from './computeTeamStrength.js';
@@ -194,6 +195,8 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
   const homeFormFeatures = computeFormFeatures(homeFormRaw, homeTeamName, standingsMap);
   const awayFormFeatures = computeFormFeatures(awayFormRaw, awayTeamName, standingsMap);
+  const homeLastMatchMemory = computeLastMatchMemory(homeFormRaw, homeTeamName);
+  const awayLastMatchMemory = computeLastMatchMemory(awayFormRaw, awayTeamName);
   const splitFeatures = computeSplitFeatures(homeFormFeatures, awayFormFeatures);
   const h2hFeatures = computeH2HFeatures(h2hRaw, homeTeamName, awayTeamName);
   const teamStrength = computeTeamStrength(homeFormFeatures, awayFormFeatures, tableContext, standings);
@@ -260,7 +263,6 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     };
 
     injuryFeatures.homeKeyMissing = homeMissing.filter(isKeyPlayer).length;
-    injuryFeatures.awayKeyMissing = awayMissing.filter(isKeyPlayer).length;
     if (injuryFeatures.homeKeyMissing === 0 && injuryFeatures.homeMissingCount >= 4) injuryFeatures.homeKeyMissing = 1;
     if (injuryFeatures.awayKeyMissing === 0 && injuryFeatures.awayMissingCount >= 4) injuryFeatures.awayKeyMissing = 1;
   }
@@ -301,6 +303,8 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     awayTeam: awayTeamName,
     homeFormFeatures,
     awayFormFeatures,
+    homeLastMatchMemory,
+    awayLastMatchMemory,
     splitFeatures,
     h2hFeatures,
     teamStrength,
