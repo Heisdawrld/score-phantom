@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Activity, BarChart2, ChevronRight, RefreshCw, Search, Sparkles, Target, Trophy, Zap } from "lucide-react";
+import { Activity, ChevronRight, RefreshCw, Search, ShieldCheck, Sparkles, Trophy, Zap } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,11 @@ function statusLabel(status?: string | null) {
   return "UPCOMING";
 }
 
+function money(value: any) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(2).replace(/\.00$/, "") : "—";
+}
+
 function LeaguePill({ active, children, onClick }: { active: boolean; children: any; onClick: () => void }) {
   return (
     <button
@@ -48,43 +53,68 @@ function LeaguePill({ active, children, onClick }: { active: boolean; children: 
   );
 }
 
-function PickCard({ pick }: { pick: any }) {
+function PickCard({ pick, onOpen }: { pick: any; onOpen: () => void }) {
   const rec = pick?.recommendation || {};
   const game = pick?.game || {};
   const projection = pick?.projection || {};
+  const intel = pick?.intel || {};
+  const capped = rec.betaCapped;
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-orange-300/15 bg-gradient-to-br from-orange-400/[0.10] via-white/[0.035] to-primary/[0.06] p-4">
-      <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-orange-400/10 blur-3xl" />
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/70">Basketball Edge</p>
-          <h3 className="mt-1 text-sm font-black text-white leading-tight">{game.homeTeam} vs {game.awayTeam}</h3>
-          <p className="mt-2 text-xl font-black text-orange-200">{rec.pick || "No Clear Edge"}</p>
+    <button onClick={onOpen} className="w-full text-left group">
+      <motion.div whileTap={{ scale: 0.99 }} className="relative overflow-hidden rounded-[28px] border border-orange-300/20 bg-gradient-to-br from-orange-400/[0.12] via-white/[0.035] to-primary/[0.06] p-4 transition-all group-hover:border-orange-300/35">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-orange-400/10 blur-3xl" />
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/70">Basketball Edge</p>
+              <span className="rounded-full border border-white/[0.08] bg-black/25 px-2 py-0.5 text-[9px] font-black text-white/45 uppercase tracking-widest">{pick?.league?.label || "NBA"}</span>
+            </div>
+            <h3 className="mt-2 text-sm font-black text-white leading-tight">{game.homeTeam} vs {game.awayTeam}</h3>
+            <p className="mt-3 text-2xl font-black text-orange-100 leading-tight">{rec.pick || "No Clear Edge"}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-300/20 bg-black/30 px-3 py-2 text-center shrink-0">
+            <p className="text-[9px] uppercase tracking-widest text-white/35">Score</p>
+            <p className="text-xl font-black text-primary">{rec.phantomScore || 0}</p>
+            {capped && <p className="mt-0.5 text-[8px] font-black text-orange-200/70">CAPPED</p>}
+          </div>
         </div>
-        <div className="rounded-2xl border border-orange-300/20 bg-black/30 px-3 py-2 text-center">
-          <p className="text-[9px] uppercase tracking-widest text-white/35">Score</p>
-          <p className="text-lg font-black text-primary">{rec.phantomScore || 0}</p>
+
+        <div className="relative mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
+            <p className="text-[9px] text-white/35 uppercase font-bold">Model</p>
+            <p className="text-sm font-black text-white">{rec.modelProbability ? `${Math.round(rec.modelProbability * 100)}%` : "—"}</p>
+          </div>
+          <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
+            <p className="text-[9px] text-white/35 uppercase font-bold">Book Line</p>
+            <p className="text-sm font-black text-white">{rec.bookmakerLine ?? "—"}</p>
+          </div>
+          <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
+            <p className="text-[9px] text-white/35 uppercase font-bold">Edge</p>
+            <p className="text-sm font-black text-white">{rec.edgePoints != null ? `${rec.edgePoints > 0 ? "+" : ""}${rec.edgePoints}` : rec.edge ? `${(rec.edge * 100).toFixed(1)}%` : "—"}</p>
+          </div>
         </div>
-      </div>
-      <div className="relative mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
-          <p className="text-[9px] text-white/35 uppercase font-bold">Model</p>
-          <p className="text-sm font-black text-white">{rec.modelProbability ? `${Math.round(rec.modelProbability * 100)}%` : "—"}</p>
+
+        <div className="relative mt-3 rounded-2xl border border-white/[0.05] bg-black/20 p-3">
+          <div className="flex items-center justify-between gap-3 text-[11px]">
+            <span className="text-white/38">Model total</span>
+            <span className="font-black text-white">{projection.total || "—"}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3 text-[11px]">
+            <span className="text-white/38">Bookmaker</span>
+            <span className="font-black text-white/75 truncate">{rec.bookmakerTitle || "Market line"} @ {money(rec.bookmakerPrice)}</span>
+          </div>
         </div>
-        <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
-          <p className="text-[9px] text-white/35 uppercase font-bold">Edge</p>
-          <p className="text-sm font-black text-white">{rec.edgePoints != null ? `${rec.edgePoints > 0 ? "+" : ""}${rec.edgePoints}` : rec.edge ? `${(rec.edge * 100).toFixed(1)}%` : "—"}</p>
+
+        <div className="relative mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/45">
+          <Sparkles className="h-3.5 w-3.5 text-orange-300" />
+          <span>{rec.riskLevel || "MEDIUM"} risk</span>
+          <span>·</span>
+          <span>{intel.dataCoverageLabel || "GOOD"} coverage</span>
+          <span>·</span>
+          <span>{intel.bookmakerCount || 0} books</span>
         </div>
-        <div className="rounded-2xl bg-black/25 border border-white/[0.05] p-2">
-          <p className="text-[9px] text-white/35 uppercase font-bold">Total</p>
-          <p className="text-sm font-black text-white">{projection.total || "—"}</p>
-        </div>
-      </div>
-      <div className="relative mt-3 flex items-center gap-2 text-[11px] text-white/45">
-        <Sparkles className="h-3.5 w-3.5 text-orange-300" />
-        <span>{rec.riskLevel || "MEDIUM"} risk · {pick?.league?.label || "Basketball"}</span>
-      </div>
-    </div>
+      </motion.div>
+    </button>
   );
 }
 
@@ -124,18 +154,21 @@ export default function Basketball() {
     queryKey: ["/api/basketball/health"],
     queryFn: () => fetchApi("/basketball/health"),
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const { data: picksData, isLoading: picksLoading } = useQuery({
     queryKey: ["/api/basketball/best-picks", league],
     queryFn: () => fetchApi(`/basketball/best-picks${leagueParam}`),
-    staleTime: 2 * 60_000,
+    staleTime: 45_000,
+    refetchInterval: 45_000,
   });
 
   const { data: gamesData, isLoading: gamesLoading } = useQuery({
     queryKey: ["/api/basketball/games", league],
     queryFn: () => fetchApi(`/basketball/games${leagueParam}`),
-    staleTime: 60_000,
+    staleTime: 45_000,
+    refetchInterval: 45_000,
   });
 
   const games = useMemo(() => {
@@ -147,6 +180,13 @@ export default function Basketball() {
 
   const picks = (picksData as any)?.picks || [];
   const degraded = (health as any)?.status === "degraded";
+
+  const overCluster = useMemo(() => {
+    const top = picks.slice(0, 5);
+    if (top.length < 3) return false;
+    const overs = top.filter((p: any) => p?.recommendation?.marketDirection === "total_over").length;
+    return overs / top.length >= 0.7;
+  }, [picks]);
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white pb-28 relative overflow-hidden">
@@ -161,15 +201,29 @@ export default function Basketball() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-200/65">ScorePhantom Basketball Beta</p>
               <h1 className="mt-2 text-2xl font-black tracking-tight">Basketball Intelligence 🏀</h1>
-              <p className="mt-1 text-xs text-white/45 leading-relaxed">NBA + NCAAB model edges powered by projected score, spread, totals and bookmaker lines.</p>
+              <p className="mt-1 text-xs text-white/45 leading-relaxed">Real bookmaker lines, projected score, spread and total edges. Beta scores are capped until injuries/player layers are added.</p>
             </div>
             <div className="h-12 w-12 rounded-2xl border border-orange-300/20 bg-orange-400/10 flex items-center justify-center">
               <Activity className="h-6 w-6 text-orange-200" />
             </div>
           </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-2xl border border-white/[0.05] bg-black/20 p-2">
+              <p className="text-[9px] uppercase tracking-widest text-white/30">Auto Sync</p>
+              <p className="text-xs font-black text-primary">Active</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.05] bg-black/20 p-2">
+              <p className="text-[9px] uppercase tracking-widest text-white/30">Status</p>
+              <p className="text-xs font-black text-white">{(health as any)?.status || "checking"}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.05] bg-black/20 p-2">
+              <p className="text-[9px] uppercase tracking-widest text-white/30">Mode</p>
+              <p className="text-xs font-black text-orange-200">Beta V1</p>
+            </div>
+          </div>
           {degraded && (
             <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-3 text-xs text-amber-100/70">
-              Basketball API is not fully configured yet. Add BALLDONTLIE_API_KEY and THE_ODDS_API_KEY on Render.
+              Basketball API is degraded. Confirm BALLDONTLIE_API_KEY and THE_ODDS_API_KEY on Render.
             </div>
           )}
         </motion.div>
@@ -178,21 +232,28 @@ export default function Basketball() {
           {LEAGUES.map((l) => <LeaguePill key={l.key} active={league === l.key} onClick={() => setLeague(l.key)}>{l.label}</LeaguePill>)}
         </div>
 
+        {overCluster && (
+          <div className="rounded-3xl border border-orange-300/20 bg-orange-400/[0.07] p-4 text-xs text-orange-100/75">
+            <div className="flex items-center gap-2 font-black text-orange-100"><ShieldCheck className="h-4 w-4" /> Market cluster detected</div>
+            <p className="mt-1 leading-relaxed">Most top basketball edges currently lean Over. ScorePhantom is showing them because they clear the line-edge gates, but confidence remains beta-capped.</p>
+          </div>
+        )}
+
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-orange-300" />
               <h2 className="text-sm font-black uppercase tracking-widest text-white/80">Best Edges</h2>
             </div>
-            <span className="text-[10px] font-bold text-white/30">Moneyline · Spread · Totals</span>
+            <span className="text-[10px] font-bold text-white/30">Book line · Model edge</span>
           </div>
-          {picksLoading ? <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading basketball edges...</div> : picks.length ? (
+          {picksLoading ? <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading live basketball edges...</div> : picks.length ? (
             <div className="grid gap-3">
-              {picks.slice(0, 3).map((pick: any, i: number) => <PickCard key={`${pick.game?.id}-${i}`} pick={pick} />)}
+              {picks.slice(0, 4).map((pick: any, i: number) => <PickCard key={`${pick.game?.id}-${i}`} pick={pick} onOpen={() => setLocation(`/basketball/games/${pick?.league?.key || 'nba'}/${pick?.game?.id}`)} />)}
             </div>
           ) : (
             <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">
-              No strong basketball edges yet. Run Basketball Admin Sync + Predictions after deploy.
+              No qualified basketball edges yet. The engine will not force weak markets.
             </div>
           )}
         </section>
@@ -219,7 +280,7 @@ export default function Basketball() {
             <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-center">
               <RefreshCw className="mx-auto h-6 w-6 text-white/20" />
               <p className="mt-3 text-sm font-bold text-white/45">No basketball games synced yet</p>
-              <p className="mt-1 text-xs text-white/30">Use admin sync after deploy to pull NBA + NCAAB games and odds.</p>
+              <p className="mt-1 text-xs text-white/30">Auto-sync may still be warming up. You can also run Full Basketball Setup from Admin.</p>
             </div>
           )}
         </section>
