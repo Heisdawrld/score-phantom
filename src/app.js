@@ -7,6 +7,8 @@ import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
 import adminRoutes from "./api/adminRoutes.js";
 import trackRecordRoutes from "./api/trackRecordRoutes.js";
+import basketballRoutes from "./basketball/routes/basketballRoutes.js";
+import { initBasketballTables } from "./basketball/storage/basketballDb.js";
 import { initBacktestingTable } from "./storage/backtesting.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
@@ -63,6 +65,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api", routes);
+app.use("/api/basketball", basketballRoutes);
 app.use("/api/auth", authRoutes);
 
 // Accurate BSD v2 health check for the React admin panel. This route is registered
@@ -89,8 +92,9 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
     checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
     checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
     checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
+    checks.basketball = (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'odds_configured' : 'odds_missing';
     const allOk = Object.values(checks).every(v => typeof v !== 'string' || v === 'ok' || v.includes('configured'));
-    return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2' });
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2 + Basketball Beta' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -397,6 +401,7 @@ app.listen(PORT, async () => {
   console.log("[Live] BSD live score watcher started");
   await initUsersTable();
   await initPredictionsTable();
+  await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
 
   // Migrate fixtures table for new columns (idempotent)
