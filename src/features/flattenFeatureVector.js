@@ -11,6 +11,7 @@ function flattenFeatureVector(fv) {
   const tc = fv.tableContext || {};
   const inf = fv.injuryFeatures || {};
   const blf = fv.bsdLineupFeatures || {};
+  const bsdIntel = fv.bsdIntelligenceFeatures || {};
   const ec = fv.eventContext || {};
   const referee = fv.refereeData || {};
 
@@ -161,6 +162,34 @@ function flattenFeatureVector(fv) {
     homeMatchesAvailable: safeNum(hf.matches_available, 0),
     awayMatchesAvailable: safeNum(af.matches_available, 0),
     predictability_score: fv.predictability_score ?? 0.5,
+    hasXgTable: bsdIntel.hasXgTable === true,
+    homeXgForPerGame: safeNum(bsdIntel.homeXgForPerGame, null),
+    homeXgAgainstPerGame: safeNum(bsdIntel.homeXgAgainstPerGame, null),
+    awayXgForPerGame: safeNum(bsdIntel.awayXgForPerGame, null),
+    awayXgAgainstPerGame: safeNum(bsdIntel.awayXgAgainstPerGame, null),
+    homeXgTableStrength: safeNum(bsdIntel.homeXgTableStrength, null),
+    awayXgTableStrength: safeNum(bsdIntel.awayXgTableStrength, null),
+    xgTableGap: safeNum(bsdIntel.xgTableGap, 0),
+    homeTableLuck: safeNum(bsdIntel.homeTableLuck, null),
+    awayTableLuck: safeNum(bsdIntel.awayTableLuck, null),
+    homeGdVsXgd: safeNum(bsdIntel.homeGdVsXgd, null),
+    awayGdVsXgd: safeNum(bsdIntel.awayGdVsXgd, null),
+    hasManagerIntel: bsdIntel.hasManagerIntel === true,
+    homeManagerAttacking: safeNum(bsdIntel.homeManagerIntel?.attacking, null),
+    awayManagerAttacking: safeNum(bsdIntel.awayManagerIntel?.attacking, null),
+    homeManagerDefensive: safeNum(bsdIntel.homeManagerIntel?.defensive, null),
+    awayManagerDefensive: safeNum(bsdIntel.awayManagerIntel?.defensive, null),
+    managerAttackGap: safeNum(bsdIntel.managerAttackGap, 0),
+    managerDefenceGap: safeNum(bsdIntel.managerDefenceGap, 0),
+    combinedManagerOverBias: safeNum(bsdIntel.combinedManagerOverBias, 0),
+    combinedManagerUnderBias: safeNum(bsdIntel.combinedManagerUnderBias, 0),
+    hasPlayerStats: bsdIntel.hasPlayerStats === true,
+    playerStatsCount: safeNum(bsdIntel.playerStatsCount, 0),
+    homePlayerXgXa: safeNum(bsdIntel.homePlayerXgXa, 0),
+    awayPlayerXgXa: safeNum(bsdIntel.awayPlayerXgXa, 0),
+    playerImpactGap: safeNum(bsdIntel.playerImpactGap, 0),
+    homeAvgPlayerRating: safeNum(bsdIntel.homeAvgPlayerRating, null),
+    awayAvgPlayerRating: safeNum(bsdIntel.awayAvgPlayerRating, null),
     advancedOdds: fv.advancedOdds || null,
     polymarketOdds: fv.polymarketOdds || null,
     homeManager: fv.homeManager || null,
