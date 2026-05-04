@@ -106,7 +106,8 @@ function buildTableContext(homeTeamName, awayTeamName, standings, homeMomentum, 
     away_momentum: safeNum(awayMomentum, 0),
     momentum_gap: safeNum(homeMomentum, 0) - safeNum(awayMomentum, 0),
   };
-}\n
+}
+
 function extractProfileFeatures(profile) {
   if (!profile) {
     return {
