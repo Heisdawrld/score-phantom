@@ -42,6 +42,8 @@ class ErrorBoundary extends React.Component<
 
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
+import Basketball from "@/pages/Basketball";
+import BasketballGame from "@/pages/BasketballGame";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
@@ -149,6 +151,8 @@ function Router() {
       <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchCenter} />} />
+      <Route path="/basketball" component={() => <ProtectedRoute component={Basketball} />} />
+      <Route path="/basketball/games/:league/:externalId" component={() => <ProtectedRoute component={BasketballGame} />} />
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/simulator" component={() => <ProtectedRoute component={Simulator} />} />
