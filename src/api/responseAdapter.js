@@ -71,11 +71,50 @@ const REASON_LABELS = {
   high_volatility_warning:         "⚠️ High match volatility — outcome variance is elevated",
   upset_risk_elevated:             "⚠️ Upset risk detected — structural vulnerabilities present",
   low_data_quality:                "⚠️ Limited data baseline — predictive confidence reduced",
+  metadata_goals_trend:            "BSD pre-match facts point toward a goals-friendly matchup",
+  metadata_scoring_warning:        "BSD pre-match facts flag a scoring concern",
+  metadata_clean_sheet_signal:     "BSD pre-match facts support a clean-sheet angle",
+  metadata_unbeaten_signal:        "BSD pre-match facts show an unbeaten/team-strength signal",
+  metadata_derby_context:          "BSD metadata flags derby/rivalry context, increasing volatility",
 };
 
 function humanizeReasonCode(code) {
   if (REASON_LABELS[code]) return REASON_LABELS[code];
-  return code.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return String(code || '').replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function collectBsdInsightReasons(fv = {}) {
+  const reasons = [];
+  const coreGap = safeNum(fv.corePlayerGap, 0);
+  const hCore = safeNum(fv.homeCorePlayerScore, 0);
+  const aCore = safeNum(fv.awayCorePlayerScore, 0);
+  if (fv.hasDeepPlayerIntel && Math.abs(coreGap) >= 0.35) {
+    if (coreGap > 0) reasons.push(`BSD player-career layer gives ${fv.homeTeam || 'home'} the stronger core-player impact (${hCore.toFixed(2)} vs ${aCore.toFixed(2)})`);
+    else reasons.push(`BSD player-career layer gives ${fv.awayTeam || 'away'} the stronger core-player impact (${aCore.toFixed(2)} vs ${hCore.toFixed(2)})`);
+  }
+
+  const hRating = safeNum(fv.homeCoreAvgRating, null);
+  const aRating = safeNum(fv.awayCoreAvgRating, null);
+  if (hRating != null && aRating != null && Math.abs(hRating - aRating) >= 0.25) {
+    if (hRating > aRating) reasons.push(`${fv.homeTeam || 'Home'} has the stronger average core-player rating from BSD career data`);
+    else reasons.push(`${fv.awayTeam || 'Away'} has the stronger average core-player rating from BSD career data`);
+  }
+
+  const refChaos = safeNum(fv.refereeVolatilityChaos, null);
+  const refStrict = safeNum(fv.refereeVolatilityStrictness, null);
+  if (refChaos != null && refChaos >= 0.72) reasons.push(`BSD referee history indicates elevated chaos/card volatility (${Math.round(refChaos * 100)}%)`);
+  else if (refStrict != null && refStrict >= 0.75) reasons.push(`BSD referee profile suggests a strict officiating style`);
+  if (fv.refereeRedCardWarning) reasons.push(`BSD referee history flags above-normal red-card risk`);
+
+  const codes = Array.isArray(fv.metadataReasonCodes) ? fv.metadataReasonCodes : [];
+  for (const code of codes.slice(0, 3)) {
+    reasons.push(humanizeReasonCode(code));
+  }
+  if (fv.hasMetadataPreview && safeNum(fv.metadataFactCount, 0) > 0) {
+    reasons.push(`BSD match metadata adds ${fv.metadataFactCount} pre-match fact${fv.metadataFactCount === 1 ? '' : 's'} to the context layer`);
+  }
+
+  return [...new Set(reasons)].slice(0, 6);
 }
 
 function mapModelConfidence(probability, dataCompletenessScore) {
@@ -350,6 +389,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   };
 
   const humanReasonCodes = (reasonCodes || []).map(humanizeReasonCode);
+  const bsdInsightReasons = collectBsdInsightReasons({ ...fv, homeTeam, awayTeam });
+  for (const r of bsdInsightReasons) {
+    if (!humanReasonCodes.includes(r)) humanReasonCodes.push(r);
+  }
   if (dataCompletenessScore < 0.4 && !humanReasonCodes.some(r => r.includes("Limited data"))) {
     humanReasonCodes.push("⚠️ Limited historical data — predictions carry higher uncertainty");
   }
@@ -408,7 +451,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       modelConfidence: "LOW",
       tacticalFit: "WEAK",
       valueRating: "WEAK",
-      reasons: [noSafePickReason || "Insufficient edge or data quality"],
+      reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
       advisor_status: "AVOID",
       no_edge: true,
     };
