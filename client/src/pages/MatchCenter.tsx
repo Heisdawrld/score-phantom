@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -86,15 +86,16 @@ export default function MatchCenter() {
       staleTime: 30 * 1000,
       refetchInterval: (query) => {
         const d = query?.state?.data as any;
-        const status = d?.fixture?.match_status || "";
+        const status = String(d?.fixture?.match_status || "").toUpperCase();
         return ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(status) ? 30000 : false;
       },
       enabled: !!fixtureId,
     });
   const d = data as any;
   const fix = d?.fixture || {};
-  const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(fix.match_status || "");
-  const isFT = ["FT", "AET", "Pen"].includes(fix.match_status || "");
+  const statusUpper = String(fix.match_status || "").toUpperCase();
+  const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(statusUpper);
+  const isFT = ["FT", "AET", "PEN_FT", "PEN", "PENS"].includes(statusUpper) || String(fix.match_status || "") === "Pen";
   const matchTime = fix.match_date
       ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "";
@@ -206,6 +207,15 @@ export default function MatchCenter() {
                 <Suspense fallback={<div className="flex justify-center py-20"><div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /></div>}>
                   {tab === "Prediction" && (
                     <>
+                      {isFT && (
+                        <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-3 flex items-start gap-2">
+                          <Info className="w-4 h-4 text-amber-300 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[11px] font-black text-amber-200 uppercase tracking-[0.14em]">Match Completed</p>
+                            <p className="text-[11px] text-amber-100/60 leading-snug mt-1">Prediction is shown for review only. This is not an active pick.</p>
+                          </div>
+                        </div>
+                      )}
                       <PhantomIntelPanel matchData={d} />
                       <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />
                     </>
