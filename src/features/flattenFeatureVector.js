@@ -4,6 +4,10 @@ function flattenFeatureVector(fv) {
   const ts = fv.teamStrength || {};
   const hf = fv.homeFormFeatures || {};
   const af = fv.awayFormFeatures || {};
+  const hMemory = fv.homeLastMatchMemory || {};
+  const aMemory = fv.awayLastMatchMemory || {};
+  const hLast = hMemory.lastMatch || {};
+  const aLast = aMemory.lastMatch || {};
   const sf = fv.splitFeatures || {};
   const h2h = fv.h2hFeatures || {};
   const vf = fv.volatilityFeatures || {};
@@ -107,6 +111,28 @@ function flattenFeatureVector(fv) {
     awayFailedToScoreRate,
     homeOver25Rate: safeNum(hf.over_2_5_rate, 0.4),
     awayOver25Rate: safeNum(af.over_2_5_rate, 0.4),
+    homeLastMatchMemoryAvailable: hMemory.available === true,
+    awayLastMatchMemoryAvailable: aMemory.available === true,
+    homeLastMatchLabel: hMemory.label || 'unknown',
+    awayLastMatchLabel: aMemory.label || 'unknown',
+    homeLastMatchAttackSignal: safeNum(hMemory.attackSignal, 0),
+    awayLastMatchAttackSignal: safeNum(aMemory.attackSignal, 0),
+    homeLastMatchDefenseSignal: safeNum(hMemory.defenseSignal, 0),
+    awayLastMatchDefenseSignal: safeNum(aMemory.defenseSignal, 0),
+    homeLastMatchVolatilitySignal: safeNum(hMemory.volatilitySignal, 0),
+    awayLastMatchVolatilitySignal: safeNum(aMemory.volatilitySignal, 0),
+    homeLastMatchReliability: safeNum(hMemory.reliability, 0),
+    awayLastMatchReliability: safeNum(aMemory.reliability, 0),
+    homeLastMatchCodes: hMemory.codes || [],
+    awayLastMatchCodes: aMemory.codes || [],
+    homeLastGoalsFor: safeNum(hLast.scored, null),
+    homeLastGoalsAgainst: safeNum(hLast.conceded, null),
+    awayLastGoalsFor: safeNum(aLast.scored, null),
+    awayLastGoalsAgainst: safeNum(aLast.conceded, null),
+    homeLastXgFor: safeNum(hLast.xgFor, null),
+    homeLastXgAgainst: safeNum(hLast.xgAgainst, null),
+    awayLastXgFor: safeNum(aLast.xgFor, null),
+    awayLastXgAgainst: safeNum(aLast.xgAgainst, null),
     homeHomeGoalsFor: sf.homeHomeGoalsFor != null ? safeNum(sf.homeHomeGoalsFor) : null,
     homeHomeGoalsAgainst: sf.homeHomeGoalsAgainst != null ? safeNum(sf.homeHomeGoalsAgainst) : null,
     homeHomeWinRate: sf.homeHomeWinRate != null ? safeNum(sf.homeHomeWinRate) : null,
