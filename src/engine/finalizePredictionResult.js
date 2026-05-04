@@ -44,7 +44,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
 
   const featureEvidence = {
     formUsed: features.homePointsLast5 != null && features.awayPointsLast5 != null,
-    h2hUsed: features.h2hMatchCount > 0,
+    h2hUsed: (features.h2hMatchesAvailable || 0) > 0,
     xgUsed: xg.homeExpectedGoals > 0 && xg.awayExpectedGoals > 0,
     tacticalUsed: !!(features.tacticalMatchup && features.tacticalMatchup.tacticalConfidence !== 'low'),
     sharpUsed: !!features.bestOdds,
