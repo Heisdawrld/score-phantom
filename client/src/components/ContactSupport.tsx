@@ -35,19 +35,19 @@ export function ContactSupport() {
         dragMomentum={false}
         whileDrag={{ scale: 1.1, cursor: "grabbing" }}
         onDragStart={() => setIsDragging(true)}
-        onDragEnd={() => setTimeout(() => setIsDragging(false), 150)} // small delay to prevent click firing immediately after drag
+        onDragEnd={() => setTimeout(() => setIsDragging(false), 150)}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 2, type: "spring", stiffness: 300 }}
         onClick={() => {
           if (!isDragging) setOpen(true);
         }}
-        className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-[#25D366] shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all cursor-grab touch-none"
+        className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-30 w-11 h-11 rounded-full bg-[#25D366] shadow-[0_4px_18px_rgba(37,211,102,0.32)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all cursor-grab touch-none md:w-12 md:h-12 md:right-5 md:bottom-24"
         aria-label="Contact Support"
       >
-        <MessageCircle className="w-7 h-7 text-white fill-white pointer-events-none" />
-        {/* Pulse ring */}
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-30 pointer-events-none" />
+        <MessageCircle className="w-5 h-5 md:w-6 md:h-6 text-white fill-white pointer-events-none" />
+        {/* Softer pulse ring */}
+        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-15 pointer-events-none" />
       </motion.button>
 
       {/* Modal */}
