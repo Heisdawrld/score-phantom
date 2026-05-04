@@ -15,7 +15,7 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchPredictedLineup, fetchPlayerStats, fetchBzzoiroPrediction, fetchBestOdds } from './bsd.js';
+import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds } from './bsd.js';
 import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
 // Odds are now sourced from fixture_odds table and live BSD v2 odds as fallback.
 
@@ -24,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.8.5'; // Bumped: live BSD odds fallback + model-only pick labeling
+const CURRENT_ENGINE_VERSION = '2.8.6'; // Bumped: removed slow BSD v1 prediction fallback from prediction path
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -244,13 +244,11 @@ export async function ensureFixtureData(fixtureId) {
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 
-  // ── INJECT LIVE INJURIES, LINEUPS, BEST ODDS AND BSD PREDICTION ──
+  // ── INJECT LIVE INJURIES, LINEUPS AND BEST ODDS ──
+  // BSD v1 /predictions is intentionally not called here. It is optional, slow under load,
+  // and must never block ScorePhantom's own engine. The engine uses BSD v2 data + our model.
   try {
-    // BSD v2 event sub-resources use the internal event id, which is fixture.id.
-    // Older rows may have bsd_event_api_id set to an external api_id, so do not use
-    // that for v2 lineups/odds. Keep it only as a legacy prediction fallback key.
     const bsdInternalEventId = fixture.id ? String(fixture.id) : null;
-    const legacyPredictionEventId = fixture.bsd_event_api_id || bsdInternalEventId;
 
     if (bsdInternalEventId) {
       async function attachMissingPlayerStats(players = []) {
@@ -263,10 +261,9 @@ export async function ensureFixtureData(fixtureId) {
         );
       }
 
-      const [lineupData, bestOdds, bsdPrediction] = await Promise.all([
+      const [lineupData, bestOdds] = await Promise.all([
         fetchPredictedLineup(bsdInternalEventId),
         fetchBestOdds(bsdInternalEventId),
-        fetchBzzoiroPrediction(legacyPredictionEventId, fixture.match_date),
       ]);
 
       if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
@@ -286,8 +283,6 @@ export async function ensureFixtureData(fixtureId) {
         }
         await upsertFixtureOdds(fixtureId, liveOdds);
       }
-
-      if (bsdPrediction) meta.bsd_prediction = bsdPrediction;
     }
   } catch (err) {
     console.error(`[predictionCache] Failed to fetch injuries/lineup/odds for ${fixtureId}:`, err.message);
