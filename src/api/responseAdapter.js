@@ -153,22 +153,27 @@ function resolveEdgeLabel(pick, phantomScore) {
 
 /**
  * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
+ * Keep this conservative: a high raw model probability is not enough to show PICK THIS.
  */
-function computeAdvisorStatus(phantomScore, riskLevel, edgeScore) {
+function computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
   const ps = safeNum(phantomScore, 0);
   const edge = safeNum(edgeScore, 0);
-  if (ps >= 0.68 && riskLevel !== 'AGGRESSIVE') return 'FIRE';
-  if (ps >= 0.63 && edge >= 0.04) return 'FIRE';
+  const dataQ = safeNum(dataCompletenessScore, 0.5);
+  const risk = String(riskLevel || '').toUpperCase();
+
+  if (ps >= 0.68 && risk !== 'AGGRESSIVE' && dataQ >= 0.35 && edge >= 0.02) return 'FIRE';
   if (ps >= 0.55) return 'GAMBLE';
   return 'AVOID';
 }
 
-function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore) {
+function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+  const computed = computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore);
   const s = String(status || '').toUpperCase();
-  if (s === 'FIRE' || s === 'GAMBLE' || s === 'AVOID') return s;
-  if (s === 'BET' || s === 'PLAYABLE') return 'FIRE';
-  if (s === 'WATCH' || s === 'PASS') return 'GAMBLE';
-  return computeAdvisorStatus(phantomScore, riskLevel, edgeScore);
+
+  // Never allow stale/legacy FIRE to override the conservative score/risk gate.
+  if (computed !== 'FIRE') return computed;
+  if (s === 'AVOID') return 'AVOID';
+  return 'FIRE';
 }
 
 function mapValueRating(edgeScore, modelOnly = false) {
@@ -292,7 +297,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   const phantomScorePct = parseFloat((phantomScoreRaw * 100).toFixed(1));
   const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
   const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
-  const advisorStatus = normalizeAdvisorStatus(pick.advisor_status, phantomScoreRaw, riskLvl, edgeScore);
+  const advisorStatus = normalizeAdvisorStatus(pick.advisor_status, phantomScoreRaw, riskLvl, edgeScore, dataCompletenessScore);
 
   return {
     market: mapMarketName(pick.marketKey),
@@ -411,7 +416,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const phantomScorePct = capProbabilityPct(bestPick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
     const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
     const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
-    const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore);
+    const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore, dataCompletenessScore);
 
     const reasons = isModelOnly
       ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
@@ -435,8 +440,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       no_edge: false,
       modelOnly: isModelOnly,
       isModelOnly,
-      isSafeBet: !isModelOnly && (bestPick.isSafeBet || false),
-      isValueBet: !isModelOnly && (bestPick.isValueBet || false),
+      isSafeBet: !isModelOnly && advisorStatus === 'FIRE' && phantomScorePct >= 68 && riskLvl2 !== 'AGGRESSIVE',
+      isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
       isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
     };
   } else {
