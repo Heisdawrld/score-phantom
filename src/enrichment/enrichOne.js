@@ -18,6 +18,14 @@ function parseScore(scoreStr) {
   return { home, away };
 }
 
+async function ensureHistoricalMetaColumn() {
+  try {
+    await db.execute('ALTER TABLE historical_matches ADD COLUMN meta TEXT');
+  } catch (_) {
+    // column already exists / unsupported in this dialect — safe to ignore
+  }
+}
+
 function normalizeMatch(match) {
   return {
     home: match?.home || null,
@@ -27,6 +35,19 @@ function normalizeMatch(match) {
     competition: match?.competition || null,
     home_xg: match?.home_xg || null,
     away_xg: match?.away_xg || null,
+    meta: match?.meta || {
+      bsd_id: match?._bsdId ?? null,
+      bsd_api_id: match?._bsdApiId ?? null,
+      home_api_id: match?._homeApiId ?? null,
+      away_api_id: match?._awayApiId ?? null,
+      stats: match?.stats ?? match?.matchStats ?? null,
+      incidents: match?.incidents ?? match?.events ?? null,
+      cards: match?.cards ?? null,
+      possession: match?.possession ?? null,
+      shots: match?.shots ?? null,
+      shots_on_target: match?.shots_on_target ?? null,
+      raw_status: match?.status ?? null,
+    },
   };
 }
 
@@ -35,6 +56,8 @@ function normalizeMatch(match) {
  * and the fixtures.meta JSON field.
  */
 export async function storeEnrichment(fixtureId, data, markEnriched = true) {
+  await ensureHistoricalMetaColumn();
+
   await db.execute({
     sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
@@ -61,8 +84,8 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
             fixture_id, type, date,
             home_team, away_team,
             home_goals, away_goals,
-            home_xg, away_xg
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            home_xg, away_xg, meta
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         args: [
           fixtureId,
@@ -73,7 +96,8 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
           home,
           away,
           normalized.home_xg,
-          normalized.away_xg
+          normalized.away_xg,
+          JSON.stringify(normalized.meta || {})
         ],
       });
     }
@@ -123,21 +147,29 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     actualAwayXg: data?.actualAwayXg ?? null,
     shotmap: data?.shotmap ?? null,
     lineups: data?.lineups ?? null,
+    predicted_lineup: data?.lineups ?? null,
+    unavailable_players: data?.injuries ?? null,
     average_positions: data?.average_positions ?? null,
     momentum: data?.momentum ?? null,
+    xg_per_minute: data?.xg_per_minute ?? null,
+    bsd_home_form_stats: data?.bsdHomeFormStats ?? null,
+    bsd_away_form_stats: data?.bsdAwayFormStats ?? null,
     odds_data: data?.oddsData ?? null,
     polymarket_odds: data?.polymarketOdds ?? null,
     home_manager: data?.homeManager ?? null,
     away_manager: data?.awayManager ?? null,
+    bsd_prediction: data?.bsdPrediction ?? null,
 
-    // BSD v2 context kept for engine evolution and future feature use.
-    // These fields are optional and safe to be null when BSD has no coverage.
+    // Full BSD intelligence bridge: fetched -> stored -> loaded -> used.
     refereeData: data?.refereeData ?? null,
+    refereeVolatility: data?.refereeVolatility ?? null,
     injuries: data?.injuries ?? null,
     metadata: data?.metadata ?? null,
+    metadataInsights: data?.metadataInsights ?? null,
     eventContext: data?.eventContext ?? null,
     venue: data?.venue ?? null,
     playerStats: Array.isArray(data?.playerStats) ? data.playerStats : [],
+    deepPlayerIntel: data?.deepPlayerIntel ?? null,
   };
 
   const completenessTier = data?.completeness?.tier ?? 'thin';
