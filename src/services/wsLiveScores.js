@@ -33,10 +33,33 @@ function safeJsonParse(value, fallback = {}) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+async function fetchKickoffWindowCandidates() {
+  try {
+    const now = new Date();
+    const from = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+    const to = new Date(now.getTime() + 35 * 60 * 1000).toISOString();
+    const r = await db.execute({
+      sql: `SELECT id, home_score, away_score, match_status, live_minute
+            FROM fixtures
+            WHERE match_date >= ?
+              AND match_date <= ?
+              AND COALESCE(match_status, 'NS') NOT IN ('FT', 'AET', 'PEN', 'CANC', 'PPD', 'finished')
+            ORDER BY match_date ASC
+            LIMIT 80`,
+      args: [from, to],
+    });
+    return (r.rows || []).map(row => ({ id: row.id, _fromKickoffWindow: true, ...row }));
+  } catch (err) {
+    console.warn('[Live] Failed kickoff-window scan:', err.message);
+    return [];
+  }
+}
+
 async function fetchExpandedLiveMatches() {
   const statuses = ['inprogress', 'halftime', '1st_half', '2nd_half', 'ht', 'live'];
   const batches = await Promise.all([
     fetchLiveMatches().catch(() => []),
+    fetchKickoffWindowCandidates().catch(() => []),
     ...statuses.map(status => bsdFetchAll('/events/', { status }, { maxPages: 2 }).catch(() => [])),
   ]);
   const byId = new Map();
@@ -47,12 +70,21 @@ async function fetchExpandedLiveMatches() {
   return [...byId.values()];
 }
 
-function normalizeLiveStatus(rawStatus) {
+function normalizeLiveStatus(rawStatus, rawPeriod = null, homeScore = null, awayScore = null, minute = null) {
   const s = String(rawStatus || '').toLowerCase();
-  if (s === 'finished' || s === 'ft') return 'FT';
-  if (s === 'halftime' || s === 'half_time' || s === 'ht') return 'HT';
+  const p = String(rawPeriod || '').toLowerCase();
+  if (s === 'finished' || s === 'ft' || p === 'ft') return 'FT';
+  if (s === 'halftime' || s === 'half_time' || s === 'ht' || p === 'ht' || p.includes('half time')) return 'HT';
   if (s === '1st_half' || s === '2nd_half' || s === 'inprogress' || s === 'live') return 'LIVE';
+  if (p.includes('1') || p.includes('2')) return 'LIVE';
+  if ((homeScore != null || awayScore != null) && (minute != null || s === 'notstarted')) return 'LIVE';
   return s ? s.toUpperCase() : 'LIVE';
+}
+
+function isPreMatchEvent(event) {
+  const s = String(event?.status || '').toLowerCase();
+  const p = String(event?.period || '').toLowerCase();
+  return (s === 'notstarted' || s === 'ns') && !p && event?.home_score == null && event?.away_score == null;
 }
 
 async function updateLiveFixtureMeta(fixtureId, finalOrLiveEvent, partialLiveStats = null) {
@@ -298,22 +330,24 @@ async function pollLiveScores() {
     if (matches && matches.length > 0) {
       if (!isConnected) isConnected = true;
       for (const m of matches) {
-        // BSD live event fields: id, home_score, away_score, current_minute, status
         const fid = String(m.id || '');
         if (!fid) continue;
-        currentLiveIds.add(fid);
         let fullLiveEvent = null;
         try {
-          // Pull full sub-resource stats for live fixtures so the detail page/Pitch tab
-          // has current momentum, shotmap, incidents and xG when a user opens the match.
           fullLiveEvent = await fetchEventDetail(fid, true);
         } catch (_) {}
+        if (m._fromKickoffWindow && isPreMatchEvent(fullLiveEvent)) continue;
+        const homeScore = fullLiveEvent?.home_score ?? m.home_score ?? 0;
+        const awayScore = fullLiveEvent?.away_score ?? m.away_score ?? 0;
+        const minute = fullLiveEvent?.current_minute || m.current_minute || null;
+        const status = normalizeLiveStatus(fullLiveEvent?.status || m.status, fullLiveEvent?.period || m.period, homeScore, awayScore, minute);
+        currentLiveIds.add(fid);
         await handleScoreUpdate({
           fixture_id: fid,
-          home_score: fullLiveEvent?.home_score ?? m.home_score ?? 0,
-          away_score: fullLiveEvent?.away_score ?? m.away_score ?? 0,
-          status:     normalizeLiveStatus(fullLiveEvent?.status || m.status),
-          minute:     fullLiveEvent?.current_minute || m.current_minute || null,
+          home_score: homeScore,
+          away_score: awayScore,
+          status,
+          minute,
           incidents:  fullLiveEvent?.incidents || m.incidents || [],
           live_stats: fullLiveEvent?.live_stats || m.live_stats || null,
           final_event: fullLiveEvent || null,
