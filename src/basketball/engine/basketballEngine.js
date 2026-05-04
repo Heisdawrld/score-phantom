@@ -1,7 +1,7 @@
 import { assertEnabledBasketballLeague } from '../config/leagues.js';
 import { getBasketballOddsForGame, getRecentTeamGames, saveBasketballPrediction } from '../storage/basketballDb.js';
 
-export const BASKETBALL_ENGINE_VERSION = 'basketball-v1.0.0';
+export const BASKETBALL_ENGINE_VERSION = 'basketball-v1.1.0';
 
 function n(value, fallback = 0) {
   const parsed = Number(value);
@@ -90,6 +90,19 @@ function restDays(rows, gameStart) {
   return Math.max(0, Math.round((start - played[0]) / 86400000));
 }
 
+function coverageLabel(score) {
+  if (score >= 82) return 'RICH';
+  if (score >= 68) return 'GOOD';
+  if (score >= 50) return 'PARTIAL';
+  return 'THIN';
+}
+
+function betaCap(leagueKey, bookmakerCount) {
+  if (bookmakerCount <= 1) return leagueKey === 'ncaab' ? 74 : 78;
+  if (leagueKey === 'ncaab') return 80;
+  return 86;
+}
+
 async function buildFeatures(game, league) {
   const before = game.start_time || new Date().toISOString();
   const homeRows = await getRecentTeamGames(league.key, game.home_team, before, 12);
@@ -102,8 +115,15 @@ async function buildFeatures(game, league) {
   const restEdge = hRest != null && aRest != null ? clamp((hRest - aRest) * 0.8, -3.0, 3.0) : 0;
   const sampleQuality = clamp(Math.min(home.games, away.games) / 10, 0, 1);
   const oddsRows = await getBasketballOddsForGame(game.id);
-  const oddsQuality = oddsRows.length >= 6 ? 1 : oddsRows.length > 0 ? 0.55 : 0;
+  const bookmakers = [...new Set((oddsRows || []).map((r) => r.bookmaker_title || r.bookmaker).filter(Boolean))];
+  const bookmakerCount = bookmakers.length;
+  const oddsQuality = bookmakerCount >= 3 ? 1 : bookmakerCount >= 2 ? 0.82 : oddsRows.length > 0 ? 0.58 : 0;
+
+  // dataQuality is the internal gate quality. coverageQuality is what we show users.
+  // We intentionally cap shown coverage because Basketball V1 does not yet include injuries/confirmed lineups/player props.
   const dataQuality = clamp((sampleQuality * 0.55) + (oddsQuality * 0.30) + 0.15, 0, 1);
+  const coverageCap = league.key === 'ncaab' ? 0.78 : 0.86;
+  const coverageQuality = clamp((sampleQuality * 0.44) + (oddsQuality * 0.28) + 0.14, 0, coverageCap);
 
   return {
     home,
@@ -111,10 +131,13 @@ async function buildFeatures(game, league) {
     homeRows,
     awayRows,
     oddsRows,
+    bookmakers,
+    bookmakerCount,
     restEdge,
     homeRestDays: hRest,
     awayRestDays: aRest,
     dataQuality,
+    coverageQuality,
     sampleQuality,
     oddsQuality,
   };
@@ -153,6 +176,8 @@ function estimateProjection(game, features, league) {
     awayPoints: Number(awayPoints.toFixed(1)),
     total: Number(total.toFixed(1)),
     spread: Number(spread.toFixed(1)),
+    favorite: spread >= 0 ? game.home_team : game.away_team,
+    favoriteSpread: Number(Math.abs(spread).toFixed(1)),
     homeWinProbability: Number(homeWinProbability.toFixed(4)),
     awayWinProbability: Number((1 - homeWinProbability).toFixed(4)),
     marginVolatility: Number(marginVol.toFixed(2)),
@@ -175,6 +200,17 @@ function pickBestLine(rows, predicate = () => true) {
   return filtered.slice().sort((a, b) => Math.abs(Number(a.price) - 1.91) - Math.abs(Number(b.price) - 1.91))[0];
 }
 
+function bookInfo(row) {
+  if (!row) return {};
+  return {
+    bookmaker: row.bookmaker || null,
+    bookmakerTitle: row.bookmaker_title || row.bookmaker || null,
+    bookmakerPrice: Number(row.price),
+    bookmakerLine: row.point ?? null,
+    lastUpdate: row.last_update || null,
+  };
+}
+
 function buildCandidates(game, league, projection, features) {
   const odds = groupOdds(features.oddsRows);
   const candidates = [];
@@ -190,11 +226,10 @@ function buildCandidates(game, league, projection, features) {
       selection: game.home_team,
       pick: `${game.home_team} Moneyline`,
       modelProbability: projection.homeWinProbability,
-      bookmakerPrice: Number(homeMl.price),
-      bookmakerLine: null,
+      ...bookInfo(homeMl),
       edge,
       edgePoints: null,
-      reasons: [`Projected ${game.home_team} win probability ${(projection.homeWinProbability*100).toFixed(1)}%`, `Model spread: ${game.home_team} by ${projection.spread.toFixed(1)}`],
+      reasons: [`Projected ${game.home_team} win probability ${(projection.homeWinProbability*100).toFixed(1)}%`, `Model spread: ${projection.favorite} by ${projection.favoriteSpread}`],
     });
   }
   if (awayMl) {
@@ -205,11 +240,10 @@ function buildCandidates(game, league, projection, features) {
       selection: game.away_team,
       pick: `${game.away_team} Moneyline`,
       modelProbability: projection.awayWinProbability,
-      bookmakerPrice: Number(awayMl.price),
-      bookmakerLine: null,
+      ...bookInfo(awayMl),
       edge,
       edgePoints: null,
-      reasons: [`Projected ${game.away_team} win probability ${(projection.awayWinProbability*100).toFixed(1)}%`, `Model spread: ${game.home_team} by ${projection.spread.toFixed(1)}`],
+      reasons: [`Projected ${game.away_team} win probability ${(projection.awayWinProbability*100).toFixed(1)}%`, `Model spread: ${projection.favorite} by ${projection.favoriteSpread}`],
     });
   }
 
@@ -217,15 +251,14 @@ function buildCandidates(game, league, projection, features) {
   const awaySpread = pickBestLine(odds.spreads, (r) => r.selection === game.away_team && r.point != null);
   if (homeSpread) {
     const line = Number(homeSpread.point);
-    const coverEdge = projection.spread + line; // home covers if model margin + handicap > 0
+    const coverEdge = projection.spread + line;
     const prob = clamp(sigmoid(coverEdge / Math.max(4.8, projection.marginVolatility * 0.55)), 0.05, 0.95);
     candidates.push({
       market: 'spread',
       selection: game.home_team,
       pick: `${game.home_team} ${line > 0 ? '+' : ''}${line}`,
       modelProbability: prob,
-      bookmakerPrice: Number(homeSpread.price),
-      bookmakerLine: line,
+      ...bookInfo(homeSpread),
       edge: impliedProbability(homeSpread.price) != null ? prob - impliedProbability(homeSpread.price) : 0,
       edgePoints: coverEdge,
       reasons: [`Model margin ${projection.spread.toFixed(1)} vs line ${line}`, `Spread edge ${coverEdge.toFixed(1)} pts`],
@@ -240,8 +273,7 @@ function buildCandidates(game, league, projection, features) {
       selection: game.away_team,
       pick: `${game.away_team} ${line > 0 ? '+' : ''}${line}`,
       modelProbability: prob,
-      bookmakerPrice: Number(awaySpread.price),
-      bookmakerLine: line,
+      ...bookInfo(awaySpread),
       edge: impliedProbability(awaySpread.price) != null ? prob - impliedProbability(awaySpread.price) : 0,
       edgePoints: coverEdge,
       reasons: [`Model margin ${(-projection.spread).toFixed(1)} for ${game.away_team} vs line ${line}`, `Spread edge ${coverEdge.toFixed(1)} pts`],
@@ -259,8 +291,7 @@ function buildCandidates(game, league, projection, features) {
       selection: 'over',
       pick: `Over ${line} Points`,
       modelProbability: prob,
-      bookmakerPrice: Number(over.price),
-      bookmakerLine: line,
+      ...bookInfo(over),
       edge: impliedProbability(over.price) != null ? prob - impliedProbability(over.price) : 0,
       edgePoints: edgePts,
       reasons: [`Projected total ${projection.total.toFixed(1)} vs book total ${line}`, `Total edge ${edgePts.toFixed(1)} pts`],
@@ -275,25 +306,44 @@ function buildCandidates(game, league, projection, features) {
       selection: 'under',
       pick: `Under ${line} Points`,
       modelProbability: prob,
-      bookmakerPrice: Number(under.price),
-      bookmakerLine: line,
+      ...bookInfo(under),
       edge: impliedProbability(under.price) != null ? prob - impliedProbability(under.price) : 0,
       edgePoints: edgePts,
       reasons: [`Projected total ${projection.total.toFixed(1)} vs book total ${line}`, `Total edge ${edgePts.toFixed(1)} pts`],
     });
   }
 
+  const maxScore = betaCap(league.key, features.bookmakerCount);
   return candidates.map((c) => {
-    const specificGate = c.market === 'moneyline'
-      ? Math.abs(c.edge || 0) / gates.moneylineEdge
+    const positiveSignal = c.market === 'moneyline'
+      ? Math.max(0, c.edge || 0) / gates.moneylineEdge
       : c.market === 'spread'
-        ? Math.abs(c.edgePoints || 0) / gates.spreadEdgePoints
-        : Math.abs(c.edgePoints || 0) / gates.totalEdgePoints;
+        ? Math.max(0, c.edgePoints || 0) / gates.spreadEdgePoints
+        : Math.max(0, c.edgePoints || 0) / gates.totalEdgePoints;
+
     const probabilityScore = c.modelProbability;
-    const edgeScore = clamp(specificGate / 1.8, 0, 1);
-    const qualityScore = features.dataQuality;
-    const phantom = clamp((probabilityScore * 0.25) + (edgeScore * 0.35) + (qualityScore * 0.25) + (features.sampleQuality * 0.15), 0, 1);
-    return { ...c, phantomScore: Number((phantom * 100).toFixed(1)), sortScore: phantom };
+    const edgeScore = clamp(positiveSignal / 1.8, 0, 1);
+    const qualityScore = features.coverageQuality;
+    let phantom = clamp((probabilityScore * 0.27) + (edgeScore * 0.34) + (qualityScore * 0.24) + (features.sampleQuality * 0.15), 0, 1);
+
+    // V1 honesty guards: giant edges and one-book support should not show as near-certainty.
+    if (features.bookmakerCount <= 1) phantom *= 0.92;
+    if (c.market === 'total' && Math.abs(c.edgePoints || 0) >= 13) phantom *= 0.95;
+
+    const rawScore = Number((phantom * 100).toFixed(1));
+    const phantomScore = Number(Math.min(rawScore, maxScore).toFixed(1));
+    const hasPositiveEdge = c.market === 'moneyline' ? (c.edge || 0) > 0 : (c.edgePoints || 0) > 0;
+    return {
+      ...c,
+      positiveEdge: hasPositiveEdge,
+      impliedProbability: impliedProbability(c.bookmakerPrice),
+      phantomScore,
+      rawPhantomScore: rawScore,
+      betaCapped: rawScore > maxScore,
+      sortScore: phantomScore / 100,
+      status: hasPositiveEdge ? 'qualified' : 'rejected',
+      rejectionReason: hasPositiveEdge ? null : 'No positive model edge',
+    };
   });
 }
 
@@ -315,11 +365,19 @@ function selectBestCandidate(candidates, league, features) {
 
 function riskLevel(best, projection, features, league) {
   if (!best) return 'HIGH';
-  if (features.dataQuality < 0.70) return league.key === 'ncaab' ? 'HIGH' : 'MEDIUM';
+  if (features.coverageQuality < 0.70 || features.bookmakerCount <= 1) return league.key === 'ncaab' ? 'HIGH' : 'MEDIUM';
   const volatility = best.market === 'total' ? projection.totalVolatility : projection.marginVolatility;
   if (volatility >= (league.key === 'ncaab' ? 18 : 16)) return 'MEDIUM';
-  if (best.phantomScore >= 72) return 'LOW';
+  if (best.phantomScore >= 80 && best.modelProbability >= 0.68) return 'LOW';
   return 'MEDIUM';
+}
+
+function marketDirection(candidate) {
+  if (!candidate) return null;
+  if (candidate.market === 'total') return `total_${candidate.selection}`;
+  if (candidate.market === 'spread') return 'spread';
+  if (candidate.market === 'moneyline') return 'moneyline';
+  return candidate.market;
 }
 
 export async function runBasketballPrediction(game, leagueKey = game.league_key || 'nba') {
@@ -330,43 +388,68 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
   const best = selectBestCandidate(candidates, league, features);
   const status = normalizeStatus(game.status);
 
+  const qualifiedCandidates = candidates
+    .filter((c) => c.positiveEdge && c.modelProbability >= 0.50)
+    .sort((a, b) => b.sortScore - a.sortScore);
+
+  const rejectedCandidates = candidates
+    .filter((c) => !c.positiveEdge || c.modelProbability < 0.50)
+    .sort((a, b) => b.sortScore - a.sortScore)
+    .slice(0, 3);
+
   const noClearEdge = !best || status === 'final';
   const recommendation = noClearEdge ? {
     market: 'No Edge',
     pick: status === 'final' ? 'Game completed — review only' : 'No Clear Edge',
+    selection: null,
+    marketDirection: null,
     modelProbability: 0,
+    bookmaker: null,
+    bookmakerTitle: null,
     bookmakerLine: null,
     bookmakerPrice: null,
+    impliedProbability: null,
     edge: 0,
     edgePoints: 0,
     phantomScore: 0,
+    rawPhantomScore: 0,
+    betaCapped: false,
     riskLevel: 'HIGH',
     noClearEdge: true,
     reasons: [
       status === 'final' ? 'Game is already completed' : 'No basketball market passed ScorePhantom V1 gates',
-      `Data quality ${(features.dataQuality * 100).toFixed(0)}%`,
+      `Data coverage ${(features.coverageQuality * 100).toFixed(0)}%`,
     ],
   } : {
     market: best.market,
     pick: best.pick,
     selection: best.selection,
+    marketDirection: marketDirection(best),
     modelProbability: Number(best.modelProbability.toFixed(4)),
+    bookmaker: best.bookmaker,
+    bookmakerTitle: best.bookmakerTitle,
     bookmakerLine: best.bookmakerLine,
     bookmakerPrice: best.bookmakerPrice,
+    impliedProbability: best.impliedProbability != null ? Number(best.impliedProbability.toFixed(4)) : null,
     edge: Number((best.edge || 0).toFixed(4)),
     edgePoints: best.edgePoints != null ? Number(best.edgePoints.toFixed(1)) : null,
     phantomScore: best.phantomScore,
+    rawPhantomScore: best.rawPhantomScore,
+    betaCapped: best.betaCapped,
     riskLevel: riskLevel(best, projection, features, league),
     noClearEdge: false,
     reasons: [
       ...best.reasons,
-      `Data quality ${(features.dataQuality * 100).toFixed(0)}%`,
+      best.bookmakerTitle ? `Line source: ${best.bookmakerTitle} @ ${best.bookmakerPrice}` : null,
+      `Data coverage ${(features.coverageQuality * 100).toFixed(0)}% (${coverageLabel(features.coverageQuality * 100)})`,
       features.homeRestDays != null && features.awayRestDays != null ? `Rest: ${game.home_team} ${features.homeRestDays}d, ${game.away_team} ${features.awayRestDays}d` : null,
+      best.betaCapped ? 'Basketball V1 confidence cap applied because injuries/player props are not yet included' : null,
     ].filter(Boolean),
   };
 
   const response = {
     engineVersion: BASKETBALL_ENGINE_VERSION,
+    beta: true,
     league: { key: league.key, label: league.label },
     game: {
       id: game.id,
@@ -377,9 +460,17 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
     },
     projection,
     intel: {
-      dataQuality: Number((features.dataQuality * 100).toFixed(0)),
+      dataQuality: Number((features.coverageQuality * 100).toFixed(0)),
+      rawDataQuality: Number((features.dataQuality * 100).toFixed(0)),
+      dataCoverageLabel: coverageLabel(features.coverageQuality * 100),
       sampleQuality: Number((features.sampleQuality * 100).toFixed(0)),
       oddsQuality: Number((features.oddsQuality * 100).toFixed(0)),
+      bookmakerCount: features.bookmakerCount,
+      bookmakers: features.bookmakers.slice(0, 6),
+      injuryLayer: false,
+      playerPropsLayer: false,
+      lineupLayer: false,
+      limitations: ['No confirmed injury layer yet', 'No player props layer yet', 'No confirmed starting lineup layer yet'],
       homeFormGames: features.home.games,
       awayFormGames: features.away.games,
       homeAvgScored: Number(features.home.avgScored.toFixed(1)),
@@ -391,7 +482,8 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
       volatility: Number(((projection.marginVolatility + projection.totalVolatility) / 2).toFixed(1)),
     },
     recommendation,
-    candidates: candidates.sort((a, b) => b.sortScore - a.sortScore).slice(0, 8),
+    candidates: qualifiedCandidates.slice(0, 8),
+    rejectedCandidates,
   };
 
   await saveBasketballPrediction({ leagueKey: league.key, gameId: game.id, prediction: response, engineVersion: BASKETBALL_ENGINE_VERSION });
