@@ -9,6 +9,7 @@ import adminRoutes from "./api/adminRoutes.js";
 import trackRecordRoutes from "./api/trackRecordRoutes.js";
 import basketballRoutes from "./basketball/routes/basketballRoutes.js";
 import { initBasketballTables } from "./basketball/storage/basketballDb.js";
+import { startBasketballAutoSync } from "./basketball/jobs/basketballAutoSync.js";
 import { initBacktestingTable } from "./storage/backtesting.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
@@ -402,6 +403,7 @@ app.listen(PORT, async () => {
   await initUsersTable();
   await initPredictionsTable();
   await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
+  startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
 
   // Migrate fixtures table for new columns (idempotent)
