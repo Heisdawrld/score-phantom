@@ -12,7 +12,7 @@ function safeParse(value, fallback = null) {
 
 export async function initBasketballTables() {
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     league_key TEXT NOT NULL,
     external_game_id TEXT,
     odds_event_id TEXT,
@@ -30,14 +30,14 @@ export async function initBasketballTables() {
     away_score INTEGER,
     neutral_site INTEGER DEFAULT 0,
     raw_json TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(league_key, external_game_id),
     UNIQUE(league_key, odds_event_id)
   )`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_odds (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     league_key TEXT NOT NULL,
     game_id INTEGER,
     odds_event_id TEXT,
@@ -49,11 +49,11 @@ export async function initBasketballTables() {
     point REAL,
     implied_probability REAL,
     last_update TEXT,
-    fetched_at TEXT DEFAULT CURRENT_TIMESTAMP
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_predictions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     league_key TEXT NOT NULL,
     game_id INTEGER NOT NULL,
     best_pick_market TEXT,
@@ -72,8 +72,8 @@ export async function initBasketballTables() {
     reason_json TEXT,
     engine_version TEXT,
     prediction_json TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(league_key, game_id, engine_version)
   )`);
 
