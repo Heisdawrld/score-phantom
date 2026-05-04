@@ -88,9 +88,9 @@ function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
     const styles = Array.isArray(manager.tactical_styles) 
       ? manager.tactical_styles.map(s => s.code || s.name).join(' ').toLowerCase() 
       : String(manager.tactical_styles || '').toLowerCase();
-    const isTerrorist = styles.includes('terrorist') || styles.includes('anti-football') || styles.includes('park the bus');
+    const isConservative = styles.includes('terrorist') || styles.includes('anti-football') || styles.includes('park the bus') || styles.includes('low block') || styles.includes('conservative');
     const isAttacking = styles.includes('positional') || styles.includes('gegenpressing') || styles.includes('attacking');
-    if (isTerrorist) { mult *= 0.85; multiplierDebug.push(`${isHome?'H':'A'} Terrorist(0.85)`); }
+    if (isConservative) { mult *= 0.85; multiplierDebug.push(`${isHome?'H':'A'} ConservativeStyle(0.85)`); }
     else if (isAttacking) { mult *= 1.05; multiplierDebug.push(`${isHome?'H':'A'} Attacking(1.05)`); }
     return mult;
   };
@@ -111,6 +111,76 @@ function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
 
   if (multiplierDebug.length > 0) console.log(`[xG] Tactical/Sharp Adjustments: ${multiplierDebug.join(', ')}`);
   return { homeXg: hXg, awayXg: aXg };
+}
+
+function applyBsdIntelligenceAdjustments(homeXg, awayXg, fv) {
+  let h = homeXg;
+  let a = awayXg;
+  const notes = [];
+  const dataScore = safeNum(fv.dataCompletenessScore, 0.5);
+  const weight = clamp(dataScore, 0.35, 0.85);
+
+  if (fv.hasXgTable) {
+    const hFor = safeNum(fv.homeXgForPerGame, null);
+    const hAgainst = safeNum(fv.homeXgAgainstPerGame, null);
+    const aFor = safeNum(fv.awayXgForPerGame, null);
+    const aAgainst = safeNum(fv.awayXgAgainstPerGame, null);
+    if (hFor != null && aAgainst != null) {
+      const tableHome = clamp((hFor * 0.62) + (aAgainst * 0.38), 0.45, 2.7);
+      h = h * (1 - 0.18 * weight) + tableHome * (0.18 * weight);
+      notes.push(`xGTableHome(${tableHome.toFixed(2)})`);
+    }
+    if (aFor != null && hAgainst != null) {
+      const tableAway = clamp((aFor * 0.62) + (hAgainst * 0.38), 0.35, 2.5);
+      a = a * (1 - 0.18 * weight) + tableAway * (0.18 * weight);
+      notes.push(`xGTableAway(${tableAway.toFixed(2)})`);
+    }
+    const gap = clamp(safeNum(fv.xgTableGap, 0) / 20, -0.06, 0.06);
+    if (Math.abs(gap) >= 0.015) {
+      h *= (1 + gap);
+      a *= (1 - gap);
+      notes.push(`xGTableGap(${gap >= 0 ? '+' : ''}${(gap*100).toFixed(1)}%)`);
+    }
+  }
+
+  if (fv.hasManagerIntel) {
+    const overBias = clamp(safeNum(fv.combinedManagerOverBias, 0), 0, 1);
+    const underBias = clamp(safeNum(fv.combinedManagerUnderBias, 0), 0, 1);
+    const totalBias = clamp((overBias - underBias) * 0.08, -0.05, 0.06);
+    if (Math.abs(totalBias) >= 0.012) {
+      h *= (1 + totalBias);
+      a *= (1 + totalBias);
+      notes.push(`ManagerTotalBias(${totalBias >= 0 ? '+' : ''}${(totalBias*100).toFixed(1)}%)`);
+    }
+    const attackGap = clamp(safeNum(fv.managerAttackGap, 0) * 0.05, -0.04, 0.04);
+    if (Math.abs(attackGap) >= 0.012) {
+      h *= (1 + attackGap);
+      a *= (1 - attackGap);
+      notes.push(`ManagerAttackGap(${attackGap >= 0 ? '+' : ''}${(attackGap*100).toFixed(1)}%)`);
+    }
+  }
+
+  if (fv.hasPlayerStats && safeNum(fv.playerStatsCount, 0) >= 8) {
+    const impactGap = clamp(safeNum(fv.playerImpactGap, 0) / 8, -0.05, 0.05);
+    if (Math.abs(impactGap) >= 0.01) {
+      h *= (1 + impactGap);
+      a *= (1 - impactGap);
+      notes.push(`PlayerImpactGap(${impactGap >= 0 ? '+' : ''}${(impactGap*100).toFixed(1)}%)`);
+    }
+    const hRating = safeNum(fv.homeAvgPlayerRating, null);
+    const aRating = safeNum(fv.awayAvgPlayerRating, null);
+    if (hRating != null && aRating != null) {
+      const ratingGap = clamp((hRating - aRating) / 20, -0.035, 0.035);
+      if (Math.abs(ratingGap) >= 0.01) {
+        h *= (1 + ratingGap);
+        a *= (1 - ratingGap);
+        notes.push(`PlayerRatingGap(${ratingGap >= 0 ? '+' : ''}${(ratingGap*100).toFixed(1)}%)`);
+      }
+    }
+  }
+
+  if (notes.length > 0) console.log(`[xG] BSD intelligence adjustments: ${notes.join(', ')}`);
+  return { homeXg: h, awayXg: a };
 }
 
 function applyBsdContextAdjustments(homeXg, awayXg, fv) {
@@ -161,6 +231,7 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyAdvancedTacticalAI(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyBsdIntelligenceAdjustments(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdContextAdjustments(homeXg, awayXg, fv));
   return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
 }
