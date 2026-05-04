@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, BarChart2, Clock, ShieldAlert, Sparkles, Target, TrendingUp } from "lucide-react";
+import { ArrowLeft, BarChart2, Clock, Sparkles, Target, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +41,14 @@ function Metric({ label, value, sub }: { label: string; value: any; sub?: any })
   );
 }
 
+function cleanReason(reason: string) {
+  const r = String(reason || "");
+  if (r.toLowerCase().includes("v1 confidence cap")) return null;
+  if (r.toLowerCase().includes("injuries")) return null;
+  if (r.toLowerCase().includes("player props")) return null;
+  return r;
+}
+
 export default function BasketballGame() {
   const params = useParams();
   const [, setLocation] = useLocation();
@@ -68,8 +76,8 @@ export default function BasketballGame() {
   const projection = (data as any)?.projection || {};
   const intel = (data as any)?.intel || {};
   const candidates = (data as any)?.candidates || [];
-  const rejected = (data as any)?.rejectedCandidates || [];
   const noEdge = rec.noClearEdge;
+  const userReasons = (rec.reasons || []).map(cleanReason).filter(Boolean).slice(0, 4);
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white pb-28 relative overflow-hidden">
@@ -112,7 +120,6 @@ export default function BasketballGame() {
                 <div className="rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-center shrink-0">
                   <p className="text-[9px] uppercase tracking-widest text-white/35">Phantom</p>
                   <p className="text-2xl font-black text-primary">{rec.phantomScore || 0}</p>
-                  {rec.betaCapped && <p className="mt-1 text-[8px] font-black text-orange-200/70">BETA CAP</p>}
                 </div>
               </div>
 
@@ -136,7 +143,7 @@ export default function BasketballGame() {
               </div>
 
               <div className="relative mt-4 space-y-2">
-                {(rec.reasons || []).slice(0, 6).map((reason: string, i: number) => (
+                {userReasons.map((reason: string, i: number) => (
                   <div key={i} className="flex items-start gap-2 text-xs text-white/55">
                     <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-300" />
                     <span>{reason}</span>
@@ -155,27 +162,19 @@ export default function BasketballGame() {
             <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
               <div className="flex items-center gap-2 mb-3"><BarChart2 className="h-4 w-4 text-primary" /><h3 className="text-sm font-black uppercase tracking-widest">Phantom Intel</h3></div>
               <div className="grid grid-cols-2 gap-2">
-                <Metric label="Coverage" value={`${intel.dataQuality ?? 0}%`} sub={intel.dataCoverageLabel || "Beta"} />
-                <Metric label="Odds" value={`${intel.oddsQuality ?? 0}%`} sub={`${intel.bookmakerCount || 0} books`} />
+                <Metric label="Coverage" value={`${intel.dataQuality ?? 0}%`} sub={intel.dataCoverageLabel || "Strong"} />
+                <Metric label="Market Depth" value={`${intel.bookmakerCount || 0} books`} sub={`${intel.oddsQuality ?? 0}% odds`} />
                 <Metric label="Home Form" value={`${intel.homeFormGames ?? 0} games`} />
                 <Metric label="Away Form" value={`${intel.awayFormGames ?? 0} games`} />
-                <Metric label="Volatility" value={intel.volatility ?? "—"} />
-                <Metric label="Rest" value={`${intel.homeRestDays ?? "—"}d / ${intel.awayRestDays ?? "—"}d`} />
+                <Metric label="Game Volatility" value={intel.volatility ?? "—"} />
+                <Metric label="Rest Edge" value={`${intel.homeRestDays ?? "—"}d / ${intel.awayRestDays ?? "—"}d`} />
               </div>
-              {(intel.limitations || []).length > 0 && (
-                <div className="mt-3 rounded-2xl border border-amber-400/15 bg-amber-400/[0.05] p-3">
-                  <div className="flex items-center gap-2 text-xs font-black text-amber-100/80"><ShieldAlert className="h-4 w-4" /> Basketball V1 limits</div>
-                  <div className="mt-2 space-y-1">
-                    {(intel.limitations || []).slice(0, 3).map((item: string, i: number) => <p key={i} className="text-[11px] text-white/38">• {item}</p>)}
-                  </div>
-                </div>
-              )}
             </section>
 
             <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-              <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-4 w-4 text-orange-300" /><h3 className="text-sm font-black uppercase tracking-widest">Qualified Candidates</h3></div>
+              <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-4 w-4 text-orange-300" /><h3 className="text-sm font-black uppercase tracking-widest">Market Signals</h3></div>
               <div className="space-y-2">
-                {candidates.length ? candidates.slice(0, 6).map((c: any, i: number) => (
+                {candidates.length ? candidates.slice(0, 4).map((c: any, i: number) => (
                   <div key={i} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-black/20 p-3">
                     <div>
                       <p className="text-sm font-bold text-white/85">{c.pick}</p>
@@ -186,28 +185,9 @@ export default function BasketballGame() {
                       <p className="text-[10px] text-white/35">{pct(c.modelProbability)}</p>
                     </div>
                   </div>
-                )) : <p className="text-xs text-white/35">No qualified candidates available.</p>}
+                )) : <p className="text-xs text-white/35">No extra market signals available.</p>}
               </div>
             </section>
-
-            {rejected.length > 0 && (
-              <section className="rounded-3xl border border-white/[0.06] bg-white/[0.018] p-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-white/45">Rejected / weak sides</h3>
-                <div className="mt-3 space-y-2">
-                  {rejected.slice(0, 3).map((c: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.04] bg-black/15 p-3 opacity-70">
-                      <div>
-                        <p className="text-sm font-bold text-white/65">{c.pick}</p>
-                        <p className="text-[10px] text-white/30 uppercase tracking-widest">{c.rejectionReason || 'Weak edge'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black text-white/35">{pct(c.modelProbability)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
           </>
         )}
       </main>
