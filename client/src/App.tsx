@@ -129,6 +129,19 @@ function GlassBubbles() {
   );
 }
 
+function AdminBasketballCTA() {
+  const [loc] = useLocation();
+  if (loc !== "/admin") return null;
+  return (
+    <a
+      href="/admin/basketball"
+      className="fixed left-4 right-4 bottom-24 z-[70] mx-auto flex max-w-sm items-center justify-center gap-2 rounded-2xl border border-orange-300/30 bg-orange-400 px-5 py-3 text-sm font-black text-black shadow-[0_0_40px_rgba(251,146,60,0.35)] md:left-auto md:right-6 md:bottom-6 md:max-w-none"
+    >
+      🏀 Basketball Admin
+    </a>
+  );
+}
+
 function Router() {
   const [loc] = useLocation();
   
@@ -191,6 +204,7 @@ function App() {
             <GlassBubbles />
             <ReferralCapture />
             <Router />
+            <AdminBasketballCTA />
             <BottomNav />
           </WouterRouter>
           <Toaster />
