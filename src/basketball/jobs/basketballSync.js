@@ -10,7 +10,7 @@ function isoDate(offsetDays = 0) {
   return d.toISOString().slice(0, 10);
 }
 
-export async function syncNbaGames({ startDate = isoDate(-7), endDate = isoDate(7), maxPages = 3 } = {}) {
+export async function syncNbaGames({ startDate = isoDate(-45), endDate = isoDate(-1), maxPages = 4 } = {}) {
   await initBasketballTables();
   let cursor = null;
   let saved = 0;
@@ -25,7 +25,7 @@ export async function syncNbaGames({ startDate = isoDate(-7), endDate = isoDate(
     cursor = payload?.meta?.next_cursor || null;
     pages++;
   } while (cursor && pages < maxPages);
-  return { league: 'nba', saved, pages };
+  return { league: 'nba', saved, pages, startDate, endDate, role: 'historical_form_only' };
 }
 
 export async function syncBasketballOdds({ leagueKey = null, regions = 'us', markets = 'h2h,spreads,totals' } = {}) {
