@@ -220,6 +220,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const refereeData = meta?.refereeData || null;
   const venue = meta?.venue || null;
   const metadata = meta?.metadata || null;
+  const metadataInsights = meta?.metadataInsights || null;
+  const refereeVolatility = meta?.refereeVolatility || null;
+  const deepPlayerIntel = meta?.deepPlayerIntel || null;
   const playerStats = Array.isArray(meta?.playerStats) ? meta.playerStats : [];
 
   const bsdIntelligenceFeatures = computeBsdIntelligenceFeatures({
@@ -323,8 +326,11 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     bestOdds,
     eventContext,
     refereeData,
+    refereeVolatility,
     venue,
     metadata,
+    metadataInsights,
     playerStats,
+    deepPlayerIntel,
   };
 }
