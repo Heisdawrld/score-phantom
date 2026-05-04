@@ -183,6 +183,63 @@ function applyBsdIntelligenceAdjustments(homeXg, awayXg, fv) {
   return { homeXg: h, awayXg: a };
 }
 
+function applyDeepBsdSignals(homeXg, awayXg, fv) {
+  let h = homeXg;
+  let a = awayXg;
+  const notes = [];
+
+  if (fv.hasDeepPlayerIntel) {
+    const gap = clamp(safeNum(fv.corePlayerGap, 0) / 18, -0.035, 0.035);
+    if (Math.abs(gap) >= 0.008) {
+      h *= (1 + gap);
+      a *= (1 - gap);
+      notes.push(`CorePlayerGap(${gap >= 0 ? '+' : ''}${(gap*100).toFixed(1)}%)`);
+    }
+    const hRating = safeNum(fv.homeCoreAvgRating, null);
+    const aRating = safeNum(fv.awayCoreAvgRating, null);
+    if (hRating != null && aRating != null) {
+      const ratingGap = clamp((hRating - aRating) / 35, -0.025, 0.025);
+      if (Math.abs(ratingGap) >= 0.008) {
+        h *= (1 + ratingGap);
+        a *= (1 - ratingGap);
+        notes.push(`CoreRatingGap(${ratingGap >= 0 ? '+' : ''}${(ratingGap*100).toFixed(1)}%)`);
+      }
+    }
+  }
+
+  const chaos = safeNum(fv.refereeVolatilityChaos, null);
+  if (chaos != null && chaos >= 0.72) {
+    h *= 0.985;
+    a *= 0.985;
+    notes.push(`RefChaos(${chaos.toFixed(2)} flow dampener)`);
+  }
+  if (fv.refereeRedCardWarning) {
+    h *= 0.99;
+    a *= 0.99;
+    notes.push('RedCardRisk volatility dampener');
+  }
+
+  const metadataCodes = Array.isArray(fv.metadataReasonCodes) ? fv.metadataReasonCodes : [];
+  if (metadataCodes.includes('metadata_goals_trend')) {
+    h *= 1.015;
+    a *= 1.015;
+    notes.push('MetadataGoalsTrend(+1.5%)');
+  }
+  if (metadataCodes.includes('metadata_scoring_warning')) {
+    h *= 0.99;
+    a *= 0.99;
+    notes.push('MetadataScoringWarning(-1.0%)');
+  }
+  if (metadataCodes.includes('metadata_derby_context')) {
+    h *= 0.99;
+    a *= 0.99;
+    notes.push('MetadataDerbyDampener(-1.0%)');
+  }
+
+  if (notes.length > 0) console.log(`[xG] Deep BSD signals: ${notes.join(', ')}`);
+  return { homeXg: h, awayXg: a };
+}
+
 function applyBsdContextAdjustments(homeXg, awayXg, fv) {
   let h = homeXg;
   let a = awayXg;
@@ -232,6 +289,7 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyAdvancedTacticalAI(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdIntelligenceAdjustments(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyDeepBsdSignals(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdContextAdjustments(homeXg, awayXg, fv));
   return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
 }
