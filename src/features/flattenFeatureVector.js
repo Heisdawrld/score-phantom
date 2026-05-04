@@ -14,6 +14,10 @@ function flattenFeatureVector(fv) {
   const bsdIntel = fv.bsdIntelligenceFeatures || {};
   const ec = fv.eventContext || {};
   const referee = fv.refereeData || {};
+  const deepPlayerIntel = fv.deepPlayerIntel || {};
+  const deepPlayerSummary = deepPlayerIntel.summary || {};
+  const refereeVolatility = fv.refereeVolatility || {};
+  const metadataInsights = fv.metadataInsights || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -54,6 +58,8 @@ function flattenFeatureVector(fv) {
   const hasBadPitch = /poor|heavy|wet|bad|mud|rough/.test(pitchText);
   const yellowCards = safeNum(referee.yellowCards ?? referee.yellow_cards ?? referee.avg_yellow_cards, null);
   const redCards = safeNum(referee.redCards ?? referee.red_cards ?? referee.avg_red_cards, null);
+  const deepStrictness = safeNum(refereeVolatility.strictness, null);
+  const deepChaos = safeNum(refereeVolatility.chaos, null);
 
   return {
     fixtureId: fv.fixtureId,
@@ -190,6 +196,19 @@ function flattenFeatureVector(fv) {
     playerImpactGap: safeNum(bsdIntel.playerImpactGap, 0),
     homeAvgPlayerRating: safeNum(bsdIntel.homeAvgPlayerRating, null),
     awayAvgPlayerRating: safeNum(bsdIntel.awayAvgPlayerRating, null),
+    hasDeepPlayerIntel: !!deepPlayerSummary,
+    homeCorePlayerScore: safeNum(deepPlayerSummary.homeCorePlayerScore, 0),
+    awayCorePlayerScore: safeNum(deepPlayerSummary.awayCorePlayerScore, 0),
+    corePlayerGap: safeNum(deepPlayerSummary.corePlayerGap, 0),
+    homeCoreAvgRating: safeNum(deepPlayerSummary.homeCoreAvgRating, null),
+    awayCoreAvgRating: safeNum(deepPlayerSummary.awayCoreAvgRating, null),
+    refereeVolatilityStrictness: deepStrictness,
+    refereeVolatilityChaos: deepChaos,
+    refereeCardsWarning: refereeVolatility.cardsWarning === true,
+    refereeRedCardWarning: refereeVolatility.redCardWarning === true,
+    metadataFactCount: (metadataInsights.facts || []).length,
+    metadataReasonCodes: metadataInsights.reasonCodes || [],
+    hasMetadataPreview: !!metadataInsights.preview,
     advancedOdds: fv.advancedOdds || null,
     polymarketOdds: fv.polymarketOdds || null,
     homeManager: fv.homeManager || null,
@@ -198,9 +217,12 @@ function flattenFeatureVector(fv) {
     bestOdds: fv.bestOdds || null,
     eventContext: fv.eventContext || null,
     refereeData: fv.refereeData || null,
+    refereeVolatility: fv.refereeVolatility || null,
     venue: fv.venue || null,
     metadata: fv.metadata || null,
+    metadataInsights: fv.metadataInsights || null,
     playerStats: fv.playerStats || [],
+    deepPlayerIntel: fv.deepPlayerIntel || null,
     isNeutralGround: fv.eventContext?.is_neutral_ground === true,
     isLocalDerby: fv.eventContext?.is_local_derby === true,
     travelDistanceKm: safeNum(fv.eventContext?.travel_distance_km, 0),
@@ -208,7 +230,7 @@ function flattenFeatureVector(fv) {
     hasBadPitch,
     refereeYellowCards: yellowCards,
     refereeRedCards: redCards,
-    refereeStrictness: clamp(((yellowCards ?? 4) / 6) + ((redCards ?? 0.2) * 0.7), 0, 1),
+    refereeStrictness: deepStrictness != null ? deepStrictness : clamp(((yellowCards ?? 4) / 6) + ((redCards ?? 0.2) * 0.7), 0, 1),
   };
 }
 
