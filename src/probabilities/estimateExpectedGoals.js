@@ -56,11 +56,15 @@ function applyFormBoosts(homeXg, awayXg, fv) {
 function applyOddsAnchor(homeXg, awayXg, fv) {
   const impl = fv.impliedOver25!=null ? safeNum(fv.impliedOver25) : null;
   if (impl==null) return { homeXg, awayXg };
+  if (impl <= 0.05 || impl >= 0.95) {
+    console.warn(`[xG] Ignoring invalid impliedOver25=${impl.toFixed(2)} odds anchor`);
+    return { homeXg, awayXg };
+  }
   const implTotal = Math.max(1.2, -2.1*Math.log(Math.max(0.01,1-impl)));
   const engTotal = homeXg+awayXg;
   const blended = engTotal*0.65+implTotal*0.35;
-  const scale = blended/Math.max(0.5,engTotal);
-  console.log("[xG] L3 odds anchor over25="+impl.toFixed(2)+" implied="+implTotal.toFixed(2)+" blended="+blended.toFixed(2));
+  const scale = clamp(blended/Math.max(0.5,engTotal), 0.78, 1.25);
+  console.log("[xG] L3 odds anchor over25="+impl.toFixed(2)+" implied="+implTotal.toFixed(2)+" blended="+blended.toFixed(2)+" scale="+scale.toFixed(2));
   return { homeXg: homeXg*scale, awayXg: awayXg*scale };
 }
 
@@ -70,15 +74,19 @@ function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
   let multiplierDebug = [];
 
   if (fv.polymarketOdds && fv.polymarketOdds.odds && fv.polymarketOdds.odds.over_under) {
-    const polyOver25 = fv.polymarketOdds.odds.over_under.over_25;
-    if (polyOver25) {
-       const sharpTotalXg = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - polyOver25)));
-       const currentTotal = hXg + aXg;
-       const blendedTotal = (currentTotal * 0.60) + (sharpTotalXg * 0.40);
-       const scale = Math.max(0.5, blendedTotal) / Math.max(0.5, currentTotal);
-       hXg *= scale;
-       aXg *= scale;
-       multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)})->Scale(${scale.toFixed(2)})`);
+    const polyOver25 = safeNum(fv.polymarketOdds.odds.over_under.over_25, null);
+    if (polyOver25 != null) {
+      if (polyOver25 <= 0.05 || polyOver25 >= 0.95) {
+        multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)}) ignored-invalid`);
+      } else {
+        const sharpTotalXg = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - polyOver25)));
+        const currentTotal = hXg + aXg;
+        const blendedTotal = (currentTotal * 0.72) + (sharpTotalXg * 0.28);
+        const scale = clamp(Math.max(0.5, blendedTotal) / Math.max(0.5, currentTotal), 0.82, 1.18);
+        hXg *= scale;
+        aXg *= scale;
+        multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)})->Scale(${scale.toFixed(2)})`);
+      }
     }
   }
 
@@ -274,7 +282,7 @@ function applyBsdContextAdjustments(homeXg, awayXg, fv) {
 }
 
 function capXg(homeXg, awayXg, baseHome, baseAway) {
-  const cap = (h,a) => { h=clamp(h,0.2,2.5); a=clamp(a,0.2,2.5); const t=h+a; if(t>4.5){const s=4.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;a*=s;} return {h,a}; };
+  const cap = (h,a) => { h=clamp(h,0.2,2.5); a=clamp(a,0.2,2.5); const t=h+a; if(t>4.5){const s=4.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;} if(t<0.8){const s=0.8/t;a*=s;} return {h,a}; };
   const {h:fh,a:fa}=cap(homeXg,awayXg), {h:bh,a:ba}=cap(baseHome,baseAway);
   return { homeExpectedGoals:parseFloat(fh.toFixed(3)), awayExpectedGoals:parseFloat(fa.toFixed(3)), totalExpectedGoals:parseFloat((fh+fa).toFixed(3)), baseHomeXg:parseFloat(bh.toFixed(3)), baseAwayXg:parseFloat(ba.toFixed(3)) };
 }
