@@ -44,6 +44,7 @@ import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Basketball from "@/pages/Basketball";
 import BasketballGame from "@/pages/BasketballGame";
+import BasketballAdmin from "@/pages/BasketballAdmin";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
@@ -144,6 +145,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/basketball" component={BasketballAdmin} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
