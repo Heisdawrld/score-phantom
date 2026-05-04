@@ -22,6 +22,8 @@ function flattenFeatureVector(fv) {
   const deepPlayerSummary = deepPlayerIntel.summary || {};
   const refereeVolatility = fv.refereeVolatility || {};
   const metadataInsights = fv.metadataInsights || {};
+  const bsdHomeFormStats = fv.bsdHomeFormStats || {};
+  const bsdAwayFormStats = fv.bsdAwayFormStats || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -64,6 +66,7 @@ function flattenFeatureVector(fv) {
   const redCards = safeNum(referee.redCards ?? referee.red_cards ?? referee.avg_red_cards, null);
   const deepStrictness = safeNum(refereeVolatility.strictness, null);
   const deepChaos = safeNum(refereeVolatility.chaos, null);
+  const xgPerMinute = Array.isArray(fv.xgPerMinute) ? fv.xgPerMinute : [];
 
   return {
     fixtureId: fv.fixtureId,
@@ -88,12 +91,14 @@ function flattenFeatureVector(fv) {
     homeAvgConceded,
     awayAvgScored,
     awayAvgConceded,
-    homeAvgXgFor: safeNum(hf.avg_xg_for, null),
-    homeAvgXgAgainst: safeNum(hf.avg_xg_against, null),
-    awayAvgXgFor: safeNum(af.avg_xg_for, null),
-    awayAvgXgAgainst: safeNum(af.avg_xg_against, null),
+    homeAvgXgFor: safeNum(hf.avg_xg_for, safeNum(bsdHomeFormStats.avg_xg, null)),
+    homeAvgXgAgainst: safeNum(hf.avg_xg_against, safeNum(bsdHomeFormStats.avg_xg_conceded, null)),
+    awayAvgXgFor: safeNum(af.avg_xg_for, safeNum(bsdAwayFormStats.avg_xg, null)),
+    awayAvgXgAgainst: safeNum(af.avg_xg_against, safeNum(bsdAwayFormStats.avg_xg_conceded, null)),
     actualHomeXg: safeNum(fv.actualHomeXg, null),
     actualAwayXg: safeNum(fv.actualAwayXg, null),
+    xgPerMinuteCount: xgPerMinute.length,
+    hasXgTimeline: xgPerMinute.length > 0,
     homeWinRate: safeNum(hf.win_rate, 0.4),
     awayWinRate: safeNum(af.win_rate, 0.35),
     homeMissingXgImpact: safeNum(inf.homeMissingXgImpact, 0),
@@ -158,10 +163,10 @@ function flattenFeatureVector(fv) {
     positionGap: safeNum(tc.position_gap, 0),
     homeContext: tc.home_context || 'midtable',
     awayContext: tc.away_context || 'midtable',
-    homeAvgShotsFor: safeNum(fv.homeProfileFeatures?.avgShotsFor, null),
-    awayAvgShotsFor: safeNum(fv.awayProfileFeatures?.avgShotsFor, null),
-    homeAvgShotsOnTargetFor: safeNum(fv.homeProfileFeatures?.avgShotsOnTargetFor, null),
-    awayAvgShotsOnTargetFor: safeNum(fv.awayProfileFeatures?.avgShotsOnTargetFor, null),
+    homeAvgShotsFor: safeNum(fv.homeProfileFeatures?.avgShotsFor, safeNum(bsdHomeFormStats.avg_shots, null)),
+    awayAvgShotsFor: safeNum(fv.awayProfileFeatures?.avgShotsFor, safeNum(bsdAwayFormStats.avg_shots, null)),
+    homeAvgShotsOnTargetFor: safeNum(fv.homeProfileFeatures?.avgShotsOnTargetFor, safeNum(bsdHomeFormStats.avg_shots_on_target, null)),
+    awayAvgShotsOnTargetFor: safeNum(fv.awayProfileFeatures?.avgShotsOnTargetFor, safeNum(bsdAwayFormStats.avg_shots_on_target, null)),
     homeAvgDangerousAttacksFor: safeNum(fv.homeProfileFeatures?.avgDangerousAttacksFor, null),
     awayAvgDangerousAttacksFor: safeNum(fv.awayProfileFeatures?.avgDangerousAttacksFor, null),
     homeAvgCornersFor: safeNum(fv.homeProfileFeatures?.avgCornersFor, null),
@@ -178,12 +183,12 @@ function flattenFeatureVector(fv) {
     awayProfileCleanSheetRate: safeNum(fv.awayProfileFeatures?.profileCleanSheetRate, null),
     homeProfileOver25Rate: safeNum(fv.homeProfileFeatures?.profileOver25Rate, null),
     awayProfileOver25Rate: safeNum(fv.awayProfileFeatures?.profileOver25Rate, null),
-    hasHomeStatProfile: fv.homeProfileFeatures?.hasProfile === true,
-    hasAwayStatProfile: fv.awayProfileFeatures?.hasProfile === true,
+    hasHomeStatProfile: fv.homeProfileFeatures?.hasProfile === true || !!bsdHomeFormStats.matches_played,
+    hasAwayStatProfile: fv.awayProfileFeatures?.hasProfile === true || !!bsdAwayFormStats.matches_played,
     homeOpponentShotsOnTargetAllowed: safeNum(fv.homeProfileFeatures?.avgOpponentShotsOnTargetAllowed, null),
     awayOpponentShotsOnTargetAllowed: safeNum(fv.awayProfileFeatures?.avgOpponentShotsOnTargetAllowed, null),
-    homeStatsMatchCount: safeNum(fv.homeProfileFeatures?.statsMatchesAvailable, 0),
-    awayStatsMatchCount: safeNum(fv.awayProfileFeatures?.statsMatchesAvailable, 0),
+    homeStatsMatchCount: safeNum(fv.homeProfileFeatures?.statsMatchesAvailable, safeNum(bsdHomeFormStats.matches_played, 0)),
+    awayStatsMatchCount: safeNum(fv.awayProfileFeatures?.statsMatchesAvailable, safeNum(bsdAwayFormStats.matches_played, 0)),
     hasLineupData: fv.lineupFeatures?.hasLineup === true,
     homeLineupComplete: fv.lineupFeatures?.homeLineupComplete || false,
     awayLineupComplete: fv.lineupFeatures?.awayLineupComplete || false,
@@ -249,6 +254,7 @@ function flattenFeatureVector(fv) {
     metadataInsights: fv.metadataInsights || null,
     playerStats: fv.playerStats || [],
     deepPlayerIntel: fv.deepPlayerIntel || null,
+    xgPerMinute: fv.xgPerMinute || [],
     isNeutralGround: fv.eventContext?.is_neutral_ground === true,
     isLocalDerby: fv.eventContext?.is_local_derby === true,
     travelDistanceKm: safeNum(fv.eventContext?.travel_distance_km, 0),
