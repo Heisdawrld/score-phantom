@@ -27,6 +27,7 @@ import { computeTeamStrength } from './computeTeamStrength.js';
 import { computeContextFeatures } from './computeContextFeatures.js';
 import { computeVolatilityFeatures } from './computeVolatilityFeatures.js';
 import { computeMarketFeatures } from './computeMarketFeatures.js';
+import { computeBsdIntelligenceFeatures } from './computeBsdIntelligenceFeatures.js';
 import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
 async function getMatches(fixtureId, type) {
@@ -54,7 +55,7 @@ async function getFixtureMeta(fixtureId) {
 async function getFixtureContext(fixtureId) {
   try {
     const result = await db.execute({
-      sql: 'SELECT tournament_id, tournament_name, category_name FROM fixtures WHERE id = ? LIMIT 1',
+      sql: 'SELECT tournament_id, tournament_name, category_name, home_team_id, away_team_id FROM fixtures WHERE id = ? LIMIT 1',
       args: [fixtureId],
     });
     return result.rows?.[0] || {};
@@ -105,8 +106,7 @@ function buildTableContext(homeTeamName, awayTeamName, standings, homeMomentum, 
     away_momentum: safeNum(awayMomentum, 0),
     momentum_gap: safeNum(homeMomentum, 0) - safeNum(awayMomentum, 0),
   };
-}
-
+}\n
 function extractProfileFeatures(profile) {
   if (!profile) {
     return {
@@ -221,6 +221,17 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const metadata = meta?.metadata || null;
   const playerStats = Array.isArray(meta?.playerStats) ? meta.playerStats : [];
 
+  const bsdIntelligenceFeatures = computeBsdIntelligenceFeatures({
+    standings,
+    homeTeam: homeTeamName,
+    awayTeam: awayTeamName,
+    homeTeamId: fixtureContext?.home_team_id,
+    awayTeamId: fixtureContext?.away_team_id,
+    homeManager,
+    awayManager,
+    playerStats,
+  });
+
   const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
   const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
 
@@ -296,6 +307,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     homeProfileFeatures,
     awayProfileFeatures,
     lineupFeatures,
+    bsdIntelligenceFeatures,
     injuryFeatures,
     bsdLineupFeatures,
     enrichmentCompleteness: completeness,
