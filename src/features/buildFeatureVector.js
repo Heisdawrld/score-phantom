@@ -227,6 +227,11 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const refereeVolatility = meta?.refereeVolatility || null;
   const deepPlayerIntel = meta?.deepPlayerIntel || null;
   const playerStats = Array.isArray(meta?.playerStats) ? meta.playerStats : [];
+  const xgPerMinute = Array.isArray(meta?.xg_per_minute) ? meta.xg_per_minute : [];
+  const bsdHomeFormStats = meta?.bsd_home_form_stats || null;
+  const bsdAwayFormStats = meta?.bsd_away_form_stats || null;
+  const actualHomeXg = safeNum(meta?.actualHomeXg, null);
+  const actualAwayXg = safeNum(meta?.actualAwayXg, null);
 
   const bsdIntelligenceFeatures = computeBsdIntelligenceFeatures({
     standings,
@@ -263,6 +268,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     };
 
     injuryFeatures.homeKeyMissing = homeMissing.filter(isKeyPlayer).length;
+    injuryFeatures.awayKeyMissing = awayMissing.filter(isKeyPlayer).length;
     if (injuryFeatures.homeKeyMissing === 0 && injuryFeatures.homeMissingCount >= 4) injuryFeatures.homeKeyMissing = 1;
     if (injuryFeatures.awayKeyMissing === 0 && injuryFeatures.awayMissingCount >= 4) injuryFeatures.awayKeyMissing = 1;
   }
@@ -322,6 +328,11 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     impliedHomeProb,
     impliedAwayProb,
     impliedOver25,
+    actualHomeXg,
+    actualAwayXg,
+    xgPerMinute,
+    bsdHomeFormStats,
+    bsdAwayFormStats,
     advancedOdds,
     polymarketOdds,
     homeManager,
