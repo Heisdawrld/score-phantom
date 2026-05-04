@@ -21,6 +21,7 @@ import {
   fetchPolymarketOdds,
 } from '../services/bsd.js';
 import { normalizeEventStatsPayload } from '../services/bsdStatsNormalizer.js';
+import { enrichTopPlayerCareers, buildRefereeVolatilityProfile, extractMetadataInsights } from '../services/bsdDeepIntel.js';
 import { buildTeamProfile } from '../services/teamProfileBuilder.js';
 import db from '../config/database.js';
 
@@ -189,7 +190,7 @@ function parseLineupModifier(rawLineup) {
   }
 }
 
-function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupModifier, matchEvents, eventContext, refereeData, venue, shotmap, momentum, matchStats }) {
+function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupModifier, matchEvents, eventContext, refereeData, venue, shotmap, momentum, matchStats, deepPlayerIntel, refereeVolatility, metadataInsights }) {
   let score = 0;
   const checks = {};
   const homeCount = homeForm?.length || 0;
@@ -214,6 +215,15 @@ function computeDataCompleteness({ homeForm, awayForm, h2h, standings, lineupMod
 
   checks.hasEventStats = !!(matchStats || (Array.isArray(shotmap) && shotmap.length) || (Array.isArray(momentum) && momentum.length));
   if (checks.hasEventStats) score += 0.10;
+
+  checks.hasDeepPlayerIntel = !!(deepPlayerIntel?.summary);
+  if (checks.hasDeepPlayerIntel) score += 0.05;
+
+  checks.hasRefereeVolatility = !!(refereeVolatility?.refereeId || refereeVolatility?.matchesSampled > 0);
+  if (checks.hasRefereeVolatility) score += 0.03;
+
+  checks.hasMetadataInsights = !!((metadataInsights?.facts || []).length || metadataInsights?.preview);
+  if (checks.hasMetadataInsights) score += 0.02;
 
   checks.hasContext = !!(
     eventContext?.weather ||
@@ -249,7 +259,7 @@ export async function fetchAndStoreEnrichment(fixture) {
       completeness: { score: 0, tier: 'thin', checks: {} },
       homeStats: null, awayStats: null, matchStats: null, matchEvents: null,
       actualHomeXg: null, actualAwayXg: null, shotmap: null, refereeData: null,
-      injuries: null, metadata: null, eventContext: null, venue: null, playerStats: [], odds: null,
+      injuries: null, metadata: null, metadataInsights: null, eventContext: null, venue: null, playerStats: [], deepPlayerIntel: null, refereeVolatility: null, odds: null,
     };
   }
 
@@ -258,7 +268,8 @@ export async function fetchAndStoreEnrichment(fixture) {
   let actualHomeXg = null, actualAwayXg = null, matchStats = null, matchEvents = null;
   let shotmap = null, refereeData = null, injuries = null;
   let lineups = null, average_positions = null, momentum = null, xg_per_minute = null;
-  let metadata = null, eventContext = null, venue = null, playerStats = [];
+  let metadata = null, metadataInsights = null, eventContext = null, venue = null, playerStats = [];
+  let deepPlayerIntel = null, refereeVolatility = null;
   let basicOdds = null;
 
   try {
@@ -285,6 +296,7 @@ export async function fetchAndStoreEnrichment(fixture) {
       momentum = normalizedEventStats.momentum || [];
       xg_per_minute = normalizedEventStats.xg_per_minute || [];
       metadata = eventDetail.metadata || null;
+      metadataInsights = extractMetadataInsights(metadata);
       eventContext = eventDetail.event_context || null;
       venue = eventDetail.venue || null;
       playerStats = Array.isArray(eventDetail.player_stats) ? eventDetail.player_stats : [];
@@ -397,7 +409,25 @@ export async function fetchAndStoreEnrichment(fixture) {
     if (fixture.away_team_id) awayManager = await fetchManagerByTeamId(fixture.away_team_id);
   } catch (_) {}
 
-  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier, eventContext, refereeData, venue, shotmap, momentum, matchStats });
+  try {
+    if (playerStats.length) {
+      deepPlayerIntel = await enrichTopPlayerCareers(playerStats, {
+        homeTeamId: fixture.home_team_id,
+        awayTeamId: fixture.away_team_id,
+        maxPerTeam: 3,
+      });
+    }
+  } catch (err) {
+    console.warn('[enrichmentService] Deep player intel failed:', err.message);
+  }
+
+  try {
+    if (refereeData) refereeVolatility = await buildRefereeVolatilityProfile(refereeData);
+  } catch (err) {
+    console.warn('[enrichmentService] Referee volatility failed:', err.message);
+  }
+
+  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier, eventContext, refereeData, venue, shotmap, momentum, matchStats, deepPlayerIntel, refereeVolatility, metadataInsights });
   if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) {
     completeness.score = Math.min(0.80, completeness.score + 0.15);
     completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial';
@@ -405,7 +435,7 @@ export async function fetchAndStoreEnrichment(fixture) {
   }
 
   const tierLabel = { rich: 'DEEP', good: 'BASIC', partial: 'LIMITED', thin: 'NO_DATA' }[completeness.tier] || '?';
-  console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' context=' + (eventContext ? 'YES' : 'no') + ' stats=' + (matchStats ? 'YES' : 'no') + ' shotmap=' + ((shotmap || []).length) + ' momentum=' + ((momentum || []).length) + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
+  console.log('[enrichmentService] ' + fixture.home_team_name + ' vs ' + fixture.away_team_name + ' -> ' + tierLabel + ' (' + completeness.score + ') | home_form=' + homeFormFinal.length + ' away_form=' + awayFormFinal.length + ' h2h=' + h2hMerged.length + ' context=' + (eventContext ? 'YES' : 'no') + ' stats=' + (matchStats ? 'YES' : 'no') + ' shotmap=' + ((shotmap || []).length) + ' momentum=' + ((momentum || []).length) + ' deepPlayers=' + (deepPlayerIntel?.summary ? 'YES' : 'no') + ' refVol=' + (refereeVolatility ? 'YES' : 'no') + ' metaFacts=' + ((metadataInsights?.facts || []).length) + ' injuries=' + (injuries ? ('H:' + injuries.homeMissingCount + ' A:' + injuries.awayMissingCount) : 'none'));
 
   return {
     h2h: cloneForm(h2hMerged), homeForm: cloneForm(homeFormFinal), awayForm: cloneForm(awayFormFinal), standings,
@@ -413,7 +443,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile,
     matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups,
     average_positions, momentum, xg_per_minute, bsdHomeFormStats, bsdAwayFormStats,
-    refereeData, injuries, metadata, eventContext, venue, playerStats,
+    refereeData, refereeVolatility, injuries, metadata, metadataInsights, eventContext, venue, playerStats, deepPlayerIntel,
     oddsData, polymarketOdds, homeManager, awayManager, odds: basicOdds,
   };
 }
