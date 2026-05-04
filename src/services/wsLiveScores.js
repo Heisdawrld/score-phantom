@@ -1,7 +1,7 @@
 import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
-import { fetchLiveMatches, fetchEventDetail } from './bsd.js';
+import { bsdFetchAll, fetchLiveMatches, fetchEventDetail } from './bsd.js';
 import { normalizeEventStatsPayload } from './bsdStatsNormalizer.js';
 import { computeProfitUnits } from '../storage/profitUnits.js';
 
@@ -31,6 +31,28 @@ function safeJsonParse(value, fallback = {}) {
   if (!value) return fallback;
   if (typeof value === 'object') return value;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function fetchExpandedLiveMatches() {
+  const statuses = ['inprogress', 'halftime', '1st_half', '2nd_half', 'ht', 'live'];
+  const batches = await Promise.all([
+    fetchLiveMatches().catch(() => []),
+    ...statuses.map(status => bsdFetchAll('/events/', { status }, { maxPages: 2 }).catch(() => [])),
+  ]);
+  const byId = new Map();
+  for (const row of batches.flat()) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), row);
+  }
+  return [...byId.values()];
+}
+
+function normalizeLiveStatus(rawStatus) {
+  const s = String(rawStatus || '').toLowerCase();
+  if (s === 'finished' || s === 'ft') return 'FT';
+  if (s === 'halftime' || s === 'half_time' || s === 'ht') return 'HT';
+  if (s === '1st_half' || s === '2nd_half' || s === 'inprogress' || s === 'live') return 'LIVE';
+  return s ? s.toUpperCase() : 'LIVE';
 }
 
 async function updateLiveFixtureMeta(fixtureId, finalOrLiveEvent, partialLiveStats = null) {
@@ -270,7 +292,7 @@ let activeLiveMatchIds = new Set();
 
 async function pollLiveScores() {
   try {
-    const matches = await fetchLiveMatches();
+    const matches = await fetchExpandedLiveMatches();
     const currentLiveIds = new Set();
 
     if (matches && matches.length > 0) {
@@ -290,7 +312,7 @@ async function pollLiveScores() {
           fixture_id: fid,
           home_score: fullLiveEvent?.home_score ?? m.home_score ?? 0,
           away_score: fullLiveEvent?.away_score ?? m.away_score ?? 0,
-          status:     (fullLiveEvent?.status === 'finished' || m.status === 'finished') ? 'FT' : 'LIVE',
+          status:     normalizeLiveStatus(fullLiveEvent?.status || m.status),
           minute:     fullLiveEvent?.current_minute || m.current_minute || null,
           incidents:  fullLiveEvent?.incidents || m.incidents || [],
           live_stats: fullLiveEvent?.live_stats || m.live_stats || null,
