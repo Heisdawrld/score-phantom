@@ -24,7 +24,7 @@ const CACHE_VALID_HOURS = 6;
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.8.7'; // Bumped: stricter headline quality + advisor badge gates
+const CURRENT_ENGINE_VERSION = '2.8.8'; // Bumped: Under 3.5 comfort-pick guard + script-aware pruning
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
