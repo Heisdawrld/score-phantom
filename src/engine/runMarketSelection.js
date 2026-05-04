@@ -55,7 +55,10 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
   const scored = scoreMarketCandidates(candidatesWithEdge, script, features, recentMarkets, accuracyCache);
 
   // ── Stage 3c: Prune weak candidates (new — before ranking) ─────────────────
-  const pruned = pruneWeakCandidates(scored);
+  const pruned = pruneWeakCandidates(scored, {
+    scriptPrimary: script?.primary,
+    primaryScript: script?.primary,
+  });
 
   // ── Stage 3d: Rank survivors ────────────────────────────────────────────────
   const ranked = rankMarkets(pruned);
