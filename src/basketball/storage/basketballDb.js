@@ -188,16 +188,30 @@ export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
     const implied = m.price && Number(m.price) > 1 ? 1 / Number(m.price) : null;
     const point = m.point ?? null;
     try {
-      await db.execute({
-        sql: `DELETE FROM basketball_odds
-              WHERE league_key = ?
-                AND odds_event_id = ?
-                AND bookmaker = ?
-                AND market_key = ?
-                AND selection = ?
-                AND ((point IS NULL AND ? IS NULL) OR point = ?)`,
-        args: [leagueKey, oddsEventId, m.bookmaker, m.market_key, m.selection, point, point],
-      });
+      if (point === null || point === undefined) {
+        await db.execute({
+          sql: `DELETE FROM basketball_odds
+                WHERE league_key = ?
+                  AND odds_event_id = ?
+                  AND bookmaker = ?
+                  AND market_key = ?
+                  AND selection = ?
+                  AND point IS NULL`,
+          args: [leagueKey, oddsEventId, m.bookmaker, m.market_key, m.selection],
+        });
+      } else {
+        await db.execute({
+          sql: `DELETE FROM basketball_odds
+                WHERE league_key = ?
+                  AND odds_event_id = ?
+                  AND bookmaker = ?
+                  AND market_key = ?
+                  AND selection = ?
+                  AND point = ?`,
+          args: [leagueKey, oddsEventId, m.bookmaker, m.market_key, m.selection, point],
+        });
+      }
+
       await db.execute({
         sql: `INSERT INTO basketball_odds
           (league_key, game_id, odds_event_id, bookmaker, bookmaker_title, market_key, selection, price, point, implied_probability, last_update, fetched_at)
