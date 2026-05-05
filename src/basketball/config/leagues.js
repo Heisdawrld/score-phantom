@@ -23,8 +23,8 @@ export const BASKETBALL_LEAGUES = {
     oddsSportKey: 'basketball_ncaab',
     ballDontLieBaseUrl: null,
     dataSource: 'odds_api_first',
-    enabled: true,
-    launchTier: 'v1',
+    enabled: false,
+    launchTier: 'paused',
     minDataQuality: 0.65,
     gates: {
       moneylineEdge: 0.06,
@@ -39,9 +39,9 @@ export const BASKETBALL_LEAGUES = {
     sportName: 'Basketball',
     oddsSportKey: 'basketball_wnba',
     ballDontLieBaseUrl: 'https://api.balldontlie.io/wnba/v1',
-    dataSource: 'balldontlie_wnba',
-    enabled: false,
-    launchTier: 'v1.5',
+    dataSource: 'odds_api_first',
+    enabled: true,
+    launchTier: 'v1',
     minDataQuality: 0.60,
     gates: {
       moneylineEdge: 0.05,
