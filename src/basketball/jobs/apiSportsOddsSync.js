@@ -22,10 +22,15 @@ export async function syncApiSportsBasketballOddsCached({ daysAhead = 2, date = 
 
   let scannedGames = 0;
   let oddsRequests = 0;
+  let apiSportsOddsItems = 0;
+  let normalizedRows = 0;
   let savedMarkets = 0;
+  let missingGameRows = 0;
   let skipped = 0;
   let quota = null;
   const daily = [];
+  const samples = [];
+  const errors = [];
 
   for (const day of dates) {
     const from = `${day}T00:00:00`;
@@ -37,7 +42,10 @@ export async function syncApiSportsBasketballOddsCached({ daysAhead = 2, date = 
       .slice(0, Math.max(Number(maxGames || 40), 1));
 
     let dayRequests = 0;
+    let dayItems = 0;
+    let dayNormalizedRows = 0;
     let daySaved = 0;
+    let dayMissingGameRows = 0;
     let daySkipped = 0;
 
     for (const game of targets) {
@@ -49,26 +57,57 @@ export async function syncApiSportsBasketballOddsCached({ daysAhead = 2, date = 
         oddsRequests++;
         dayRequests++;
         const items = payload.data || [];
+        apiSportsOddsItems += items.length;
+        dayItems += items.length;
+
         if (!items.length) {
           daySkipped++;
           skipped++;
+          if (samples.length < 8) samples.push({ gameId, home: game.home_team, away: game.away_team, league: game.league_key, apiItems: 0, reason: 'api_sports_returned_no_odds_items' });
           continue;
         }
+
         for (const rawOdds of items) {
           const result = await saveApiSportsBasketballOdds(rawOdds, { leagueKey: game.league_key });
           savedMarkets += result.inserted;
           daySaved += result.inserted;
           skipped += result.skipped;
           daySkipped += result.skipped;
+          normalizedRows += result.rows || 0;
+          dayNormalizedRows += result.rows || 0;
+          missingGameRows += result.diagnostics?.missingGameRows || 0;
+          dayMissingGameRows += result.diagnostics?.missingGameRows || 0;
+          if (samples.length < 8) {
+            samples.push({
+              gameId,
+              home: game.home_team,
+              away: game.away_team,
+              league: game.league_key,
+              apiItems: items.length,
+              inserted: result.inserted,
+              normalizedRows: result.rows,
+              diagnostics: result.diagnostics,
+            });
+          }
         }
       } catch (err) {
         daySkipped++;
         skipped++;
+        if (errors.length < 8) errors.push({ gameId, home: game.home_team, away: game.away_team, league: game.league_key, error: err.message, statusCode: err.statusCode || 500 });
       }
     }
 
     scannedGames += targets.length;
-    daily.push({ date: day, scannedGames: targets.length, oddsRequests: dayRequests, savedMarkets: daySaved, skipped: daySkipped });
+    daily.push({
+      date: day,
+      scannedGames: targets.length,
+      oddsRequests: dayRequests,
+      apiSportsOddsItems: dayItems,
+      normalizedRows: dayNormalizedRows,
+      savedMarkets: daySaved,
+      missingGameRows: dayMissingGameRows,
+      skipped: daySkipped,
+    });
   }
 
   return {
@@ -78,9 +117,14 @@ export async function syncApiSportsBasketballOddsCached({ daysAhead = 2, date = 
     dates,
     scannedGames,
     oddsRequests,
+    apiSportsOddsItems,
+    normalizedRows,
     savedMarkets,
+    missingGameRows,
     skipped,
     quota,
     daily,
+    samples,
+    errors,
   };
 }
