@@ -40,10 +40,14 @@ async function oddsFetch(path, params = {}) {
   return { data, quota: { remaining, used, last } };
 }
 
-export async function fetchBasketballOddsEvents(leagueKey = 'nba') {
+export async function fetchBasketballOddsEvents(leagueKey = 'nba', options = {}) {
   const league = getBasketballLeague(leagueKey);
   if (!league) throw new Error(`Unknown basketball league: ${leagueKey}`);
-  return oddsFetch(`/sports/${league.oddsSportKey}/events`);
+  return oddsFetch(`/sports/${league.oddsSportKey}/events`, {
+    dateFormat: options.dateFormat || 'iso',
+    commenceTimeFrom: options.commenceTimeFrom || undefined,
+    commenceTimeTo: options.commenceTimeTo || undefined,
+  });
 }
 
 export async function fetchBasketballOdds(leagueKey = 'nba', options = {}) {
@@ -54,6 +58,8 @@ export async function fetchBasketballOdds(leagueKey = 'nba', options = {}) {
     markets: options.markets || DEFAULT_MARKETS,
     oddsFormat: options.oddsFormat || DEFAULT_ODDS_FORMAT,
     dateFormat: options.dateFormat || 'iso',
+    commenceTimeFrom: options.commenceTimeFrom || undefined,
+    commenceTimeTo: options.commenceTimeTo || undefined,
   });
 }
 
@@ -77,6 +83,19 @@ export async function fetchAllEnabledBasketballOdds(options = {}) {
     }
   }
   return results;
+}
+
+export function normalizeOddsEventGame(raw, leagueKey) {
+  return {
+    external_event_id: raw.id,
+    league_key: leagueKey,
+    sport_key: raw.sport_key,
+    sport_title: raw.sport_title,
+    commence_time: raw.commence_time,
+    home_team: raw.home_team,
+    away_team: raw.away_team,
+    bookmakers: [],
+  };
 }
 
 export function normalizeOddsGame(raw, leagueKey) {
