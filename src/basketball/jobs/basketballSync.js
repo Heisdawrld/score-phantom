@@ -4,6 +4,7 @@ import { fetchNbaGames, normalizeNbaGame } from '../services/ballDontLieNba.js';
 import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
 import { initBasketballTables, upsertBasketballGame, upsertOddsGame, saveBasketballOdds, listBasketballGames } from '../storage/basketballDb.js';
 import { syncApiSportsBasketballGamesCached } from './apiSportsPremiumSync.js';
+import { syncApiSportsBasketballOddsCached } from './apiSportsOddsSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
 import { isoDate, oddsApiDateTime, apiSportsFreeWindowDates } from '../utils/dateWindow.js';
 
@@ -101,8 +102,12 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 2, maxLeague
   };
 }
 
-export async function syncApiSportsBasketballGames({ daysAhead = 2, date = null } = {}) {
-  return syncApiSportsBasketballGamesCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date });
+export async function syncApiSportsBasketballGames({ daysAhead = 2, date = null, selectedOnly = true } = {}) {
+  return syncApiSportsBasketballGamesCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date, selectedOnly });
+}
+
+export async function syncApiSportsBasketballOdds({ daysAhead = 2, date = null, leagueLimit = 12, maxGames = 40 } = {}) {
+  return syncApiSportsBasketballOddsCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date, leagueLimit, maxGames });
 }
 
 export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } = {}) {
@@ -122,7 +127,7 @@ export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } =
         await upsertOddsGame(normalizeOddsEventGame(raw, league.key));
         savedGames++;
       }
-      results.push({ league: league.key, savedGames, role: 'odds_api_schedule', daysAhead, quota: response.quota });
+      results.push({ league: league.key, savedGames, role: 'odds_api_schedule_backup', daysAhead, quota: response.quota });
     } catch (err) {
       results.push({ league: league.key, error: err.message, statusCode: err.statusCode || 500, quota: err.quota || null });
     }
@@ -155,7 +160,7 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
         savedMarkets += oddsResult.inserted;
       }
 
-      results.push({ league: league.key, savedGames, savedMarkets, daysAhead, quota: response.quota });
+      results.push({ league: league.key, savedGames, savedMarkets, role: 'odds_api_markets_backup', daysAhead, quota: response.quota });
     } catch (err) {
       results.push({ league: league.key, error: err.message, statusCode: err.statusCode || 500, quota: err.quota || null });
     }
@@ -164,11 +169,12 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
   return results;
 }
 
-export async function syncBasketballV1({ includeNbaGames = false, leagueKey = null, daysAhead = 7, includeApiSports = true } = {}) {
-  const output = { apiSports: null, nbaGames: 'skipped_auto_sync', events: null, odds: null };
+export async function syncBasketballV1({ includeNbaGames = false, leagueKey = null, daysAhead = 7, includeApiSports = true, includeOddsApiBackup = true } = {}) {
+  const output = { apiSports: null, apiSportsOdds: null, nbaGames: 'skipped_auto_sync', events: null, odds: null };
 
   if (includeApiSports) {
-    output.apiSports = await syncApiSportsBasketballGames({ daysAhead: Math.min(Number(daysAhead || 2), 2) });
+    output.apiSports = await syncApiSportsBasketballGames({ daysAhead: Math.min(Number(daysAhead || 2), 2), selectedOnly: true });
+    output.apiSportsOdds = await syncApiSportsBasketballOdds({ daysAhead: Math.min(Number(daysAhead || 2), 2) });
   }
 
   if (includeNbaGames && (!leagueKey || leagueKey === 'nba')) {
@@ -179,8 +185,14 @@ export async function syncBasketballV1({ includeNbaGames = false, leagueKey = nu
     }
   }
 
-  output.events = await syncBasketballEvents({ leagueKey, daysAhead });
-  output.odds = await syncBasketballOdds({ leagueKey, daysAhead });
+  if (includeOddsApiBackup) {
+    output.events = await syncBasketballEvents({ leagueKey, daysAhead });
+    output.odds = await syncBasketballOdds({ leagueKey, daysAhead });
+  } else {
+    output.events = 'skipped_odds_api_backup';
+    output.odds = 'skipped_odds_api_backup';
+  }
+
   return output;
 }
 
