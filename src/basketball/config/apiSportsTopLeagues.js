@@ -20,7 +20,7 @@ function parseIds(value = '') {
   return String(value || '')
     .split(',')
     .map((x) => Number(String(x).trim()))
-    .filter(Number.isFinite);
+    .filter((id) => Number.isFinite(id) && id > 0);
 }
 
 export function getApiSportsTopBasketballLeagues({ limit = 12 } = {}) {
@@ -34,11 +34,12 @@ export function getApiSportsTopBasketballLeagues({ limit = 12 } = {}) {
 
   const safeLimit = Math.min(Math.max(Number(limit || process.env.BASKETBALL_APISPORTS_LEAGUE_LIMIT || 12), 1), 15);
   return selected
+    .filter((league) => Number.isFinite(Number(league.id)) && Number(league.id) > 0)
     .sort((a, b) => (b.priority || 0) - (a.priority || 0))
     .slice(0, safeLimit);
 }
 
 export function isSelectedApiSportsLeague(leagueId) {
   const id = Number(leagueId);
-  return getApiSportsTopBasketballLeagues({ limit: 15 }).some((l) => l.id === id);
+  return Number.isFinite(id) && id > 0 && getApiSportsTopBasketballLeagues({ limit: 15 }).some((l) => l.id === id);
 }
