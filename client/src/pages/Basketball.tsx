@@ -27,8 +27,8 @@ function timeLabel(value?: string | null) {
 
 function statusLabel(status?: string | null) {
   const s = String(status || "scheduled").toLowerCase();
-  if (s.includes("final")) return "FT";
-  if (s.includes("live") || s.includes("q") || s.includes("half")) return "LIVE";
+  if (s.includes("final") || s.includes("finished") || s === "ft") return "FT";
+  if (s.includes("live") || s.includes("q") || s.includes("half") || s.includes("in play")) return "LIVE";
   return "UPCOMING";
 }
 
@@ -41,6 +41,59 @@ function initials(name?: string) {
     .map((w) => w[0])
     .join("")
     .toUpperCase();
+}
+
+function rawOf(game: any) {
+  return game?.raw || {};
+}
+
+function leagueMeta(game: any) {
+  const raw = rawOf(game);
+  const league = raw?.league || raw?.raw?.league || {};
+  const country = raw?.country || raw?.raw?.country || {};
+  const key = String(game?.league_key || "basketball");
+  const isApiSports = key.startsWith("apisports_");
+  return {
+    key,
+    name: game?.league_name || league?.name || (isApiSports ? "Global Basketball" : key.toUpperCase()),
+    country: game?.league_country || country?.name || league?.country || null,
+    logo: game?.league_logo || raw?.leagueLogo || league?.logo || null,
+    flag: game?.country_flag || raw?.countryFlag || country?.flag || null,
+  };
+}
+
+function teamLogo(game: any, side: "home" | "away") {
+  const raw = rawOf(game);
+  const teams = raw?.teams || raw?.raw?.teams || {};
+  if (side === "home") return game?.home_team_logo || raw?.homeTeamLogo || teams?.home?.logo || null;
+  return game?.away_team_logo || raw?.awayTeamLogo || teams?.away?.logo || null;
+}
+
+function groupGames(games: any[]) {
+  const map = new Map<string, { meta: ReturnType<typeof leagueMeta>; games: any[] }>();
+  for (const game of games) {
+    const meta = leagueMeta(game);
+    const id = `${meta.key}-${meta.name}`;
+    if (!map.has(id)) map.set(id, { meta, games: [] });
+    map.get(id)!.games.push(game);
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const liveA = a.games.some((g) => statusLabel(g.status) === "LIVE") ? 1 : 0;
+    const liveB = b.games.some((g) => statusLabel(g.status) === "LIVE") ? 1 : 0;
+    if (liveA !== liveB) return liveB - liveA;
+    return new Date(a.games[0]?.start_time || 0).getTime() - new Date(b.games[0]?.start_time || 0).getTime();
+  });
+}
+
+function TeamAvatar({ name, logo, tone = "orange" }: { name: string; logo?: string | null; tone?: "orange" | "dark" }) {
+  return (
+    <div className={cn(
+      "flex h-11 w-11 items-center justify-center rounded-2xl border overflow-hidden shrink-0",
+      tone === "orange" ? "border-orange-300/15 bg-orange-400/10 text-orange-100" : "border-white/10 bg-white/[0.06] text-white"
+    )}>
+      {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-1.5" loading="lazy" /> : <span className="text-xs font-black">{initials(name)}</span>}
+    </div>
+  );
 }
 
 function LeaguePill({ active, children, onClick }: { active: boolean; children: any; onClick: () => void }) {
@@ -73,33 +126,37 @@ function MiniStat({ label, value, tone = "green" }: { label: string; value: any;
 
 function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; index?: number }) {
   const live = statusLabel(game.status) === "LIVE";
+  const homeLogo = teamLogo(game, "home");
+  const awayLogo = teamLogo(game, "away");
+  const done = statusLabel(game.status) === "FT";
+  const hasScore = game.home_score != null || game.away_score != null;
+
   return (
     <motion.button
       onClick={onOpen}
       className="w-full text-left group"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.025 }}
+      transition={{ delay: Math.min(index * 0.018, 0.22) }}
       whileTap={{ scale: 0.985 }}
     >
       <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4 transition-all group-hover:bg-white/[0.045] group-hover:border-orange-300/18">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex -space-x-3 shrink-0">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-orange-300/15 bg-orange-400/10 text-xs font-black text-orange-100">{initials(game.home_team)}</div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] text-xs font-black text-white">{initials(game.away_team)}</div>
+              <TeamAvatar name={game.home_team} logo={homeLogo} tone="orange" />
+              <TeamAvatar name={game.away_team} logo={awayLogo} tone="dark" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-orange-400/10 border border-orange-300/20 px-2 py-0.5 text-[9px] font-black text-orange-200 uppercase tracking-widest">{String(game.league_key || "NBA").toUpperCase()}</span>
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", live ? "text-red-400" : "text-white/30")}>{live ? "● LIVE" : statusLabel(game.status)}</span>
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", live ? "text-red-400" : done ? "text-white/35" : "text-white/30")}>{live ? "● LIVE" : statusLabel(game.status)}</span>
               </div>
               <p className="mt-2 text-sm font-black text-white truncate">{game.home_team}</p>
               <p className="text-sm font-black text-white/70 truncate">{game.away_team}</p>
             </div>
           </div>
           <div className="text-right shrink-0">
-            {(game.home_score != null || game.away_score != null) ? (
+            {hasScore ? (
               <p className="text-xl font-black text-white tabular-nums">{game.home_score ?? 0}-{game.away_score ?? 0}</p>
             ) : (
               <p className="text-xs font-bold text-white/40">{timeLabel(game.start_time)}</p>
@@ -109,6 +166,29 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
         </div>
       </div>
     </motion.button>
+  );
+}
+
+function LeagueGroup({ group, offset, openGame }: { group: any; offset: number; openGame: (game: any) => void }) {
+  const { meta, games } = group;
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2 min-w-0">
+          {meta.logo || meta.flag ? <img src={meta.logo || meta.flag} alt="" className="h-5 w-5 rounded-md object-contain" loading="lazy" /> : <span className="h-5 w-1 rounded-full bg-orange-300/70" />}
+          <div className="min-w-0">
+            <h3 className="text-[12px] font-black uppercase tracking-[0.18em] text-white/75 truncate">{meta.name}</h3>
+            {meta.country && <p className="text-[10px] font-bold uppercase tracking-widest text-white/25 truncate">{meta.country}</p>}
+          </div>
+        </div>
+        <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[10px] font-black text-white/35">{games.length}</span>
+      </div>
+      <div className="grid gap-3">
+        {games.map((game: any, i: number) => (
+          <GameCard key={`${game.league_key}-${game.external_game_id || game.id}`} game={game} index={offset + i} onOpen={() => openGame(game)} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -136,12 +216,22 @@ export default function Basketball() {
     const all = (gamesData as any)?.games || [];
     const q = query.trim().toLowerCase();
     if (!q) return all;
-    return all.filter((g: any) => String(g.home_team || "").toLowerCase().includes(q) || String(g.away_team || "").toLowerCase().includes(q));
+    return all.filter((g: any) => {
+      const meta = leagueMeta(g);
+      return String(g.home_team || "").toLowerCase().includes(q)
+        || String(g.away_team || "").toLowerCase().includes(q)
+        || String(meta.name || "").toLowerCase().includes(q)
+        || String(meta.country || "").toLowerCase().includes(q);
+    });
   }, [gamesData, query]);
 
+  const grouped = useMemo(() => groupGames(games), [games]);
   const liveCount = games.filter((g: any) => statusLabel(g.status) === "LIVE").length;
+  const leagueCount = new Set(games.map((g: any) => leagueMeta(g).key)).size;
   const degraded = (health as any)?.status === "degraded";
   const syncing = gamesFetching;
+
+  const openGame = (game: any) => setLocation(`/basketball/games/${game.league_key}/${game.external_game_id || game.odds_event_id}`);
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white pb-28 relative overflow-hidden">
@@ -157,7 +247,7 @@ export default function Basketball() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-200/65">ScorePhantom Hoops</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight">Basketball Games 🏀</h1>
-              <p className="mt-1 text-xs text-white/45 leading-relaxed">Browse upcoming NBA and NCAAB games. Open a matchup for full analysis.</p>
+              <p className="mt-1 text-xs text-white/45 leading-relaxed">Browse global basketball games. Open a matchup for full analysis.</p>
             </div>
             <motion.div animate={{ rotate: syncing ? 360 : 0 }} transition={{ duration: 1.2, repeat: syncing ? Infinity : 0, ease: "linear" }} className="h-12 w-12 rounded-2xl border border-orange-300/20 bg-orange-400/10 flex items-center justify-center shrink-0">
               <Activity className="h-6 w-6 text-orange-200" />
@@ -167,7 +257,7 @@ export default function Basketball() {
           <div className="relative mt-5 grid grid-cols-3 gap-2">
             <MiniStat label="Games" value={games.length || "—"} tone="orange" />
             <MiniStat label="Live" value={liveCount} tone="blue" />
-            <MiniStat label="Leagues" value={league === "all" ? "2" : "1"} />
+            <MiniStat label="Leagues" value={leagueCount || "—"} />
           </div>
 
           <div className="relative mt-4 flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-black/25 px-3 py-2 text-xs text-white/35">
@@ -186,7 +276,7 @@ export default function Basketball() {
           {LEAGUES.map((l) => <LeaguePill key={l.key} active={league === l.key} onClick={() => setLeague(l.key)}>{l.label}</LeaguePill>)}
         </div>
 
-        <section className="space-y-3">
+        <section className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Trophy className="h-4 w-4 text-primary" />
@@ -198,11 +288,9 @@ export default function Basketball() {
             </div>
           </div>
 
-          {gamesLoading ? <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading games...</div> : games.length ? (
-            <div className="grid gap-3">
-              {games.map((game: any, i: number) => (
-                <GameCard key={`${game.league_key}-${game.external_game_id || game.id}`} game={game} index={i} onOpen={() => setLocation(`/basketball/games/${game.league_key}/${game.external_game_id || game.odds_event_id}`)} />
-              ))}
+          {gamesLoading ? <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading games...</div> : grouped.length ? (
+            <div className="space-y-6">
+              {grouped.map((group, i) => <LeagueGroup key={`${group.meta.key}-${group.meta.name}`} group={group} offset={i * 4} openGame={openGame} />)}
             </div>
           ) : (
             <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-center">
