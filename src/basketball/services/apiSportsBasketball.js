@@ -1,4 +1,5 @@
 const APISPORTS_BASKETBALL_BASE = process.env.APISPORTS_BASKETBALL_BASE_URL || 'https://v1.basketball.api-sports.io';
+const FETCH_TIMEOUT_MS = Number(process.env.APISPORTS_BASKETBALL_FETCH_TIMEOUT_MS || 15000);
 
 function apiKey() {
   return process.env.APISPORTS_BASKETBALL_KEY || process.env.API_SPORTS_BASKETBALL_KEY || process.env.APISPORTS_KEY || '';
@@ -10,6 +11,16 @@ function cleanParams(params = {}) {
     if (value !== undefined && value !== null && value !== '') out[key] = String(value);
   }
   return out;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function apiSportsFetch(path, params = {}) {
@@ -25,12 +36,19 @@ async function apiSportsFetch(path, params = {}) {
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'x-apisports-key': key,
-    },
-  });
+  let res;
+  try {
+    res = await fetchWithTimeout(url.toString(), {
+      headers: {
+        Accept: 'application/json',
+        'x-apisports-key': key,
+      },
+    });
+  } catch (err) {
+    const wrapped = new Error(`API-SPORTS Basketball timeout/error on ${path}: ${err.message}`);
+    wrapped.statusCode = err.name === 'AbortError' ? 504 : 500;
+    throw wrapped;
+  }
 
   const remaining = res.headers.get('x-ratelimit-requests-remaining') || res.headers.get('x-ratelimit-remaining');
   const limit = res.headers.get('x-ratelimit-requests-limit') || res.headers.get('x-ratelimit-limit');
