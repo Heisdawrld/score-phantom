@@ -1,7 +1,7 @@
 import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame } from '../storage/basketballDb.js';
-import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
+import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
@@ -122,6 +122,21 @@ router.post('/admin/sync-api-sports', requireAdminSecret, async (req, res) => {
     const result = await syncApiSportsBasketballGamesCached({
       daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 7), 1), 14),
       date: req.body?.date || null,
+      selectedOnly: req.body?.selectedOnly !== false,
+    });
+    res.json({ ok: true, result });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/sync-api-sports-odds', requireAdminSecret, async (req, res) => {
+  try {
+    const result = await syncApiSportsBasketballOdds({
+      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
+      date: req.body?.date || null,
+      leagueLimit: Math.min(Math.max(Number(req.body?.leagueLimit || 12), 1), 15),
+      maxGames: Math.min(Math.max(Number(req.body?.maxGames || 40), 1), 80),
     });
     res.json({ ok: true, result });
   } catch (err) {
@@ -135,6 +150,7 @@ router.post('/admin/sync', requireAdminSecret, async (req, res) => {
       leagueKey: req.body?.league || null,
       daysAhead: Number(req.body?.daysAhead || 7),
       includeApiSports: req.body?.includeApiSports !== false,
+      includeOddsApiBackup: req.body?.includeOddsApiBackup !== false,
     });
     res.json({ ok: true, result });
   } catch (err) {
