@@ -10,6 +10,60 @@ function safeParse(value, fallback = null) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function normTeam(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(the|bc|bk|basket|club)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function gameDay(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+function sourcePriority(row) {
+  const source = String(row.source || '').toLowerCase();
+  const league = String(row.league_key || '').toLowerCase();
+  const raw = safeParse(row.raw_json, null) || row.raw || {};
+  const teams = raw?.teams || raw?.raw?.teams || {};
+  const hasLogos = !!(row.home_team_logo || row.away_team_logo || teams?.home?.logo || teams?.away?.logo);
+  if (source === 'api_sports_basketball' || league.startsWith('apisports_')) return hasLogos ? 100 : 92;
+  if (source === 'the_odds_api') return 65;
+  if (source === 'balldontlie') return 35;
+  return 50;
+}
+
+function matchKey(row) {
+  return [gameDay(row.start_time), normTeam(row.home_team), normTeam(row.away_team)].join('|');
+}
+
+function dedupeGames(rows = []) {
+  const best = new Map();
+  for (const row of rows) {
+    const key = matchKey(row);
+    if (!key || key === '||') continue;
+    const existing = best.get(key);
+    if (!existing || sourcePriority(row) > sourcePriority(existing)) {
+      best.set(key, row);
+    }
+  }
+  const singles = rows.filter((row) => !best.has(matchKey(row)));
+  return [...best.values(), ...singles].sort((a, b) => new Date(a.start_time || 0) - new Date(b.start_time || 0));
+}
+
+function siblingLeagueKeys(leagueKey = '') {
+  const key = String(leagueKey || '').toLowerCase();
+  if (key === 'nba' || key === 'apisports_12') return ['nba', 'apisports_12'];
+  if (key === 'wnba') return ['wnba'];
+  return [key];
+}
+
 export async function initBasketballTables() {
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
     id SERIAL PRIMARY KEY,
@@ -160,7 +214,7 @@ export async function findBasketballGameByExternalId(leagueKey, externalGameId) 
     sql: `SELECT * FROM basketball_games WHERE league_key = ? AND external_game_id = ? LIMIT 1`,
     args: [leagueKey, String(externalGameId)],
   });
-  return r.rows?.[0] || null;
+  return r.rows?.[0] ? { ...r.rows[0], raw: safeParse(r.rows[0].raw_json, null) } : null;
 }
 
 export async function listBasketballGames({ leagueKey = null, from = null, to = null, limit = 100 } = {}) {
@@ -173,9 +227,10 @@ export async function listBasketballGames({ leagueKey = null, from = null, to = 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const r = await db.execute({
     sql: `SELECT * FROM basketball_games ${where} ORDER BY start_time ASC LIMIT ?`,
-    args: [...args, limit],
+    args: [...args, Math.max(limit * 2, limit)],
   });
-  return (r.rows || []).map((row) => ({ ...row, raw: safeParse(row.raw_json, null) }));
+  const rows = (r.rows || []).map((row) => ({ ...row, raw: safeParse(row.raw_json, null) }));
+  return dedupeGames(rows).slice(0, limit);
 }
 
 export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
@@ -239,11 +294,40 @@ export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
   return { inserted, gameId };
 }
 
+async function findSiblingGameIds(game) {
+  if (!game) return [];
+  const leagues = siblingLeagueKeys(game.league_key);
+  const start = game.start_time ? new Date(game.start_time) : null;
+  if (!start || Number.isNaN(start.getTime())) return [game.id];
+  const from = new Date(start.getTime() - 8 * 60 * 60 * 1000).toISOString();
+  const to = new Date(start.getTime() + 8 * 60 * 60 * 1000).toISOString();
+  const placeholders = leagues.map(() => '?').join(', ');
+  const r = await db.execute({
+    sql: `SELECT id, league_key, home_team, away_team, start_time, source
+          FROM basketball_games
+          WHERE league_key IN (${placeholders})
+            AND start_time >= ? AND start_time <= ?`,
+    args: [...leagues, from, to],
+  });
+  const h = normTeam(game.home_team);
+  const a = normTeam(game.away_team);
+  return (r.rows || [])
+    .filter((row) => normTeam(row.home_team) === h && normTeam(row.away_team) === a)
+    .sort((x, y) => sourcePriority(y) - sourcePriority(x))
+    .map((row) => row.id);
+}
+
 export async function getBasketballOddsForGame(gameId) {
   await initBasketballTables();
+  const gameResult = await db.execute({ sql: `SELECT * FROM basketball_games WHERE id = ? LIMIT 1`, args: [gameId] });
+  const game = gameResult.rows?.[0] || null;
+  const ids = await findSiblingGameIds(game);
+  const uniqueIds = [...new Set([gameId, ...ids].filter(Boolean))];
+  if (!uniqueIds.length) return [];
+  const placeholders = uniqueIds.map(() => '?').join(', ');
   const r = await db.execute({
-    sql: `SELECT * FROM basketball_odds WHERE game_id = ? ORDER BY bookmaker ASC, market_key ASC`,
-    args: [gameId],
+    sql: `SELECT * FROM basketball_odds WHERE game_id IN (${placeholders}) ORDER BY bookmaker ASC, market_key ASC`,
+    args: uniqueIds,
   });
   return r.rows || [];
 }
