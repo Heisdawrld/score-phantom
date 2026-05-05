@@ -31,25 +31,55 @@ function selectionFromValue(value = '') {
   return text;
 }
 
+function extractGameId(rawOdds) {
+  const game = rawOdds?.game;
+  if (typeof game === 'number' || typeof game === 'string') return game;
+  return game?.id || rawOdds?.fixture?.id || rawOdds?.id || rawOdds?.game_id || rawOdds?.gameId;
+}
+
+function extractBookmakers(rawOdds) {
+  if (Array.isArray(rawOdds?.bookmakers)) return rawOdds.bookmakers;
+  if (Array.isArray(rawOdds?.bookmakers?.data)) return rawOdds.bookmakers.data;
+  if (Array.isArray(rawOdds?.odds)) return rawOdds.odds;
+  if (Array.isArray(rawOdds?.markets)) return [{ name: 'API-SPORTS', bets: rawOdds.markets }];
+  if (Array.isArray(rawOdds?.bets)) return [{ name: 'API-SPORTS', bets: rawOdds.bets }];
+  return [];
+}
+
+function extractBets(bookmaker) {
+  if (Array.isArray(bookmaker?.bets)) return bookmaker.bets;
+  if (Array.isArray(bookmaker?.markets)) return bookmaker.markets;
+  if (Array.isArray(bookmaker?.odds)) return bookmaker.odds;
+  if (Array.isArray(bookmaker?.values)) return [{ name: bookmaker?.name || bookmaker?.title || 'Market', values: bookmaker.values }];
+  return [];
+}
+
+function extractValues(bet) {
+  if (Array.isArray(bet?.values)) return bet.values;
+  if (Array.isArray(bet?.outcomes)) return bet.outcomes;
+  if (Array.isArray(bet?.odds)) return bet.odds;
+  return [];
+}
+
 export function normalizeApiSportsOddsRows(rawOdds, { leagueKey } = {}) {
-  const gameId = rawOdds?.game?.id || rawOdds?.fixture?.id || rawOdds?.id || rawOdds?.game_id;
+  const gameId = extractGameId(rawOdds);
   const externalGameId = gameId ? `apisports_${gameId}` : null;
-  const resolvedLeagueKey = leagueKey || `apisports_${rawOdds?.league?.id || 'basketball'}`;
+  const resolvedLeagueKey = leagueKey || `apisports_${rawOdds?.league?.id || rawOdds?.league || 'basketball'}`;
   const rows = [];
 
-  const bookmakers = Array.isArray(rawOdds?.bookmakers) ? rawOdds.bookmakers : [];
+  const bookmakers = extractBookmakers(rawOdds);
   for (const bookmaker of bookmakers) {
     const bookmakerName = bookmaker?.name || bookmaker?.title || bookmaker?.key || `bookmaker_${bookmaker?.id || 'unknown'}`;
-    const bets = Array.isArray(bookmaker?.bets) ? bookmaker.bets : Array.isArray(bookmaker?.markets) ? bookmaker.markets : [];
+    const bets = extractBets(bookmaker);
 
     for (const bet of bets) {
-      const marketName = bet?.name || bet?.key || bet?.label || 'Market';
+      const marketName = bet?.name || bet?.key || bet?.label || bet?.market || 'Market';
       const marketKey = marketKeyFromBetName(marketName);
-      const values = Array.isArray(bet?.values) ? bet.values : Array.isArray(bet?.outcomes) ? bet.outcomes : [];
+      const values = extractValues(bet);
 
       for (const outcome of values) {
-        const outcomeValue = outcome?.value ?? outcome?.name ?? outcome?.label ?? outcome?.selection;
-        const price = asNumber(outcome?.odd ?? outcome?.price ?? outcome?.odds);
+        const outcomeValue = outcome?.value ?? outcome?.name ?? outcome?.label ?? outcome?.selection ?? outcome?.team;
+        const price = asNumber(outcome?.odd ?? outcome?.price ?? outcome?.odds ?? outcome?.value_odd);
         if (!price || price <= 1) continue;
 
         rows.push({
@@ -63,7 +93,7 @@ export function normalizeApiSportsOddsRows(rawOdds, { leagueKey } = {}) {
           selection: selectionFromValue(outcomeValue),
           raw_selection: String(outcomeValue || ''),
           price,
-          point: normalizePoint(outcomeValue),
+          point: outcome?.point != null ? asNumber(outcome.point) : normalizePoint(outcomeValue),
           last_update: rawOdds?.update || rawOdds?.updated || rawOdds?.last_update || null,
           raw: { bookmaker, bet, outcome },
         });
@@ -88,11 +118,20 @@ export async function saveApiSportsBasketballOdds(rawOdds, { leagueKey } = {}) {
   const rows = normalizeApiSportsOddsRows(rawOdds, { leagueKey });
   let inserted = 0;
   let skipped = 0;
+  const diagnostics = {
+    gameId: extractGameId(rawOdds) || null,
+    externalGameId: extractGameId(rawOdds) ? `apisports_${extractGameId(rawOdds)}` : null,
+    bookmakerCount: extractBookmakers(rawOdds).length,
+    normalizedRows: rows.length,
+    missingGameRows: 0,
+    saveErrors: [],
+  };
 
   for (const row of rows) {
     const game = await findGameByExternalId(row.league_key, row.external_game_id);
     if (!game?.id) {
       skipped++;
+      diagnostics.missingGameRows++;
       continue;
     }
 
@@ -134,9 +173,10 @@ export async function saveApiSportsBasketballOdds(rawOdds, { leagueKey } = {}) {
       inserted++;
     } catch (err) {
       skipped++;
+      diagnostics.saveErrors.push(err.message);
       console.warn('[apiSportsBasketballOdds] save failed:', err.message);
     }
   }
 
-  return { inserted, skipped, rows: rows.length };
+  return { inserted, skipped, rows: rows.length, diagnostics };
 }
