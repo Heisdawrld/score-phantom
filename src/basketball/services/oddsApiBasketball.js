@@ -4,9 +4,20 @@ const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const DEFAULT_REGIONS = process.env.BASKETBALL_ODDS_REGIONS || 'us';
 const DEFAULT_MARKETS = process.env.BASKETBALL_ODDS_MARKETS || 'h2h,spreads,totals';
 const DEFAULT_ODDS_FORMAT = process.env.BASKETBALL_ODDS_FORMAT || 'decimal';
+const FETCH_TIMEOUT_MS = Number(process.env.BASKETBALL_ODDS_FETCH_TIMEOUT_MS || 15000);
 
 function apiKey() {
   return process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY || '';
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function oddsFetch(path, params = {}) {
@@ -23,7 +34,15 @@ async function oddsFetch(path, params = {}) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   }
 
-  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+  let res;
+  try {
+    res = await fetchWithTimeout(url.toString(), { headers: { Accept: 'application/json' } });
+  } catch (err) {
+    const wrapped = new Error(`The Odds API timeout/error on ${path}: ${err.message}`);
+    wrapped.statusCode = err.name === 'AbortError' ? 504 : 500;
+    throw wrapped;
+  }
+
   const remaining = res.headers.get('x-requests-remaining');
   const used = res.headers.get('x-requests-used');
   const last = res.headers.get('x-requests-last');
