@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Clock, Sparkles, Target, TrendingUp } from "lucide-react";
+import { AlertCircle, ArrowLeft, BarChart3, Clock, Sparkles, Target, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,13 @@ function timeLabel(value?: string | null) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "TBD";
   return d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function statusLabel(status?: string | null) {
+  const s = String(status || "scheduled").toLowerCase();
+  if (s.includes("final") || s.includes("finished") || s === "ft") return "FT";
+  if (s.includes("live") || s.includes("q") || s.includes("half") || s.includes("in play")) return "LIVE";
+  return "UPCOMING";
 }
 
 function shortTeam(name?: string) {
@@ -42,12 +49,49 @@ function initials(name?: string) {
     .toUpperCase();
 }
 
+function rawOf(game: any) {
+  const rawJson = game?.raw_json;
+  if (game?.raw) return game.raw;
+  if (rawJson && typeof rawJson === "object") return rawJson;
+  if (rawJson && typeof rawJson === "string") {
+    try { return JSON.parse(rawJson); } catch { return {}; }
+  }
+  return {};
+}
+
+function teamLogo(game: any, side: "home" | "away") {
+  const raw = rawOf(game);
+  const teams = raw?.teams || raw?.raw?.teams || {};
+  if (side === "home") return game?.home_team_logo || raw?.homeTeamLogo || teams?.home?.logo || null;
+  return game?.away_team_logo || raw?.awayTeamLogo || teams?.away?.logo || null;
+}
+
+function leagueMeta(game: any, prediction: any, leagueKey: string) {
+  const raw = rawOf(game);
+  const league = raw?.league || raw?.raw?.league || {};
+  const country = raw?.country || raw?.raw?.country || {};
+  return {
+    name: prediction?.league?.label || game?.league_name || league?.name || String(leagueKey).replace("apisports_", "").toUpperCase(),
+    country: game?.league_country || country?.name || league?.country || null,
+    logo: game?.league_logo || raw?.leagueLogo || league?.logo || null,
+    flag: game?.country_flag || raw?.countryFlag || country?.flag || null,
+  };
+}
+
 function Metric({ label, value, sub }: { label: string; value: any; sub?: any }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3 min-h-[78px]">
       <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">{label}</p>
       <p className="mt-1 text-lg font-black text-white leading-tight">{value}</p>
       {sub && <p className="mt-1 text-[10px] text-white/30 leading-tight">{sub}</p>}
+    </div>
+  );
+}
+
+function TeamBadge({ name, logo }: { name: string; logo?: string | null }) {
+  return (
+    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/15 bg-orange-400/10 text-xl font-black text-orange-100 shadow-[0_0_30px_rgba(251,146,60,0.08)] overflow-hidden">
+      {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-2" loading="lazy" /> : initials(name)}
     </div>
   );
 }
@@ -60,6 +104,7 @@ function cleanReason(reason: string) {
   if (low.includes("player props")) return null;
   if (low.includes("starting lineup")) return null;
   if (low.includes("data coverage")) return null;
+  if (low.includes("no basketball market passed")) return null;
   return r;
 }
 
@@ -85,14 +130,22 @@ export default function BasketballGame() {
     refetchInterval: 45_000,
   });
 
-  const game = (data as any)?.game || (gameData as any)?.game || {};
+  const rawGame = (gameData as any)?.game || {};
+  const game = (data as any)?.game || rawGame || {};
   const rec = (data as any)?.recommendation || {};
   const projection = (data as any)?.projection || {};
   const intel = (data as any)?.intel || {};
   const candidates = (data as any)?.candidates || [];
+  const odds = (gameData as any)?.odds || [];
+  const hasBookLines = odds.length > 0 || Number(intel.bookmakerCount || 0) > 0 || !!rec.bookmakerPrice;
   const noEdge = rec.noClearEdge;
+  const showNoLinesState = !isLoading && !error && data && !hasBookLines;
   const homeName = game.homeTeam || game.home_team;
   const awayName = game.awayTeam || game.away_team;
+  const homeLogo = teamLogo(rawGame, "home");
+  const awayLogo = teamLogo(rawGame, "away");
+  const meta = leagueMeta(rawGame, data, league);
+  const status = statusLabel(game.status || rawGame.status);
   const userReasons = (rec.reasons || []).map(cleanReason).filter(Boolean).slice(0, 3);
   const marketSignals = candidates.filter((c: any) => c.pick !== rec.pick).slice(0, 3);
 
@@ -109,24 +162,58 @@ export default function BasketballGame() {
         </button>
 
         <section className="rounded-[28px] border border-white/[0.06] bg-white/[0.025] p-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/65">{String((data as any)?.league?.label || league).toUpperCase()} · {timeLabel(game.startTime || game.start_time)}</p>
-          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/15 bg-orange-400/10 text-xl font-black text-orange-100 shadow-[0_0_30px_rgba(251,146,60,0.08)]">{initials(homeName)}</div>
-              <p className="mt-3 text-base font-black leading-tight text-white">{shortTeam(homeName)}</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/65 truncate">{String(meta.name || league).toUpperCase()} {meta.country ? `· ${String(meta.country).toUpperCase()}` : ""}</p>
+              <div className="mt-2 flex items-center gap-2 text-xs text-white/35">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{timeLabel(game.startTime || game.start_time || rawGame.start_time)}</span>
+                <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", status === "LIVE" ? "bg-red-400/10 text-red-300" : "bg-white/[0.06] text-white/40")}>{status}</span>
+              </div>
+            </div>
+            {(meta.logo || meta.flag) && <img src={meta.logo || meta.flag} alt="" className="h-9 w-9 rounded-xl object-contain" loading="lazy" />}
+          </div>
+
+          <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="text-center min-w-0">
+              <TeamBadge name={homeName} logo={homeLogo} />
+              <p className="mt-3 text-base font-black leading-tight text-white truncate">{shortTeam(homeName)}</p>
             </div>
             <div className="text-center text-white/25 font-black">VS</div>
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/15 bg-orange-400/10 text-xl font-black text-orange-100 shadow-[0_0_30px_rgba(251,146,60,0.08)]">{initials(awayName)}</div>
-              <p className="mt-3 text-base font-black leading-tight text-white">{shortTeam(awayName)}</p>
+            <div className="text-center min-w-0">
+              <TeamBadge name={awayName} logo={awayLogo} />
+              <p className="mt-3 text-base font-black leading-tight text-white truncate">{shortTeam(awayName)}</p>
             </div>
           </div>
         </section>
 
-        {isLoading && <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-sm text-white/40">Running basketball engine...</div>}
+        {isLoading && <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-sm text-white/40">Checking match data...</div>}
         {error && <div className="rounded-3xl border border-red-400/20 bg-red-400/[0.06] p-6 text-sm text-red-100/70">{(error as any).message || "Basketball prediction failed"}</div>}
 
-        {!isLoading && !error && data && (
+        {showNoLinesState && (
+          <section className="rounded-[30px] border border-white/[0.06] bg-white/[0.025] p-5 overflow-hidden relative">
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
+            <div className="relative flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 shrink-0">
+                <AlertCircle className="h-5 w-5 text-amber-200" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-100/70">Lines not available yet</p>
+                <h2 className="mt-2 text-2xl font-black leading-tight text-white">Fixture available, edge pending</h2>
+                <p className="mt-2 text-sm leading-relaxed text-white/45">
+                  ScorePhantom has the game schedule and team info, but no bookmaker line has been saved for this matchup yet. Value edge will appear when odds are available.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative mt-5 grid grid-cols-2 gap-3">
+              <Metric label="Game Status" value={status} />
+              <Metric label="Book Lines" value="Pending" sub="No odds saved" />
+            </div>
+          </section>
+        )}
+
+        {!isLoading && !error && data && !showNoLinesState && (
           <>
             <section className={cn("rounded-[30px] border p-5 overflow-hidden relative", noEdge ? "border-white/[0.06] bg-white/[0.025]" : "border-orange-300/20 bg-gradient-to-br from-orange-400/[0.12] via-white/[0.035] to-primary/[0.06]") }>
               <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
@@ -191,20 +278,19 @@ export default function BasketballGame() {
                 </div>
               </section>
             )}
-
-            <section className="rounded-3xl border border-white/[0.045] bg-white/[0.015] p-4 opacity-80">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Match Data</p>
-                  <p className="mt-1 text-xs text-white/35">Coverage {intel.dataQuality ?? 0}% · {intel.bookmakerCount || 0} books · Form {intel.homeFormGames ?? 0}/{intel.awayFormGames ?? 0}</p>
-                </div>
-                <div className="text-right text-xs text-white/35">
-                  <p>Rest</p>
-                  <p className="font-black text-white/55">{intel.homeRestDays ?? "—"}d / {intel.awayRestDays ?? "—"}d</p>
-                </div>
-              </div>
-            </section>
           </>
+        )}
+
+        {!isLoading && !error && data && (
+          <section className="rounded-3xl border border-white/[0.045] bg-white/[0.015] p-4 opacity-80">
+            <div className="flex items-center gap-2 mb-3"><BarChart3 className="h-4 w-4 text-primary" /><h3 className="text-sm font-black uppercase tracking-widest">Match Data</h3></div>
+            <div className="grid grid-cols-2 gap-3">
+              <Metric label="Coverage" value={`${intel.dataQuality ?? 0}%`} sub={intel.dataCoverageLabel || "data"} />
+              <Metric label="Bookmakers" value={intel.bookmakerCount || 0} sub={hasBookLines ? "lines saved" : "pending lines"} />
+              <Metric label="Home Form" value={`${intel.homeFormGames ?? 0} games`} />
+              <Metric label="Away Form" value={`${intel.awayFormGames ?? 0} games`} />
+            </div>
+          </section>
         )}
       </main>
     </div>
