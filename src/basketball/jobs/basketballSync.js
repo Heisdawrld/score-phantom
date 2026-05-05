@@ -3,19 +3,9 @@ import { fetchBasketballOdds, fetchBasketballOddsEvents, normalizeOddsGame, norm
 import { fetchNbaGames, normalizeNbaGame } from '../services/ballDontLieNba.js';
 import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, normalizeApiSportsGame, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
 import { initBasketballTables, upsertBasketballGame, upsertOddsGame, saveBasketballOdds, listBasketballGames } from '../storage/basketballDb.js';
+import { syncApiSportsBasketballGamesCached } from './apiSportsPremiumSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
-
-function isoDate(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
-}
-
-function isoDateTime(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString();
-}
+import { isoDate, oddsApiDateTime, apiSportsFreeWindowDates } from '../utils/dateWindow.js';
 
 export async function syncNbaGames({ startDate = isoDate(-45), endDate = isoDate(-1), maxPages = 4 } = {}) {
   await initBasketballTables();
@@ -35,7 +25,7 @@ export async function syncNbaGames({ startDate = isoDate(-45), endDate = isoDate
   return { league: 'nba', saved, pages, startDate, endDate, role: 'historical_form_only' };
 }
 
-export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeagueSamples = 20 } = {}) {
+export async function testApiSportsBasketballCoverage({ daysAhead = 2, maxLeagueSamples = 20 } = {}) {
   const [statusResult, leaguesResult] = await Promise.allSettled([
     fetchApiSportsStatus(),
     fetchApiSportsLeagues(),
@@ -46,9 +36,9 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeague
   let totalGames = 0;
   let quota = null;
   const sampleGames = [];
+  const dates = apiSportsFreeWindowDates(daysAhead);
 
-  for (let i = 0; i < daysAhead; i++) {
-    const date = isoDate(i);
+  for (const date of dates) {
     try {
       const gamesPayload = await fetchApiSportsGames({ date });
       quota = gamesPayload.quota || quota;
@@ -56,12 +46,16 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeague
       totalGames += games.length;
       for (const game of games) {
         const league = game?.league || {};
+        const country = game?.country || {};
         const key = String(league?.id || 'unknown');
         if (!leagueMap.has(key)) {
           leagueMap.set(key, {
             id: league?.id || null,
+            key: `apisports_${league?.id || 'basketball'}`,
             name: league?.name || 'Unknown League',
-            country: league?.country || game?.country?.name || null,
+            country: country?.name || league?.country || null,
+            logo: league?.logo || null,
+            flag: country?.flag || null,
             games: 0,
           });
         }
@@ -71,9 +65,11 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeague
             id: game?.id,
             date: game?.date,
             league: league?.name,
-            country: league?.country || game?.country?.name || null,
+            country: country?.name || league?.country || null,
             home: game?.teams?.home?.name,
             away: game?.teams?.away?.name,
+            homeLogo: game?.teams?.home?.logo || null,
+            awayLogo: game?.teams?.away?.logo || null,
             status: game?.status?.long || game?.status?.short,
           });
         }
@@ -92,10 +88,11 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeague
   return {
     ok: true,
     provider: 'api_sports_basketball',
+    planWindow: 'free_plan_today_tomorrow',
     status: statusResult.status === 'fulfilled' ? statusResult.value.raw : { error: statusResult.reason?.message },
     catalogCount: leaguesResult.status === 'fulfilled' ? (leaguesResult.value.results || leaguesResult.value.data?.length || 0) : 0,
     leagueCatalog,
-    daysAhead,
+    daysAhead: dates.length,
     totalGames,
     daily,
     leagues,
@@ -104,66 +101,17 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeague
   };
 }
 
-export async function syncApiSportsBasketballGames({ daysAhead = 7, date = null } = {}) {
-  await initBasketballTables();
-  const dates = date ? [date] : Array.from({ length: daysAhead }, (_, i) => isoDate(i));
-  const daily = [];
-  let saved = 0;
-  let totalFetched = 0;
-  const leagueMap = new Map();
-  let quota = null;
-
-  for (const day of dates) {
-    try {
-      const payload = await fetchApiSportsGames({ date: day });
-      quota = payload.quota || quota;
-      const games = payload.data || [];
-      totalFetched += games.length;
-      let savedForDay = 0;
-      for (const raw of games) {
-        const normalized = normalizeApiSportsGame(raw);
-        if (!normalized.external_game_id || !normalized.home_team || !normalized.away_team) continue;
-        await upsertBasketballGame(normalized);
-        saved++;
-        savedForDay++;
-
-        const league = raw?.league || {};
-        const key = String(league?.id || 'unknown');
-        if (!leagueMap.has(key)) {
-          leagueMap.set(key, {
-            id: league?.id || null,
-            key: normalized.league_key,
-            name: league?.name || 'Unknown League',
-            country: league?.country || raw?.country?.name || null,
-            games: 0,
-          });
-        }
-        leagueMap.get(key).games++;
-      }
-      daily.push({ date: day, fetched: games.length, saved: savedForDay });
-    } catch (err) {
-      daily.push({ date: day, error: err.message, statusCode: err.statusCode || 500 });
-    }
-  }
-
-  return {
-    provider: 'api_sports_basketball',
-    role: 'primary_schedule',
-    daysAhead: date ? null : daysAhead,
-    dates,
-    fetched: totalFetched,
-    saved,
-    daily,
-    leagues: Array.from(leagueMap.values()).sort((a, b) => b.games - a.games),
-    quota,
-  };
+export async function syncApiSportsBasketballGames({ daysAhead = 2, date = null } = {}) {
+  // API-SPORTS free plan currently exposes only a short date window.
+  // Use the cached sync so league/team logos and names are saved with games.
+  return syncApiSportsBasketballGamesCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date });
 }
 
 export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } = {}) {
   await initBasketballTables();
   const leagues = leagueKey ? [assertEnabledBasketballLeague(leagueKey)] : getEnabledBasketballLeagues();
-  const commenceTimeFrom = isoDateTime(0);
-  const commenceTimeTo = isoDateTime(daysAhead);
+  const commenceTimeFrom = oddsApiDateTime(0);
+  const commenceTimeTo = oddsApiDateTime(daysAhead);
   const results = [];
 
   for (const league of leagues) {
@@ -189,8 +137,8 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
   await initBasketballTables();
   const leagues = leagueKey ? [assertEnabledBasketballLeague(leagueKey)] : getEnabledBasketballLeagues();
   const results = [];
-  const commenceTimeFrom = isoDateTime(0);
-  const commenceTimeTo = isoDateTime(daysAhead);
+  const commenceTimeFrom = oddsApiDateTime(0);
+  const commenceTimeTo = oddsApiDateTime(daysAhead);
 
   for (const league of leagues) {
     if (!league.oddsSportKey) continue;
@@ -217,7 +165,7 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
 export async function syncBasketballV1({ includeNbaGames = true, leagueKey = null, daysAhead = 7, includeApiSports = true } = {}) {
   const output = { apiSports: null, nbaGames: null, events: null, odds: null };
   if (includeApiSports) {
-    output.apiSports = await syncApiSportsBasketballGames({ daysAhead });
+    output.apiSports = await syncApiSportsBasketballGames({ daysAhead: Math.min(Number(daysAhead || 2), 2) });
   }
   if (includeNbaGames && (!leagueKey || leagueKey === 'nba')) {
     try {
@@ -238,7 +186,7 @@ export async function syncBasketballV1({ includeNbaGames = true, leagueKey = nul
 export async function runBasketballPredictions({ leagueKey = null, limit = 120 } = {}) {
   await initBasketballTables();
   const from = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-  const to = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
   const games = await listBasketballGames({ leagueKey, from, to, limit });
   const results = [];
 
