@@ -1,6 +1,7 @@
 import { getEnabledBasketballLeagues, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { fetchBasketballOdds, fetchBasketballOddsEvents, normalizeOddsGame, normalizeOddsEventGame, extractBestBasketballMarkets } from '../services/oddsApiBasketball.js';
 import { fetchNbaGames, normalizeNbaGame } from '../services/ballDontLieNba.js';
+import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, normalizeApiSportsGame, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
 import { initBasketballTables, upsertBasketballGame, upsertOddsGame, saveBasketballOdds, listBasketballGames } from '../storage/basketballDb.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
 
@@ -34,6 +35,130 @@ export async function syncNbaGames({ startDate = isoDate(-45), endDate = isoDate
   return { league: 'nba', saved, pages, startDate, endDate, role: 'historical_form_only' };
 }
 
+export async function testApiSportsBasketballCoverage({ daysAhead = 7, maxLeagueSamples = 20 } = {}) {
+  const [statusResult, leaguesResult] = await Promise.allSettled([
+    fetchApiSportsStatus(),
+    fetchApiSportsLeagues(),
+  ]);
+
+  const daily = [];
+  const leagueMap = new Map();
+  let totalGames = 0;
+  let quota = null;
+  const sampleGames = [];
+
+  for (let i = 0; i < daysAhead; i++) {
+    const date = isoDate(i);
+    try {
+      const gamesPayload = await fetchApiSportsGames({ date });
+      quota = gamesPayload.quota || quota;
+      const games = gamesPayload.data || [];
+      totalGames += games.length;
+      for (const game of games) {
+        const league = game?.league || {};
+        const key = String(league?.id || 'unknown');
+        if (!leagueMap.has(key)) {
+          leagueMap.set(key, {
+            id: league?.id || null,
+            name: league?.name || 'Unknown League',
+            country: league?.country || game?.country?.name || null,
+            games: 0,
+          });
+        }
+        leagueMap.get(key).games++;
+        if (sampleGames.length < 12) {
+          sampleGames.push({
+            id: game?.id,
+            date: game?.date,
+            league: league?.name,
+            country: league?.country || game?.country?.name || null,
+            home: game?.teams?.home?.name,
+            away: game?.teams?.away?.name,
+            status: game?.status?.long || game?.status?.short,
+          });
+        }
+      }
+      daily.push({ date, games: games.length });
+    } catch (err) {
+      daily.push({ date, error: err.message, statusCode: err.statusCode || 500 });
+    }
+  }
+
+  const leagues = Array.from(leagueMap.values()).sort((a, b) => b.games - a.games);
+  const leagueCatalog = leaguesResult.status === 'fulfilled'
+    ? (leaguesResult.value.data || []).slice(0, maxLeagueSamples).map(summarizeApiSportsLeague)
+    : [];
+
+  return {
+    ok: true,
+    provider: 'api_sports_basketball',
+    status: statusResult.status === 'fulfilled' ? statusResult.value.raw : { error: statusResult.reason?.message },
+    catalogCount: leaguesResult.status === 'fulfilled' ? (leaguesResult.value.results || leaguesResult.value.data?.length || 0) : 0,
+    leagueCatalog,
+    daysAhead,
+    totalGames,
+    daily,
+    leagues,
+    sampleGames,
+    quota,
+  };
+}
+
+export async function syncApiSportsBasketballGames({ daysAhead = 7, date = null } = {}) {
+  await initBasketballTables();
+  const dates = date ? [date] : Array.from({ length: daysAhead }, (_, i) => isoDate(i));
+  const daily = [];
+  let saved = 0;
+  let totalFetched = 0;
+  const leagueMap = new Map();
+  let quota = null;
+
+  for (const day of dates) {
+    try {
+      const payload = await fetchApiSportsGames({ date: day });
+      quota = payload.quota || quota;
+      const games = payload.data || [];
+      totalFetched += games.length;
+      let savedForDay = 0;
+      for (const raw of games) {
+        const normalized = normalizeApiSportsGame(raw);
+        if (!normalized.external_game_id || !normalized.home_team || !normalized.away_team) continue;
+        await upsertBasketballGame(normalized);
+        saved++;
+        savedForDay++;
+
+        const league = raw?.league || {};
+        const key = String(league?.id || 'unknown');
+        if (!leagueMap.has(key)) {
+          leagueMap.set(key, {
+            id: league?.id || null,
+            key: normalized.league_key,
+            name: league?.name || 'Unknown League',
+            country: league?.country || raw?.country?.name || null,
+            games: 0,
+          });
+        }
+        leagueMap.get(key).games++;
+      }
+      daily.push({ date: day, fetched: games.length, saved: savedForDay });
+    } catch (err) {
+      daily.push({ date: day, error: err.message, statusCode: err.statusCode || 500 });
+    }
+  }
+
+  return {
+    provider: 'api_sports_basketball',
+    role: 'primary_schedule',
+    daysAhead: date ? null : daysAhead,
+    dates,
+    fetched: totalFetched,
+    saved,
+    daily,
+    leagues: Array.from(leagueMap.values()).sort((a, b) => b.games - a.games),
+    quota,
+  };
+}
+
 export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } = {}) {
   await initBasketballTables();
   const leagues = leagueKey ? [assertEnabledBasketballLeague(leagueKey)] : getEnabledBasketballLeagues();
@@ -42,6 +167,7 @@ export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } =
   const results = [];
 
   for (const league of leagues) {
+    if (!league.oddsSportKey) continue;
     try {
       const response = await fetchBasketballOddsEvents(league.key, { commenceTimeFrom, commenceTimeTo });
       const games = response.data || [];
@@ -67,6 +193,7 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
   const commenceTimeTo = isoDateTime(daysAhead);
 
   for (const league of leagues) {
+    if (!league.oddsSportKey) continue;
     const response = await fetchBasketballOdds(league.key, { regions, markets, commenceTimeFrom, commenceTimeTo });
     const games = response.data || [];
     let savedGames = 0;
@@ -87,8 +214,11 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
   return results;
 }
 
-export async function syncBasketballV1({ includeNbaGames = true, leagueKey = null, daysAhead = 7 } = {}) {
-  const output = { nbaGames: null, events: null, odds: null };
+export async function syncBasketballV1({ includeNbaGames = true, leagueKey = null, daysAhead = 7, includeApiSports = true } = {}) {
+  const output = { apiSports: null, nbaGames: null, events: null, odds: null };
+  if (includeApiSports) {
+    output.apiSports = await syncApiSportsBasketballGames({ daysAhead });
+  }
   if (includeNbaGames && (!leagueKey || leagueKey === 'nba')) {
     try {
       output.nbaGames = await syncNbaGames();
