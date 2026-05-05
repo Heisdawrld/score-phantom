@@ -89,6 +89,8 @@ export default function BasketballAdmin() {
     );
   }
 
+  const selectedCount = health?.checks?.selectedApiSportsLeagueCount || 0;
+
   return (
     <div className="min-h-screen bg-[#080b10] text-white pb-10">
       {message && (
@@ -101,32 +103,36 @@ export default function BasketballAdmin() {
         <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/60">Hoops Control Room</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/60">API-SPORTS Control Room</p>
               <h1 className="mt-2 text-2xl font-black">Basketball Admin</h1>
-              <p className="mt-1 text-xs text-white/40">Run NBA + NCAAB sync and prediction jobs from your phone.</p>
+              <p className="mt-1 text-xs text-white/40">Sync selected basketball leagues, logos, odds cache and predictions without touching football.</p>
             </div>
             <Trophy className="h-8 w-8 text-orange-200" />
           </div>
           {health && (
             <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Status</p><p className="font-black text-white">{health.status}</p></div>
-              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Odds API</p><p className="font-black text-white">{health.checks?.oddsApi}</p></div>
-              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">BallDontLie</p><p className="font-black text-white">{health.checks?.ballDontLie}</p></div>
-              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Leagues</p><p className="font-black text-white">{(health.checks?.enabledLeagues || []).join(', ')}</p></div>
+              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Primary</p><p className="font-black text-white">{health.checks?.apiSports}</p></div>
+              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Odds Backup</p><p className="font-black text-white">{health.checks?.oddsApiBackup}</p></div>
+              <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3"><p className="text-white/35">Selected Leagues</p><p className="font-black text-white">{selectedCount || "—"}</p></div>
             </div>
           )}
         </section>
 
         <div className="grid gap-3">
-          <ActionButton icon={Activity} title="Check Health" subtitle="Confirm keys and basketball setup" loading={loadingKey === "health"} onClick={checkHealth} tone="blue" />
-          <ActionButton icon={Database} title="Initialize Tables" subtitle="Create basketball DB tables safely" loading={loadingKey === "init"} onClick={() => run("init", "Basketball tables initialized", () => adminFetch("/api/basketball/admin/init", session, { method: "POST", body: "{}" }))} />
-          <ActionButton icon={RefreshCw} title="Sync Basketball Data" subtitle="Pull NBA games + NBA/NCAAB odds" loading={loadingKey === "sync"} onClick={() => run("sync", "Basketball sync completed", () => adminFetch("/api/basketball/admin/sync", session, { method: "POST", body: "{}" }))} tone="orange" />
-          <ActionButton icon={PlayCircle} title="Run Predictions" subtitle="Generate basketball best picks" loading={loadingKey === "predictions"} onClick={() => run("predictions", "Basketball predictions generated", () => adminFetch("/api/basketball/admin/run-predictions", session, { method: "POST", body: JSON.stringify({ limit: 80 }) }))} />
-          <ActionButton icon={Zap} title="Full Basketball Setup" subtitle="Init → Sync → Predict" loading={loadingKey === "full"} onClick={() => run("full", "Full basketball setup completed", async () => {
+          <ActionButton icon={Activity} title="Check Health" subtitle="Confirm API-SPORTS, backup odds and DB setup" loading={loadingKey === "health"} onClick={checkHealth} tone="blue" />
+          <ActionButton icon={Database} title="Initialize Tables" subtitle="Create basketball DB/cache tables safely" loading={loadingKey === "init"} onClick={() => run("init", "Basketball tables initialized", () => adminFetch("/api/basketball/admin/init", session, { method: "POST", body: "{}" }))} />
+          <ActionButton icon={RefreshCw} title="Sync API-SPORTS Fixtures" subtitle="Selected leagues only: games, logos, live scores" loading={loadingKey === "fixtures"} onClick={() => run("fixtures", "API-SPORTS fixtures synced", () => adminFetch("/api/basketball/admin/sync-api-sports", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, selectedOnly: true }) }))} tone="orange" />
+          <ActionButton icon={Zap} title="Sync API-SPORTS Odds" subtitle="Fetch odds for cached selected-league games" loading={loadingKey === "apiOdds"} onClick={() => run("apiOdds", "API-SPORTS odds sync completed", () => adminFetch("/api/basketball/admin/sync-api-sports-odds", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, leagueLimit: 12, maxGames: 40 }) }))} tone="orange" />
+          <ActionButton icon={RefreshCw} title="Sync Full Basketball Cache" subtitle="Fixtures → API-SPORTS odds → Odds API backup" loading={loadingKey === "sync"} onClick={() => run("sync", "Full basketball cache sync completed", () => adminFetch("/api/basketball/admin/sync", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, includeApiSports: true, includeOddsApiBackup: true }) }))} tone="orange" />
+          <ActionButton icon={PlayCircle} title="Run Predictions" subtitle="Generate basketball model leans and value edges" loading={loadingKey === "predictions"} onClick={() => run("predictions", "Basketball predictions generated", () => adminFetch("/api/basketball/admin/run-predictions", session, { method: "POST", body: JSON.stringify({ limit: 120 }) }))} />
+          <ActionButton icon={Zap} title="Full Basketball Setup" subtitle="Init → Fixtures → Odds → Backup → Predict" loading={loadingKey === "full"} onClick={() => run("full", "Full basketball setup completed", async () => {
             await adminFetch("/api/basketball/admin/init", session, { method: "POST", body: "{}" });
-            const sync = await adminFetch("/api/basketball/admin/sync", session, { method: "POST", body: "{}" });
-            const preds = await adminFetch("/api/basketball/admin/run-predictions", session, { method: "POST", body: JSON.stringify({ limit: 80 }) });
-            return { sync, preds };
+            const fixtures = await adminFetch("/api/basketball/admin/sync-api-sports", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, selectedOnly: true }) });
+            const apiOdds = await adminFetch("/api/basketball/admin/sync-api-sports-odds", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, leagueLimit: 12, maxGames: 40 }) });
+            const backup = await adminFetch("/api/basketball/admin/sync", session, { method: "POST", body: JSON.stringify({ daysAhead: 2, includeApiSports: false, includeOddsApiBackup: true }) });
+            const preds = await adminFetch("/api/basketball/admin/run-predictions", session, { method: "POST", body: JSON.stringify({ limit: 120 }) });
+            return { fixtures, apiOdds, backup, preds };
           })} tone="orange" />
         </div>
 
