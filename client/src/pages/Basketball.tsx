@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Activity, ChevronRight, RefreshCw, Search, Trophy } from "lucide-react";
+import { Activity, ChevronDown, ChevronRight, RefreshCw, Search, Trophy } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -102,11 +102,11 @@ function isMyLeague(game: any) {
 }
 
 function groupGames(games: any[]) {
-  const map = new Map<string, { meta: ReturnType<typeof leagueMeta>; games: any[] }>();
+  const map = new Map<string, { id: string; meta: ReturnType<typeof leagueMeta>; games: any[] }>();
   for (const game of games) {
     const meta = leagueMeta(game);
     const id = `${meta.key}-${meta.name}`;
-    if (!map.has(id)) map.set(id, { meta, games: [] });
+    if (!map.has(id)) map.set(id, { id, meta, games: [] });
     map.get(id)!.games.push(game);
   }
   return Array.from(map.values()).sort((a, b) => {
@@ -218,26 +218,51 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
   );
 }
 
-function LeagueGroup({ group, offset, openGame }: { group: any; offset: number; openGame: (game: any) => void }) {
+function LeagueGroup({
+  group,
+  offset,
+  openGame,
+  expanded,
+  onToggle,
+}: {
+  group: any;
+  offset: number;
+  openGame: (game: any) => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const { meta, games } = group;
+  const liveCount = games.filter((g: any) => statusLabel(g.status) === "LIVE").length;
+
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3 px-1">
+      <button onClick={onToggle} className="w-full flex items-center justify-between gap-3 px-1 py-1 text-left group">
         <div className="flex items-center gap-2 min-w-0">
-          {meta.logo || meta.flag ? <img src={meta.logo || meta.flag} alt="" className="h-6 w-6 rounded-md object-contain" loading="lazy" /> : <span className="text-lg">🏀</span>}
+          {meta.logo || meta.flag ? (
+            <img src={meta.logo || meta.flag} alt="" className="h-6 w-6 rounded-md object-contain" loading="lazy" />
+          ) : (
+            <span className="text-lg">🏀</span>
+          )}
           <span className="h-6 w-1 rounded-full bg-primary/75" />
           <div className="min-w-0">
-            <h3 className="text-[12px] font-black uppercase tracking-[0.18em] text-white/72 truncate">{meta.name}</h3>
+            <h3 className="text-[12px] font-black uppercase tracking-[0.18em] text-white/72 truncate group-hover:text-white/90 transition-colors">{meta.name}</h3>
             {meta.country && <p className="text-[10px] font-bold uppercase tracking-widest text-white/25 truncate">{meta.country}</p>}
           </div>
         </div>
-        <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[10px] font-black text-white/35">{games.length}</span>
-      </div>
-      <div className="grid gap-3">
-        {games.map((game: any, i: number) => (
-          <GameCard key={`${game.league_key}-${game.external_game_id || game.id}`} game={game} index={offset + i} onOpen={() => openGame(game)} />
-        ))}
-      </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {liveCount > 0 && <span className="text-[9px] font-black uppercase tracking-widest text-red-300">● {liveCount}</span>}
+          <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-[10px] font-black text-white/35">{games.length}</span>
+          <ChevronDown className={cn("h-4 w-4 text-white/30 transition-transform duration-200", expanded && "rotate-180 text-primary")} />
+        </div>
+      </button>
+
+      {expanded && (
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="grid gap-3">
+          {games.map((game: any, i: number) => (
+            <GameCard key={`${game.league_key}-${game.external_game_id || game.id}`} game={game} index={offset + i} onOpen={() => openGame(game)} />
+          ))}
+        </motion.div>
+      )}
     </section>
   );
 }
@@ -247,6 +272,7 @@ export default function Basketball() {
   const [filter, setFilter] = useState("all");
   const [selectedDate, setSelectedDate] = useState(() => buildDateTabs()[0].key);
   const [query, setQuery] = useState("");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const dateTabs = useMemo(() => buildDateTabs(), []);
 
   const from = `${selectedDate}T00:00:00`;
@@ -291,6 +317,7 @@ export default function Basketball() {
   const syncing = gamesFetching;
 
   const openGame = (game: any) => setLocation(`/basketball/games/${game.league_key}/${game.external_game_id || game.odds_event_id}`);
+  const toggleGroup = (id: string) => setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white pb-28 relative overflow-hidden">
@@ -354,8 +381,17 @@ export default function Basketball() {
           <p className="text-xs text-white/35"><span className="text-primary">●</span> {games.length} fixture{games.length === 1 ? "" : "s"} on this tab</p>
 
           {gamesLoading ? <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading games...</div> : grouped.length ? (
-            <div className="space-y-6">
-              {grouped.map((group, i) => <LeagueGroup key={`${group.meta.key}-${group.meta.name}`} group={group} offset={i * 4} openGame={openGame} />)}
+            <div className="space-y-5">
+              {grouped.map((group, i) => (
+                <LeagueGroup
+                  key={group.id}
+                  group={group}
+                  offset={i * 4}
+                  openGame={openGame}
+                  expanded={!!expandedGroups[group.id]}
+                  onToggle={() => toggleGroup(group.id)}
+                />
+              ))}
             </div>
           ) : (
             <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-center">
