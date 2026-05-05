@@ -69,9 +69,35 @@ export const BASKETBALL_LEAGUES = {
   },
 };
 
+export function isApiSportsLeagueKey(leagueKey = '') {
+  return String(leagueKey || '').toLowerCase().startsWith('apisports_');
+}
+
+export function getApiSportsGenericLeague(leagueKey = 'apisports_basketball') {
+  return {
+    key: String(leagueKey || 'apisports_basketball').toLowerCase(),
+    label: 'Global Basketball',
+    sportName: 'Basketball',
+    oddsSportKey: null,
+    ballDontLieBaseUrl: null,
+    dataSource: 'api_sports_basketball',
+    enabled: true,
+    launchTier: 'v1-global',
+    minDataQuality: 0.52,
+    gates: {
+      moneylineEdge: 0.05,
+      spreadEdgePoints: 5.0,
+      totalEdgePoints: 7.0,
+      minModelProbability: 0.57,
+    },
+  };
+}
+
 export function getBasketballLeague(leagueKey = 'nba') {
   const key = String(leagueKey || 'nba').toLowerCase();
-  return BASKETBALL_LEAGUES[key] || null;
+  if (BASKETBALL_LEAGUES[key]) return BASKETBALL_LEAGUES[key];
+  if (isApiSportsLeagueKey(key)) return getApiSportsGenericLeague(key);
+  return null;
 }
 
 export function getEnabledBasketballLeagues() {
