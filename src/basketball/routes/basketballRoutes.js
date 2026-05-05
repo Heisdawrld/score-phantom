@@ -1,5 +1,6 @@
 import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
+import { getApiSportsTopBasketballLeagues } from '../config/apiSportsTopLeagues.js';
 import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame } from '../storage/basketballDb.js';
 import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
@@ -16,6 +17,7 @@ function handleError(res, err) {
 router.get('/leagues', (req, res) => {
   res.json({
     enabled: getEnabledBasketballLeagues(),
+    selectedApiSports: getApiSportsTopBasketballLeagues({ limit: 15 }),
     all: Object.values(BASKETBALL_LEAGUES),
   });
 });
@@ -23,14 +25,18 @@ router.get('/leagues', (req, res) => {
 router.get('/health', async (req, res) => {
   try {
     await initBasketballTables();
+    const selectedApiSportsLeagues = getApiSportsTopBasketballLeagues({ limit: 15 });
     const checks = {
       database: 'ok',
-      ballDontLie: process.env.BALLDONTLIE_API_KEY ? 'configured' : 'missing_key',
-      oddsApi: (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'configured' : 'missing_key',
+      primaryProvider: 'api_sports_basketball',
       apiSports: (process.env.APISPORTS_BASKETBALL_KEY || process.env.API_SPORTS_BASKETBALL_KEY || process.env.APISPORTS_KEY) ? 'configured' : 'missing_key',
-      enabledLeagues: getEnabledBasketballLeagues().map((l) => l.key),
+      oddsApiBackup: (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'configured' : 'missing_key',
+      ballDontLie: process.env.BALLDONTLIE_API_KEY ? 'manual_backup_only' : 'disabled',
+      selectedApiSportsLeagues: selectedApiSportsLeagues.map((l) => `${l.name}${l.country ? ` (${l.country})` : ''}`),
+      selectedApiSportsLeagueCount: selectedApiSportsLeagues.length,
+      oddsApiBackupLeagues: getEnabledBasketballLeagues().map((l) => l.key),
     };
-    res.json({ status: checks.oddsApi === 'configured' || checks.apiSports === 'configured' ? 'ok' : 'degraded', checks });
+    res.json({ status: checks.apiSports === 'configured' ? 'ok' : 'degraded', checks });
   } catch (err) {
     handleError(res, err);
   }
@@ -108,7 +114,7 @@ router.post('/admin/init', requireAdminSecret, async (req, res) => {
 router.post('/admin/test-api-sports', requireAdminSecret, async (req, res) => {
   try {
     const result = await testApiSportsBasketballCoverage({
-      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 7), 1), 14),
+      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
       maxLeagueSamples: Math.min(Math.max(Number(req.body?.maxLeagueSamples || 20), 1), 100),
     });
     res.json({ ok: true, result });
@@ -120,7 +126,7 @@ router.post('/admin/test-api-sports', requireAdminSecret, async (req, res) => {
 router.post('/admin/sync-api-sports', requireAdminSecret, async (req, res) => {
   try {
     const result = await syncApiSportsBasketballGamesCached({
-      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 7), 1), 14),
+      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
       date: req.body?.date || null,
       selectedOnly: req.body?.selectedOnly !== false,
     });
@@ -148,7 +154,7 @@ router.post('/admin/sync', requireAdminSecret, async (req, res) => {
   try {
     const result = await syncBasketballV1({
       leagueKey: req.body?.league || null,
-      daysAhead: Number(req.body?.daysAhead || 7),
+      daysAhead: Number(req.body?.daysAhead || 2),
       includeApiSports: req.body?.includeApiSports !== false,
       includeOddsApiBackup: req.body?.includeOddsApiBackup !== false,
     });
