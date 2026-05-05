@@ -24,7 +24,7 @@ async function runExternalBasketballSync(reason = 'scheduled') {
   externalSyncRunning = true;
   try {
     console.log(`[BasketballAutoSync] External sync started (${reason})`);
-    const result = await syncBasketballV1({ includeNbaGames: true });
+    const result = await syncBasketballV1({ includeNbaGames: false, daysAhead: 2 });
     console.log('[BasketballAutoSync] External sync complete:', JSON.stringify(result));
     return result;
   } catch (err) {
@@ -66,13 +66,13 @@ export function startBasketballAutoSync() {
     return;
   }
 
+  const hasApiSportsKey = !!(process.env.APISPORTS_BASKETBALL_KEY || process.env.API_SPORTS_BASKETBALL_KEY || process.env.APISPORTS_KEY);
   const hasOddsKey = !!(process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY);
-  const hasBdlKey = !!process.env.BALLDONTLIE_API_KEY;
-  if (!hasOddsKey) {
-    console.warn('[BasketballAutoSync] THE_ODDS_API_KEY missing — basketball external sync will not fetch odds');
+  if (!hasApiSportsKey) {
+    console.warn('[BasketballAutoSync] APISPORTS_BASKETBALL_KEY missing — basketball fixtures/odds will be limited');
   }
-  if (!hasBdlKey) {
-    console.warn('[BasketballAutoSync] BALLDONTLIE_API_KEY missing — NBA historical game sync will be limited');
+  if (!hasOddsKey) {
+    console.warn('[BasketballAutoSync] THE_ODDS_API_KEY missing — backup basketball odds will be skipped');
   }
 
   const startupDelayMs = intEnv('BASKETBALL_STARTUP_SYNC_DELAY_MS', 120000);
