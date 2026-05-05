@@ -1,7 +1,7 @@
 import { getEnabledBasketballLeagues, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { fetchBasketballOdds, fetchBasketballOddsEvents, normalizeOddsGame, normalizeOddsEventGame, extractBestBasketballMarkets } from '../services/oddsApiBasketball.js';
 import { fetchNbaGames, normalizeNbaGame } from '../services/ballDontLieNba.js';
-import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, normalizeApiSportsGame, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
+import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
 import { initBasketballTables, upsertBasketballGame, upsertOddsGame, saveBasketballOdds, listBasketballGames } from '../storage/basketballDb.js';
 import { syncApiSportsBasketballGamesCached } from './apiSportsPremiumSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
@@ -22,7 +22,7 @@ export async function syncNbaGames({ startDate = isoDate(-45), endDate = isoDate
     cursor = payload?.meta?.next_cursor || null;
     pages++;
   } while (cursor && pages < maxPages);
-  return { league: 'nba', saved, pages, startDate, endDate, role: 'historical_form_only' };
+  return { league: 'nba', saved, pages, startDate, endDate, role: 'manual_historical_form_only' };
 }
 
 export async function testApiSportsBasketballCoverage({ daysAhead = 2, maxLeagueSamples = 20 } = {}) {
@@ -102,8 +102,6 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 2, maxLeague
 }
 
 export async function syncApiSportsBasketballGames({ daysAhead = 2, date = null } = {}) {
-  // API-SPORTS free plan currently exposes only a short date window.
-  // Use the cached sync so league/team logos and names are saved with games.
   return syncApiSportsBasketballGamesCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date });
 }
 
@@ -124,7 +122,7 @@ export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } =
         await upsertOddsGame(normalizeOddsEventGame(raw, league.key));
         savedGames++;
       }
-      results.push({ league: league.key, savedGames, role: 'upcoming_schedule', daysAhead, quota: response.quota });
+      results.push({ league: league.key, savedGames, role: 'odds_api_schedule', daysAhead, quota: response.quota });
     } catch (err) {
       results.push({ league: league.key, error: err.message, statusCode: err.statusCode || 500, quota: err.quota || null });
     }
@@ -142,31 +140,37 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
 
   for (const league of leagues) {
     if (!league.oddsSportKey) continue;
-    const response = await fetchBasketballOdds(league.key, { regions, markets, commenceTimeFrom, commenceTimeTo });
-    const games = response.data || [];
-    let savedGames = 0;
-    let savedMarkets = 0;
+    try {
+      const response = await fetchBasketballOdds(league.key, { regions, markets, commenceTimeFrom, commenceTimeTo });
+      const games = response.data || [];
+      let savedGames = 0;
+      let savedMarkets = 0;
 
-    for (const raw of games) {
-      const normalized = normalizeOddsGame(raw, league.key);
-      await upsertOddsGame(normalized);
-      savedGames++;
-      const markets = extractBestBasketballMarkets(raw);
-      const oddsResult = await saveBasketballOdds({ leagueKey: league.key, oddsEventId: raw.id, markets });
-      savedMarkets += oddsResult.inserted;
+      for (const raw of games) {
+        const normalized = normalizeOddsGame(raw, league.key);
+        await upsertOddsGame(normalized);
+        savedGames++;
+        const markets = extractBestBasketballMarkets(raw);
+        const oddsResult = await saveBasketballOdds({ leagueKey: league.key, oddsEventId: raw.id, markets });
+        savedMarkets += oddsResult.inserted;
+      }
+
+      results.push({ league: league.key, savedGames, savedMarkets, daysAhead, quota: response.quota });
+    } catch (err) {
+      results.push({ league: league.key, error: err.message, statusCode: err.statusCode || 500, quota: err.quota || null });
     }
-
-    results.push({ league: league.key, savedGames, savedMarkets, daysAhead, quota: response.quota });
   }
 
   return results;
 }
 
-export async function syncBasketballV1({ includeNbaGames = true, leagueKey = null, daysAhead = 7, includeApiSports = true } = {}) {
-  const output = { apiSports: null, nbaGames: null, events: null, odds: null };
+export async function syncBasketballV1({ includeNbaGames = false, leagueKey = null, daysAhead = 7, includeApiSports = true } = {}) {
+  const output = { apiSports: null, nbaGames: 'skipped_auto_sync', events: null, odds: null };
+
   if (includeApiSports) {
     output.apiSports = await syncApiSportsBasketballGames({ daysAhead: Math.min(Number(daysAhead || 2), 2) });
   }
+
   if (includeNbaGames && (!leagueKey || leagueKey === 'nba')) {
     try {
       output.nbaGames = await syncNbaGames();
@@ -174,12 +178,9 @@ export async function syncBasketballV1({ includeNbaGames = true, leagueKey = nul
       output.nbaGames = { error: err.message };
     }
   }
+
   output.events = await syncBasketballEvents({ leagueKey, daysAhead });
-  try {
-    output.odds = await syncBasketballOdds({ leagueKey, daysAhead });
-  } catch (err) {
-    output.odds = { error: err.message, statusCode: err.statusCode || 500, quota: err.quota || null };
-  }
+  output.odds = await syncBasketballOdds({ leagueKey, daysAhead });
   return output;
 }
 
