@@ -1,6 +1,7 @@
 import { fetchApiSportsGames, normalizeApiSportsGame } from '../services/apiSportsBasketball.js';
 import { initBasketballTables, upsertBasketballGame } from '../storage/basketballDb.js';
 import { initBasketballMetaTables, cacheApiSportsGameMeta } from '../storage/basketballMetaDb.js';
+import { isSelectedApiSportsLeague, getApiSportsTopBasketballLeagues } from '../config/apiSportsTopLeagues.js';
 
 function isoDate(offsetDays = 0) {
   const d = new Date();
@@ -8,7 +9,7 @@ function isoDate(offsetDays = 0) {
   return d.toISOString().slice(0, 10);
 }
 
-export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date = null } = {}) {
+export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date = null, selectedOnly = true } = {}) {
   await initBasketballTables();
   await initBasketballMetaTables();
 
@@ -16,11 +17,14 @@ export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date =
   const dates = date ? [date] : Array.from({ length: safeDays }, (_, i) => isoDate(i));
 
   let fetched = 0;
+  let considered = 0;
+  let skippedByLeague = 0;
   let saved = 0;
   let metaSaved = 0;
   let quota = null;
   const daily = [];
   const leagueMap = new Map();
+  const selectedLeagues = getApiSportsTopBasketballLeagues({ limit: 15 });
 
   for (const day of dates) {
     try {
@@ -30,8 +34,17 @@ export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date =
       fetched += games.length;
       let daySaved = 0;
       let dayMeta = 0;
+      let daySkipped = 0;
 
       for (const raw of games) {
+        const leagueId = Number(raw?.league?.id);
+        if (selectedOnly && !isSelectedApiSportsLeague(leagueId)) {
+          skippedByLeague++;
+          daySkipped++;
+          continue;
+        }
+
+        considered++;
         const normalized = normalizeApiSportsGame(raw);
         if (!normalized.external_game_id || !normalized.home_team || !normalized.away_team) continue;
 
@@ -60,7 +73,7 @@ export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date =
         leagueMap.get(id).games++;
       }
 
-      daily.push({ date: day, fetched: games.length, saved: daySaved, metaSaved: dayMeta });
+      daily.push({ date: day, fetched: games.length, considered: games.length - daySkipped, saved: daySaved, metaSaved: dayMeta, skippedByLeague: daySkipped });
     } catch (err) {
       daily.push({ date: day, error: err.message, statusCode: err.statusCode || 500 });
     }
@@ -68,10 +81,14 @@ export async function syncApiSportsBasketballGamesCached({ daysAhead = 7, date =
 
   return {
     provider: 'api_sports_basketball',
-    role: 'premium_schedule_with_cached_meta',
+    role: selectedOnly ? 'selected_league_schedule_with_cached_meta' : 'premium_schedule_with_cached_meta',
+    selectedOnly,
+    selectedLeagues,
     daysAhead: date ? null : safeDays,
     dates,
     fetched,
+    considered,
+    skippedByLeague,
     saved,
     metaSaved,
     daily,
