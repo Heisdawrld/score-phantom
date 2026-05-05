@@ -2,6 +2,7 @@ import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame } from '../storage/basketballDb.js';
 import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
+import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
 
@@ -80,12 +81,7 @@ router.get('/best-picks', async (req, res) => {
     const days = Math.min(Math.max(Number(req.query.days || 7), 1), 14);
     const from = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const to = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-    const games = await listBasketballGames({
-      leagueKey,
-      from,
-      to,
-      limit: 200,
-    });
+    const games = await listBasketballGames({ leagueKey, from, to, limit: 200 });
     const picks = [];
     for (const game of games.slice(0, 80)) {
       try {
@@ -123,7 +119,7 @@ router.post('/admin/test-api-sports', requireAdminSecret, async (req, res) => {
 
 router.post('/admin/sync-api-sports', requireAdminSecret, async (req, res) => {
   try {
-    const result = await syncApiSportsBasketballGames({
+    const result = await syncApiSportsBasketballGamesCached({
       daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 7), 1), 14),
       date: req.body?.date || null,
     });
