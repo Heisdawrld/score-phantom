@@ -1,7 +1,7 @@
 import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame } from '../storage/basketballDb.js';
-import { syncBasketballV1, syncBasketballOdds, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
+import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
 
@@ -40,9 +40,9 @@ router.get('/games', async (req, res) => {
     if (leagueKey) assertEnabledBasketballLeague(leagueKey);
     const from = req.query.from || new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const to = req.query.to || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const limit = Math.min(Number(req.query.limit || 100), 300);
+    const limit = Math.min(Number(req.query.limit || 300), 500);
     const games = await listBasketballGames({ leagueKey, from, to, limit });
-    res.json({ games, count: games.length });
+    res.json({ games, count: games.length, window: { from, to } });
   } catch (err) {
     handleError(res, err);
   }
@@ -76,21 +76,24 @@ router.get('/best-picks', async (req, res) => {
   try {
     const leagueKey = req.query.league ? String(req.query.league).toLowerCase() : null;
     if (leagueKey) assertEnabledBasketballLeague(leagueKey);
+    const days = Math.min(Math.max(Number(req.query.days || 7), 1), 14);
+    const from = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const to = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     const games = await listBasketballGames({
       leagueKey,
-      from: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      to: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      limit: 80,
+      from,
+      to,
+      limit: 200,
     });
     const picks = [];
-    for (const game of games.slice(0, 30)) {
+    for (const game of games.slice(0, 80)) {
       try {
         const pred = await runBasketballPrediction(game, game.league_key);
         if (!pred.recommendation?.noClearEdge) picks.push(pred);
       } catch {}
     }
     picks.sort((a, b) => (b.recommendation?.phantomScore || 0) - (a.recommendation?.phantomScore || 0));
-    res.json({ picks: picks.slice(0, 12), count: picks.length });
+    res.json({ picks: picks.slice(0, 12), count: picks.length, scanned: games.length, window: { from, to, days } });
   } catch (err) {
     handleError(res, err);
   }
@@ -107,7 +110,16 @@ router.post('/admin/init', requireAdminSecret, async (req, res) => {
 
 router.post('/admin/sync', requireAdminSecret, async (req, res) => {
   try {
-    const result = await syncBasketballV1({ leagueKey: req.body?.league || null });
+    const result = await syncBasketballV1({ leagueKey: req.body?.league || null, daysAhead: Number(req.body?.daysAhead || 7) });
+    res.json({ ok: true, result });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/sync-events', requireAdminSecret, async (req, res) => {
+  try {
+    const result = await syncBasketballEvents({ leagueKey: req.body?.league || null, daysAhead: Number(req.body?.daysAhead || 7) });
     res.json({ ok: true, result });
   } catch (err) {
     handleError(res, err);
