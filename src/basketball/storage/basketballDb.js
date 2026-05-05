@@ -210,9 +210,14 @@ export async function findBasketballGameByOddsEvent(leagueKey, oddsEventId) {
 
 export async function findBasketballGameByExternalId(leagueKey, externalGameId) {
   await initBasketballTables();
+  const keys = siblingLeagueKeys(leagueKey);
+  const placeholders = keys.map(() => '?').join(', ');
   const r = await db.execute({
-    sql: `SELECT * FROM basketball_games WHERE league_key = ? AND external_game_id = ? LIMIT 1`,
-    args: [leagueKey, String(externalGameId)],
+    sql: `SELECT * FROM basketball_games
+          WHERE league_key IN (${placeholders}) AND external_game_id = ?
+          ORDER BY CASE WHEN league_key = ? THEN 0 ELSE 1 END, updated_at DESC
+          LIMIT 1`,
+    args: [...keys, String(externalGameId), String(leagueKey || '').toLowerCase()],
   });
   return r.rows?.[0] ? { ...r.rows[0], raw: safeParse(r.rows[0].raw_json, null) } : null;
 }
@@ -221,13 +226,17 @@ export async function listBasketballGames({ leagueKey = null, from = null, to = 
   await initBasketballTables();
   const clauses = [];
   const args = [];
-  if (leagueKey) { clauses.push('league_key = ?'); args.push(leagueKey); }
+  if (leagueKey) {
+    const keys = siblingLeagueKeys(leagueKey);
+    clauses.push(`league_key IN (${keys.map(() => '?').join(', ')})`);
+    args.push(...keys);
+  }
   if (from) { clauses.push('start_time >= ?'); args.push(from); }
   if (to) { clauses.push('start_time <= ?'); args.push(to); }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const r = await db.execute({
     sql: `SELECT * FROM basketball_games ${where} ORDER BY start_time ASC LIMIT ?`,
-    args: [...args, Math.max(limit * 2, limit)],
+    args: [...args, Math.max(limit * 3, limit)],
   });
   const rows = (r.rows || []).map((row) => ({ ...row, raw: safeParse(row.raw_json, null) }));
   return dedupeGames(rows).slice(0, limit);
@@ -334,15 +343,17 @@ export async function getBasketballOddsForGame(gameId) {
 
 export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit = 12) {
   await initBasketballTables();
+  const keys = siblingLeagueKeys(leagueKey);
+  const placeholders = keys.map(() => '?').join(', ');
   const r = await db.execute({
     sql: `SELECT * FROM basketball_games
-          WHERE league_key = ?
+          WHERE league_key IN (${placeholders})
             AND start_time < ?
             AND (home_team = ? OR away_team = ?)
             AND home_score IS NOT NULL AND away_score IS NOT NULL
           ORDER BY start_time DESC
           LIMIT ?`,
-    args: [leagueKey, beforeIso || new Date().toISOString(), teamName, teamName, limit],
+    args: [...keys, beforeIso || new Date().toISOString(), teamName, teamName, limit],
   });
   return r.rows || [];
 }
