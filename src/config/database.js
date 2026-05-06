@@ -197,6 +197,7 @@ async function runSchema() {
       implied_probability REAL,
       edge REAL,
       model_probability REAL,
+      model_confidence TEXT,
       material_signature TEXT,
       phantom_score REAL,
       volatility_score REAL
@@ -265,6 +266,10 @@ async function runSchema() {
   const hasSig = ppInfo.rows.some((col) => col.name === "material_signature");
   if (!hasSig) {
     await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
+  }
+  const hasModelConfidence = ppInfo.rows.some((col) => col.name === "model_confidence");
+  if (!hasModelConfidence) {
+    await db.execute(`ALTER TABLE prediction_picks ADD COLUMN model_confidence TEXT`);
   }
 
   await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);

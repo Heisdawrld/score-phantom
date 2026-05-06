@@ -13,6 +13,7 @@ export async function initBacktestingTable() {
       CREATE TABLE IF NOT EXISTS prediction_outcomes (
         id SERIAL PRIMARY KEY,
         fixture_id TEXT NOT NULL UNIQUE,
+        sport_key TEXT DEFAULT 'football',
         home_team TEXT,
         away_team TEXT,
         match_date TEXT,
@@ -46,6 +47,7 @@ export async function initBacktestingTable() {
     const cols = (colRes.rows || []).map((r) => r.name);
 
     const migrations = [
+      ['sport_key',      `ALTER TABLE prediction_outcomes ADD COLUMN sport_key TEXT DEFAULT 'football'`],
       ['pick_id',        `ALTER TABLE prediction_outcomes ADD COLUMN pick_id INTEGER`],
       ['best_pick_odds', `ALTER TABLE prediction_outcomes ADD COLUMN best_pick_odds REAL`],
       ['stake_units',    `ALTER TABLE prediction_outcomes ADD COLUMN stake_units REAL DEFAULT 1`],
@@ -81,11 +83,11 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
 export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, homeTeamName, awayTeamName) {
   const fid = String(fixtureId);
 
-  let snapshot = null;
-  try {
-    const r = await db.execute({
-      sql: `
-        SELECT id, market_key, selection, model_probability, bookmaker_odds
+      let snapshot = null;
+      try {
+        const r = await db.execute({
+          sql: `
+        SELECT id, market_key, selection, model_probability, bookmaker_odds, model_confidence
         FROM prediction_picks
         WHERE fixture_id = ?
           AND prediction_source = 'pre_match'
@@ -103,6 +105,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   const selection = snapshot?.selection || prediction.best_pick_selection;
   const probability = snapshot?.model_probability ?? prediction.best_pick_probability ?? 0;
   const odds = snapshot?.bookmaker_odds ?? null;
+  const modelConfidence = snapshot ? snapshot.model_confidence : prediction.confidence_model;
 
   const outcome = evaluatePrediction(
     market,
@@ -116,15 +119,16 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   try {
     await db.execute({
       sql: `INSERT INTO prediction_outcomes
-        (fixture_id, home_team, away_team, match_date, tournament,
+        (fixture_id, sport_key, home_team, away_team, match_date, tournament,
          pick_id, predicted_market, predicted_selection, predicted_probability,
          best_pick_odds, stake_units, profit_units,
          model_confidence, home_score, away_score, full_score, outcome, result_status, evaluated_at, created_at)
-        VALUES (?,?,?,?,?,
+        VALUES (?,?,?,?,?,?,
                 ?,?,?,?,?,?,
                 ?,?,
                 ?,?,?,?, ?, ?, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT (fixture_id) DO UPDATE SET
+          sport_key = EXCLUDED.sport_key,
           pick_id = EXCLUDED.pick_id,
           predicted_market = EXCLUDED.predicted_market,
           predicted_selection = EXCLUDED.predicted_selection,
@@ -141,6 +145,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
           evaluated_at = CURRENT_TIMESTAMP`,
       args: [
         fid,
+        'football',
         prediction.home_team || '',
         prediction.away_team || '',
         prediction.match_date || '',
@@ -152,7 +157,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
         odds != null ? parseFloat(odds) : null,
         stakeUnits,
         profitUnits,
-        prediction.confidence_model || '',
+        modelConfidence || '',
         homeScore, awayScore,
         `${homeScore}-${awayScore}`,
         outcome,

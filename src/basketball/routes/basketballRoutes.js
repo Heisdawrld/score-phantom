@@ -1,7 +1,7 @@
 import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { getApiSportsTopBasketballLeagues } from '../config/apiSportsTopLeagues.js';
-import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame } from '../storage/basketballDb.js';
+import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame, listBasketballPredictions } from '../storage/basketballDb.js';
 import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction } from '../engine/basketballEngine.js';
@@ -87,16 +87,12 @@ router.get('/best-picks', async (req, res) => {
     const days = Math.min(Math.max(Number(req.query.days || 7), 1), 14);
     const from = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const to = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-    const games = await listBasketballGames({ leagueKey, from, to, limit: 200 });
-    const picks = [];
-    for (const game of games.slice(0, 80)) {
-      try {
-        const pred = await runBasketballPrediction(game, game.league_key);
-        if (!pred.recommendation?.noClearEdge) picks.push(pred);
-      } catch {}
-    }
+    const cached = await listBasketballPredictions({ leagueKey, from, to, limit: 120, engineVersion: null, onlyEdges: true });
+    const picks = cached
+      .map((row) => row.prediction)
+      .filter((p) => p && !p.recommendation?.noClearEdge);
     picks.sort((a, b) => (b.recommendation?.phantomScore || 0) - (a.recommendation?.phantomScore || 0));
-    res.json({ picks: picks.slice(0, 12), count: picks.length, scanned: games.length, window: { from, to, days } });
+    res.json({ picks: picks.slice(0, 12), count: picks.length, source: 'cache', window: { from, to, days } });
   } catch (err) {
     handleError(res, err);
   }

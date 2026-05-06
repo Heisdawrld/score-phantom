@@ -407,3 +407,59 @@ export async function saveBasketballPrediction({ leagueKey, gameId, prediction, 
     ],
   });
 }
+
+export async function listBasketballPredictions({ leagueKey = null, from = null, to = null, limit = 50, engineVersion = null, onlyEdges = true } = {}) {
+  await initBasketballTables();
+  const clauses = [];
+  const args = [];
+  if (leagueKey) {
+    const keys = siblingLeagueKeys(leagueKey);
+    clauses.push(`bp.league_key IN (${keys.map(() => '?').join(', ')})`);
+    args.push(...keys);
+  }
+  if (engineVersion) {
+    clauses.push('bp.engine_version = ?');
+    args.push(String(engineVersion));
+  }
+  if (onlyEdges) clauses.push('(bp.no_clear_edge IS NULL OR bp.no_clear_edge = 0)');
+  if (from) { clauses.push('g.start_time >= ?'); args.push(from); }
+  if (to) { clauses.push('g.start_time <= ?'); args.push(to); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const r = await db.execute({
+    sql: `
+      SELECT
+        bp.*,
+        g.external_game_id,
+        g.odds_event_id,
+        g.status AS game_status,
+        g.start_time,
+        g.home_team,
+        g.away_team,
+        g.raw_json AS game_raw_json
+      FROM basketball_predictions bp
+      JOIN basketball_games g ON g.id = bp.game_id
+      ${where}
+      ORDER BY COALESCE(bp.phantom_score, 0) DESC, bp.updated_at DESC
+      LIMIT ?
+    `,
+    args: [...args, Math.min(Math.max(Number(limit || 50), 1), 200)],
+  });
+
+  return (r.rows || []).map((row) => ({
+    ...row,
+    reasons: safeParse(row.reason_json, []),
+    prediction: safeParse(row.prediction_json, null),
+    game: {
+      id: row.game_id,
+      league_key: row.league_key,
+      external_game_id: row.external_game_id,
+      odds_event_id: row.odds_event_id,
+      status: row.game_status,
+      start_time: row.start_time,
+      home_team: row.home_team,
+      away_team: row.away_team,
+      raw: safeParse(row.game_raw_json, null),
+    },
+  }));
+}
