@@ -18,7 +18,15 @@ function timeLabel(value?: string | null) {
   if (!value) return "TBD";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "TBD";
-  return d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toLocaleString("en-NG", {
+    timeZone: "Africa/Lagos",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function statusLabel(status?: string | null) {
@@ -54,7 +62,11 @@ function rawOf(game: any) {
   if (game?.raw) return game.raw;
   if (rawJson && typeof rawJson === "object") return rawJson;
   if (rawJson && typeof rawJson === "string") {
-    try { return JSON.parse(rawJson); } catch { return {}; }
+    try {
+      return JSON.parse(rawJson);
+    } catch {
+      return {};
+    }
   }
   return {};
 }
@@ -80,7 +92,7 @@ function leagueMeta(game: any, prediction: any, leagueKey: string) {
 
 function Metric({ label, value, sub }: { label: string; value: any; sub?: any }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-black/25 p-3 min-h-[78px]">
+    <div className="premium-stat min-h-[78px]">
       <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">{label}</p>
       <p className="mt-1 text-lg font-black text-white leading-tight">{value}</p>
       {sub && <p className="mt-1 text-[10px] text-white/30 leading-tight">{sub}</p>}
@@ -158,24 +170,28 @@ export default function BasketballGame() {
         <div className="absolute top-[20%] left-[-30%] h-[45vh] w-[70vw] rounded-full bg-primary/7 blur-[100px]" />
       </div>
 
-      <main className="relative z-10 mx-auto max-w-3xl px-4 pt-5 space-y-4">
+      <main className="relative z-10 mx-auto max-w-4xl px-4 pt-5 space-y-4">
         <button onClick={() => setLocation("/basketball")} className="flex items-center gap-2 text-xs font-bold text-white/45 hover:text-white transition-colors">
           <ArrowLeft className="h-4 w-4" /> Back to Basketball
         </button>
 
-        <section className="rounded-[28px] border border-white/[0.06] bg-white/[0.025] p-5">
+        <section className="premium-surface-orange rounded-[28px] p-5 overflow-hidden relative">
+          <div className="absolute -right-12 -top-10 h-32 w-32 rounded-full bg-orange-400/12 blur-3xl" />
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/65 truncate">{String(meta.name || league).toUpperCase()} {meta.country ? `· ${String(meta.country).toUpperCase()}` : ""}</p>
-              <div className="mt-2 flex items-center gap-2 text-xs text-white/35">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">Hoops Match Desk</span>
+                <span className="premium-chip">Odds-Led Edge</span>
+              </div>
+              <p className="mt-3 text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/65 truncate">
+                {String(meta.name || league).toUpperCase()} {meta.country ? `· ${String(meta.country).toUpperCase()}` : ""}
+              </p>
+              <div className="mt-2 flex items-center gap-2 text-xs text-white/35 flex-wrap">
                 <Clock className="h-3.5 w-3.5" />
                 <span>{timeLabel(game.startTime || game.start_time || rawGame.start_time)}</span>
                 <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", status === "LIVE" ? "bg-red-400/10 text-red-300" : "bg-white/[0.06] text-white/40")}>{status}</span>
                 {predictionSummary && (
-                  <span className={cn(
-                    "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest",
-                    predictionSummary.noClearEdge ? "bg-white/[0.06] text-white/40" : "bg-primary/12 text-primary"
-                  )}>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", predictionSummary.noClearEdge ? "bg-white/[0.06] text-white/40" : "bg-primary/12 text-primary")}>
                     {predictionSummary.noClearEdge ? "No edge saved" : "Edge ready"}
                   </span>
                 )}
@@ -201,7 +217,7 @@ export default function BasketballGame() {
         {error && <div className="rounded-3xl border border-red-400/20 bg-red-400/[0.06] p-6 text-sm text-red-100/70">{(error as any).message || "Basketball prediction failed"}</div>}
 
         {showNoLinesState && (
-          <section className="rounded-[30px] border border-white/[0.06] bg-white/[0.025] p-5 overflow-hidden relative">
+          <section className="premium-surface-orange rounded-[30px] p-5 overflow-hidden relative">
             <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
             <div className="relative flex items-start gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 shrink-0">
@@ -216,7 +232,7 @@ export default function BasketballGame() {
               </div>
             </div>
 
-            <div className="relative mt-5 grid grid-cols-2 gap-3">
+            <div className="relative mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Metric label="Game Status" value={status} />
               <Metric label="Book Lines" value="Pending" sub="No odds saved" />
             </div>
@@ -225,7 +241,7 @@ export default function BasketballGame() {
 
         {!isLoading && !error && data && !showNoLinesState && (
           <>
-            <section className={cn("rounded-[30px] border p-5 overflow-hidden relative", noEdge ? "border-white/[0.06] bg-white/[0.025]" : "border-orange-300/20 bg-gradient-to-br from-orange-400/[0.12] via-white/[0.035] to-primary/[0.06]") }>
+            <section className={cn("rounded-[30px] border p-5 overflow-hidden relative", noEdge ? "border-white/[0.06] bg-white/[0.025]" : "premium-surface-orange border-orange-300/20")}>
               <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
               <div className="relative flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -248,7 +264,7 @@ export default function BasketballGame() {
                 </div>
               </div>
 
-              <div className="relative mt-5 grid grid-cols-3 gap-2">
+              <div className="relative mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Metric label="Model" value={pct(rec.modelProbability)} />
                 <Metric label="Line" value={rec.bookmakerLine ?? "—"} />
                 <Metric label="Odds" value={money(rec.bookmakerPrice)} sub={rec.bookmakerTitle || "Book"} />
@@ -264,9 +280,9 @@ export default function BasketballGame() {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+            <section className="premium-surface rounded-3xl p-4">
               <div className="flex items-center gap-2 mb-3"><Target className="h-4 w-4 text-primary" /><h3 className="text-sm font-black uppercase tracking-widest">Game Projection</h3></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <Metric label="Projected Total" value={projection.total ?? "—"} />
                 <Metric label="Model Favorite" value={projection.favorite ? `${shortTeam(projection.favorite)} by ${projection.favoriteSpread}` : "—"} />
                 <Metric label="Home Points" value={projection.homePoints ?? "—"} />
@@ -275,14 +291,14 @@ export default function BasketballGame() {
             </section>
 
             {marketSignals.length > 0 && (
-              <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+              <section className="premium-surface rounded-3xl p-4">
                 <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-4 w-4 text-orange-300" /><h3 className="text-sm font-black uppercase tracking-widest">Other Playable Angles</h3></div>
                 <div className="space-y-2">
                   {marketSignals.map((c: any, i: number) => (
                     <div key={i} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-black/20 p-3">
                       <div>
                         <p className="text-sm font-bold text-white/85">{c.pick}</p>
-                        <p className="text-[10px] text-white/35 uppercase tracking-widest">{c.bookmakerTitle || 'book line'} @ {money(c.bookmakerPrice)}</p>
+                        <p className="text-[10px] text-white/35 uppercase tracking-widest">{c.bookmakerTitle || "book line"} @ {money(c.bookmakerPrice)}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-black text-primary">{c.phantomScore}</p>
@@ -297,17 +313,13 @@ export default function BasketballGame() {
         )}
 
         {!isLoading && !error && data && (
-          <section className="rounded-3xl border border-white/[0.045] bg-white/[0.015] p-4 opacity-80">
+          <section className="premium-surface rounded-3xl p-4 opacity-90">
             <div className="flex items-center gap-2 mb-3"><BarChart3 className="h-4 w-4 text-primary" /><h3 className="text-sm font-black uppercase tracking-widest">Match Data</h3></div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Metric label="Coverage" value={`${intel.dataQuality ?? 0}%`} sub={intel.dataCoverageLabel || "data"} />
               <Metric label="Bookmakers" value={intel.bookmakerCount || 0} sub={hasBookLines ? "lines saved" : "pending lines"} />
               <Metric label="Home Form" value={`${intel.homeFormGames ?? 0} games`} />
-              <Metric
-                label="Away Form"
-                value={`${intel.awayFormGames ?? 0} games`}
-                sub={cacheMeta?.updatedAt ? `Updated ${timeLabel(cacheMeta.updatedAt)}` : undefined}
-              />
+              <Metric label="Away Form" value={`${intel.awayFormGames ?? 0} games`} sub={cacheMeta?.updatedAt ? `Updated ${timeLabel(cacheMeta.updatedAt)}` : undefined} />
             </div>
           </section>
         )}
