@@ -64,9 +64,10 @@ export default function Landing() {
           </div>
           <span className="font-black tracking-wide text-lg">ScorePhantom</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <span className="hidden md:inline-flex premium-chip">Football First</span>
           <button onClick={goToLogin} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Log in</button>
-          <button onClick={goToSignup} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform">Start Free Trial</button>
+          <button onClick={goToSignup} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)]">Start Free Trial</button>
         </div>
       </nav>
 
@@ -77,7 +78,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8">
             <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">The Next-Gen Betting Edge</span>
+            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">Football Core. Basketball Rising.</span>
           </motion.div>
 
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
@@ -88,7 +89,7 @@ export default function Landing() {
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
             className="text-lg sm:text-xl text-white/50 mb-10 leading-relaxed max-w-2xl mx-auto font-medium">
-            ScorePhantom ingests millions of data points to surface high-value betting edges, exact win probabilities, and smart accumulators.
+            ScorePhantom is your premium prediction desk for football first, then basketball where live lines are strong enough to matter.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}

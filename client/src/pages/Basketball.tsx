@@ -355,13 +355,16 @@ export default function Basketball() {
       </div>
 
       <main className="relative z-10 mx-auto max-w-3xl px-4 pt-5 space-y-5">
-        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[30px] border border-white/[0.06] bg-white/[0.025] p-5 overflow-hidden relative">
+        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="premium-surface-orange rounded-[30px] p-5 overflow-hidden relative">
           <div className="absolute -right-10 -bottom-16 h-36 w-36 rounded-full bg-orange-400/10 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-200/65">ScorePhantom Hoops</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Basketball Games 🏀</h1>
-              <p className="mt-1 text-xs text-white/45 leading-relaxed">Browse global basketball games. Edge appears only when bookmaker lines are available.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">Hoops Board</span>
+                <span className="premium-chip">Odds-Led Edge</span>
+              </div>
+              <h1 className="mt-3 text-3xl font-black tracking-tight">Basketball Games 🏀</h1>
+              <p className="mt-2 text-sm text-white/45 leading-relaxed max-w-xl">Browse global basketball slates with lines-aware edge detection. We only elevate picks when odds support the read.</p>
             </div>
             <motion.div animate={{ rotate: syncing ? 360 : 0 }} transition={{ duration: 1.2, repeat: syncing ? Infinity : 0, ease: "linear" }} className="h-12 w-12 rounded-2xl border border-orange-300/20 bg-orange-400/10 flex items-center justify-center shrink-0">
               <Activity className="h-6 w-6 text-orange-200" />

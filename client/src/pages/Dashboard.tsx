@@ -292,16 +292,26 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 8 }} 
           animate={{ opacity: 1, y: 0 }} 
           transition={{ duration: 0.3 }}
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.02] border border-white/[0.05] p-5 rounded-3xl"
+          className="premium-surface flex flex-col gap-5 p-5 rounded-[30px] overflow-hidden relative"
         >
-          <div>
-            <h1 className="text-xl font-black text-white tracking-tight">
-              Welcome back, <span className="text-primary capitalize">{displayName}</span> 👋
-            </h1>
-            <p className="text-xs text-white/50 mt-1">Football stays front and center here. Basketball lives in its own premium lane from the sport switcher above.</p>
-          </div>
-          
-          <div className="relative w-full sm:w-64 shrink-0">
+          <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-primary/14 blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative z-10">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="premium-chip text-primary border-primary/20 bg-primary/10">Football Main Desk</span>
+                <span className="premium-chip">Basketball Separate Lane</span>
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Welcome back, <span className="text-primary capitalize">{displayName}</span>
+                </h1>
+                <p className="text-sm text-white/48 mt-2 max-w-xl leading-relaxed">
+                  Your football board stays first. Basketball stays isolated, so one sport never muddies the other.
+                </p>
+              </div>
+            </div>
+            
+            <div className="relative w-full sm:w-72 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input 
               type="text" 
@@ -310,6 +320,26 @@ export default function Dashboard() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#0a110d] border border-white/[0.05] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/30 transition-all"
             />
+          </div>
+          </div>
+
+          <div className="relative z-10 grid grid-cols-3 gap-3">
+            <div className="premium-stat">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">30D Accuracy</p>
+              <p className="mt-2 text-2xl font-black text-white">
+                {trackStats?.hitRate ? `${(trackStats.hitRate * 100).toFixed(0)}%` : "—"}
+              </p>
+            </div>
+            <div className="premium-stat">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Live Slate</p>
+              <p className="mt-2 text-2xl font-black text-primary">{allFixtures.length}</p>
+            </div>
+            <div className="premium-stat">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Access</p>
+              <p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/78">
+                {isPremium ? "Premium" : isTrial ? "Trial" : "Locked"}
+              </p>
+            </div>
           </div>
         </motion.div>
 
