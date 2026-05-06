@@ -15,6 +15,8 @@ const FILTERS = [
 ];
 
 const MY_LEAGUE_HINTS = ["nba", "ncaab", "euroleague", "champions", "basketball africa", "bbl", "acb", "liga", "higher league", "pba"];
+const MAJOR_HINTS = ["nba", "wnba", "ncaab", "wncaab", "euroleague"];
+const MAJOR_KEYS = new Set(["nba", "wnba", "ncaab", "ncaaw", "apisports_12", "apisports_120"]);
 
 function lagosDate(offset = 0) {
   const d = new Date(Date.now() + offset * DAY_MS);
@@ -101,6 +103,14 @@ function isMyLeague(game: any) {
   return MY_LEAGUE_HINTS.some((hint) => haystack.includes(hint));
 }
 
+function isMajorLeague(game: any) {
+  const meta = leagueMeta(game);
+  const key = String(meta.key || "").toLowerCase();
+  if (MAJOR_KEYS.has(key)) return true;
+  const haystack = `${meta.key} ${meta.name} ${meta.country || ""}`.toLowerCase();
+  return MAJOR_HINTS.some((hint) => haystack.includes(hint));
+}
+
 function groupGames(games: any[]) {
   const map = new Map<string, { id: string; meta: ReturnType<typeof leagueMeta>; games: any[] }>();
   for (const game of games) {
@@ -174,6 +184,7 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
   const hasScore = game.home_score != null || game.away_score != null;
   const homeLogo = teamLogo(game, "home");
   const awayLogo = teamLogo(game, "away");
+  const oddsLive = String(game.source || "").toLowerCase() === "the_odds_api" || !!game.odds_event_id;
 
   return (
     <motion.button
@@ -185,7 +196,7 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
       whileTap={{ scale: 0.985 }}
     >
       <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] px-4 py-4 transition-all group-hover:bg-white/[0.045] group-hover:border-primary/15">
-        <div className="grid grid-cols-[54px_1fr_auto_20px] items-center gap-3">
+        <div className="grid grid-cols-[54px_1fr_auto_auto_20px] items-center gap-3">
           <div className="text-xs font-black tabular-nums text-white/35">
             {hasScore ? <span className={cn(live && "text-red-300")}>{done ? "FT" : live ? "LIVE" : ""}</span> : timeLabel(game.start_time)}
           </div>
@@ -209,6 +220,15 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
             ) : (
               <p className="text-[10px] font-black uppercase tracking-widest text-white/25">Upcoming</p>
             )}
+          </div>
+
+          <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
+            <span className={cn(
+              "rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]",
+              oddsLive ? "border-orange-300/20 bg-orange-400/10 text-orange-200" : "border-white/[0.08] bg-black/20 text-white/35"
+            )}>
+              {oddsLive ? "ODDS LIVE" : "MODEL ONLY"}
+            </span>
           </div>
 
           <ChevronRight className="h-4 w-4 text-white/22 transition-transform group-hover:translate-x-1" />
@@ -270,6 +290,7 @@ function LeagueGroup({
 export default function Basketball() {
   const [, setLocation] = useLocation();
   const [filter, setFilter] = useState("all");
+  const [scope, setScope] = useState<"major" | "global">("major");
   const [selectedDate, setSelectedDate] = useState(() => buildDateTabs()[0].key);
   const [query, setQuery] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -299,6 +320,7 @@ export default function Basketball() {
   const games = useMemo(() => {
     const q = query.trim().toLowerCase();
     return allGamesForDay.filter((g: any) => {
+      if (scope === "major" && !isMajorLeague(g)) return false;
       if (filter === "live" && statusLabel(g.status) !== "LIVE") return false;
       if (filter === "my" && !isMyLeague(g)) return false;
       if (!q) return true;
@@ -308,7 +330,7 @@ export default function Basketball() {
         || String(meta.name || "").toLowerCase().includes(q)
         || String(meta.country || "").toLowerCase().includes(q);
     });
-  }, [allGamesForDay, filter, query]);
+  }, [allGamesForDay, filter, query, scope]);
 
   const grouped = useMemo(() => groupGames(games), [games]);
   const liveCount = allGamesForDay.filter((g: any) => statusLabel(g.status) === "LIVE").length;
@@ -360,6 +382,11 @@ export default function Basketball() {
 
         <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1 -mx-4 px-4">
           {dateTabs.map((tab) => <DateTab key={tab.key} tab={tab} active={selectedDate === tab.key} onClick={() => setSelectedDate(tab.key)} />)}
+        </div>
+
+        <div className="rounded-[22px] border border-white/[0.055] bg-black/25 p-2 flex items-center gap-1 overflow-x-auto hide-scrollbar">
+          <FilterPill active={scope === "major"} onClick={() => setScope("major")}>Major (Edges)</FilterPill>
+          <FilterPill active={scope === "global"} onClick={() => setScope("global")}>Global (All)</FilterPill>
         </div>
 
         <div className="rounded-[22px] border border-white/[0.055] bg-black/25 p-2 flex items-center gap-1 overflow-x-auto hide-scrollbar">
