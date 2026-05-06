@@ -64,10 +64,13 @@ export default function Landing() {
           </div>
           <span className="font-black tracking-wide text-lg">ScorePhantom</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden md:inline-flex premium-chip">Football First</span>
-          <button onClick={goToLogin} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Log in</button>
-          <button onClick={goToSignup} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)]">Start Free Trial</button>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="hidden md:flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/55">Football First</span>
+          <button onClick={goToLogin} className="text-xs sm:text-sm font-semibold text-white/70 hover:text-white transition-colors whitespace-nowrap">Log in</button>
+          <button onClick={goToSignup} className="px-3 sm:px-4 py-2 rounded-full bg-white text-black text-xs sm:text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)] whitespace-nowrap">
+            <span className="sm:hidden">Start Free</span>
+            <span className="hidden sm:inline">Start Free Trial</span>
+          </button>
         </div>
       </nav>
 
