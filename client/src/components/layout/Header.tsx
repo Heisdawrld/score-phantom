@@ -200,15 +200,6 @@ export function Header() {
                           <span className="text-xs font-bold">Leagues Tracker</span>
                         </div>
                       </Link>
-                      {/* Admin link */}
-                      {user.email?.toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase() && (
-                        <Link href="/admin" onClick={() => setOpen(false)}>
-                          <div className="px-4 py-2.5 rounded-xl hover:bg-primary/10 transition-all cursor-pointer flex items-center gap-3 text-primary">
-                            <ShieldCheck className="w-4 h-4" />
-                            <span className="text-xs font-bold">Admin Panel</span>
-                          </div>
-                        </Link>
-                      )}
                     </div>
 
                     {/* Upgrade CTA */}

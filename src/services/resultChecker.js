@@ -173,12 +173,13 @@ export async function checkResults(dateStr) {
         pp.market_key       AS pick_market_key,
         pp.selection        AS pick_selection,
         pp.model_probability AS pick_model_probability,
-        pp.bookmaker_odds   AS pick_bookmaker_odds
+        pp.bookmaker_odds   AS pick_bookmaker_odds,
+        pp.model_confidence AS pick_model_confidence
       FROM fixtures f
       JOIN predictions_v2 p ON p.fixture_id = f.id
       LEFT JOIN (
         SELECT DISTINCT ON (fixture_id)
-          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, generated_at, kickoff_at
+          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence, generated_at, kickoff_at
         FROM prediction_picks
         WHERE prediction_source = 'pre_match'
           AND kickoff_at IS NOT NULL
@@ -217,6 +218,7 @@ export async function checkResults(dateStr) {
     const selection = fix.pick_selection || fix.best_pick_selection;
     const probability = fix.pick_model_probability ?? fix.best_pick_probability ?? 0;
     const bestPickOdds = fix.pick_bookmaker_odds ?? null;
+    const modelConfidence = fix.pick_id != null ? fix.pick_model_confidence : fix.confidence_model;
 
     const outcome = evaluatePrediction(market, selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     const resultStatus = outcome;
@@ -226,7 +228,7 @@ export async function checkResults(dateStr) {
       await db.execute({ 
         sql: `
           INSERT INTO prediction_outcomes (
-            fixture_id, home_team, away_team, match_date, tournament,
+            fixture_id, sport_key, home_team, away_team, match_date, tournament,
             pick_id, predicted_market, predicted_selection, predicted_probability,
             best_pick_odds, stake_units, profit_units,
             model_confidence,
@@ -234,7 +236,7 @@ export async function checkResults(dateStr) {
             outcome, result_status,
             evaluated_at, created_at
           ) VALUES (
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?,
             ?,
@@ -243,6 +245,7 @@ export async function checkResults(dateStr) {
             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
           ON CONFLICT (fixture_id) DO UPDATE SET
+            sport_key = EXCLUDED.sport_key,
             pick_id = EXCLUDED.pick_id,
             predicted_market = EXCLUDED.predicted_market,
             predicted_selection = EXCLUDED.predicted_selection,
@@ -260,6 +263,7 @@ export async function checkResults(dateStr) {
         `,
         args: [
           fid,
+          'football',
           fix.home_team_name,
           fix.away_team_name,
           fix.match_date,
@@ -271,7 +275,7 @@ export async function checkResults(dateStr) {
           bestPickOdds != null ? parseFloat(bestPickOdds) : null,
           stakeUnits,
           profitUnits,
-          fix.confidence_model || null,
+          modelConfidence || null,
           score.home,
           score.away,
           score.home + '-' + score.away,
