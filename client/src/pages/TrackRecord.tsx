@@ -36,17 +36,19 @@ function HitRateBar({ rate, color = 'bg-primary' }: { rate: number; color?: stri
 }
 
 export default function TrackRecord() {
+  const [activeSport, setActiveSport] = useState<'football' | 'basketball'>('football');
   const [activeSource, setActiveSource] = useState<'live' | 'backtest'>('live');
+  const effectiveSource = activeSport === 'basketball' ? 'live' : activeSource;
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['track-record-stats'],
-    queryFn: () => fetchApi('/track-record/stats'),
+    queryKey: ['track-record-stats', activeSport],
+    queryFn: () => fetchApi(`/track-record/stats?sport=${activeSport}`),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: recent, isLoading: recentLoading } = useQuery({
-    queryKey: ['track-record-recent', activeSource],
-    queryFn: () => fetchApi(`/track-record/recent?limit=50&source=${activeSource}`),
+    queryKey: ['track-record-recent', activeSport, effectiveSource],
+    queryFn: () => fetchApi(`/track-record/recent?limit=50&source=${effectiveSource}&sport=${activeSport}`),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -68,8 +70,25 @@ export default function TrackRecord() {
             TRACK <span className='text-primary'>RECORD</span>
           </h1>
           <p className='text-white/40 text-sm px-4'>
-            Verifiable hit rates across live predictions & historical simulations.
+            Verifiable hit rates for football and basketball, separated by sport.
           </p>
+        </div>
+
+        <div className='flex items-center justify-center'>
+          <div className='flex items-center gap-1 p-1 bg-white/5 rounded-2xl border border-white/5'>
+            {(['football', 'basketball'] as const).map((sport) => (
+              <button
+                key={sport}
+                onClick={() => setActiveSport(sport)}
+                className={cn(
+                  'px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
+                  activeSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white/70'
+                )}
+              >
+                {sport}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Overall Hit Rate */}
@@ -97,7 +116,7 @@ export default function TrackRecord() {
               </p>
               <div className='flex items-center gap-4 mt-4 text-[11px] text-white/30'>
                 {stats?.live?.total > 0 && <span>📡 {stats.live.total} live picks</span>}
-                {stats?.historical?.total > 0 && <span>🗄 {stats.historical.total} historical</span>}
+                {activeSport === 'football' && stats?.historical?.total > 0 && <span>🗄 {stats.historical.total} historical</span>}
               </div>
             </div>
           </motion.div>
@@ -209,10 +228,12 @@ export default function TrackRecord() {
               {(['live', 'backtest'] as const).map(src => (
                 <button
                   key={src}
-                  onClick={() => setActiveSource(src)}
+                  onClick={() => activeSport === 'football' && setActiveSource(src)}
+                  disabled={activeSport === 'basketball' && src === 'backtest'}
                   className={cn(
                     'px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-                    activeSource === src ? 'bg-primary text-black' : 'text-white/40 hover:text-white/70'
+                    effectiveSource === src ? 'bg-primary text-black' : 'text-white/40 hover:text-white/70',
+                    activeSport === 'basketball' && src === 'backtest' && 'opacity-35 cursor-not-allowed'
                   )}
                 >
                   {src === 'live' ? '📡 Live' : '🗄 History'}
@@ -285,7 +306,7 @@ export default function TrackRecord() {
               <p className='text-4xl mb-3'>🏆</p>
               <p className='text-white/50 text-sm'>No results yet for this source.</p>
               <p className='text-[10px] text-white/30 mt-2'>
-                {activeSource === 'live'
+                {effectiveSource === 'live'
                   ? 'Live picks are evaluated automatically after matches end.'
                   : 'Run the backtest script to populate historical data.'}
               </p>

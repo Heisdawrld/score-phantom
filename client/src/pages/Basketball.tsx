@@ -185,6 +185,14 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
   const homeLogo = teamLogo(game, "home");
   const awayLogo = teamLogo(game, "away");
   const oddsLive = String(game.source || "").toLowerCase() === "the_odds_api" || !!game.odds_event_id;
+  const prediction = game.prediction_summary || null;
+  const predictionBadge = prediction
+    ? prediction.noClearEdge
+      ? { label: "NO EDGE", className: "border-white/[0.08] bg-black/20 text-white/40" }
+      : { label: "EDGE READY", className: "border-primary/20 bg-primary/10 text-primary" }
+    : oddsLive
+      ? { label: "LINES LIVE", className: "border-orange-300/20 bg-orange-400/10 text-orange-200" }
+      : { label: "LINES PENDING", className: "border-white/[0.08] bg-black/20 text-white/35" };
 
   return (
     <motion.button
@@ -223,11 +231,8 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
           </div>
 
           <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
-            <span className={cn(
-              "rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]",
-              oddsLive ? "border-orange-300/20 bg-orange-400/10 text-orange-200" : "border-white/[0.08] bg-black/20 text-white/35"
-            )}>
-              {oddsLive ? "ODDS LIVE" : "MODEL ONLY"}
+            <span className={cn("rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em]", predictionBadge.className)}>
+              {predictionBadge.label}
             </span>
           </div>
 
@@ -335,6 +340,7 @@ export default function Basketball() {
   const grouped = useMemo(() => groupGames(games), [games]);
   const liveCount = allGamesForDay.filter((g: any) => statusLabel(g.status) === "LIVE").length;
   const leagueCount = new Set(allGamesForDay.map((g: any) => leagueMeta(g).key)).size;
+  const edgeReadyCount = allGamesForDay.filter((g: any) => g.prediction_summary && !g.prediction_summary.noClearEdge).length;
   const degraded = (health as any)?.status === "degraded";
   const syncing = gamesFetching;
 
@@ -364,7 +370,7 @@ export default function Basketball() {
 
           <div className="relative mt-5 grid grid-cols-3 gap-2">
             <MiniStat label="Games" value={allGamesForDay.length || "—"} tone="orange" />
-            <MiniStat label="Live" value={liveCount} tone="blue" />
+            <MiniStat label="Edge Ready" value={edgeReadyCount} tone="green" />
             <MiniStat label="Leagues" value={leagueCount || "—"} />
           </div>
 

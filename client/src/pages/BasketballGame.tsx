@@ -131,11 +131,13 @@ export default function BasketballGame() {
   });
 
   const rawGame = (gameData as any)?.game || {};
+  const predictionSummary = (gameData as any)?.predictionSummary || rawGame?.prediction_summary || null;
   const game = (data as any)?.game || rawGame || {};
   const rec = (data as any)?.recommendation || {};
   const projection = (data as any)?.projection || {};
   const intel = (data as any)?.intel || {};
   const candidates = (data as any)?.candidates || [];
+  const cacheMeta = (data as any)?.cache || null;
   const odds = (gameData as any)?.odds || [];
   const hasBookLines = odds.length > 0 || Number(intel.bookmakerCount || 0) > 0 || !!rec.bookmakerPrice;
   const noEdge = rec.noClearEdge;
@@ -169,6 +171,14 @@ export default function BasketballGame() {
                 <Clock className="h-3.5 w-3.5" />
                 <span>{timeLabel(game.startTime || game.start_time || rawGame.start_time)}</span>
                 <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", status === "LIVE" ? "bg-red-400/10 text-red-300" : "bg-white/[0.06] text-white/40")}>{status}</span>
+                {predictionSummary && (
+                  <span className={cn(
+                    "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest",
+                    predictionSummary.noClearEdge ? "bg-white/[0.06] text-white/40" : "bg-primary/12 text-primary"
+                  )}>
+                    {predictionSummary.noClearEdge ? "No edge saved" : "Edge ready"}
+                  </span>
+                )}
               </div>
             </div>
             {(meta.logo || meta.flag) && <img src={meta.logo || meta.flag} alt="" className="h-9 w-9 rounded-xl object-contain" loading="lazy" />}
@@ -225,6 +235,11 @@ export default function BasketballGame() {
                     <span className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-orange-100">{rec.market || "Market"}</span>
                     <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">{rec.riskLevel || "HIGH"} Risk</span>
                     {rec.edgePoints != null && <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">+{rec.edgePoints} Edge</span>}
+                    {cacheMeta?.source && (
+                      <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">
+                        {cacheMeta.source === "cache" ? "Cached model" : "Fresh rebuild"}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-center shrink-0">
@@ -288,7 +303,11 @@ export default function BasketballGame() {
               <Metric label="Coverage" value={`${intel.dataQuality ?? 0}%`} sub={intel.dataCoverageLabel || "data"} />
               <Metric label="Bookmakers" value={intel.bookmakerCount || 0} sub={hasBookLines ? "lines saved" : "pending lines"} />
               <Metric label="Home Form" value={`${intel.homeFormGames ?? 0} games`} />
-              <Metric label="Away Form" value={`${intel.awayFormGames ?? 0} games`} />
+              <Metric
+                label="Away Form"
+                value={`${intel.awayFormGames ?? 0} games`}
+                sub={cacheMeta?.updatedAt ? `Updated ${timeLabel(cacheMeta.updatedAt)}` : undefined}
+              />
             </div>
           </section>
         )}

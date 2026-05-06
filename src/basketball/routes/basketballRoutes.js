@@ -1,10 +1,10 @@
 import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { getApiSportsTopBasketballLeagues } from '../config/apiSportsTopLeagues.js';
-import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame, listBasketballPredictions } from '../storage/basketballDb.js';
+import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame, listBasketballPredictions, getLatestBasketballPrediction } from '../storage/basketballDb.js';
 import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
-import { runBasketballPrediction } from '../engine/basketballEngine.js';
+import { runBasketballPrediction, BASKETBALL_ENGINE_VERSION } from '../engine/basketballEngine.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
 
 const router = express.Router();
@@ -12,6 +12,36 @@ const router = express.Router();
 function handleError(res, err) {
   const code = err.statusCode || 500;
   return res.status(code).json({ error: err.message || 'Basketball API error' });
+}
+
+function normalizeGameState(status = '') {
+  const value = String(status || '').toLowerCase();
+  if (value.includes('final') || value === 'ft') return 'final';
+  if (value.includes('live') || value.includes('quarter') || value.includes('half') || value.includes('q')) return 'live';
+  return 'scheduled';
+}
+
+function isPredictionFresh(game, row) {
+  if (!row?.updated_at) return false;
+  const updatedAt = new Date(row.updated_at);
+  if (Number.isNaN(updatedAt.getTime())) return false;
+
+  const state = normalizeGameState(game?.status);
+  if (state === 'final') return true;
+
+  const now = Date.now();
+  const ageMs = now - updatedAt.getTime();
+  if (ageMs < 0) return true;
+  if (state === 'live') return ageMs <= 10 * 60 * 1000;
+
+  const startTime = game?.start_time ? new Date(game.start_time) : null;
+  const hoursToTip = startTime && !Number.isNaN(startTime.getTime())
+    ? (startTime.getTime() - now) / 3600000
+    : null;
+
+  if (hoursToTip != null && hoursToTip <= 6) return ageMs <= 45 * 60 * 1000;
+  if (hoursToTip != null && hoursToTip <= 24) return ageMs <= 2 * 60 * 60 * 1000;
+  return ageMs <= 6 * 60 * 60 * 1000;
 }
 
 router.get('/leagues', (req, res) => {
@@ -62,7 +92,20 @@ router.get('/games/:league/:externalId', async (req, res) => {
     const game = await findBasketballGameByExternalId(league.key, req.params.externalId);
     if (!game) return res.status(404).json({ error: 'Basketball game not found' });
     const odds = await getBasketballOddsForGame(game.id);
-    res.json({ game, odds });
+    const prediction = await getLatestBasketballPrediction(game.id, { leagueKey: league.key, preferredEngineVersion: BASKETBALL_ENGINE_VERSION });
+    res.json({
+      game,
+      odds,
+      predictionSummary: prediction ? {
+        engineVersion: prediction.engine_version || null,
+        market: prediction.best_pick_market || null,
+        selection: prediction.best_pick_selection || null,
+        modelProbability: prediction.model_probability != null ? Number(prediction.model_probability) : null,
+        phantomScore: prediction.phantom_score != null ? Number(prediction.phantom_score) : null,
+        noClearEdge: !!prediction.no_clear_edge,
+        updatedAt: prediction.updated_at || null,
+      } : null,
+    });
   } catch (err) {
     handleError(res, err);
   }
@@ -73,8 +116,29 @@ router.get('/predict/:league/:externalId', async (req, res) => {
     const league = assertEnabledBasketballLeague(req.params.league);
     const game = await findBasketballGameByExternalId(league.key, req.params.externalId);
     if (!game) return res.status(404).json({ error: 'Basketball game not found. Run sync first.' });
+    const cached = await getLatestBasketballPrediction(game.id, { leagueKey: league.key, preferredEngineVersion: BASKETBALL_ENGINE_VERSION });
+    if (cached?.prediction && isPredictionFresh(game, cached)) {
+      return res.json({
+        ...cached.prediction,
+        cache: {
+          source: 'cache',
+          engineVersion: cached.engine_version || null,
+          updatedAt: cached.updated_at || null,
+          stale: false,
+        },
+      });
+    }
+
     const prediction = await runBasketballPrediction(game, league.key);
-    res.json(prediction);
+    res.json({
+      ...prediction,
+      cache: {
+        source: 'rebuilt',
+        engineVersion: BASKETBALL_ENGINE_VERSION,
+        updatedAt: new Date().toISOString(),
+        stale: false,
+      },
+    });
   } catch (err) {
     handleError(res, err);
   }

@@ -64,6 +64,15 @@ function siblingLeagueKeys(leagueKey = '') {
   return [key];
 }
 
+function mapPredictionRow(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    reasons: safeParse(row.reason_json, []),
+    prediction: safeParse(row.prediction_json, null),
+  };
+}
+
 export async function initBasketballTables() {
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
     id SERIAL PRIMARY KEY,
@@ -239,7 +248,12 @@ export async function listBasketballGames({ leagueKey = null, from = null, to = 
     args: [...args, Math.max(limit * 3, limit)],
   });
   const rows = (r.rows || []).map((row) => ({ ...row, raw: safeParse(row.raw_json, null) }));
-  return dedupeGames(rows).slice(0, limit);
+  const deduped = dedupeGames(rows).slice(0, limit);
+  const summaries = await getLatestBasketballPredictionSummaries(deduped.map((row) => row.id));
+  return deduped.map((row) => ({
+    ...row,
+    prediction_summary: summaries.get(Number(row.id)) || null,
+  }));
 }
 
 export async function saveBasketballOdds({ leagueKey, oddsEventId, markets }) {
@@ -408,6 +422,75 @@ export async function saveBasketballPrediction({ leagueKey, gameId, prediction, 
   });
 }
 
+export async function getLatestBasketballPrediction(gameId, { leagueKey = null, preferredEngineVersion = null } = {}) {
+  await initBasketballTables();
+  const clauses = ['bp.game_id = ?'];
+  const args = [gameId];
+  if (leagueKey) {
+    const keys = siblingLeagueKeys(leagueKey);
+    clauses.push(`bp.league_key IN (${keys.map(() => '?').join(', ')})`);
+    args.push(...keys);
+  }
+  const preferredOrder = preferredEngineVersion ? 'CASE WHEN bp.engine_version = ? THEN 0 ELSE 1 END,' : '';
+  if (preferredEngineVersion) args.push(preferredEngineVersion);
+  const r = await db.execute({
+    sql: `
+      SELECT bp.*
+      FROM basketball_predictions bp
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY ${preferredOrder} bp.updated_at DESC
+      LIMIT 1
+    `,
+    args,
+  });
+  return mapPredictionRow(r.rows?.[0] || null);
+}
+
+export async function getLatestBasketballPredictionSummaries(gameIds = [], { preferredEngineVersion = null } = {}) {
+  await initBasketballTables();
+  const ids = [...new Set((gameIds || []).map((id) => Number(id)).filter(Number.isFinite))];
+  if (!ids.length) return new Map();
+
+  const args = preferredEngineVersion ? [...ids, preferredEngineVersion] : [...ids];
+  const preferredOrder = preferredEngineVersion ? 'CASE WHEN bp.engine_version = ? THEN 0 ELSE 1 END,' : '';
+  const placeholders = ids.map(() => '?').join(', ');
+  const r = await db.execute({
+    sql: `
+      SELECT DISTINCT ON (bp.game_id)
+        bp.game_id,
+        bp.engine_version,
+        bp.best_pick_market,
+        bp.best_pick_selection,
+        bp.model_probability,
+        bp.bookmaker_line,
+        bp.bookmaker_price,
+        bp.edge,
+        bp.phantom_score,
+        bp.risk_level,
+        bp.no_clear_edge,
+        bp.updated_at
+      FROM basketball_predictions bp
+      WHERE bp.game_id IN (${placeholders})
+      ORDER BY bp.game_id, ${preferredOrder} bp.updated_at DESC
+    `,
+    args,
+  });
+
+  return new Map((r.rows || []).map((row) => [Number(row.game_id), {
+    engineVersion: row.engine_version || null,
+    market: row.best_pick_market || null,
+    selection: row.best_pick_selection || null,
+    modelProbability: row.model_probability != null ? Number(row.model_probability) : null,
+    bookmakerLine: row.bookmaker_line != null ? Number(row.bookmaker_line) : null,
+    bookmakerPrice: row.bookmaker_price != null ? Number(row.bookmaker_price) : null,
+    edge: row.edge != null ? Number(row.edge) : null,
+    phantomScore: row.phantom_score != null ? Number(row.phantom_score) : null,
+    riskLevel: row.risk_level || null,
+    noClearEdge: !!row.no_clear_edge,
+    updatedAt: row.updated_at || null,
+  }]));
+}
+
 export async function listBasketballPredictions({ leagueKey = null, from = null, to = null, limit = 50, engineVersion = null, onlyEdges = true } = {}) {
   await initBasketballTables();
   const clauses = [];
@@ -426,24 +509,32 @@ export async function listBasketballPredictions({ leagueKey = null, from = null,
   if (to) { clauses.push('g.start_time <= ?'); args.push(to); }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
+  const preferredOrder = engineVersion ? 'CASE WHEN bp.engine_version = ? THEN 0 ELSE 1 END,' : '';
+  const queryArgs = engineVersion
+    ? [...args, engineVersion, Math.min(Math.max(Number(limit || 50), 1), 200)]
+    : [...args, Math.min(Math.max(Number(limit || 50), 1), 200)];
   const r = await db.execute({
     sql: `
-      SELECT
-        bp.*,
-        g.external_game_id,
-        g.odds_event_id,
-        g.status AS game_status,
-        g.start_time,
-        g.home_team,
-        g.away_team,
-        g.raw_json AS game_raw_json
-      FROM basketball_predictions bp
-      JOIN basketball_games g ON g.id = bp.game_id
-      ${where}
-      ORDER BY COALESCE(bp.phantom_score, 0) DESC, bp.updated_at DESC
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (bp.game_id)
+          bp.*,
+          g.external_game_id,
+          g.odds_event_id,
+          g.status AS game_status,
+          g.start_time,
+          g.home_team,
+          g.away_team,
+          g.raw_json AS game_raw_json
+        FROM basketball_predictions bp
+        JOIN basketball_games g ON g.id = bp.game_id
+        ${where}
+        ORDER BY bp.game_id, ${preferredOrder} bp.updated_at DESC
+      ) latest
+      ORDER BY COALESCE(latest.phantom_score, 0) DESC, latest.updated_at DESC
       LIMIT ?
     `,
-    args: [...args, Math.min(Math.max(Number(limit || 50), 1), 200)],
+    args: queryArgs,
   });
 
   return (r.rows || []).map((row) => ({
