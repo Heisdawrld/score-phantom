@@ -4,8 +4,8 @@ import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import {
    Zap, Crown, LogOut, User, Copy, Check, ChevronDown,
-  LayoutDashboard, Flame, Trophy, Star
-} from "lucide-react";
+  LayoutDashboard, Flame, Trophy, Star, ShieldCheck
+ } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 

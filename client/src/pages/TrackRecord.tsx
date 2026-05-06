@@ -39,6 +39,7 @@ export default function TrackRecord() {
   const [activeSport, setActiveSport] = useState<'football' | 'basketball'>('football');
   const [activeSource, setActiveSource] = useState<'live' | 'backtest'>('live');
   const effectiveSource = activeSport === 'basketball' ? 'live' : activeSource;
+  const isBasketball = activeSport === 'basketball';
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['track-record-stats', activeSport],
@@ -56,22 +57,46 @@ export default function TrackRecord() {
   const hasData = overall.total > 0;
 
   return (
-    <div className='min-h-screen bg-background pb-24'>
+    <div className='min-h-screen bg-[#060a0e] pb-24 relative overflow-hidden'>
+      <div className='fixed inset-0 pointer-events-none'>
+        <div className={cn(
+          'absolute top-[-16%] right-[-12%] h-[44vh] w-[44vw] rounded-full blur-[120px]',
+          isBasketball ? 'bg-orange-500/12' : 'bg-primary/10'
+        )} />
+        <div className='absolute bottom-[-14%] left-[-8%] h-[40vh] w-[38vw] rounded-full bg-cyan-500/8 blur-[120px]' />
+      </div>
       <Header />
 
-      <main className='max-w-lg mx-auto px-4 pt-6 space-y-6'>
+      <main className='relative z-10 max-w-lg mx-auto px-4 pt-6 space-y-6'>
 
         {/* Header */}
-        <div className='text-center space-y-2 mb-2'>
-          <div className='inline-flex items-center justify-center p-3 bg-primary/10 rounded-full mb-2'>
-            <Activity className='w-8 h-8 text-primary' />
+        <div className='rounded-[30px] border border-white/[0.06] bg-white/[0.025] p-5 text-center space-y-4 mb-2 overflow-hidden relative'>
+          <div className={cn(
+            'absolute -right-8 -top-10 h-28 w-28 rounded-full blur-3xl',
+            isBasketball ? 'bg-orange-400/18' : 'bg-primary/16'
+          )} />
+          <div className='relative inline-flex items-center justify-center p-3 rounded-full mb-1 bg-white/[0.04] border border-white/[0.06]'>
+            <Activity className={cn('w-8 h-8', isBasketball ? 'text-orange-200' : 'text-primary')} />
           </div>
-          <h1 className='text-3xl font-display tracking-widest text-white drop-shadow-md'>
-            TRACK <span className='text-primary'>RECORD</span>
-          </h1>
-          <p className='text-white/40 text-sm px-4'>
-            Verifiable hit rates for football and basketball, separated by sport.
-          </p>
+          <div className='relative flex items-center justify-center gap-2 flex-wrap'>
+            <span className={cn(
+              'rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
+              isBasketball ? 'border-orange-300/25 bg-orange-400/10 text-orange-200' : 'border-primary/20 bg-primary/10 text-primary'
+            )}>
+              {isBasketball ? 'Basketball Ledger' : 'Football Ledger'}
+            </span>
+            <span className='rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35'>
+              {effectiveSource === 'live' ? 'Live Settlements' : 'Historical Backtest'}
+            </span>
+          </div>
+          <div className='relative'>
+            <h1 className='text-3xl font-display tracking-widest text-white drop-shadow-md'>
+              TRACK <span className={isBasketball ? 'text-orange-200' : 'text-primary'}>RECORD</span>
+            </h1>
+            <p className='text-white/40 text-sm px-4 mt-2 leading-relaxed'>
+              Verifiable hit rates, separated by sport so football stays honest and basketball grows on its own track.
+            </p>
+          </div>
         </div>
 
         <div className='flex items-center justify-center'>
@@ -82,7 +107,11 @@ export default function TrackRecord() {
                 onClick={() => setActiveSport(sport)}
                 className={cn(
                   'px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
-                  activeSport === sport ? 'bg-primary text-black' : 'text-white/40 hover:text-white/70'
+                  activeSport === sport
+                    ? sport === 'basketball'
+                      ? 'bg-orange-300 text-black'
+                      : 'bg-primary text-black'
+                    : 'text-white/40 hover:text-white/70'
                 )}
               >
                 {sport}
@@ -90,6 +119,23 @@ export default function TrackRecord() {
             ))}
           </div>
         </div>
+
+        {hasData && (
+          <div className='grid grid-cols-3 gap-3'>
+            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
+              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Settled</p>
+              <p className='mt-2 text-2xl font-black text-white'>{overall.total}</p>
+            </div>
+            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
+              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Won</p>
+              <p className={cn('mt-2 text-2xl font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
+            </div>
+            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
+              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Source</p>
+              <p className='mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/72'>{effectiveSource}</p>
+            </div>
+          </div>
+        )}
 
         {/* Overall Hit Rate */}
         {statsLoading ? (
@@ -100,23 +146,31 @@ export default function TrackRecord() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className='glass-panel p-6 rounded-[2rem] border border-primary/20 shadow-[0_0_40px_rgba(16,231,116,0.1)] relative overflow-hidden'
+            className={cn(
+              'glass-panel p-6 rounded-[2rem] shadow-[0_0_40px_rgba(16,231,116,0.1)] relative overflow-hidden',
+              isBasketball ? 'border-orange-300/20 shadow-[0_0_40px_rgba(251,146,60,0.12)]' : 'border-primary/20'
+            )}
           >
-            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.1),transparent_70%)]' />
+            <div className={cn(
+              'absolute inset-0',
+              isBasketball
+                ? 'bg-[radial-gradient(ellipse_at_top,rgba(251,146,60,0.1),transparent_70%)]'
+                : 'bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.1),transparent_70%)]'
+            )} />
 
             <div className='relative z-10 flex flex-col items-center justify-center py-2'>
               <p className='text-xs font-bold text-white/50 uppercase tracking-widest mb-2 flex items-center gap-2'>
                 <Shield className='w-4 h-4' /> Overall Accuracy
               </p>
               <div className='text-6xl font-display text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]'>
-                {((overall.hitRate || 0) * 100).toFixed(1)}<span className='text-3xl text-primary'>%</span>
+                {((overall.hitRate || 0) * 100).toFixed(1)}<span className={cn('text-3xl', isBasketball ? 'text-orange-200' : 'text-primary')}>%</span>
               </div>
-              <p className='text-sm text-primary/80 font-medium mt-3 tracking-wide'>
+              <p className={cn('text-sm font-medium mt-3 tracking-wide', isBasketball ? 'text-orange-200/80' : 'text-primary/80')}>
                 {overall.won} Won / {overall.total} Total
               </p>
               <div className='flex items-center gap-4 mt-4 text-[11px] text-white/30'>
-                {stats?.live?.total > 0 && <span>📡 {stats.live.total} live picks</span>}
-                {activeSport === 'football' && stats?.historical?.total > 0 && <span>🗄 {stats.historical.total} historical</span>}
+                {stats?.live?.total > 0 && <span>{stats.live.total} live picks</span>}
+                {activeSport === 'football' && stats?.historical?.total > 0 && <span>{stats.historical.total} historical</span>}
               </div>
             </div>
           </motion.div>
@@ -232,15 +286,25 @@ export default function TrackRecord() {
                   disabled={activeSport === 'basketball' && src === 'backtest'}
                   className={cn(
                     'px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-                    effectiveSource === src ? 'bg-primary text-black' : 'text-white/40 hover:text-white/70',
+                    effectiveSource === src
+                      ? isBasketball && src === 'live'
+                        ? 'bg-orange-300 text-black'
+                        : 'bg-primary text-black'
+                      : 'text-white/40 hover:text-white/70',
                     activeSport === 'basketball' && src === 'backtest' && 'opacity-35 cursor-not-allowed'
                   )}
                 >
-                  {src === 'live' ? '📡 Live' : '🗄 History'}
+                  {src === 'live' ? 'Live' : 'History'}
                 </button>
               ))}
             </div>
           </div>
+
+          {activeSport === 'basketball' && (
+            <div className='rounded-2xl border border-orange-300/15 bg-orange-400/[0.06] px-4 py-3 text-[11px] text-orange-100/75'>
+              Basketball uses live settlement only for now, so the record stays clean and separated from football backtests.
+            </div>
+          )}
 
           {recentLoading ? (
             <div className='flex justify-center py-8'>

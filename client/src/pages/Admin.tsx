@@ -75,7 +75,11 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#080b10] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#080b10] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[-12%] left-[-8%] h-[40vh] w-[40vw] rounded-full bg-primary/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[38vh] w-[36vw] rounded-full bg-cyan-500/10 blur-[120px]" />
+      </div>
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -86,6 +90,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
             SCORE<span style={{ color: "#10e774" }}>PHANTOM</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1 tracking-wider">ADMIN PANEL</p>
+          <p className="text-[11px] text-white/30 mt-3 leading-relaxed">Standalone control room for user access, payments, football operations, basketball sync, and engine health.</p>
         </div>
 
         {/* Card */}
@@ -127,6 +132,19 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
           </form>
         </div>
 
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          {[
+            { value: "2", label: "Sports" },
+            { value: "Live", label: "Ops" },
+            { value: "Secure", label: "Access" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3">
+              <p className="text-sm font-black text-white">{item.value}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">{item.label}</p>
+            </div>
+          ))}
+        </div>
+
         <p className="text-center text-xs text-gray-600 mt-4">
           Restricted access · Admin credentials only
         </p>
@@ -163,6 +181,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
+  const referralBaseUrl = typeof window !== "undefined" ? `${window.location.origin}/login` : "/login";
   const [tab, setTab] = useState<"overview" | "users" | "payments" | "partners" | "system" | "engine">("overview");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [engineStats, setEngineStats] = useState<any>(null);
@@ -903,7 +922,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                     <div>
                       <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Referral Code *</label>
                       <input required value={createPartnerForm.code} onChange={e => setCreatePartnerForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="e.g. MAZI" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/50 font-mono tracking-widest transition-all" />
-                      <p className="text-[10px] text-gray-600 mt-1">Link: score-phantom.onrender.com/?ref={createPartnerForm.code||"CODE"} · 25% commission · max 5 partners</p>
+                      <p className="text-[10px] text-gray-600 mt-1">Link: {referralBaseUrl}?ref={createPartnerForm.code||"CODE"} · 25% commission · max 5 partners</p>
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Notes (internal)</label>

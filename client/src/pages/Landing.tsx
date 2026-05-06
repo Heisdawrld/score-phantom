@@ -43,6 +43,9 @@ export default function Landing() {
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
   const heroY = useTransform(scrollY, [0, 400], [0, 100]);
+  const goToLogin = () => setLocation("/login");
+  const goToSignup = () => setLocation("/login?mode=signup");
+  const goToTrackRecord = () => setLocation("/track-record");
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white overflow-x-hidden selection:bg-primary/30">
@@ -62,8 +65,8 @@ export default function Landing() {
           <span className="font-black tracking-wide text-lg">ScorePhantom</span>
         </div>
         <div className="flex items-center gap-4">
-          <button onClick={() => setLocation("/login")} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Log in</button>
-          <button onClick={() => setLocation("/login")} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform">Get Started</button>
+          <button onClick={goToLogin} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Log in</button>
+          <button onClick={goToSignup} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform">Start Free Trial</button>
         </div>
       </nav>
 
@@ -90,13 +93,13 @@ export default function Landing() {
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToSignup}
               className="group relative h-14 px-8 rounded-full font-black text-black text-base overflow-hidden transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
               style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
               <span className="relative flex items-center gap-2">Start 7-Day Free Trial <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
             </button>
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToTrackRecord}
               className="h-14 px-8 rounded-full font-bold text-white bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.08] transition-colors flex items-center gap-2">
               View Track Record
             </button>
@@ -259,7 +262,7 @@ export default function Landing() {
             Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep model analysis for just ₦3,000/month.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToSignup}
               className="w-full sm:w-auto px-10 h-14 rounded-full font-black text-black text-base transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
               style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
               Start 7-Day Free Trial

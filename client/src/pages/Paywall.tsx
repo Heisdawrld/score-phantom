@@ -15,7 +15,7 @@ const FEATURES = [
 
 const PROOF_POINTS = [
   { value: "68%", label: "Avg Win Rate" },
-  { value: "500+", label: "Weekly Picks" },
+  { value: "2 Sports", label: "Football + Hoops" },
   { value: "24/7", label: "Live Analysis" },
 ];
 
@@ -132,7 +132,7 @@ export default function Paywall() {
                 
                 <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                   className="text-white/50 text-base max-w-sm mx-auto leading-relaxed">
-                  Join thousands of smart bettors using model-driven probabilities to beat the bookmakers every day.
+                  Unlock the full ScorePhantom stack with football as your primary edge desk and basketball as a fast-moving second board when lines are live.
                 </motion.p>
               </div>
 
@@ -170,6 +170,7 @@ export default function Paywall() {
                     <div>
                       <h2 className="text-2xl font-black text-white">Premium</h2>
                       <p className="text-sm text-primary font-semibold mt-1">Full Model Access</p>
+                      <p className="text-[11px] text-white/35 mt-1">One subscription. Football first, basketball included as the slate matures.</p>
                     </div>
                     <div className="text-right">
                       <div className="flex items-start justify-end gap-1">

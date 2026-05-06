@@ -204,7 +204,7 @@ export default function Dashboard() {
 
   const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5 * 60 * 1000 });
   const heroPick = (heroData as any)?.picks?.[0] || null;
-  const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
+  const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30&sport=football"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
   const trackStats = (trackData as any)?.overallStats || null;
 
   const isTrial = user?.access_status === "trial";
@@ -298,7 +298,7 @@ export default function Dashboard() {
             <h1 className="text-xl font-black text-white tracking-tight">
               Welcome back, <span className="text-primary capitalize">{displayName}</span> 👋
             </h1>
-            <p className="text-xs text-white/50 mt-1">Here are today's highest value edges</p>
+            <p className="text-xs text-white/50 mt-1">Football stays front and center here. Basketball lives in its own premium lane from the sport switcher above.</p>
           </div>
           
           <div className="relative w-full sm:w-64 shrink-0">

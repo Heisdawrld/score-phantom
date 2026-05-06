@@ -55,6 +55,7 @@ export default function Profile() {
   const username = (user as any)?.username || "";
   const dn = username || email.split("@")[0] || "User";
   const ini = dn.charAt(0).toUpperCase();
+  const referralLink = `${window.location.origin}/login?ref=${(user as any)?.own_referral_code || ""}`;
 
   const trialEnd = (user as any)?.trial_ends_at ? new Date((user as any).trial_ends_at) : null;
   const premEnd = (user as any)?.subscription_expires_at ? new Date((user as any).subscription_expires_at) : null;
@@ -62,7 +63,7 @@ export default function Profile() {
 
   const { data: td } = useQuery({
     queryKey: ["/api/track-record"],
-    queryFn: () => fetchApi("/track-record?days=30"),
+    queryFn: () => fetchApi("/track-record?days=30&sport=football"),
     staleTime: 300000,
   });
   const st = (td as any)?.overallStats || {};
@@ -78,6 +79,11 @@ export default function Profile() {
     { icon: Settings, label: "Account Settings", sub: "Preferences & notifications", go: "/settings" },
     { icon: BarChart2, label: "Track Record", sub: "Win rates & prediction history", go: "/track-record" },
     { icon: Heart, label: "Favourite Leagues", sub: "Personalise your match feed", go: "/league-favorites" },
+  ];
+  const quickActions = [
+    { icon: CreditCard, label: "Billing", go: "/billing" },
+    { icon: BarChart2, label: "Track", go: "/track-record" },
+    { icon: Heart, label: "Leagues", go: "/league-favorites" },
   ];
 
   return (
@@ -125,6 +131,24 @@ export default function Profile() {
               </span>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03 }}
+          className="grid grid-cols-3 gap-2"
+        >
+          {quickActions.map(({ icon: Icon, label, go }) => (
+            <button
+              key={label}
+              onClick={() => nav(go)}
+              className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-4 text-center hover:bg-white/[0.05] transition-all"
+            >
+              <Icon size={16} className="mx-auto text-primary" />
+              <p className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/55">{label}</p>
+            </button>
+          ))}
         </motion.div>
 
         {/* ── Performance Card ── */}
@@ -272,7 +296,7 @@ export default function Profile() {
                 </button>
               </div>
               <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
-                <span className="text-sm font-medium text-white/70 truncate mr-3">score-phantom.com/login?ref={(user as any)?.own_referral_code || ""}</span>
+                    <span className="text-sm font-medium text-white/70 truncate mr-3">{referralLink}</span>
                 <button 
                   onClick={copyReferralLink}
                   className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-sm font-medium text-primary transition-colors shrink-0"

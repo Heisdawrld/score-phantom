@@ -461,14 +461,14 @@ export default function Login() {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
         </div>
 
-        {/* Stats strip */}
+        {/* Trust strip */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }}
           className="flex items-center gap-6 text-center">
-          <div><p className="text-primary font-black text-lg leading-tight">500+</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Matches/week</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">7D</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Free trial</p></div>
           <div className="w-px h-7 bg-white/8" />
-          <div><p className="text-primary font-black text-lg leading-tight">Model</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Predictions</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">15</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Daily picks</p></div>
           <div className="w-px h-7 bg-white/8" />
-          <div><p className="text-primary font-black text-lg leading-tight">73%</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Accuracy</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">2</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Sports live</p></div>
         </motion.div>
 
         {/* WhatsApp support — for users who lost premium access */}
