@@ -129,52 +129,6 @@ function GlassBubbles() {
   );
 }
 
-function AdminSystemBasketballCard() {
-  const [loc] = useLocation();
-
-  useEffect(() => {
-    if (loc !== "/admin") return;
-
-    let disposed = false;
-
-    const makeCard = () => {
-      if (disposed || document.getElementById("sp-basketball-system-card")) return;
-
-      const headings = Array.from(document.querySelectorAll("h1,h2,h3"));
-      const systemHeading = headings.find((el) => (el.textContent || "").trim().toLowerCase().includes("system controls"));
-      if (!systemHeading) return;
-
-      const card = document.createElement("div");
-      card.id = "sp-basketball-system-card";
-      card.className = "bg-[#0f172a] border border-orange-300/20 rounded-2xl p-6 mb-6 shadow-[0_0_30px_rgba(251,146,60,0.08)]";
-      card.innerHTML = `
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;">
-          <div>
-            <h3 style="font-size:18px;font-weight:900;color:white;margin:0 0 6px;">🏀 Basketball Control Room</h3>
-            <p style="font-size:13px;line-height:1.6;color:rgba(156,163,175,1);margin:0;">Initialize tables, sync NBA + NCAAB odds, and run basketball predictions without touching football.</p>
-          </div>
-          <span style="font-size:11px;font-weight:900;color:#fdba74;border:1px solid rgba(251,146,60,.3);background:rgba(251,146,60,.1);padding:8px 10px;border-radius:999px;white-space:nowrap;">BETA</span>
-        </div>
-        <a href="/admin/basketball" style="display:flex;align-items:center;justify-content:center;width:100%;border-radius:14px;background:#fb923c;color:#000;font-weight:900;font-size:14px;text-decoration:none;padding:14px 16px;box-shadow:0 0 30px rgba(251,146,60,.22);">Open Basketball Admin →</a>
-      `;
-
-      systemHeading.insertAdjacentElement("afterend", card);
-    };
-
-    makeCard();
-    const observer = new MutationObserver(makeCard);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      document.getElementById("sp-basketball-system-card")?.remove();
-    };
-  }, [loc]);
-
-  return null;
-}
-
 function Router() {
   const [loc] = useLocation();
   
@@ -237,7 +191,6 @@ function App() {
             <GlassBubbles />
             <ReferralCapture />
             <Router />
-            <AdminSystemBasketballCard />
             <BottomNav />
           </WouterRouter>
           <Toaster />

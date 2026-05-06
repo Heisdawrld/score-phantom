@@ -31,6 +31,7 @@ async function main() {
     WHERE pp.prediction_source = 'pre_match'
       AND pp.kickoff_at IS NOT NULL
       AND pp.generated_at < pp.kickoff_at
+      AND (po.sport_key = 'football' OR po.sport_key IS NULL)
       AND po.best_pick_odds IS NOT NULL
       AND po.profit_units IS NOT NULL
   `;

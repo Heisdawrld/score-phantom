@@ -8,6 +8,12 @@ const router = express.Router();
 // Secondary source: backtest_results (historical BSD backtesting)
 router.get("/stats", async (req, res) => {
   try {
+    const requestedSport = String(req.query.sport || 'football').toLowerCase();
+    const sportKey = requestedSport === 'basketball' || requestedSport === 'hoops' ? 'basketball' : 'football';
+    const liveSportFilter = sportKey === 'football'
+      ? `(sport_key = 'football' OR sport_key IS NULL)`
+      : `sport_key = 'basketball'`;
+
     // 1. Live prediction outcomes (primary — always available after a few days)
     const liveOverall = await db.execute(`
       SELECT 
@@ -17,6 +23,7 @@ router.get("/stats", async (req, res) => {
         SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
+        AND ${liveSportFilter}
     `);
 
     const liveByMarket = await db.execute(`
@@ -27,6 +34,7 @@ router.get("/stats", async (req, res) => {
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND predicted_market IS NOT NULL
+        AND ${liveSportFilter}
       GROUP BY predicted_market
       ORDER BY total DESC
       LIMIT 12
@@ -40,6 +48,7 @@ router.get("/stats", async (req, res) => {
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND model_confidence IS NOT NULL
+        AND ${liveSportFilter}
       GROUP BY model_confidence
       ORDER BY total DESC
     `);
@@ -47,18 +56,20 @@ router.get("/stats", async (req, res) => {
     // 2. Historical backtest results (populated by runBacktest.js script)
     let backtestOverall = { rows: [{ total: 0, won: 0 }] };
     let backtestByMarket = { rows: [] };
-    try {
-      backtestOverall = await db.execute(`
-        SELECT COUNT(*) as total, SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
-        FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
-      `);
-      backtestByMarket = await db.execute(`
-        SELECT top_prediction as market, COUNT(*) as total,
-          SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
-        FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
-        GROUP BY top_prediction ORDER BY total DESC LIMIT 12
-      `);
-    } catch (_) {}
+    if (sportKey === 'football') {
+      try {
+        backtestOverall = await db.execute(`
+          SELECT COUNT(*) as total, SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
+          FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
+        `);
+        backtestByMarket = await db.execute(`
+          SELECT top_prediction as market, COUNT(*) as total,
+            SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
+          FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
+          GROUP BY top_prediction ORDER BY total DESC LIMIT 12
+        `);
+      } catch (_) {}
+    }
 
     // Merge live + backtest totals
     const liveRow = liveOverall.rows[0] || {};
@@ -101,6 +112,7 @@ router.get("/stats", async (req, res) => {
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND evaluated_at >= NOW() - INTERVAL '90 days'
+        AND ${liveSportFilter}
       GROUP BY TO_CHAR(evaluated_at::date, 'YYYY-MM')
       ORDER BY month DESC
       LIMIT 6
@@ -114,6 +126,7 @@ router.get("/stats", async (req, res) => {
     }));
 
     res.json({
+      sport: sportKey,
       overall: { total: totalMatches, won: totalWon, hitRate: overallHitRate },
       live: { total: Number(liveRow.total || 0), won: Number(liveRow.won || 0) },
       historical: { total: Number(btRow.total || 0), won: Number(btRow.won || 0) },
@@ -132,10 +145,18 @@ router.get("/recent", async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const source = req.query.source || 'live'; // 'live' | 'backtest' | 'all'
+    const requestedSport = String(req.query.sport || 'football').toLowerCase();
+    const sportKey = requestedSport === 'basketball' || requestedSport === 'hoops' ? 'basketball' : 'football';
+    const liveSportClause = sportKey === 'football'
+      ? `(sport_key = 'football' OR sport_key IS NULL)`
+      : `sport_key = 'basketball'`;
 
     let results = [];
 
     if (source === 'backtest') {
+      if (sportKey !== 'football') {
+        return res.json({ results: [], total: 0, source, sport: sportKey });
+      }
       const btRes = await db.execute({
         sql: `SELECT fixture_id, league_id, season, match_date, home_team, away_team,
                 predicted_script, top_prediction, confidence_score, actual_result,
@@ -159,6 +180,7 @@ router.get("/recent", async (req, res) => {
                 full_score, outcome as actual_result,
                 evaluated_at as created_at
               FROM prediction_outcomes
+              WHERE ${liveSportClause}
               ORDER BY evaluated_at DESC
               LIMIT ?`,
         args: [limit]
@@ -172,7 +194,7 @@ router.get("/recent", async (req, res) => {
       }));
 
       // If not enough live results, pad with backtest
-      if (results.length < 10) {
+      if (sportKey === 'football' && results.length < 10) {
         try {
           const btPad = await db.execute({
             sql: `SELECT fixture_id, match_date, home_team, away_team,
@@ -188,7 +210,7 @@ router.get("/recent", async (req, res) => {
       }
     }
 
-    res.json({ results, total: results.length, source });
+    res.json({ results, total: results.length, source, sport: sportKey });
   } catch (error) {
     console.error("Error fetching recent track records:", error);
     res.status(500).json({ error: "Internal Server Error" });

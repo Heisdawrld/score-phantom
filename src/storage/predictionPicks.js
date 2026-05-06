@@ -23,6 +23,7 @@ async function initPredictionPicksTable() {
       implied_probability REAL,
       edge REAL,
       model_probability REAL,
+      model_confidence TEXT,
       material_signature TEXT,
       phantom_score REAL,
       volatility_score REAL
@@ -30,6 +31,7 @@ async function initPredictionPicksTable() {
   `);
 
   await db.execute(`ALTER TABLE prediction_picks ADD COLUMN IF NOT EXISTS material_signature TEXT`);
+  await db.execute(`ALTER TABLE prediction_picks ADD COLUMN IF NOT EXISTS model_confidence TEXT`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`);
   await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);
@@ -46,7 +48,7 @@ export async function getLatestPredictionPick({ fixtureId, predictionSource }) {
   const r = await db.execute({
     sql: `
       SELECT id, fixture_id, engine_version, prediction_source, generated_at, kickoff_at,
-             market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, material_signature
+             market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, model_confidence, material_signature
       FROM prediction_picks
       WHERE fixture_id = ? AND prediction_source = ?
       ORDER BY generated_at DESC
@@ -87,11 +89,11 @@ export async function insertPredictionPickIfMaterialChange(pick) {
     sql: `
       INSERT INTO prediction_picks
         (fixture_id, engine_version, prediction_source, generated_at, kickoff_at,
-         market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, material_signature,
+         market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, model_confidence, material_signature,
          phantom_score, volatility_score)
       VALUES
         (?, ?, ?, ?, ?,
-         ?, ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?, ?, ?,
          ?, ?)
       ON CONFLICT (fixture_id, prediction_source, material_signature) DO NOTHING
       RETURNING id
@@ -108,6 +110,7 @@ export async function insertPredictionPickIfMaterialChange(pick) {
       pick.implied_probability,
       pick.edge,
       pick.model_probability,
+      pick.model_confidence ?? null,
       materialSignature,
       pick.phantom_score ?? null,
       pick.volatility_score ?? null,
