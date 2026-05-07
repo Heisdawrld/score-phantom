@@ -1,9 +1,20 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchApi } from '@/lib/api';
+import { motion } from 'framer-motion';
+import {
+  Activity,
+  ArrowUpRight,
+  BarChart2,
+  CheckCircle,
+  Clock,
+  Layers3,
+  Shield,
+  Target,
+  TrendingUp,
+  XCircle,
+} from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, Target, Shield, CheckCircle, XCircle, TrendingUp, BarChart2, Clock } from 'lucide-react';
+import { fetchApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const MARKET_LABELS: Record<string, string> = {
@@ -18,13 +29,13 @@ const MARKET_LABELS: Record<string, string> = {
 };
 
 function formatMarket(marketId: string) {
-  if (!marketId) return '—';
-  return MARKET_LABELS[marketId] || marketId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  if (!marketId) return '--';
+  return MARKET_LABELS[marketId] || marketId.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function HitRateBar({ rate, color = 'bg-primary' }: { rate: number; color?: string }) {
   return (
-    <div className="h-1 bg-white/5 rounded-full overflow-hidden mt-2">
+    <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/5">
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${Math.min(100, rate * 100).toFixed(1)}%` }}
@@ -57,327 +68,375 @@ export default function TrackRecord() {
   const hasData = overall.total > 0;
 
   return (
-    <div className='min-h-screen bg-[#060a0e] pb-24 relative overflow-hidden'>
-      <div className='fixed inset-0 pointer-events-none'>
-        <div className={cn(
-          'absolute top-[-16%] right-[-12%] h-[44vh] w-[44vw] rounded-full blur-[120px]',
-          isBasketball ? 'bg-orange-500/12' : 'bg-primary/10'
-        )} />
-        <div className='absolute bottom-[-14%] left-[-8%] h-[40vh] w-[38vw] rounded-full bg-cyan-500/8 blur-[120px]' />
+    <div className="relative min-h-screen overflow-hidden bg-[#060a0e] pb-24">
+      <div className="pointer-events-none fixed inset-0">
+        <div
+          className={cn(
+            'absolute right-[-12%] top-[-16%] h-[44vh] w-[44vw] rounded-full blur-[120px]',
+            isBasketball ? 'bg-orange-500/12' : 'bg-primary/10'
+          )}
+        />
+        <div className="absolute bottom-[-14%] left-[-8%] h-[40vh] w-[38vw] rounded-full bg-cyan-500/8 blur-[120px]" />
       </div>
       <Header />
 
-      <main className='relative z-10 max-w-lg mx-auto px-4 pt-6 space-y-6'>
-
-        {/* Header */}
-        <div className='rounded-[30px] border border-white/[0.06] bg-white/[0.025] p-5 text-center space-y-4 mb-2 overflow-hidden relative'>
-          <div className={cn(
-            'absolute -right-8 -top-10 h-28 w-28 rounded-full blur-3xl',
-            isBasketball ? 'bg-orange-400/18' : 'bg-primary/16'
-          )} />
-          <div className='relative inline-flex items-center justify-center p-3 rounded-full mb-1 bg-white/[0.04] border border-white/[0.06]'>
-            <Activity className={cn('w-8 h-8', isBasketball ? 'text-orange-200' : 'text-primary')} />
-          </div>
-          <div className='relative flex items-center justify-center gap-2 flex-wrap'>
-            <span className={cn(
-              'rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
-              isBasketball ? 'border-orange-300/25 bg-orange-400/10 text-orange-200' : 'border-primary/20 bg-primary/10 text-primary'
-            )}>
-              {isBasketball ? 'Basketball Ledger' : 'Football Ledger'}
-            </span>
-            <span className='rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35'>
-              {effectiveSource === 'live' ? 'Live Settlements' : 'Historical Backtest'}
-            </span>
-          </div>
-          <div className='relative'>
-            <h1 className='text-3xl font-display tracking-widest text-white drop-shadow-md'>
-              TRACK <span className={isBasketball ? 'text-orange-200' : 'text-primary'}>RECORD</span>
-            </h1>
-            <p className='text-white/40 text-sm px-4 mt-2 leading-relaxed'>
-              Verifiable hit rates, separated by sport so football stays honest and basketball grows on its own track.
-            </p>
-          </div>
-        </div>
-
-        <div className='flex items-center justify-center'>
-          <div className='flex items-center gap-1 p-1 bg-white/5 rounded-2xl border border-white/5'>
-            {(['football', 'basketball'] as const).map((sport) => (
-              <button
-                key={sport}
-                onClick={() => setActiveSport(sport)}
-                className={cn(
-                  'px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
-                  activeSport === sport
-                    ? sport === 'basketball'
-                      ? 'bg-orange-300 text-black'
-                      : 'bg-primary text-black'
-                    : 'text-white/40 hover:text-white/70'
-                )}
-              >
-                {sport}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {hasData && (
-          <div className='grid grid-cols-3 gap-3'>
-            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
-              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Settled</p>
-              <p className='mt-2 text-2xl font-black text-white'>{overall.total}</p>
-            </div>
-            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
-              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Won</p>
-              <p className={cn('mt-2 text-2xl font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
-            </div>
-            <div className='rounded-2xl border border-white/[0.06] bg-black/25 p-4'>
-              <p className='text-[10px] font-black uppercase tracking-[0.18em] text-white/30'>Source</p>
-              <p className='mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/72'>{effectiveSource}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Overall Hit Rate */}
-        {statsLoading ? (
-          <div className='glass-panel p-8 rounded-[2rem] border border-white/5 flex items-center justify-center'>
-            <div className='w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin' />
-          </div>
-        ) : hasData ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn(
-              'glass-panel p-6 rounded-[2rem] shadow-[0_0_40px_rgba(16,231,116,0.1)] relative overflow-hidden',
-              isBasketball ? 'border-orange-300/20 shadow-[0_0_40px_rgba(251,146,60,0.12)]' : 'border-primary/20'
-            )}
-          >
-            <div className={cn(
-              'absolute inset-0',
-              isBasketball
-                ? 'bg-[radial-gradient(ellipse_at_top,rgba(251,146,60,0.1),transparent_70%)]'
-                : 'bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.1),transparent_70%)]'
-            )} />
-
-            <div className='relative z-10 flex flex-col items-center justify-center py-2'>
-              <p className='text-xs font-bold text-white/50 uppercase tracking-widest mb-2 flex items-center gap-2'>
-                <Shield className='w-4 h-4' /> Overall Accuracy
-              </p>
-              <div className='text-6xl font-display text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]'>
-                {((overall.hitRate || 0) * 100).toFixed(1)}<span className={cn('text-3xl', isBasketball ? 'text-orange-200' : 'text-primary')}>%</span>
-              </div>
-              <p className={cn('text-sm font-medium mt-3 tracking-wide', isBasketball ? 'text-orange-200/80' : 'text-primary/80')}>
-                {overall.won} Won / {overall.total} Total
-              </p>
-              <div className='flex items-center gap-4 mt-4 text-[11px] text-white/30'>
-                {stats?.live?.total > 0 && <span>{stats.live.total} live picks</span>}
-                {activeSport === 'football' && stats?.historical?.total > 0 && <span>{stats.historical.total} historical</span>}
-              </div>
-            </div>
-          </motion.div>
-        ) : (
-          <div className='glass-panel p-8 rounded-[2rem] border border-white/5 text-center'>
-            <div className='text-5xl mb-4'>📊</div>
-            <p className='text-white/50 font-medium'>Building Track Record</p>
-            <p className='text-white/30 text-sm mt-2 max-w-xs mx-auto leading-relaxed'>
-              Predictions are evaluated automatically as matches finish. Check back tomorrow to see today's hit rate.
-            </p>
-          </div>
-        )}
-
-        {/* Monthly Breakdown */}
-        {stats?.monthly && stats.monthly.length > 0 && (
-          <div className='space-y-3'>
-            <h2 className='text-xs font-black text-white/40 uppercase tracking-widest pl-1 flex items-center gap-2'>
-              <BarChart2 className='w-4 h-4' /> Monthly Performance
-            </h2>
-            <div className='glass-panel p-4 rounded-2xl border border-white/5 space-y-3'>
-              {stats.monthly.map((m: any) => (
-                <div key={m.month}>
-                  <div className='flex justify-between items-center'>
-                    <span className='text-xs text-white/60 font-medium'>{m.month}</span>
-                    <div className='flex items-center gap-2'>
-                      <span className='text-xs text-white/30'>{m.won}/{m.total}</span>
-                      <span className={cn('text-sm font-display font-black',
-                        m.hitRate >= 0.6 ? 'text-primary' : m.hitRate >= 0.5 ? 'text-amber-400' : 'text-red-400'
-                      )}>
-                        {(m.hitRate * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  </div>
-                  <HitRateBar
-                    rate={m.hitRate}
-                    color={m.hitRate >= 0.6 ? 'bg-primary' : m.hitRate >= 0.5 ? 'bg-amber-400' : 'bg-red-500'}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Market Performance Grid */}
-        {stats?.byMarket && stats.byMarket.length > 0 && (
-          <div className='space-y-3'>
-            <h2 className='text-xs font-black text-white/40 uppercase tracking-widest pl-1 flex items-center gap-2'>
-              <Target className='w-4 h-4' /> Performance by Market
-            </h2>
-            <div className='grid grid-cols-2 gap-3'>
-              {stats.byMarket.filter((m: any) => m.total >= 3).slice(0, 8).map((m: any) => (
-                <div key={m.market} className='glass-panel p-4 rounded-2xl border border-white/5'>
-                  <p className='text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1 truncate'>
-                    {formatMarket(m.market)}
-                  </p>
-                  <p className={cn('text-2xl font-display',
-                    m.hitRate >= 0.6 ? 'text-primary' : m.hitRate >= 0.5 ? 'text-amber-400' : 'text-white/70'
-                  )}>
-                    {(m.hitRate * 100).toFixed(1)}<span className='text-sm text-white/30'>%</span>
-                  </p>
-                  <p className='text-[10px] text-white/30 mt-1'>{m.won}W / {m.total - m.won}L</p>
-                  <HitRateBar rate={m.hitRate} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Confidence Breakdown */}
-        {stats?.byConfidence && stats.byConfidence.length > 0 && (
-          <div className='space-y-3'>
-            <h2 className='text-xs font-black text-white/40 uppercase tracking-widest pl-1 flex items-center gap-2'>
-              <TrendingUp className='w-4 h-4' /> By Confidence Tier
-            </h2>
-            <div className='glass-panel p-4 rounded-2xl border border-white/5 space-y-3'>
-              {stats.byConfidence.map((c: any) => (
-                <div key={c.confidence}>
-                  <div className='flex justify-between items-center'>
-                    <div className='flex items-center gap-2'>
-                      <div className={cn('w-2 h-2 rounded-full',
-                        c.confidence === 'HIGH' ? 'bg-primary' :
-                        c.confidence === 'MEDIUM' ? 'bg-amber-400' : 'bg-white/30'
-                      )} />
-                      <span className='text-xs text-white/60 font-medium capitalize'>{(c.confidence || '?').toLowerCase()}</span>
-                    </div>
-                    <div className='flex items-center gap-2'>
-                      <span className='text-xs text-white/30'>{c.won}/{c.total}</span>
-                      <span className={cn('text-sm font-display font-black',
-                        c.hitRate >= 0.6 ? 'text-primary' : c.hitRate >= 0.5 ? 'text-amber-400' : 'text-white/50'
-                      )}>
-                        {(c.hitRate * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                  <HitRateBar rate={c.hitRate} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Results Toggle */}
-        <div className='space-y-3'>
-          <div className='flex items-center justify-between'>
-            <h2 className='text-xs font-black text-white/40 uppercase tracking-widest pl-1 flex items-center gap-2'>
-              <Clock className='w-4 h-4' /> Recent Results
-            </h2>
-            <div className='flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/5'>
-              {(['live', 'backtest'] as const).map(src => (
-                <button
-                  key={src}
-                  onClick={() => activeSport === 'football' && setActiveSource(src)}
-                  disabled={activeSport === 'basketball' && src === 'backtest'}
+      <main className="relative z-10 mx-auto max-w-6xl space-y-6 px-4 pt-6">
+        <section className="grid gap-4 xl:grid-cols-[1.55fr_0.85fr]">
+          <div className="premium-surface relative overflow-hidden rounded-[34px] p-6 md:p-7">
+            <div className={cn('absolute -right-10 -top-10 h-36 w-36 rounded-full blur-3xl', isBasketball ? 'bg-orange-400/18' : 'bg-primary/16')} />
+            <div className="relative space-y-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
                   className={cn(
-                    'px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-                    effectiveSource === src
-                      ? isBasketball && src === 'live'
-                        ? 'bg-orange-300 text-black'
-                        : 'bg-primary text-black'
-                      : 'text-white/40 hover:text-white/70',
-                    activeSport === 'basketball' && src === 'backtest' && 'opacity-35 cursor-not-allowed'
+                    'rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
+                    isBasketball ? 'border-orange-300/25 bg-orange-400/10 text-orange-200' : 'border-primary/20 bg-primary/10 text-primary'
                   )}
                 >
-                  {src === 'live' ? 'Live' : 'History'}
-                </button>
-              ))}
+                  {isBasketball ? 'Basketball Ledger' : 'Football Ledger'}
+                </span>
+                <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+                  {effectiveSource === 'live' ? 'Live Settlements' : 'Historical Backtest'}
+                </span>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
+                <div>
+                  <div className="mb-4 inline-flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3">
+                    <Activity className={cn('h-7 w-7', isBasketball ? 'text-orange-200' : 'text-primary')} />
+                  </div>
+                  <h1 className="font-display text-4xl tracking-[0.14em] text-white md:text-5xl">
+                    TRACK <span className={isBasketball ? 'text-orange-200' : 'text-primary'}>RECORD</span>
+                  </h1>
+                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/42 md:text-base">
+                    Verifiable hit rates, separated by sport so football keeps its own truth and basketball can mature on a clean independent record.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="premium-stat">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Review Mode</p>
+                    <p className="mt-2 text-lg font-black text-white">{isBasketball ? 'Live Only' : 'Dual Source'}</p>
+                    <p className="mt-1 text-xs text-white/35">No cross-sport blending.</p>
+                  </div>
+                  <div className="premium-stat">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Latest Lens</p>
+                    <p className={cn('mt-2 text-lg font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>
+                      {effectiveSource === 'live' ? 'Auto Settled' : 'Backtest View'}
+                    </p>
+                    <p className="mt-1 text-xs text-white/35">Switched per active sport.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-1">
+                  {(['football', 'basketball'] as const).map((sport) => (
+                    <button
+                      key={sport}
+                      onClick={() => setActiveSport(sport)}
+                      className={cn(
+                        'rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
+                        activeSport === sport
+                          ? sport === 'basketball'
+                            ? 'bg-orange-300 text-black'
+                            : 'bg-primary text-black'
+                          : 'text-white/40 hover:text-white/70'
+                      )}
+                    >
+                      {sport}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-1">
+                  {(['live', 'backtest'] as const).map((src) => (
+                    <button
+                      key={src}
+                      onClick={() => activeSport === 'football' && setActiveSource(src)}
+                      disabled={activeSport === 'basketball' && src === 'backtest'}
+                      className={cn(
+                        'rounded-xl px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
+                        effectiveSource === src
+                          ? isBasketball && src === 'live'
+                            ? 'bg-orange-300 text-black'
+                            : 'bg-primary text-black'
+                          : 'text-white/40 hover:text-white/70',
+                        activeSport === 'basketball' && src === 'backtest' && 'cursor-not-allowed opacity-35'
+                      )}
+                    >
+                      {src === 'live' ? 'Live' : 'History'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
+          </div>
+
+          <div className="space-y-4">
+            {hasData && (
+              <div className="grid grid-cols-3 gap-3 xl:grid-cols-1">
+                <div className="premium-stat">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Settled</p>
+                  <p className="mt-2 text-2xl font-black text-white">{overall.total}</p>
+                </div>
+                <div className="premium-stat">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Won</p>
+                  <p className={cn('mt-2 text-2xl font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
+                </div>
+                <div className="premium-stat">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Source</p>
+                  <p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/72">{effectiveSource}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-[28px] border border-white/[0.06] bg-black/25 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Integrity Rules</p>
+                  <h2 className="mt-2 text-xl font-black text-white">Separated by sport, not by vibes.</h2>
+                </div>
+                <Layers3 className={cn('h-5 w-5 shrink-0', isBasketball ? 'text-orange-200' : 'text-primary')} />
+              </div>
+              <div className="mt-4 space-y-3 text-sm text-white/50">
+                <div className="flex items-start gap-3">
+                  <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-white/24" />
+                  <p>Football can compare live settlements and historical replays. Basketball stays live-only for now so its ledger does not inherit football assumptions.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-white/24" />
+                  <p>Confidence and market performance stay readable here before we promote any more aggressive edge policies.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-6">
+            {statsLoading ? (
+              <div className="glass-panel flex items-center justify-center rounded-[2rem] border border-white/5 p-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : hasData ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  'glass-panel relative overflow-hidden rounded-[2rem] p-6 shadow-[0_0_40px_rgba(16,231,116,0.1)]',
+                  isBasketball ? 'border-orange-300/20 shadow-[0_0_40px_rgba(251,146,60,0.12)]' : 'border-primary/20'
+                )}
+              >
+                <div
+                  className={cn(
+                    'absolute inset-0',
+                    isBasketball
+                      ? 'bg-[radial-gradient(ellipse_at_top,rgba(251,146,60,0.1),transparent_70%)]'
+                      : 'bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.1),transparent_70%)]'
+                  )}
+                />
+
+                <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+                  <div>
+                    <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/50">
+                      <Shield className="h-4 w-4" /> Overall Accuracy
+                    </p>
+                    <div className="text-6xl font-display text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                      {((overall.hitRate || 0) * 100).toFixed(1)}<span className={cn('text-3xl', isBasketball ? 'text-orange-200' : 'text-primary')}>%</span>
+                    </div>
+                    <p className={cn('mt-3 text-sm font-medium tracking-wide', isBasketball ? 'text-orange-200/80' : 'text-primary/80')}>
+                      {overall.won} Won / {overall.total} Total
+                    </p>
+                  </div>
+
+                  <div className="grid flex-1 grid-cols-3 gap-3 lg:max-w-md">
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/30 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/28">Live</p>
+                      <p className="mt-2 text-xl font-black text-white">{stats?.live?.total || 0}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/30 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/28">History</p>
+                      <p className="mt-2 text-xl font-black text-white">{activeSport === 'football' ? stats?.historical?.total || 0 : 0}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/30 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/28">Wins</p>
+                      <p className={cn('mt-2 text-xl font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <div className="glass-panel rounded-[2rem] border border-white/5 p-8 text-center">
+                <div className="mb-4 text-5xl">Track</div>
+                <p className="font-medium text-white/50">Building Track Record</p>
+                <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-white/30">
+                  Predictions are evaluated automatically as matches finish. Check back tomorrow to see today&apos;s hit rate.
+                </p>
+              </div>
+            )}
+
+            {stats?.monthly && stats.monthly.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="flex items-center gap-2 pl-1 text-xs font-black uppercase tracking-widest text-white/40">
+                  <BarChart2 className="h-4 w-4" /> Monthly Performance
+                </h2>
+                <div className="glass-panel space-y-3 rounded-2xl border border-white/5 p-4">
+                  {stats.monthly.map((m: any) => (
+                    <div key={m.month}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-white/60">{m.month}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-white/30">{m.won}/{m.total}</span>
+                          <span className={cn('text-sm font-display font-black', m.hitRate >= 0.6 ? 'text-primary' : m.hitRate >= 0.5 ? 'text-amber-400' : 'text-red-400')}>
+                            {(m.hitRate * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                      <HitRateBar rate={m.hitRate} color={m.hitRate >= 0.6 ? 'bg-primary' : m.hitRate >= 0.5 ? 'bg-amber-400' : 'bg-red-500'} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-6">
+            {stats?.byMarket && stats.byMarket.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="flex items-center gap-2 pl-1 text-xs font-black uppercase tracking-widest text-white/40">
+                  <Target className="h-4 w-4" /> Performance by Market
+                </h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {stats.byMarket.filter((m: any) => m.total >= 3).slice(0, 8).map((m: any) => (
+                    <div key={m.market} className="glass-panel rounded-2xl border border-white/5 p-4">
+                      <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-wider text-white/50">{formatMarket(m.market)}</p>
+                      <p className={cn('text-2xl font-display', m.hitRate >= 0.6 ? 'text-primary' : m.hitRate >= 0.5 ? 'text-amber-400' : 'text-white/70')}>
+                        {(m.hitRate * 100).toFixed(1)}<span className="text-sm text-white/30">%</span>
+                      </p>
+                      <p className="mt-1 text-[10px] text-white/30">{m.won}W / {m.total - m.won}L</p>
+                      <HitRateBar rate={m.hitRate} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {stats?.byConfidence && stats.byConfidence.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="flex items-center gap-2 pl-1 text-xs font-black uppercase tracking-widest text-white/40">
+                  <TrendingUp className="h-4 w-4" /> By Confidence Tier
+                </h2>
+                <div className="glass-panel space-y-3 rounded-2xl border border-white/5 p-4">
+                  {stats.byConfidence.map((c: any) => (
+                    <div key={c.confidence}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={cn('h-2 w-2 rounded-full', c.confidence === 'HIGH' ? 'bg-primary' : c.confidence === 'MEDIUM' ? 'bg-amber-400' : 'bg-white/30')} />
+                          <span className="text-xs font-medium capitalize text-white/60">{(c.confidence || '?').toLowerCase()}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-white/30">{c.won}/{c.total}</span>
+                          <span className={cn('text-sm font-display font-black', c.hitRate >= 0.6 ? 'text-primary' : c.hitRate >= 0.5 ? 'text-amber-400' : 'text-white/50')}>
+                            {(c.hitRate * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <HitRateBar rate={c.hitRate} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 pl-1 text-xs font-black uppercase tracking-widest text-white/40">
+              <Clock className="h-4 w-4" /> Recent Results
+            </h2>
+            <span className="hidden rounded-full border border-white/[0.08] bg-black/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35 md:inline-flex">
+              {recent?.results?.length || 0} settled views
+            </span>
           </div>
 
           {activeSport === 'basketball' && (
-            <div className='rounded-2xl border border-orange-300/15 bg-orange-400/[0.06] px-4 py-3 text-[11px] text-orange-100/75'>
+            <div className="rounded-2xl border border-orange-300/15 bg-orange-400/[0.06] px-4 py-3 text-[11px] text-orange-100/75">
               Basketball uses live settlement only for now, so the record stays clean and separated from football backtests.
             </div>
           )}
 
           {recentLoading ? (
-            <div className='flex justify-center py-8'>
-              <div className='w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin' />
+            <div className="flex justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             </div>
           ) : recent?.results?.length > 0 ? (
-            <div className='space-y-3'>
+            <div className="grid gap-3 xl:grid-cols-2">
               {recent.results.map((r: any, i: number) => (
                 <motion.div
                   key={r.fixture_id || i}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.03 }}
-                  className='glass-panel p-4 rounded-2xl border border-white/5 relative overflow-hidden'
+                  className="glass-panel relative overflow-hidden rounded-2xl border border-white/5 p-4"
                 >
-                  <div className={cn(
-                    'absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl',
-                    r.actual_result === 'WON' ? 'bg-primary shadow-[0_0_10px_rgba(16,231,116,0.8)]' :
-                    r.actual_result === 'LOST' ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' :
-                    'bg-white/20'
-                  )} />
+                  <div
+                    className={cn(
+                      'absolute bottom-0 left-0 top-0 w-1 rounded-l-2xl',
+                      r.actual_result === 'WON'
+                        ? 'bg-primary shadow-[0_0_10px_rgba(16,231,116,0.8)]'
+                        : r.actual_result === 'LOST'
+                          ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]'
+                          : 'bg-white/20'
+                    )}
+                  />
 
-                  <div className='flex justify-between items-start mb-2 pl-2'>
-                    <div className='flex-1 min-w-0 mr-3'>
-                      <p className='text-sm font-bold text-white truncate'>{r.home_team} vs {r.away_team}</p>
-                      <p className='text-[10px] text-white/40 mt-0.5'>
+                  <div className="mb-2 flex items-start justify-between pl-2">
+                    <div className="mr-3 min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-white">{r.home_team} vs {r.away_team}</p>
+                      <p className="mt-0.5 text-[10px] text-white/40">
                         {r.match_date ? new Date(r.match_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : ''}
                         {r.tournament ? ` · ${r.tournament}` : ''}
                       </p>
                     </div>
-                    <div className={cn(
-                      'flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black tracking-wider uppercase border shrink-0',
-                      r.actual_result === 'WON' ? 'bg-primary/10 text-primary border-primary/20' :
-                      r.actual_result === 'LOST' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                      'bg-white/5 text-white/30 border-white/10'
-                    )}>
-                      {r.actual_result === 'WON' ? <CheckCircle className='w-3 h-3' /> :
-                       r.actual_result === 'LOST' ? <XCircle className='w-3 h-3' /> :
-                       <span>—</span>}
+                    <div
+                      className={cn(
+                        'flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wider',
+                        r.actual_result === 'WON'
+                          ? 'border-primary/20 bg-primary/10 text-primary'
+                          : r.actual_result === 'LOST'
+                            ? 'border-red-500/20 bg-red-500/10 text-red-500'
+                            : 'border-white/10 bg-white/5 text-white/30'
+                      )}
+                    >
+                      {r.actual_result === 'WON' ? <CheckCircle className="h-3 w-3" /> : r.actual_result === 'LOST' ? <XCircle className="h-3 w-3" /> : <span>--</span>}
                       {r.actual_result}
                     </div>
                   </div>
 
-                  <div className='flex justify-between items-end pl-2 pt-2 border-t border-white/5'>
+                  <div className="flex items-end justify-between border-t border-white/5 pl-2 pt-2">
                     <div>
-                      <p className='text-[10px] uppercase text-white/30 mb-0.5'>Pick</p>
-                      <p className='text-sm font-display text-white/80'>
-                        {r.selection || formatMarket(r.top_prediction)}
-                      </p>
+                      <p className="mb-0.5 text-[10px] uppercase text-white/30">Pick</p>
+                      <p className="text-sm font-display text-white/80">{r.selection || formatMarket(r.top_prediction)}</p>
                     </div>
-                    <div className='text-right'>
-                      <p className='text-[10px] uppercase text-white/30 mb-0.5'>Score</p>
-                      <p className='text-lg font-display text-white'>
-                        {r.full_score || (r.home_goals != null ? `${r.home_goals}-${r.away_goals}` : '—')}
-                      </p>
+                    <div className="text-right">
+                      <p className="mb-0.5 text-[10px] uppercase text-white/30">Score</p>
+                      <p className="text-lg font-display text-white">{r.full_score || (r.home_goals != null ? `${r.home_goals}-${r.away_goals}` : '--')}</p>
                     </div>
                   </div>
                 </motion.div>
               ))}
             </div>
           ) : (
-            <div className='glass-panel p-8 text-center rounded-2xl border border-white/5'>
-              <p className='text-4xl mb-3'>🏆</p>
-              <p className='text-white/50 text-sm'>No results yet for this source.</p>
-              <p className='text-[10px] text-white/30 mt-2'>
-                {effectiveSource === 'live'
-                  ? 'Live picks are evaluated automatically after matches end.'
-                  : 'Run the backtest script to populate historical data.'}
+            <div className="glass-panel rounded-2xl border border-white/5 p-8 text-center">
+              <p className="mb-3 text-4xl">Ledger</p>
+              <p className="text-sm text-white/50">No results yet for this source.</p>
+              <p className="mt-2 text-[10px] text-white/30">
+                {effectiveSource === 'live' ? 'Live picks are evaluated automatically after matches end.' : 'Run the backtest script to populate historical data.'}
               </p>
             </div>
           )}
-        </div>
-
+        </section>
       </main>
     </div>
   );
