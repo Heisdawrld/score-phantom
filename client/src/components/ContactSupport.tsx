@@ -42,12 +42,12 @@ export function ContactSupport() {
         onClick={() => {
           if (!isDragging) setOpen(true);
         }}
-        className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-30 w-11 h-11 rounded-full bg-[#25D366] shadow-[0_4px_18px_rgba(37,211,102,0.32)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all cursor-grab touch-none md:w-12 md:h-12 md:right-5 md:bottom-24"
+        className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-2.5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] shadow-[0_4px_16px_rgba(37,211,102,0.24)] transition-all hover:brightness-110 active:scale-95 cursor-grab touch-none md:right-5 md:bottom-24 md:h-12 md:w-12 md:shadow-[0_4px_18px_rgba(37,211,102,0.32)]"
         aria-label="Contact Support"
       >
-        <MessageCircle className="w-5 h-5 md:w-6 md:h-6 text-white fill-white pointer-events-none" />
+        <MessageCircle className="h-4.5 w-4.5 fill-white text-white pointer-events-none md:h-6 md:w-6" />
         {/* Softer pulse ring */}
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-15 pointer-events-none" />
+        <span className="pointer-events-none absolute inset-0 hidden rounded-full bg-[#25D366] opacity-15 animate-ping md:block" />
       </motion.button>
 
       {/* Modal */}
