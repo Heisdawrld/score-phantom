@@ -282,9 +282,15 @@ function buildCandidates(game, league, projection, features) {
       reasons: [`Model margin ${(-projection.spread).toFixed(1)} for ${game.away_team} vs line ${line}`, `Spread edge ${coverEdge.toFixed(1)} pts`],
     });
   }
+  // Sanity guard: reject any totals line that's clearly not a full-game total.
+  // NBA full-game totals are typically 190-260. Anything under 160 is likely a
+  // half total, quarter total, or team total that leaked into the totals bucket.
+  const minFullGameTotal = league.key === 'ncaab' ? 100 : 160;
+  const isValidFullGameTotal = (r) => String(r.selection).toLowerCase() === 'over' && r.point != null && Number(r.point) >= minFullGameTotal;
+  const isValidFullGameUnder = (r) => String(r.selection).toLowerCase() === 'under' && r.point != null && Number(r.point) >= minFullGameTotal;
 
-  const over = pickBestLine(odds.totals, (r) => String(r.selection).toLowerCase() === 'over' && r.point != null);
-  const under = pickBestLine(odds.totals, (r) => String(r.selection).toLowerCase() === 'under' && r.point != null);
+  const over = pickBestLine(odds.totals, isValidFullGameTotal);
+  const under = pickBestLine(odds.totals, isValidFullGameUnder);
   if (over) {
     const line = Number(over.point);
     const edgePts = projection.total - line;

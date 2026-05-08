@@ -171,8 +171,8 @@ export default function BasketballGame() {
       </div>
 
       <main className="relative z-10 mx-auto max-w-4xl px-4 pt-5 space-y-4">
-        <button onClick={() => setLocation("/basketball")} className="flex items-center gap-2 text-xs font-bold text-white/45 hover:text-white transition-colors">
-          <ArrowLeft className="h-4 w-4" /> Back to Basketball
+        <button onClick={() => window.history.back()} className="flex items-center gap-2 text-xs font-bold text-white/45 hover:text-white transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
         <section className="premium-surface-orange rounded-[28px] p-5 overflow-hidden relative">
@@ -180,8 +180,7 @@ export default function BasketballGame() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">Hoops Match Desk</span>
-                <span className="premium-chip">Odds-Led Edge</span>
+                <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">Basketball</span>
               </div>
               <p className="mt-3 text-[10px] font-black uppercase tracking-[0.2em] text-orange-200/65 truncate">
                 {String(meta.name || league).toUpperCase()} {meta.country ? `· ${String(meta.country).toUpperCase()}` : ""}

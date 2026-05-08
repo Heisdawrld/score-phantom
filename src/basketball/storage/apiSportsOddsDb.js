@@ -15,8 +15,11 @@ function marketKeyFromBetName(name = '') {
   const s = String(name || '').toLowerCase();
   if (s.includes('home/away') || s.includes('winner') || s.includes('match winner') || s === '1x2') return 'h2h';
   if (s.includes('handicap') || s.includes('spread')) return 'spreads';
-  if (s.includes('over/under') || s.includes('total')) return 'totals';
+  // Separate sub-market totals from full-game totals
   if (s.includes('team total') || s.includes('team points')) return 'team_totals';
+  if (s.includes('quarter') || s.includes('1st q') || s.includes('2nd q') || s.includes('3rd q') || s.includes('4th q')) return 'quarter_totals';
+  if (s.includes('half') || s.includes('1st h') || s.includes('2nd h')) return 'half_totals';
+  if (s.includes('over/under') || s.includes('total')) return 'totals';
   return s.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'market';
 }
 
