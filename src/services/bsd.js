@@ -246,6 +246,20 @@ export async function fetchFixturesByDate(dateStr) {
   return attachLeagueObjects(results);
 }
 
+/**
+ * Fetch fixtures for a specific league on a date range.
+ * Used as a fallback when the generic /events/ endpoint returns too few results.
+ */
+export async function fetchFixturesByLeague(leagueId, dateFrom, dateTo) {
+  if (!leagueId) return [];
+  const results = await bsdFetchAll('/events/', {
+    league_id: leagueId,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
+  return attachLeagueObjects(results);
+}
+
 export async function fetchFixturesByRange(dateFrom, dateTo) {
   const results = await bsdFetchAll('/events/', {
     date_from: dateFrom,

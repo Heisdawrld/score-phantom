@@ -2,6 +2,8 @@
 import db from '../config/database.js';
 import {
   fetchFixturesByDate,
+  fetchFixturesByLeague,
+  fetchLeagues,
   normaliseBsdEventToFixture,
   extractOddsFromEvent,
 } from './bsd.js';
@@ -87,15 +89,64 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
   }
 
   const allBsdEvents = [];
+  const seenEventIds = new Set();
   const now = new Date();
+
+  // === Strategy 1: Date-based bulk fetch ===
+  const startDate = new Date(now);
+  startDate.setDate(now.getDate() + startOffset);
+  const endDate = new Date(now);
+  endDate.setDate(now.getDate() + startOffset + days);
+  const startDateStr = startDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  const endDateStr = endDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
   for (let i = startOffset; i <= startOffset + days; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const events = await fetchFixturesByDate(dateStr);
+    for (const e of events) {
+      const eid = String(e.id || '');
+      if (eid && !seenEventIds.has(eid)) { seenEventIds.add(eid); allBsdEvents.push(e); }
+    }
     log('[Seeder] ' + dateStr + ': ' + events.length + ' events from BSD');
-    allBsdEvents.push(...events);
     await sleep(400);
+  }
+
+  // === Strategy 2: Per-league fetch fallback ===
+  // If the date-based fetch returned very few events, it means BSD's date index
+  // is incomplete. Fall back to querying each league individually.
+  if (allBsdEvents.length < 10) {
+    log('[Seeder] ⚠ Only ' + allBsdEvents.length + ' events from date query — activating per-league fallback...');
+    try {
+      const leagues = await fetchLeagues();
+      const leagueIds = allowedIds.size > 0
+        ? [...allowedIds]
+        : (leagues || []).map(l => String(l.id)).filter(Boolean);
+
+      log('[Seeder] Scanning ' + leagueIds.length + ' leagues for fixtures (' + startDateStr + ' to ' + endDateStr + ')...');
+      let leagueHits = 0;
+      for (const lid of leagueIds) {
+        try {
+          const leagueEvents = await fetchFixturesByLeague(lid, startDateStr, endDateStr);
+          let added = 0;
+          for (const e of leagueEvents) {
+            const eid = String(e.id || '');
+            if (eid && !seenEventIds.has(eid)) { seenEventIds.add(eid); allBsdEvents.push(e); added++; }
+          }
+          if (added > 0) {
+            leagueHits++;
+            log('[Seeder]   League ' + lid + ': +' + added + ' new events');
+          }
+          await sleep(300);
+        } catch (err) {
+          log('[Seeder]   League ' + lid + ' failed: ' + err.message);
+        }
+      }
+      log('[Seeder] Per-league fallback done: ' + leagueHits + ' leagues had events, total now ' + allBsdEvents.length);
+    } catch (err) {
+      log('[Seeder] Per-league fallback failed: ' + err.message);
+    }
   }
 
   log('[Seeder] Total: ' + allBsdEvents.length + ' events. Normalising + inserting...');
