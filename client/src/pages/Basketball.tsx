@@ -4,13 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import {
-  Activity,
   ChevronDown,
   ChevronRight,
   RefreshCw,
   Search,
-  ShieldCheck,
-  Sparkles,
   Trophy,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
@@ -82,10 +79,7 @@ function initials(name?: string) {
     .toUpperCase();
 }
 
-function pct(value?: number | null) {
-  if (value == null) return '--';
-  return `${Math.round(Number(value) * 100)}%`;
-}
+
 
 function rawOf(game: any) {
   return game?.raw || {};
@@ -357,14 +351,7 @@ export default function Basketball() {
   const liveCount = allGamesForDay.filter((g: any) => statusLabel(g.status) === 'LIVE').length;
   const leagueCount = new Set(allGamesForDay.map((g: any) => leagueMeta(g).key)).size;
   const edgeReadyCount = allGamesForDay.filter((g: any) => g.prediction_summary && !g.prediction_summary.noClearEdge).length;
-  const topEdgeGames = useMemo(() => {
-    return [...allGamesForDay]
-      .filter((g: any) => g.prediction_summary && !g.prediction_summary.noClearEdge)
-      .sort((a: any, b: any) => (Number(b.prediction_summary?.phantomScore || 0) - Number(a.prediction_summary?.phantomScore || 0)))
-      .slice(0, 3);
-  }, [allGamesForDay]);
-  const topLeagues = useMemo(() => grouped.slice(0, 5), [grouped]);
-  const degraded = (health as any)?.status === 'degraded';
+
   const syncing = gamesFetching;
 
   const openGame = (game: any) => setLocation(`/basketball/games/${game.league_key}/${game.external_game_id || game.odds_event_id}`);
@@ -421,123 +408,45 @@ export default function Basketball() {
           {dateTabs.map((tab) => <DateTab key={tab.key} tab={tab} active={selectedDate === tab.key} onClick={() => setSelectedDate(tab.key)} />)}
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-4">
-            <div className="rounded-[24px] border border-white/[0.055] bg-black/25 p-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <div className="flex items-center gap-1 overflow-x-auto rounded-[22px] border border-white/[0.055] bg-black/25 p-1 hide-scrollbar">
-                    <FilterPill active={scope === 'major'} onClick={() => setScope('major')}>Major</FilterPill>
-                    <FilterPill active={scope === 'global'} onClick={() => setScope('global')}>Global</FilterPill>
-                  </div>
-                  <div className="flex items-center gap-1 overflow-x-auto rounded-[22px] border border-white/[0.055] bg-black/25 p-1 hide-scrollbar">
-                    {FILTERS.map((f) => <FilterPill key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</FilterPill>)}
-                  </div>
-                </div>
+        {/* ── Filters ── */}
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar rounded-[22px] border border-white/[0.055] bg-black/25 p-1">
+          <FilterPill active={scope === 'major'} onClick={() => setScope('major')}>Major</FilterPill>
+          <FilterPill active={scope === 'global'} onClick={() => setScope('global')}>Global</FilterPill>
+          <span className="mx-1 h-5 w-px bg-white/[0.08]" />
+          {FILTERS.map((f) => <FilterPill key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</FilterPill>)}
+        </div>
 
-                <div className="relative w-full lg:w-56 shrink-0">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search teams or leagues" className="w-full rounded-xl border border-white/[0.06] bg-black/30 py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-white/25 focus:border-primary/30" />
-                </div>
-              </div>
+        {/* ── Fixtures count ── */}
+        <div className="flex items-center gap-2 px-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-300 shadow-[0_0_5px_rgba(251,191,36,0.4)] shrink-0" />
+          <span className="text-[11px] text-white/30">
+            <span className="text-orange-200 font-semibold">{games.length}</span> fixture{games.length === 1 ? '' : 's'} today
+          </span>
+        </div>
+
+        {/* ── Games by League ── */}
+        <div className="space-y-5">
+          {gamesLoading ? (
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading games...</div>
+          ) : grouped.length ? (
+            grouped.map((group, i) => (
+              <LeagueGroup
+                key={group.id}
+                group={group}
+                offset={i * 4}
+                openGame={openGame}
+                expanded={expandedGroups[group.id] ?? i < 2}
+                onToggle={() => toggleGroup(group.id)}
+              />
+            ))
+          ) : (
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-center">
+              <RefreshCw className="mx-auto h-6 w-6 text-white/20" />
+              <p className="mt-3 text-sm font-bold text-white/45">No basketball games on this tab</p>
+              <p className="mt-1 text-xs text-white/30">Try another date or switch to Global.</p>
             </div>
-
-            <section className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Trophy className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-black uppercase tracking-widest text-white/80">Games</h2>
-                </div>
-                <p className="text-xs text-white/35"><span className="text-primary">•</span> {games.length} fixture{games.length === 1 ? '' : 's'} on this tab</p>
-              </div>
-
-              {gamesLoading ? (
-                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5 text-sm text-white/40">Loading games...</div>
-              ) : grouped.length ? (
-                <div className="space-y-5">
-                  {grouped.map((group, i) => (
-                    <LeagueGroup
-                      key={group.id}
-                      group={group}
-                      offset={i * 4}
-                      openGame={openGame}
-                      expanded={expandedGroups[group.id] ?? i < 2}
-                      onToggle={() => toggleGroup(group.id)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-center">
-                  <RefreshCw className="mx-auto h-6 w-6 text-white/20" />
-                  <p className="mt-3 text-sm font-bold text-white/45">No basketball games on this tab</p>
-                  <p className="mt-1 text-xs text-white/30">Try another date or switch back to All.</p>
-                </div>
-              )}
-            </section>
-          </div>
-
-          <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-            <div className="rounded-[28px] border border-white/[0.06] bg-black/25 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Top Saved Edges</p>
-                  <h2 className="mt-2 text-2xl font-black text-white">Slate Radar</h2>
-                </div>
-                <Sparkles className="h-5 w-5 shrink-0 text-orange-200" />
-              </div>
-              <div className="mt-4 space-y-3">
-                {topEdgeGames.length ? topEdgeGames.map((game: any) => {
-                  const summary = game.prediction_summary || {};
-                  return (
-                    <button
-                      key={`${game.league_key}-${game.external_game_id || game.id}-radar`}
-                      onClick={() => openGame(game)}
-                      className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-left transition-colors hover:border-orange-300/20 hover:bg-white/[0.04]"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-white">{game.home_team} vs {game.away_team}</p>
-                          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-white/30">{summary.market || 'Market'} · {timeLabel(game.start_time)}</p>
-                        </div>
-                        <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-primary">
-                          {pct(summary.modelProbability)}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-                        <span className="font-black text-orange-100">{summary.selection || 'Saved edge'}</span>
-                        <span className="text-white/35">{summary.edge != null ? `+${Number(summary.edge).toFixed(1)}` : '--'}</span>
-                      </div>
-                    </button>
-                  );
-                }) : (
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm text-white/40">
-                    No edge-ready summaries saved yet for this date.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-white/[0.06] bg-black/25 p-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Coverage</p>
-              <h2 className="mt-2 text-2xl font-black text-white">League Board</h2>
-              <div className="mt-4 space-y-3">
-                {topLeagues.length ? topLeagues.map((group: any) => (
-                  <div key={`${group.id}-coverage`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-white">{group.meta.name}</p>
-                      <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-white/30">{group.meta.country || 'Basketball'}</p>
-                    </div>
-                    <span className="rounded-full border border-white/[0.08] bg-black/25 px-2.5 py-1 text-[10px] font-black text-white/40">{group.games.length}</span>
-                  </div>
-                )) : (
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm text-white/40">
-                    League coverage will appear here once the slate syncs.
-                  </div>
-                )}
-              </div>
-            </div>
-          </aside>
-        </section>
+          )}
+        </div>
       </main>
     </div>
   );

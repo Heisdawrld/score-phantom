@@ -273,8 +273,8 @@ export default function Login() {
             <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain animate-logo-glow" />
           </motion.div>
           <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className="premium-chip text-primary border-primary/20 bg-primary/10">Football Core</span>
-            <span className="premium-chip">7-Day Trial Live</span>
+            <span className="premium-chip text-primary border-primary/20 bg-primary/10">Free 7-Day Trial</span>
+            <span className="premium-chip">No Card Required</span>
           </div>
         </div>
 
