@@ -80,121 +80,82 @@ export default function TrackRecord() {
       </div>
       <Header />
 
-      <main className="relative z-10 mx-auto max-w-6xl space-y-6 px-4 pt-6">
-        <section className="grid gap-4 xl:grid-cols-[1.55fr_0.85fr]">
-          <div className="premium-surface relative overflow-hidden rounded-[34px] p-6 md:p-7">
-            <div className={cn('absolute -right-10 -top-10 h-36 w-36 rounded-full blur-3xl', isBasketball ? 'bg-orange-400/18' : 'bg-primary/16')} />
-            <div className="relative space-y-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]',
-                    isBasketball ? 'border-orange-300/25 bg-orange-400/10 text-orange-200' : 'border-primary/20 bg-primary/10 text-primary'
-                  )}
-                >
-                  {isBasketball ? 'Basketball Ledger' : 'Football Ledger'}
-                </span>
-                <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
-                  {effectiveSource === 'live' ? 'Live Settlements' : 'Historical Backtest'}
-                </span>
-              </div>
+      <main className="relative z-10 mx-auto max-w-2xl space-y-5 px-4 pt-4">
 
-              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-                <div>
-                  <div className="mb-4 inline-flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3">
-                    <Activity className={cn('h-7 w-7', isBasketball ? 'text-orange-200' : 'text-primary')} />
-                  </div>
-                  <h1 className="font-display text-4xl tracking-[0.14em] text-white md:text-5xl">
-                    TRACK <span className={isBasketball ? 'text-orange-200' : 'text-primary'}>RECORD</span>
-                  </h1>
-                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/42 md:text-base">
-                    Verifiable hit rates, separated by sport so football keeps its own truth and basketball can mature on a clean independent record.
-                  </p>
-                </div>
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-black text-white tracking-tight">
+              Track Record
+            </h1>
+            <p className="text-xs text-white/30 mt-0.5">
+              {hasData ? `${overall.total} settled · ${overall.hitRate ? `${(overall.hitRate * 100).toFixed(0)}% win rate` : 'calculating...'}` : 'No picks settled yet'}
+            </p>
+          </div>
+          {hasData && (
+            <div className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border', isBasketball ? 'bg-orange-400/8 border-orange-300/15' : 'bg-primary/8 border-primary/15')}>
+              <span className={cn('text-lg font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>
+                {overall.hitRate ? `${(overall.hitRate * 100).toFixed(0)}%` : '—'}
+              </span>
+            </div>
+          )}
+        </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="premium-stat">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Total Picks</p>
-                    <p className="mt-2 text-lg font-black text-white">{overall.total || 0}</p>
-                    <p className="mt-1 text-xs text-white/35">Settled predictions.</p>
-                  </div>
-                  <div className="premium-stat">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Win Rate</p>
-                    <p className={cn('mt-2 text-lg font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>
-                      {overall.hitRate ? `${(overall.hitRate * 100).toFixed(0)}%` : '—'}
-                    </p>
-                    <p className="mt-1 text-xs text-white/35">Overall accuracy.</p>
-                  </div>
-                </div>
-              </div>
+        {/* ── Sport + Source Toggles ── */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5">
+            {(['football', 'basketball'] as const).map((sport) => (
+              <button
+                key={sport}
+                onClick={() => setActiveSport(sport)}
+                className={cn(
+                  'px-3 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider transition-all',
+                  activeSport === sport
+                    ? sport === 'basketball' ? 'bg-orange-400/12 text-orange-200' : 'bg-primary/12 text-primary'
+                    : 'text-white/25 hover:text-white/50'
+                )}
+              >
+                {sport === 'football' ? '⚽ Football' : '🏀 Basketball'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5">
+            {(['live', 'backtest'] as const).map((src) => (
+              <button
+                key={src}
+                onClick={() => activeSport === 'football' && setActiveSource(src)}
+                disabled={activeSport === 'basketball' && src === 'backtest'}
+                className={cn(
+                  'px-3 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider transition-all',
+                  effectiveSource === src ? 'bg-white/8 text-white' : 'text-white/25 hover:text-white/50',
+                  activeSport === 'basketball' && src === 'backtest' && 'cursor-not-allowed opacity-25'
+                )}
+              >
+                {src === 'live' ? 'Live' : 'History'}
+              </button>
+            ))}
+          </div>
+        </div>
 
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-1">
-                  {(['football', 'basketball'] as const).map((sport) => (
-                    <button
-                      key={sport}
-                      onClick={() => setActiveSport(sport)}
-                      className={cn(
-                        'rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
-                        activeSport === sport
-                          ? sport === 'basketball'
-                            ? 'bg-orange-300 text-black'
-                            : 'bg-primary text-black'
-                          : 'text-white/40 hover:text-white/70'
-                      )}
-                    >
-                      {sport}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-1">
-                  {(['live', 'backtest'] as const).map((src) => (
-                    <button
-                      key={src}
-                      onClick={() => activeSport === 'football' && setActiveSource(src)}
-                      disabled={activeSport === 'basketball' && src === 'backtest'}
-                      className={cn(
-                        'rounded-xl px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-all',
-                        effectiveSource === src
-                          ? isBasketball && src === 'live'
-                            ? 'bg-orange-300 text-black'
-                            : 'bg-primary text-black'
-                          : 'text-white/40 hover:text-white/70',
-                        activeSport === 'basketball' && src === 'backtest' && 'cursor-not-allowed opacity-35'
-                      )}
-                    >
-                      {src === 'live' ? 'Live' : 'History'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+        {/* ── Quick Stats ── */}
+        {hasData && (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-center">
+              <p className="text-lg font-black text-white">{overall.total}</p>
+              <p className="text-[9px] text-white/25 uppercase tracking-wider">Settled</p>
+            </div>
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-center">
+              <p className={cn('text-lg font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
+              <p className="text-[9px] text-white/25 uppercase tracking-wider">Won</p>
+            </div>
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-center">
+              <p className="text-lg font-black text-red-400">{overall.lost || 0}</p>
+              <p className="text-[9px] text-white/25 uppercase tracking-wider">Lost</p>
             </div>
           </div>
+        )}
 
-          <div className="space-y-4">
-            {hasData && (
-              <div className="grid grid-cols-3 gap-3 xl:grid-cols-1">
-                <div className="premium-stat">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Settled</p>
-                  <p className="mt-2 text-2xl font-black text-white">{overall.total}</p>
-                </div>
-                <div className="premium-stat">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Won</p>
-                  <p className={cn('mt-2 text-2xl font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>{overall.won || 0}</p>
-                </div>
-                <div className="premium-stat">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Source</p>
-                  <p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/72">{effectiveSource}</p>
-                </div>
-              </div>
-            )}
-
-
-          </div>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <section>
           <div className="space-y-6">
             {statsLoading ? (
               <div className="glass-panel flex items-center justify-center rounded-[2rem] border border-white/5 p-8">

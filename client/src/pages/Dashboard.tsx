@@ -9,11 +9,8 @@ import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
 import {
-  ChevronRight, ChevronDown, ChevronUp, Search, Trophy, BellRing,
-  Crown, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star,
-  TrendingUp, Target
+  ChevronRight, ChevronDown, Search, Trophy, Crown, Zap, Lock, Flame, TrendingUp
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -22,14 +19,8 @@ import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
-import { TodaysBestBet } from "@/components/dashboard/TodaysBestBet";
-import { QuickActions } from "@/components/dashboard/QuickActions";
-import { YourStats } from "@/components/dashboard/YourStats";
-import { ValueBetCard } from "@/components/dashboard/ValueBetCard";
-import { UpcomingFixtures } from "@/components/dashboard/UpcomingFixtures";
-import { AccaSection } from "@/components/dashboard/AccaSection";
-import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
+import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,16 +32,6 @@ function toWAT(dateStr: string): string {
   } catch { return ''; }
 }
 
-
-
-/**
- * Build a display label for a tournament group.
- * Uses category_name (country) from the fixture — already stored in the DB.
- * Format: "Premier League · England" or just "Premier League"
- *
- * Safety: some fixtures have a venue/stadium in category_name (e.g. "Selhurst Park").
- * We filter those out by checking for venue-like keywords.
- */
 const VENUE_KEYWORDS = ['park', 'stadium', 'arena', 'ground', 'road', 'lane', 'parc', 'stade', 'estadio', 'field', 'dome'];
 function looksLikeVenue(s: string): boolean {
   const lower = s.toLowerCase();
@@ -59,12 +40,7 @@ function looksLikeVenue(s: string): boolean {
 function getTournamentLabel(tournamentName: string, categoryName?: string | null): string {
   if (!tournamentName) return 'Other Competitions';
   const country = (categoryName || '').trim();
-  if (
-    !country ||
-    country.toLowerCase() === 'other' ||
-    country.toLowerCase() === tournamentName.toLowerCase() ||
-    looksLikeVenue(country)
-  ) {
+  if (!country || country.toLowerCase() === 'other' || country.toLowerCase() === tournamentName.toLowerCase() || looksLikeVenue(country)) {
     return tournamentName;
   }
   return `${tournamentName} · ${country}`;
@@ -192,8 +168,6 @@ export default function Dashboard() {
       }
     }
     return filtered.reduce((acc: any, fixture) => {
-      // Group by tournament_id — this is the stable unique key per competition.
-      // category_name is used only for the display label, not the group key.
       const groupId = fixture.tournament_id
         ? String(fixture.tournament_id)
         : (fixture.tournament_name || 'Other Competitions');
@@ -207,7 +181,7 @@ export default function Dashboard() {
       acc[groupId].fixtures.push(fixture);
       return acc;
     }, {});
-  }, [data?.fixtures, searchQuery]);
+  }, [data?.fixtures, searchQuery, activeGroupTab]);
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
@@ -221,201 +195,172 @@ export default function Dashboard() {
   const leagues = Object.entries(groupedFixtures).sort(([, a]: any, [, b]: any) => a.label.localeCompare(b.label));
   const allFixtures = data?.fixtures || [];
   const displayName = (user as any)?.username || (user?.email ? user.email.split('@')[0] : 'User');
+  const liveCount = allFixtures.filter((f: any) => ['LIVE', 'HT', '1H', '2H'].includes(f.match_status?.toUpperCase?.() || '')).length;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
-      
+
       <Header />
-      
-      {/* Main Content Area */}
-      <main className="flex-1 container mx-auto max-w-3xl px-4 pt-4 space-y-4 relative z-10">
 
-        {/* ── Welcome Header ── */}
-        <motion.div 
-          initial={{ opacity: 0, y: 8 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          transition={{ duration: 0.3 }}
-          className="premium-surface flex flex-col gap-5 p-5 rounded-[30px] overflow-hidden relative"
-        >
-          <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-primary/14 blur-3xl pointer-events-none" />
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative z-10">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="premium-chip text-primary border-primary/20 bg-primary/10">⚽ Football</span>
-              </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  Welcome back, <span className="text-primary capitalize">{displayName}</span>
-                </h1>
-                <p className="text-sm text-white/48 mt-2 max-w-xl leading-relaxed">
-                  Today's matches, predictions, and top picks at a glance.
-                </p>
-              </div>
-            </div>
-            
-            <div className="relative w-full sm:w-72 shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input 
-              type="text" 
-              placeholder="Search teams or leagues..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0a110d] border border-white/[0.05] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/30 transition-all"
-            />
-          </div>
-          </div>
+      <main className="flex-1 container mx-auto max-w-2xl px-4 pt-4 space-y-5 relative z-10">
 
-          <div className="relative z-10 grid grid-cols-3 gap-3">
-            <div className="premium-stat">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">30D Accuracy</p>
-              <p className="mt-2 text-2xl font-black text-white">
-                {trackStats?.hitRate ? `${(trackStats.hitRate * 100).toFixed(0)}%` : "—"}
+        {/* ── Welcome Strip ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-black text-white tracking-tight">
+                Hey, <span className="text-primary capitalize">{displayName}</span>
+              </h1>
+              <p className="text-xs text-white/35 mt-0.5">
+                {allFixtures.length} matches today{liveCount > 0 ? ` · ${liveCount} live` : ''}
               </p>
             </div>
-            <div className="premium-stat">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Live Slate</p>
-              <p className="mt-2 text-2xl font-black text-primary">{allFixtures.length}</p>
-            </div>
-            <div className="premium-stat">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Access</p>
-              <p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/78">
-                {isPremium ? "Premium" : isTrial ? "Trial" : "Locked"}
-              </p>
+
+            <div className="flex items-center gap-2">
+              {trackStats?.hitRate && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/8 border border-primary/15">
+                  <TrendingUp className="w-3 h-3 text-primary" />
+                  <span className="text-xs font-bold text-primary">{(trackStats.hitRate * 100).toFixed(0)}%</span>
+                </div>
+              )}
+              <button onClick={() => setLocation("/picks")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-all">
+                <Flame className="w-3 h-3" />
+                <span className="text-xs font-bold">Picks</span>
+              </button>
             </div>
           </div>
         </motion.div>
 
-        {/* ── Payment Success Banner ── */}
-        {showPayBanner && (
-          <motion.div initial={{ opacity: 0, y: -16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10 }}
-            className="relative rounded-2xl overflow-hidden border border-primary/40 p-4 flex items-center gap-4"
-            style={{ background: "linear-gradient(135deg,#0c2018 0%,#0a1a12 100%)", boxShadow: "0 0 30px rgba(16,231,116,0.15)" }}>
-            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
-            <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
-              <span className="text-2xl">🎉</span>
+        {/* ── Trial/Expired/Payment Inline Alerts ── */}
+        <AnimatePresence>
+          {showPayBanner && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="flex items-center gap-3 p-3 rounded-2xl bg-primary/8 border border-primary/20">
+              <span className="text-lg">🎉</span>
+              <p className="text-xs font-bold text-primary flex-1">Premium activated!</p>
+              <button onClick={() => setShowPayBanner(false)} className="text-white/20 hover:text-white/50 text-sm">×</button>
+            </motion.div>
+          )}
+          {isExpired && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="flex items-center gap-3 p-3 rounded-2xl bg-orange-500/8 border border-orange-500/20 cursor-pointer hover:bg-orange-500/12 transition-all"
+              onClick={() => setLocation("/paywall")}>
+              <Lock className="w-4 h-4 text-orange-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-orange-400">Trial expired</p>
+              </div>
+              <span className="text-[10px] font-black text-black bg-primary px-2.5 py-1 rounded-lg shrink-0">Upgrade</span>
+            </motion.div>
+          )}
+          {isTrial && !isExpired && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="flex items-center gap-3 p-3 rounded-2xl bg-primary/6 border border-primary/15 cursor-pointer hover:bg-primary/10 transition-all"
+              onClick={() => setLocation("/paywall")}>
+              <Crown className="w-4 h-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white/60">
+                  {usageData && <span className="font-bold text-white/80">{(usageData as any).remaining}/{(usageData as any).limit} picks left</span>}
+                  {trialTimeLabel && <span> · {trialTimeLabel}</span>}
+                </p>
+              </div>
+              <span className="text-[10px] font-black text-black bg-primary px-2.5 py-1 rounded-lg shrink-0">Upgrade</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Today's Top Pick ── */}
+        {heroPick && (
+          <motion.button
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            onClick={() => setLocation("/matches/" + heroPick.fixtureId)}
+            className="group w-full text-left rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/8 via-primary/4 to-transparent p-4 transition-all hover:border-primary/25 hover:shadow-[0_0_30px_rgba(16,231,116,0.08)]"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Flame className="w-3.5 h-3.5 text-primary" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/70">Top Pick</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-black text-primary">Welcome to Premium!</p>
-              <p className="text-xs text-white/50 mt-0.5">Your account is fully activated. Enjoy unlimited predictions.</p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-white truncate">{heroPick.homeTeam} vs {heroPick.awayTeam}</p>
+                <p className="text-xs text-white/40 mt-1">{heroPick.tournamentName} · {toWAT(heroPick.matchTime)}</p>
+                <p className="text-sm font-black text-primary mt-2">{heroPick.pick}</p>
+              </div>
+              <div className="shrink-0 flex flex-col items-center gap-1">
+                <ConfidenceRing value={heroPick.confidence} size={44} />
+                <span className="text-[9px] font-bold text-white/30 uppercase">Conf.</span>
+              </div>
             </div>
-            <button onClick={() => setShowPayBanner(false)} className="text-white/20 hover:text-white/50 transition-colors shrink-0 p-1">
-              <span className="text-lg leading-none">×</span>
-            </button>
-          </motion.div>
+          </motion.button>
         )}
-
-        {/* ── Trial/Expired Banners ── */}
-        {isExpired && (
-          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-orange-500/10 to-orange-500/5 border border-orange-500/25 cursor-pointer hover:border-orange-500/40 transition-all"
-            onClick={() => setLocation("/paywall")}>
-            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0"><Lock className="w-4 h-4 text-orange-400" /></div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-orange-400 leading-none mb-0.5">Free Trial Expired</p>
-              <p className="text-xs text-white/50">Upgrade to unlock everything</p>
-            </div>
-            <span className="text-[11px] font-black text-black bg-primary px-3 py-1.5 rounded-xl shrink-0">Unlock All</span>
-          </div>
-        )}
-
-        {isTrial && (
-          <div className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all group ${
-            isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2)
-              ? 'bg-gradient-to-r from-red-500/10 to-red-500/5 border-red-500/25 hover:border-red-500/40'
-              : 'bg-gradient-to-r from-primary/10 to-primary/5 border-primary/25 hover:border-primary/40'
-          }`} onClick={() => setLocation("/paywall")}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-              isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2) ? 'bg-red-500/20' : 'bg-primary/20'
-            }`}>
-              {isDailyLimitHit ? <Zap className="w-4 h-4 text-red-400" /> : <Crown className="w-4 h-4 text-primary" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-bold leading-none mb-0.5 ${
-                isDailyLimitHit || (trialHoursRemaining !== null && trialHoursRemaining <= 2) ? 'text-red-400' : 'text-primary'
-              }`}>
-                {isDailyLimitHit ? "Predictions used up for today" : "Free Trial Active"}
-              </p>
-              <p className="text-xs text-white/50 flex flex-wrap gap-x-1.5">
-                {usageData && <span className={
-                  usageData.remaining === 0 ? "text-red-400 font-semibold" :
-                  usageData.remaining <= 1 ? "text-orange-400 font-semibold" :
-                  "text-white/80 font-semibold"
-                }>{usageData.remaining}/{usageData.limit} left</span>}
-                {trialHoursRemaining !== null && <span>· {trialTimeLabel}</span>}
-              </p>
-            </div>
-            <span className={`text-[11px] font-black text-black px-3 py-1.5 rounded-xl shrink-0 ${
-              isDailyLimitHit ? 'bg-red-400' : 'bg-primary'
-            }`}>{isDailyLimitHit ? "Unlock" : "Upgrade"}</span>
-          </div>
-        )}
-
-        {/* ── Today's Best Bet ── */}
-        {heroPick && <TodaysBestBet pick={heroPick} onView={() => setLocation("/matches/" + heroPick.fixtureId)} />}
-
-        {/* ── Quick Actions ── */}
-        <QuickActions
-          onTopPicks={() => setLocation("/picks")}
-          onAcca={() => setLocation("/acca")}
-          onLive={() => {
-            setSelectedDate(dates[0]);
-            setActiveGroupTab("live");
-            document.getElementById('fixtures-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-          onValueBets={() => setLocation("/picks")}
-        />
-
-        {/* ── Your Stats ── */}
-        {trackStats && trackStats.totalPicks > 0 && (
-          <YourStats stats={trackStats} onView={() => setLocation("/track-record")} />
-        )}
-
-        {/* ── Value Bet of the Day ── */}
-        <ValueBetCard isPremium={isPremium} />
-
-        {/* ── ACCA Section ── */}
-        <AccaSection isPremium={isPremium} />
-
-        {/* ── Upcoming Fixtures (horizontal scroll) ── */}
-        <UpcomingFixtures fixtures={allFixtures} onSelect={handleSelectFixture} />
 
         {/* ── Date Strip ── */}
-        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 touch-pan-x overscroll-x-contain">
+        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain -mx-1 px-1">
           {dates.map((date) => {
             const isSelected = isSameDay(date, selectedDate);
+            const isToday = isSameDay(date, new Date());
             return (
               <button
                 key={date.toISOString()}
                 onClick={() => setSelectedDate(date)}
                 className={cn(
-                  "snap-start shrink-0 min-w-[66px] flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all",
+                  "snap-start shrink-0 min-w-[60px] flex flex-col items-center justify-center py-2.5 px-3 rounded-xl border transition-all",
                   isSelected
-                    ? "bg-gradient-to-b from-primary/15 to-primary/5 border-primary/30 text-primary glow-primary"
-                    : "bg-white/[0.02] border-white/[0.05] text-white/35 hover:bg-white/[0.04]"
+                    ? "bg-primary/10 border-primary/25 text-primary"
+                    : "bg-white/[0.02] border-white/[0.04] text-white/30 hover:bg-white/[0.04]"
                 )}
               >
-                <span className="text-[10px] font-bold tracking-widest uppercase mb-1">{format(date, "EEE")}</span>
-                <span className="font-display text-2xl leading-none">{format(date, "dd")}</span>
+                <span className="text-[9px] font-bold tracking-widest uppercase">{isToday ? 'Today' : format(date, "EEE")}</span>
+                <span className="text-lg font-black leading-none mt-0.5">{format(date, "dd")}</span>
               </button>
             );
           })}
         </div>
 
-        {/* ── Tabs ── */}
-          <div id="fixtures-list" className="flex bg-black/40 backdrop-blur-md rounded-xl p-1.5 border border-white/5 shadow-lg overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory">
-            <button onClick={() => setActiveGroupTab("all")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "all" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>All</button>
-            <button onClick={() => setActiveGroupTab("live")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "live" ? "bg-red-500/20 text-red-400" : "text-white/40 hover:text-white/70"}`}>Live</button>
-            <button onClick={() => setActiveGroupTab("favorites")} className={`shrink-0 px-4 py-2 text-[11px] uppercase tracking-wider font-bold rounded-lg transition-all ${activeGroupTab === "favorites" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"}`}>My Leagues</button>
+        {/* ── Search + Filter Bar ── */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+            <input
+              type="text"
+              placeholder="Search teams or leagues..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl pl-8 pr-3 py-2.5 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-primary/25 transition-all"
+            />
           </div>
+          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5 shrink-0">
+            {([
+              { key: "all" as const, label: "All" },
+              { key: "live" as const, label: "Live" },
+              { key: "favorites" as const, label: "Fav" },
+            ]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveGroupTab(tab.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider transition-all",
+                  activeGroupTab === tab.key
+                    ? tab.key === "live" ? "bg-red-500/15 text-red-400" : "bg-white/8 text-white"
+                    : "text-white/25 hover:text-white/50"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* ── Fixtures count ── */}
-        {data && ((data as any).total > 0) && (
-          <div className="flex items-center gap-2 px-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_#34d399] shrink-0" />
-            <span className="text-[11px] text-white/30">
-              <span className="text-emerald-400 font-semibold">{(data as any).total ?? 0}</span> fixtures today
+        {/* ── Fixture Count ── */}
+        {allFixtures.length > 0 && (
+          <div className="flex items-center gap-2 px-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_6px_rgba(16,231,116,0.5)] shrink-0" />
+            <span className="text-[10px] text-white/25">
+              <span className="text-primary font-semibold">{allFixtures.length}</span> fixtures · {format(selectedDate, "EEEE, MMM d")}
             </span>
           </div>
         )}
@@ -425,20 +370,20 @@ export default function Dashboard() {
           {fixturesLoading ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="space-y-3">
-                <Skeleton className="h-6 w-40" />
-                <Skeleton className="h-20 w-full rounded-2xl" />
-                <Skeleton className="h-20 w-full rounded-2xl" />
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-16 w-full rounded-2xl" />
+                <Skeleton className="h-16 w-full rounded-2xl" />
               </div>
             ))
           ) : leagues.length === 0 ? (
-            <div className="text-center py-20 text-white/25 space-y-3">
-              <Trophy className="w-12 h-12 mx-auto opacity-20" />
-              <p className="font-medium">
+            <div className="text-center py-16 text-white/20 space-y-3">
+              <Trophy className="w-10 h-10 mx-auto opacity-20" />
+              <p className="text-sm font-medium">
                 {activeGroupTab === "live" ? "No live matches right now." :
-                 activeGroupTab === "favorites" ? "None of your favorite leagues have matches today." :
+                 activeGroupTab === "favorites" ? "No favorite league matches today." :
                  `No fixtures for ${format(selectedDate, 'MMM d')}.`}
               </p>
-              <p className="text-xs opacity-60">{isSameDay(selectedDate, dates[0]) ? 'Fixtures loading — check back soon.' : 'No matches scheduled.'}</p>
+              <p className="text-xs opacity-50">{isSameDay(selectedDate, dates[0]) ? 'Check back soon.' : 'Try another date.'}</p>
             </div>
           ) : (
             leagues.map(([groupId, group]: [string, any], idx) => (
@@ -447,12 +392,26 @@ export default function Dashboard() {
                 tournament={group.label}
                 fixtures={group.fixtures}
                 onSelectFixture={handleSelectFixture}
-                defaultOpen={idx < 2}
+                defaultOpen={idx < 3}
                 isPremium={isPremium}
               />
             ))
           )}
         </div>
+
+        {/* ── Bottom Quick Links ── */}
+        {!fixturesLoading && leagues.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <button onClick={() => setLocation("/picks")} className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-all">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <span className="text-xs font-bold">Today's Best Picks</span>
+            </button>
+            <button onClick={() => setLocation("/track-record")} className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-all">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold">Track Record</span>
+            </button>
+          </div>
+        )}
       </main>
 
       <PredictionPanel

@@ -175,82 +175,68 @@ export default function TopPicksToday() {
       </div>
       <Header />
 
-      <div className="flex-1 w-full max-w-lg mx-auto px-4 pt-6 space-y-6 relative z-10">
+      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10">
 
         {/* ── Page header ── */}
-        <div className="flex items-center gap-3 pt-6 mb-1">
-          <button onClick={() => setLocation("/")} className="p-2 hover:bg-white/5 rounded-xl transition shrink-0">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black flex items-center gap-2">
-              <Flame className="w-6 h-6 text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.6)]" />
-              Best Tips Today
-            </h1>
-            <p className="text-xs text-white/30 mt-0.5">
-              Ranked by composite score — confidence, edge, tactical fit &amp; form
-            </p>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setLocation("/")} className="p-2 hover:bg-white/5 rounded-xl transition shrink-0">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div>
+                <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-400" />
+                  Today's Picks
+                </h1>
+                <p className="text-xs text-white/30 mt-0.5">
+                  {allPicks.length} picks ranked by composite score
+                </p>
+              </div>
+            </div>
+            {avgConf && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/8 border border-primary/15 shrink-0">
+                <span className="text-xs font-bold text-primary">{avgConf}%</span>
+                <span className="text-[9px] text-white/30">avg</span>
+              </div>
+            )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* ── Summary stats ── */}
-        {allPicks.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 my-5">
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-white">{allPicks.length}</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Tips Today</p>
-            </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-primary">{avgConf}%</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Avg Confidence</p>
-            </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-emerald-400">{eliteCount}</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Elite Picks</p>
-            </div>
+        {/* ── Filter + Track Strip ── */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5 overflow-x-auto hide-scrollbar">
+            {[
+              { key: "all" as FilterMode, label: "All" },
+              { key: "safe" as FilterMode, label: "Safe" },
+              { key: "value" as FilterMode, label: "Value" },
+              { key: "elite" as FilterMode, label: "Elite" },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider transition-all shrink-0",
+                  filter === f.key
+                    ? "bg-primary/12 text-primary"
+                    : "text-white/25 hover:text-white/50"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
-        )}
-
-        {/* ── Filter Tabs ── */}
-        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4 touch-pan-x overscroll-x-contain">
-          {[
-            { key: "all" as FilterMode, label: "All Picks" },
-            { key: "safe" as FilterMode, label: "Safe Bets" },
-            { key: "value" as FilterMode, label: "Value Bets" },
-            { key: "elite" as FilterMode, label: "Elite" },
-          ].map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all",
-                filter === f.key
-                  ? "bg-primary/15 border-primary/30 text-primary"
-                  : "bg-white/[0.03] border-white/[0.06] text-white/30 hover:text-white/50"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+          {weekStats && weekStats.totalPicks > 0 && (
+            <div className="flex items-center gap-1.5 ml-auto shrink-0">
+              <TrendingUp className="w-3 h-3 text-primary" />
+              <span className="text-[10px] text-white/35">
+                <span className="text-primary font-bold">{weekStats.wins}W</span>
+                <span className="mx-0.5">·</span>
+                <span className="text-red-400 font-bold">{weekStats.losses}L</span>
+              </span>
+            </div>
+          )}
         </div>
-
-        {/* ── 7-Day Track Record Strip ── */}
-        {weekStats && weekStats.totalPicks > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 px-4 py-2.5 rounded-xl glass-card mb-4"
-          >
-            <TrendingUp className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-[11px] text-white/50">
-              7-Day Record: <span className="text-primary font-bold">{weekStats.wins}W</span>
-              <span className="mx-1">·</span>
-              <span className="text-red-400 font-bold">{weekStats.losses}L</span>
-              <span className="mx-1">·</span>
-              <span className="text-white font-bold">{(weekStats.winRate || 0).toFixed(0)}% WR</span>
-            </span>
-          </motion.div>
-        )}
 
         {/* ── Pick Cards ── */}
         {picks.length > 0 ? (
