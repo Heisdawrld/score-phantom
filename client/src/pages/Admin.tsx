@@ -90,7 +90,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
             SCORE<span style={{ color: "#10e774" }}>PHANTOM</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1 tracking-wider">ADMIN PANEL</p>
-          <p className="text-[11px] text-white/30 mt-3 leading-relaxed">Standalone control room for user access, payments, football operations, basketball sync, and engine health.</p>
+          <p className="text-[11px] text-white/30 mt-3 leading-relaxed">User management, payments, engine ops, and system health.</p>
         </div>
 
         {/* Card */}
@@ -476,9 +476,9 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   ] as const;
 
   return (
-    <div className="min-h-screen bg-[#080b10] text-white">
+    <div className="min-h-screen bg-[#060a0e] text-white">
       {/* Top bar */}
-      <div className="border-b border-white/[0.06] bg-[#0a0e16] px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
+      <div className="border-b border-white/[0.04] bg-[#060a0e]/95 backdrop-blur-xl px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
             <Shield className="w-4 h-4 text-primary" />

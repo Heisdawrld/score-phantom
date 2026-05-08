@@ -387,7 +387,7 @@ export default function Basketball() {
                 group={group}
                 offset={i * 4}
                 openGame={openGame}
-                expanded={expandedGroups[group.id] ?? i < 3}
+                expanded={expandedGroups[group.id] ?? false}
                 onToggle={() => toggleGroup(group.id)}
               />
             ))

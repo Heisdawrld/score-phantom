@@ -91,18 +91,12 @@ export default function Profile() {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
-      {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/[0.04] px-4 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-black text-white tracking-wide">Account</h1>
-            <p className="text-[11px] text-white/35 mt-1">Your plan, referrals, and performance desk.</p>
-          </div>
-          <span className="premium-chip hidden sm:inline-flex">Member Desk</span>
-        </div>
+        <h1 className="text-xl font-black text-white tracking-tight">Account</h1>
+        <p className="text-[11px] text-white/30 mt-0.5">{email}</p>
       </div>
 
-      <div className="px-4 py-5 flex flex-col gap-4 relative z-10">
+      <div className="px-4 py-5 mx-auto max-w-2xl flex flex-col gap-4 relative z-10">
         {/* ── Profile Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}

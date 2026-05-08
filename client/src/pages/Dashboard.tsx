@@ -392,7 +392,7 @@ export default function Dashboard() {
                 tournament={group.label}
                 fixtures={group.fixtures}
                 onSelectFixture={handleSelectFixture}
-                defaultOpen={idx < 3}
+                defaultOpen={false}
                 isPremium={isPremium}
               />
             ))

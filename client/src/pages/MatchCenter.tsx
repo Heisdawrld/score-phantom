@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
-import { PhantomIntelPanel } from "@/components/match/PhantomIntelPanel";
+
 
 const PredictionTab = lazy(() => import("@/components/match/PredictionTab").then(m => ({ default: m.PredictionTab })));
 const StatsTab = lazy(() => import("@/components/match/StatsTab").then(m => ({ default: m.StatsTab })));
@@ -216,7 +216,6 @@ export default function MatchCenter() {
                           </div>
                         </div>
                       )}
-                      <PhantomIntelPanel matchData={d} />
                       <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />
                     </>
                   )}

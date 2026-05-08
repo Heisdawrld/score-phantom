@@ -87,14 +87,17 @@ export default function PhantomLab() {
 
       <Header />
 
-      <main className='max-w-7xl mx-auto px-4 pt-6 space-y-6 relative z-10'>
-        <div className='flex items-center gap-4 mb-8'>
-          <button onClick={() => setLocation('/')} className='w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all'>
-            <ChevronLeft className='w-6 h-6' />
+      <main className='max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10'>
+        <div className='flex items-center gap-3'>
+          <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition shrink-0'>
+            <ChevronLeft className='w-4 h-4' />
           </button>
           <div>
-            <h1 className='font-display text-3xl tracking-widest text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]'>PHANTOM <span className='text-primary drop-shadow-[0_0_10px_rgba(16,231,116,0.4)]'>LAB</span></h1>
-            <p className='text-sm text-primary/70 font-medium tracking-wide uppercase mt-0.5'>Interactive Match Sandbox</p>
+            <h1 className='text-xl font-black text-white tracking-tight flex items-center gap-2'>
+              <Zap className='w-5 h-5 text-primary' />
+              Simulator
+            </h1>
+            <p className='text-xs text-white/30 mt-0.5'>Run tactical match simulations</p>
           </div>
         </div>
 

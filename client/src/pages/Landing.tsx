@@ -80,7 +80,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8">
             <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">Football Core. Basketball Rising.</span>
+            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">AI-Powered Predictions</span>
           </motion.div>
 
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
@@ -91,7 +91,7 @@ export default function Landing() {
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
             className="text-lg sm:text-xl text-white/50 mb-10 leading-relaxed max-w-2xl mx-auto font-medium">
-            ScorePhantom is your premium prediction desk for football first, then basketball where live lines are strong enough to matter.
+            ScorePhantom analyzes thousands of data points to find high-probability predictions across football and basketball.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
