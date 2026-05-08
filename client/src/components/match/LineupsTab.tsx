@@ -1,25 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
-
-const RISK_LABELS: Record<string, string> = {
-  SAFE: 'Stable',
-  MODERATE: 'Calculated',
-  AGGRESSIVE: 'High Variance',
-  VOLATILE: 'High Variance',
-};
-function riskColor(r: string) {
-  const l = (r || '').toUpperCase();
-  if (l === 'SAFE') return 'text-primary';
-  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
-  return 'text-blue-400';
-}
+import { Users, AlertCircle } from "lucide-react";
 
 function getPlayerName(p: any) {
   return p?.name || p?.player_name || p?.player?.name || p?.short_name || 'Unknown player';

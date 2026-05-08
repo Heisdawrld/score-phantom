@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useParams } from "wouter";
 import { AlertCircle, ArrowLeft, BarChart3, Clock, Sparkles, Target, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,6 @@ function cleanReason(reason: string) {
 
 export default function BasketballGame() {
   const params = useParams();
-  const [, setLocation] = useLocation();
   const league = params?.league || "nba";
   const externalId = params?.externalId || "";
 

@@ -20,6 +20,12 @@ const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").th
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function ordinal(n: number) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 export function SpiralWatermark() {
   return (
     <svg width="110" height="110" viewBox="0 0 110 110" fill="none"
@@ -42,29 +48,6 @@ const TABS = [
   { key: "League", label: "League", Icon: Trophy },
   { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
 ];
-
-
-// ── Prediction Tab ──────────────────────────────────────────────────────────
-
-
-
-// ── Stats Tab ───────────────────────────────────────────────────────────────
-
-
-
-// ── League Tab ──────────────────────────────────────────────────────────────
-
-
-
-// ── Pitch Tab ────────────────────────────────────────────────────────────────
-
-
-// ── Lineups Tab ───────────────────────────────────────────────────────────────
-
-
-// ── PhantomChat Tab ─────────────────────────────────────────────────────────
-
-
 
 // ── Main MatchCenter ────────────────────────────────────────────────────────
 
@@ -141,7 +124,7 @@ export default function MatchCenter() {
             <TeamLogo src={fix.home_team_logo} name={fix.home_team_name || "Home"} size="lg" />
             <span className="text-sm font-black text-white">{(fix.home_team_name || "Home").slice(0, 3).toUpperCase()}</span>
             {homePos && (
-              <span className="text-[9px] text-white/30">{homePos.position}th · {homePos.points} PTS</span>
+              <span className="text-[9px] text-white/30">{ordinal(homePos.position)} · {homePos.points} PTS</span>
             )}
           </div>
 
@@ -172,7 +155,7 @@ export default function MatchCenter() {
             <TeamLogo src={fix.away_team_logo} name={fix.away_team_name || "Away"} size="lg" />
             <span className="text-sm font-black text-white">{(fix.away_team_name || "Away").slice(0, 3).toUpperCase()}</span>
             {awayPos && (
-              <span className="text-[9px] text-white/30">{awayPos.position}th · {awayPos.points} PTS</span>
+              <span className="text-[9px] text-white/30">{ordinal(awayPos.position)} · {awayPos.points} PTS</span>
             )}
           </div>
         </div>

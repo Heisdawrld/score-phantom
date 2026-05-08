@@ -1,25 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
-
-const RISK_LABELS: Record<string, string> = {
-  SAFE: 'Stable',
-  MODERATE: 'Calculated',
-  AGGRESSIVE: 'High Variance',
-  VOLATILE: 'High Variance',
-};
-function riskColor(r: string) {
-  const l = (r || '').toUpperCase();
-  if (l === 'SAFE') return 'text-primary';
-  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
-  return 'text-blue-400';
-}
 
 export function LeagueTab({ d }: any) {
   const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];

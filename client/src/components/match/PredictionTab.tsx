@@ -246,7 +246,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
               </p>
               {/* Model probability secondary stat */}
               <p className="text-[10px] text-white/25 mt-1.5 tabular-nums">
-                Raw Model: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
+                Confidence: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
               </p>
             </div>
             {/* Confidence ring */}
