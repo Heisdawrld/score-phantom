@@ -1180,6 +1180,30 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                   </button>
                 </div>
               </div>
+
+              {/* Basketball Predictions */}
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
+                <h3 className="text-sm font-bold text-white">🏀 Basketball Predictions</h3>
+                <p className="text-xs text-gray-500">Clear basketball prediction cache so the engine rebuilds with latest logic.</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => { if(confirm("Clear ALL basketball predictions? Engine will rebuild fresh.")) run(() => call("/api/basketball/admin/clear-predictions", { method: "POST" }), "Basketball predictions cleared — engine will rebuild on next request"); }}
+                    className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
+                    🗑️ Clear Basketball Predictions
+                  </button>
+                  <button onClick={() => run(() => call("/api/basketball/admin/force-rebuild", { method: "POST" }), "Basketball predictions clearing + rebuilding… this may take 1-2 minutes")}
+                    className="w-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">
+                    🔄 Force Rebuild Basketball Predictions
+                  </button>
+                  <button onClick={() => run(() => call("/api/basketball/admin/run-predictions", { method: "POST" }), "Running basketball predictions (keeps existing cache, fills missing)…")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    ▶️ Run Predictions (fill missing only)
+                  </button>
+                  <button onClick={() => run(() => call("/api/basketball/admin/sync", { method: "POST", body: JSON.stringify({ daysAhead: 3 }) }), "Syncing basketball games + odds…")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    📡 Sync Basketball Games & Odds
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Manual upgrade section */}

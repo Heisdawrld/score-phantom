@@ -260,4 +260,32 @@ router.post('/admin/run-predictions', requireAdminSecret, async (req, res) => {
   }
 });
 
+router.post('/admin/clear-predictions', requireAdminSecret, async (req, res) => {
+  try {
+    const { default: db } = await import('../../config/database.js');
+    const r = await db.execute('DELETE FROM basketball_predictions');
+    res.json({ ok: true, deleted: r.rowsAffected || 0, message: 'Basketball prediction cache cleared — engine will rebuild on next request' });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/force-rebuild', requireAdminSecret, async (req, res) => {
+  try {
+    const { default: db } = await import('../../config/database.js');
+    // Step 1: Wipe stale predictions
+    const cleared = await db.execute('DELETE FROM basketball_predictions');
+    // Step 2: Re-run predictions for all upcoming games
+    const result = await runBasketballPredictions(req.body || {});
+    res.json({
+      ok: true,
+      cleared: cleared.rowsAffected || 0,
+      rebuilt: result,
+      message: 'Basketball predictions cleared and rebuilt with latest engine logic',
+    });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
 export default router;
