@@ -59,13 +59,12 @@ export default function Landing() {
       {/* ── NAV ─────────────────────────────────────────────── */}
       <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#060a0e]/50 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center overflow-hidden p-1">
+            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="font-black tracking-wide text-lg">ScorePhantom</span>
+          <span className="font-black tracking-wide text-lg">Score<span className="text-primary">Phantom</span></span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <span className="hidden md:flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/55">Football First</span>
           <button onClick={goToLogin} className="text-xs sm:text-sm font-semibold text-white/70 hover:text-white transition-colors whitespace-nowrap">Log in</button>
           <button onClick={goToSignup} className="px-3 sm:px-4 py-2 rounded-full bg-white text-black text-xs sm:text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)] whitespace-nowrap">
             <span className="sm:hidden">Start Free</span>

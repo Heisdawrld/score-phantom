@@ -382,59 +382,37 @@ export default function Basketball() {
       <main className="relative z-10 mx-auto max-w-6xl space-y-5 px-4 pt-5">
         <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="premium-surface-orange relative overflow-hidden rounded-[30px] p-5">
           <div className="absolute -bottom-16 -right-10 h-36 w-36 rounded-full bg-orange-400/10 blur-3xl" />
-          <div className="relative grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">Hoops Board</span>
-                <span className="premium-chip">Odds-Led Edge</span>
-                <span className="premium-chip">Desktop + Mobile Ready</span>
-              </div>
-              <h1 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">Basketball Games</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/45 md:text-base">
-                Browse a cleaner major-first hoops desk with saved prediction summaries, live line awareness, and league grouping that does not bury the best slate.
-              </p>
-
-              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <MiniStat label="Games" value={allGamesForDay.length || '--'} tone="orange" />
-                <MiniStat label="Edge Ready" value={edgeReadyCount} tone="green" />
-                <MiniStat label="Live" value={liveCount} tone="blue" />
-                <MiniStat label="Leagues" value={leagueCount || '--'} tone="orange" />
+          <div className="relative space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="premium-chip border-orange-300/20 bg-orange-400/10 text-orange-200">🏀 Basketball</span>
+                </div>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Basketball Games</h1>
+                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/45">
+                    Today's basketball slate with predictions, live lines, and edge detection.
+                  </p>
+                </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-black/25 px-3 py-2 text-xs text-white/35">
-                <span className={cn('h-2 w-2 rounded-full', syncing ? 'animate-pulse bg-orange-300' : 'bg-primary')} />
-                <span>{syncing ? 'Refreshing basketball games...' : 'Games synced · auto-refresh active'}</span>
+              <div className="relative w-full sm:w-72 shrink-0">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search teams or leagues..."
+                  className="w-full rounded-xl border border-white/[0.05] bg-[#0a110d] py-2.5 pl-9 pr-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-orange-300/30 focus:ring-1 focus:ring-orange-300/30 transition-all" />
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-[26px] border border-white/[0.06] bg-black/25 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Feed Status</p>
-                    <h2 className="mt-2 text-xl font-black text-white">{degraded ? 'Warm-up Mode' : 'Board Ready'}</h2>
-                  </div>
-                  <Activity className={cn('h-5 w-5 shrink-0', degraded ? 'text-amber-300' : 'text-orange-200')} />
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-white/45">
-                  {degraded
-                    ? 'Basketball feed is warming up. More games may appear after the next sync cycle.'
-                    : 'Prediction summaries are cached first so the slate stays responsive even when the board is busy.'}
-                </p>
-              </div>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+              <MiniStat label="Games" value={allGamesForDay.length || '—'} tone="orange" />
+              <MiniStat label="Edge Ready" value={edgeReadyCount} tone="green" />
+              <MiniStat label="Live" value={liveCount} tone="blue" />
+              <div className="hidden sm:block"><MiniStat label="Leagues" value={leagueCount || '—'} tone="orange" /></div>
+            </div>
 
-              <div className="rounded-[26px] border border-white/[0.06] bg-black/25 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">League Scope</p>
-                    <h2 className="mt-2 text-xl font-black text-white">{scope === 'major' ? 'Major Slate' : 'Global Slate'}</h2>
-                  </div>
-                  <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-white/45">
-                  Major mode keeps the first experience high-signal. Global mode opens the wider slate when users want broader coverage.
-                </p>
-              </div>
+            <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2 text-xs text-white/35">
+              <span className={cn('h-2 w-2 rounded-full', syncing ? 'animate-pulse bg-orange-300' : 'bg-primary')} />
+              <span>{syncing ? 'Refreshing games…' : 'Games synced · auto-refresh active'}</span>
             </div>
           </div>
         </motion.section>

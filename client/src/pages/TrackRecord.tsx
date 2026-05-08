@@ -114,16 +114,16 @@ export default function TrackRecord() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="premium-stat">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Review Mode</p>
-                    <p className="mt-2 text-lg font-black text-white">{isBasketball ? 'Live Only' : 'Dual Source'}</p>
-                    <p className="mt-1 text-xs text-white/35">No cross-sport blending.</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Total Picks</p>
+                    <p className="mt-2 text-lg font-black text-white">{overall.total || 0}</p>
+                    <p className="mt-1 text-xs text-white/35">Settled predictions.</p>
                   </div>
                   <div className="premium-stat">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Latest Lens</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/30">Win Rate</p>
                     <p className={cn('mt-2 text-lg font-black', isBasketball ? 'text-orange-200' : 'text-primary')}>
-                      {effectiveSource === 'live' ? 'Auto Settled' : 'Backtest View'}
+                      {overall.hitRate ? `${(overall.hitRate * 100).toFixed(0)}%` : '—'}
                     </p>
-                    <p className="mt-1 text-xs text-white/35">Switched per active sport.</p>
+                    <p className="mt-1 text-xs text-white/35">Overall accuracy.</p>
                   </div>
                 </div>
               </div>
@@ -190,25 +190,7 @@ export default function TrackRecord() {
               </div>
             )}
 
-            <div className="rounded-[28px] border border-white/[0.06] bg-black/25 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Integrity Rules</p>
-                  <h2 className="mt-2 text-xl font-black text-white">Separated by sport, not by vibes.</h2>
-                </div>
-                <Layers3 className={cn('h-5 w-5 shrink-0', isBasketball ? 'text-orange-200' : 'text-primary')} />
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-white/50">
-                <div className="flex items-start gap-3">
-                  <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-white/24" />
-                  <p>Football can compare live settlements and historical replays. Basketball stays live-only for now so its ledger does not inherit football assumptions.</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-white/24" />
-                  <p>Confidence and market performance stay readable here before we promote any more aggressive edge policies.</p>
-                </div>
-              </div>
-            </div>
+
           </div>
         </section>
 
@@ -360,11 +342,7 @@ export default function TrackRecord() {
             </span>
           </div>
 
-          {activeSport === 'basketball' && (
-            <div className="rounded-2xl border border-orange-300/15 bg-orange-400/[0.06] px-4 py-3 text-[11px] text-orange-100/75">
-              Basketball uses live settlement only for now, so the record stays clean and separated from football backtests.
-            </div>
-          )}
+
 
           {recentLoading ? (
             <div className="flex justify-center py-8">

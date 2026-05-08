@@ -41,31 +41,7 @@ function toWAT(dateStr: string): string {
   } catch { return ''; }
 }
 
-// ── Tournament ID → Country lookup ──────────────────────────────────────────
-const TOURNAMENT_COUNTRY: Record<string, string> = {
-  '5': 'France', '35': 'Algeria', '84': 'Senegal', '42': 'Tunisia',
-  '97': 'France', '229': 'Ivory Coast', '343': 'Morocco',
-  '7': 'England', '16': 'Scotland', '30': 'Russia', '36': 'Nigeria',
-  '37': 'South Africa', '64': 'Bangladesh', '80': 'Tajikistan',
-  '86': 'India', '91': 'Zambia', '183': 'Thailand', '238': 'Rwanda',
-  '258': 'Uganda', '273': 'Gambia', '278': 'Ethiopia', '281': 'Iraq',
-  '282': 'Jamaica', '287': 'Bahrain', '292': 'South Sudan',
-  '313': 'Eswatini', '399': 'Liberia',
-  '25': 'Uruguay', '46': 'Dominican Rep', '47': 'Cuba', '48': 'Paraguay',
-  '52': 'Bolivia', '54': 'El Salvador',
-  '259': 'Ecuador', '265': 'Colombia',
-  '55': 'Guatemala', '56': 'Honduras',
-  '9': 'Greece', '15': 'Kosovo', '26': 'Switzerland', '63': 'China',
-  '290': 'Egypt', '408': 'Bangladesh',
-  '72': 'Hungary', '138': 'Bosnia', '187': 'Moldova', '239': 'Armenia',
-  '44': 'Andorra', '132': 'Lithuania', '147': 'Estonia',
-  '216': 'Yemen', '327': 'South Africa',
-  '144': 'Croatia', '148': 'Denmark',
-  '126': 'Serbia', '135': 'Turkmenistan', '190': 'Malta',
-  '202': 'N. Macedonia', '272': 'Iceland', '295': 'Luxembourg', '434': 'Armenia',
-  '191': 'Malta', '338': 'Switzerland',
-  '4': 'Brazil', '24': 'Brazil B', '95': 'Brazil Ser.B',
-};
+
 
 /**
  * Build a display label for a tournament group.
@@ -110,36 +86,6 @@ function fifaToEmoji(fifaCode: string): string {
   };
   return FIFA_EMOJI[code] || '⚽';
 }
-
-// ── TODAY'S BEST BET — Premium Hero Card ────────────────────────────────────
-
-
-
-// ── Quick Action Cards ──────────────────────────────────────────────────────
-
-
-
-// ── Your Stats Card ─────────────────────────────────────────────────────────
-
-
-
-// ── Value Bet of the Day ────────────────────────────────────────────────────
-
-
-
-// ── Upcoming Fixtures Horizontal Scroll ─────────────────────────────────────
-
-
-
-// ── ACCA Section ────────────────────────────────────────────────────────────
-
-
-
-// ── League Group ────────────────────────────────────────────────────────────
-
-
-
-
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 
@@ -298,15 +244,14 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative z-10">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="premium-chip text-primary border-primary/20 bg-primary/10">Football Main Desk</span>
-                <span className="premium-chip">Basketball Separate Lane</span>
+                <span className="premium-chip text-primary border-primary/20 bg-primary/10">⚽ Football</span>
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   Welcome back, <span className="text-primary capitalize">{displayName}</span>
                 </h1>
                 <p className="text-sm text-white/48 mt-2 max-w-xl leading-relaxed">
-                  Your football board stays first. Basketball stays isolated, so one sport never muddies the other.
+                  Today's matches, predictions, and top picks at a glance.
                 </p>
               </div>
             </div>

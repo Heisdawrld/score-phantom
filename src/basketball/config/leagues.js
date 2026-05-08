@@ -83,7 +83,7 @@ export function getApiSportsGenericLeague(leagueKey = 'apisports_basketball') {
     dataSource: 'api_sports_basketball',
     enabled: true,
     launchTier: 'v1-global',
-    minDataQuality: 0.52,
+    minDataQuality: 0.42,
     gates: {
       moneylineEdge: 0.05,
       spreadEdgePoints: 5.0,

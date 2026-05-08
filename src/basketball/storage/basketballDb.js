@@ -359,7 +359,9 @@ export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit =
   await initBasketballTables();
   const keys = siblingLeagueKeys(leagueKey);
   const placeholders = keys.map(() => '?').join(', ');
-  const r = await db.execute({
+
+  // First: try exact match (fastest, most accurate for consistent sources like BallDontLie)
+  let r = await db.execute({
     sql: `SELECT * FROM basketball_games
           WHERE league_key IN (${placeholders})
             AND start_time < ?
@@ -369,6 +371,29 @@ export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit =
           LIMIT ?`,
     args: [...keys, beforeIso || new Date().toISOString(), teamName, teamName, limit],
   });
+
+  // Fallback: fuzzy LIKE match for API Sports leagues where team names may vary
+  // e.g. "Fenerbahce Beko" vs "Fenerbahce", "LA Lakers" vs "Los Angeles Lakers"
+  if ((!r.rows || r.rows.length < 3) && teamName && teamName.length >= 3) {
+    const fuzzy = `%${teamName.split(/\s+/).filter(w => w.length >= 3).slice(0, 2).join('%')}%`;
+    if (fuzzy.length > 4) {
+      const r2 = await db.execute({
+        sql: `SELECT * FROM basketball_games
+              WHERE league_key IN (${placeholders})
+                AND start_time < ?
+                AND (home_team LIKE ? OR away_team LIKE ?)
+                AND home_score IS NOT NULL AND away_score IS NOT NULL
+              ORDER BY start_time DESC
+              LIMIT ?`,
+        args: [...keys, beforeIso || new Date().toISOString(), fuzzy, fuzzy, limit],
+      });
+      // Merge results, preferring exact matches, then deduped by id
+      const existingIds = new Set((r.rows || []).map(row => row.id));
+      const merged = [...(r.rows || []), ...(r2.rows || []).filter(row => !existingIds.has(row.id))];
+      return merged.slice(0, limit);
+    }
+  }
+
   return r.rows || [];
 }
 

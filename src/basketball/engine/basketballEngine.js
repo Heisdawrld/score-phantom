@@ -121,7 +121,10 @@ async function buildFeatures(game, league) {
 
   // dataQuality is the internal gate quality. coverageQuality is what we show users.
   // We intentionally cap shown coverage because Basketball V1 does not yet include injuries/confirmed lineups/player props.
-  const dataQuality = clamp((sampleQuality * 0.55) + (oddsQuality * 0.30) + 0.15, 0, 1);
+  // Boost baseline for API Sports leagues with any odds coverage — these have thinner historical data
+  // but valid real-time lines, so predictions are still valuable.
+  const baselineBoost = (oddsQuality > 0 && sampleQuality < 0.4) ? 0.12 : 0;
+  const dataQuality = clamp((sampleQuality * 0.48) + (oddsQuality * 0.35) + 0.17 + baselineBoost, 0, 1);
   const coverageCap = league.key === 'ncaab' ? 0.78 : 0.86;
   const coverageQuality = clamp((sampleQuality * 0.44) + (oddsQuality * 0.28) + 0.14, 0, coverageCap);
 

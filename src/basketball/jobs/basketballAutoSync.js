@@ -82,6 +82,24 @@ export function startBasketballAutoSync() {
   console.log(`[BasketballAutoSync] Enabled. startup=${Math.round(startupDelayMs / 1000)}s external=${Math.round(externalIntervalMs / 60000)}m predictions=${Math.round(predictionIntervalMs / 60000)}m`);
 
   setTimeout(async () => {
+    // Fetch past game results first — the engine needs completed games for form calculations
+    try {
+      console.log('[BasketballAutoSync] Backfilling recent results for form data...');
+      const { syncApiSportsBasketballGamesCached } = await import('./apiSportsPremiumSync.js');
+      for (let dayOffset = -7; dayOffset <= -1; dayOffset++) {
+        const d = new Date();
+        d.setDate(d.getDate() + dayOffset);
+        const pastDate = d.toISOString().slice(0, 10);
+        try {
+          await syncApiSportsBasketballGamesCached({ date: pastDate, selectedOnly: true });
+        } catch (err) {
+          console.warn(`[BasketballAutoSync] Past date ${pastDate} failed:`, err.message);
+        }
+      }
+      console.log('[BasketballAutoSync] Historical backfill complete');
+    } catch (err) {
+      console.warn('[BasketballAutoSync] Historical backfill failed:', err.message);
+    }
     await runExternalBasketballSync('startup');
     await runCachedBasketballPredictions('startup');
   }, startupDelayMs);
