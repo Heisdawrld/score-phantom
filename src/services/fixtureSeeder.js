@@ -24,6 +24,15 @@ async function ensureColumns() {
   for (const sql of cols) { try { await db.execute(sql); } catch (_) {} }
 }
 
+function getAllowedLeagueIds() {
+  return new Set(
+    String(process.env.BSD_ALLOWED_LEAGUE_IDS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+}
+
 function getAllowedLeagueNames() {
   return new Set(
     String(process.env.BSD_ALLOWED_LEAGUES || '')
@@ -33,9 +42,24 @@ function getAllowedLeagueNames() {
   );
 }
 
-function isLeagueAllowed(tournamentName, allowedLeagues) {
-  if (!allowedLeagues || allowedLeagues.size === 0) return true;
-  return allowedLeagues.has(String(tournamentName || '').toLowerCase().trim());
+function isLeagueAllowed(tournamentName, tournamentId, allowedNames, allowedIds) {
+  // If NEITHER filter is set, allow everything
+  if ((!allowedNames || allowedNames.size === 0) && (!allowedIds || allowedIds.size === 0)) return true;
+
+  // Check by league ID first (most reliable — IDs never change)
+  if (allowedIds && allowedIds.size > 0 && allowedIds.has(String(tournamentId))) return true;
+
+  // Then check by exact name match
+  const name = String(tournamentName || '').toLowerCase().trim();
+  if (allowedNames && allowedNames.size > 0) {
+    if (allowedNames.has(name)) return true;
+    // Fuzzy fallback: check if any allowed name is a substring of the tournament name or vice versa
+    for (const allowed of allowedNames) {
+      if (name.includes(allowed) || allowed.includes(name)) return true;
+    }
+  }
+
+  return false;
 }
 
 export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = false, log = console.log } = {}) {
@@ -50,11 +74,16 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
     await db.execute('DELETE FROM tournaments');
   }
 
-  const allowedLeagues = getAllowedLeagueNames();
-  if (allowedLeagues.size > 0) {
-    log('[Seeder] BSD_ALLOWED_LEAGUES active — seeding only: ' + [...allowedLeagues].join(', '));
-  } else {
-    log('[Seeder] BSD_ALLOWED_LEAGUES empty — seeding all leagues returned by BSD.');
+  const allowedNames = getAllowedLeagueNames();
+  const allowedIds = getAllowedLeagueIds();
+  if (allowedIds.size > 0) {
+    log('[Seeder] BSD_ALLOWED_LEAGUE_IDS active — ' + allowedIds.size + ' IDs: ' + [...allowedIds].join(', '));
+  }
+  if (allowedNames.size > 0) {
+    log('[Seeder] BSD_ALLOWED_LEAGUES active — ' + allowedNames.size + ' names');
+  }
+  if (allowedIds.size === 0 && allowedNames.size === 0) {
+    log('[Seeder] No league filter set — seeding ALL leagues from BSD.');
   }
 
   const allBsdEvents = [];
@@ -71,14 +100,16 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
 
   log('[Seeder] Total: ' + allBsdEvents.length + ' events. Normalising + inserting...');
   let inserted = 0, failed = 0, oddsWritten = 0, skippedByLeagueFilter = 0;
+  const skippedLeagueNames = new Set();
 
   for (const event of allBsdEvents) {
       try {
         const f = normaliseBsdEventToFixture(event);
         if (!f) continue;
 
-        if (!isLeagueAllowed(f.tournament_name, allowedLeagues)) {
+        if (!isLeagueAllowed(f.tournament_name, f.tournament_id, allowedNames, allowedIds)) {
           skippedByLeagueFilter++;
+          skippedLeagueNames.add(`${f.tournament_name} (id:${f.tournament_id})`);
           continue;
         }
 
@@ -138,5 +169,8 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
   }
 
   log(`[Seeder] Done! Inserted: ${inserted} | Odds written: ${oddsWritten} | Failed: ${failed} | Skipped by league filter: ${skippedByLeagueFilter}`);
+  if (skippedLeagueNames.size > 0) {
+    log(`[Seeder] Skipped leagues: ${[...skippedLeagueNames].join(', ')}`);
+  }
   return { inserted, failed, oddsWritten, skippedByLeagueFilter, total: allBsdEvents.length };
 }
