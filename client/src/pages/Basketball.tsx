@@ -293,7 +293,11 @@ export default function Basketball() {
   const grouped = useMemo(() => groupGames(games), [games]);
   const liveCount = allGamesForDay.filter((g: any) => statusLabel(g.status) === 'LIVE').length;
 
-  const openGame = (game: any) => setLocation(`/basketball/games/${game.league_key}/${game.external_game_id || game.odds_event_id}`);
+  const openGame = (game: any) => {
+    const id = game.external_game_id || game.odds_event_id || game.id;
+    if (!id || String(id) === 'undefined' || String(id) === 'null') return;
+    setLocation(`/basketball/games/${game.league_key}/${id}`);
+  };
   const toggleGroup = (id: string) => setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (

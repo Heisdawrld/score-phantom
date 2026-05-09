@@ -199,6 +199,26 @@ export default function BasketballGame() {
           </div>
         )}
 
+        {/* Game not found */}
+        {!isLoading && !error && !gameData && (
+          <div className="relative rounded-2xl overflow-hidden p-6 text-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent" />
+            <div className="relative z-10">
+              <AlertCircle className="w-10 h-10 text-white/20 mx-auto mb-3" />
+              <p className="text-sm font-bold text-white/40 mb-1">Game Not Found</p>
+              <p className="text-xs text-white/25 max-w-[240px] mx-auto">
+                This fixture isn't in our database yet. Try again after the next sync.
+              </p>
+              <button onClick={() => window.history.back()} className="mt-4 px-4 py-2 rounded-xl bg-white/[0.06] text-xs font-bold text-white/50 hover:bg-white/10 transition-all">
+                Go Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main content – only render when we have game data */}
+        {!isLoading && !error && gameData && (
+          <>
         <section className="premium-surface-orange rounded-[28px] p-5 overflow-hidden relative">
           <div className="absolute -right-12 -top-10 h-32 w-32 rounded-full bg-orange-400/12 blur-3xl" />
           <div className="flex items-center justify-between gap-3">
@@ -394,6 +414,8 @@ export default function BasketballGame() {
               <Metric label="Away Form" value={`${intel.awayFormGames ?? 0} games`} sub={cacheMeta?.updatedAt ? `Updated ${timeLabel(cacheMeta.updatedAt)}` : undefined} />
             </div>
           </section>
+        )}
+          </>
         )}
       </main>
     </div>

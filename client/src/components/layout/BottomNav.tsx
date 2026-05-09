@@ -1,12 +1,13 @@
 import { useLocation, Link } from 'wouter';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
-import { Home, Flame, User, Dna } from 'lucide-react';
+import { Home, Flame, User, Dna, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/picks", label: "Picks", icon: Flame },
+  { href: "/acca", label: "ACCA", icon: Zap },
   { href: "/simulator", label: "Sim", icon: Dna },
   { href: "/profile", label: "Profile", icon: User },
 ];

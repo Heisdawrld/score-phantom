@@ -46,12 +46,10 @@
 
 @layer base {
   html {
-    overscroll-behavior: none;
     -webkit-text-size-adjust: 100%;
-    touch-action: pan-y;
-    overflow-x: hidden;
     width: 100%;
     max-width: 100vw;
+    /* NOTE: do NOT set overflow-x:hidden on html — it breaks desktop scroll */
   }
 
   body {
@@ -63,6 +61,7 @@
     overscroll-behavior-y: none;
     -webkit-overflow-scrolling: touch;
     overflow-x: hidden;
+    overflow-y: auto; /* explicitly allow vertical scroll on desktop */
     width: 100%;
     min-height: 100vh;
     min-height: 100dvh;
