@@ -153,8 +153,8 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
       whileTap={{ scale: 0.985 }}
     >
       <div className={cn(
-        "rounded-2xl border px-4 py-3.5 transition-all",
-        live ? "border-red-500/15 bg-red-500/[0.03]" : "border-white/[0.04] bg-white/[0.02]",
+        "rounded-2xl border px-4 py-3.5 transition-all deco-corners deco-arc-double",
+        live ? "border-red-500/15 bg-red-500/[0.03] deco-live-scan" : "border-white/[0.04] bg-white/[0.02]",
         "group-hover:border-primary/12 group-hover:bg-white/[0.04]"
       )}>
         <div className="flex items-center gap-3">

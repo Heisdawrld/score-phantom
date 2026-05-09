@@ -92,9 +92,8 @@ export default function TopPicksToday() {
   const { user, isSubscribed, isLoading: authLoading } = useAccess();
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
-  const savedScrollRef = useRef(0);
-  const handleOpenPanel = (id: string) => { savedScrollRef.current = window.scrollY; setSelectedFixtureId(id); };
-  const handleClosePanel = () => { setSelectedFixtureId(null); requestAnimationFrame(() => window.scrollTo(0, savedScrollRef.current)); };
+  const handleOpenPanel = (id: string) => setLocation(`/match/${id}`);
+  const handleClosePanel = () => {};
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
@@ -257,7 +256,7 @@ export default function TopPicksToday() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenPanel(pick.fixtureId)}
                   className={cn(
-                    "relative rounded-2xl p-4 cursor-pointer transition-all group overflow-hidden",
+                    "relative rounded-2xl p-4 cursor-pointer transition-all group overflow-hidden deco-corners",
                     isTop ? "border border-primary/15" : "border glass-card border-white/10"
                   )}
                 >
@@ -389,7 +388,6 @@ export default function TopPicksToday() {
           </p>
         )}
       </div>
-      <PredictionPanel fixtureId={selectedFixtureId} onClose={handleClosePanel} />
     </div>
   );
 }

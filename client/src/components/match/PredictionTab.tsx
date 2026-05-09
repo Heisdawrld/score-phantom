@@ -185,7 +185,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
         </div>
 
-        <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm">
+        <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm deco-corners deco-glow-top">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}

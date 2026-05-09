@@ -99,8 +99,8 @@ export function LeagueGroup({
                 key={fixture.id}
                 onClick={() => onSelectFixture(fixture.id)}
                 className={cn(
-                  "group w-full text-left rounded-2xl border px-4 py-3 transition-all",
-                  isLive ? "border-red-500/15 bg-red-500/[0.03]" : "border-white/[0.04] bg-white/[0.02]",
+                  "group w-full text-left rounded-2xl border px-4 py-3 transition-all deco-corners deco-arc-double",
+                  isLive ? "border-red-500/15 bg-red-500/[0.03] deco-live-scan" : "border-white/[0.04] bg-white/[0.02]",
                   "hover:border-primary/12 hover:bg-white/[0.04] active:scale-[0.99]"
                 )}
               >
