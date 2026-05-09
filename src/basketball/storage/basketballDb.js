@@ -75,7 +75,7 @@ function mapPredictionRow(row) {
 
 export async function initBasketballTables() {
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     league_key TEXT NOT NULL,
     external_game_id TEXT,
     odds_event_id TEXT,
@@ -100,7 +100,7 @@ export async function initBasketballTables() {
   )`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_odds (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     league_key TEXT NOT NULL,
     game_id INTEGER,
     odds_event_id TEXT,
@@ -116,7 +116,7 @@ export async function initBasketballTables() {
   )`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_predictions (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     league_key TEXT NOT NULL,
     game_id INTEGER NOT NULL,
     best_pick_market TEXT,
@@ -481,7 +481,7 @@ export async function getLatestBasketballPredictionSummaries(gameIds = [], { pre
   const placeholders = ids.map(() => '?').join(', ');
   const r = await db.execute({
     sql: `
-      SELECT DISTINCT ON (bp.game_id)
+      SELECT 
         bp.game_id,
         bp.engine_version,
         bp.best_pick_market,
@@ -493,10 +493,11 @@ export async function getLatestBasketballPredictionSummaries(gameIds = [], { pre
         bp.phantom_score,
         bp.risk_level,
         bp.no_clear_edge,
-        bp.updated_at
+        MAX(bp.updated_at) as updated_at
       FROM basketball_predictions bp
       WHERE bp.game_id IN (${placeholders})
-      ORDER BY bp.game_id, ${preferredOrder} bp.updated_at DESC
+      GROUP BY bp.game_id
+      ORDER BY bp.game_id ASC
     `,
     args,
   });
@@ -542,7 +543,7 @@ export async function listBasketballPredictions({ leagueKey = null, from = null,
     sql: `
       SELECT *
       FROM (
-        SELECT DISTINCT ON (bp.game_id)
+        SELECT 
           bp.*,
           g.external_game_id,
           g.odds_event_id,
@@ -550,13 +551,14 @@ export async function listBasketballPredictions({ leagueKey = null, from = null,
           g.start_time,
           g.home_team,
           g.away_team,
-          g.raw_json AS game_raw_json
+          g.raw_json AS game_raw_json,
+          MAX(bp.updated_at) as latest_update
         FROM basketball_predictions bp
         JOIN basketball_games g ON g.id = bp.game_id
         ${where}
-        ORDER BY bp.game_id, ${preferredOrder} bp.updated_at DESC
+        GROUP BY bp.game_id
       ) latest
-      ORDER BY COALESCE(latest.phantom_score, 0) DESC, latest.updated_at DESC
+      ORDER BY COALESCE(latest.phantom_score, 0) DESC, latest.latest_update DESC
       LIMIT ?
     `,
     args: queryArgs,

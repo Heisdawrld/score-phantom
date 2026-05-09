@@ -127,7 +127,7 @@ async function ensureDailyCountTable() {
   try {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS trial_daily_counts (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         date_str TEXT NOT NULL,
         prediction_count INTEGER DEFAULT 0,
@@ -144,7 +144,7 @@ async function getTodayCount(userId) {
   const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
   try {
     const r = await db.execute({
-      sql: `SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = $1 AND date_str = $2`,
+      sql: `SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
     return { count: Number(r.rows?.[0]?.count || 0), today };
@@ -157,10 +157,13 @@ async function getTodayCount(userId) {
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
+    await db.execute({
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
+      args: [userId, today],
+    });
     const result = await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES ($1, $2, 1)
-            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1
-            RETURNING prediction_count`,
+      sql: `SELECT prediction_count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
     const newCount = result.rows[0].prediction_count;
@@ -179,8 +182,8 @@ async function incrementAndCheckDailyCount(userId, limit) {
 async function incrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES ($1, $2, 1)
-            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = trial_daily_counts.prediction_count + 1`,
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
       args: [userId, today],
     });
   } catch (err) {
@@ -191,7 +194,7 @@ async function incrementDailyCount(userId, today) {
 async function decrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `UPDATE trial_daily_counts SET prediction_count = GREATEST(prediction_count - 1, 0) WHERE user_id = $1 AND date_str = $2`,
+      sql: `UPDATE trial_daily_counts SET prediction_count = MAX(prediction_count - 1, 0) WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
   } catch (err) {
@@ -1448,7 +1451,7 @@ export function createTrialLimitGuard(trialDailyLimit = 15) {
     try {
       const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
       const r = await db.execute({
-        sql: "SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = $1 AND date_str = $2",
+        sql: "SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?",
         args: [req.user.id, today]
       });
       const currentCount = Number(r.rows?.[0]?.count || 0);
@@ -1498,7 +1501,7 @@ router.post('/push-token', requireAuth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token required' });
-    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id, updated_at=CURRENT_TIMESTAMP', args: [req.user.id, token, 'web'] });
+    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=excluded.user_id, updated_at=CURRENT_TIMESTAMP', args: [req.user.id, token, 'web'] });
     res.json({ ok: true });
   } catch(e) { console.error('[PushToken]',e.message); res.status(500).json({ error: 'Failed to save token' }); }
 });

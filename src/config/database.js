@@ -1,58 +1,48 @@
-import pg from "pg";
+import { createClient } from "@libsql/client";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-if (!process.env.DATABASE_URL) {
-  console.error("❌ FATAL: Missing DATABASE_URL environment variable.");
-  console.error("   Add it to your Render dashboard → Environment Variables.");
+if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
+  console.error("❌ FATAL: Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN environment variables.");
   process.exit(1);
 }
 
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-// Wrapper to emulate @libsql/client execute method and translate SQLite '?' to Postgres '$1'
 const db = {
   execute: async (queryOrObj, ...argsObj) => {
     let sql = typeof queryOrObj === 'string' ? queryOrObj : queryOrObj.sql;
     let args = typeof queryOrObj === 'string' ? (argsObj.length ? argsObj[0] : []) : (queryOrObj.args || []);
-
-    // Replace ? with $1, $2, etc.
-    let paramIndex = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
+    
+    // Convert Postgres $1, $2 back to SQLite ? if the app accidentally used Postgres syntax somewhere
+    sql = sql.replace(/\$\d+/g, '?');
 
     try {
-      const res = await pool.query(pgSql, args);
-      return { rows: res.rows, rowsAffected: res.rowCount };
+      const res = await client.execute({ sql, args });
+      return { rows: res.rows, rowsAffected: res.rowsAffected };
     } catch (err) {
+      console.error(`DB Execute Error: ${sql}`, err);
       throw err;
     }
   },
   batch: async (statements) => {
-    const client = await pool.connect();
+    const stmts = statements.map(stmt => {
+      let sql = typeof stmt === 'string' ? stmt : stmt.sql;
+      let args = typeof stmt === 'string' ? [] : (stmt.args || []);
+      sql = sql.replace(/\$\d+/g, '?');
+      return { sql, args };
+    });
+    
     try {
-      await client.query('BEGIN');
-      const results = [];
-      for (const stmt of statements) {
-        let sql = typeof stmt === 'string' ? stmt : stmt.sql;
-        let args = typeof stmt === 'string' ? [] : (stmt.args || []);
-        
-        let paramIndex = 1;
-        const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
-        
-        const res = await client.query(pgSql, args);
-        results.push({ rows: res.rows, rowsAffected: res.rowCount });
-      }
-      await client.query('COMMIT');
-      return results;
+      const results = await client.batch(stmts, "write");
+      return results.map(res => ({ rows: res.rows, rowsAffected: res.rowsAffected }));
     } catch (err) {
-      await client.query('ROLLBACK');
+      console.error(`DB Batch Error`, err);
       throw err;
-    } finally {
-      client.release();
     }
   }
 };
@@ -89,10 +79,16 @@ async function runSchema() {
       odds_home REAL,
       odds_draw REAL,
       odds_away REAL,
+      home_score INTEGER,
+      away_score INTEGER,
+      match_status TEXT DEFAULT 'NS',
+      live_minute TEXT,
+      enrichment_status TEXT DEFAULT 'none',
+      data_quality TEXT DEFAULT 'unknown',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS historical_matches (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         fixture_id TEXT NOT NULL,
         type TEXT NOT NULL,
         date TEXT,
@@ -107,7 +103,7 @@ async function runSchema() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`,
     `CREATE TABLE IF NOT EXISTS fixture_odds (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL UNIQUE,
       home REAL,
       draw REAL,
@@ -118,7 +114,7 @@ async function runSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS predictions (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL,
       market TEXT NOT NULL,
       value TEXT NOT NULL,
@@ -131,24 +127,46 @@ async function runSchema() {
     `CREATE INDEX IF NOT EXISTS idx_historical_fixture_type ON historical_matches(fixture_id, type)`,
     `CREATE INDEX IF NOT EXISTS idx_odds_fixture_id ON fixture_odds(fixture_id)`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       endpoint TEXT NOT NULL UNIQUE,
       keys TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    `CREATE TABLE IF NOT EXISTS push_tokens (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, platform TEXT DEFAULT 'web', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)  `,
-    `CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY, user_id INTEGER, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, data TEXT DEFAULT '{}', read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)  `,
-    `CREATE TABLE IF NOT EXISTS match_subscriptions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL, fixture_id TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, fixture_id))`,
+    `CREATE TABLE IF NOT EXISTS push_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, 
+      user_id INTEGER NOT NULL, 
+      token TEXT NOT NULL UNIQUE, 
+      platform TEXT DEFAULT 'web', 
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, 
+      user_id INTEGER, 
+      type TEXT NOT NULL, 
+      title TEXT NOT NULL, 
+      body TEXT NOT NULL, 
+      data TEXT DEFAULT '{}', 
+      read INTEGER DEFAULT 0, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS match_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, 
+      user_id INTEGER NOT NULL, 
+      fixture_id TEXT NOT NULL, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+      UNIQUE(user_id, fixture_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS trial_daily_counts (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       date_str TEXT NOT NULL,
       prediction_count INTEGER DEFAULT 0,
       UNIQUE(user_id, date_str)
     )`,
     `CREATE TABLE IF NOT EXISTS predictions_v2 (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL UNIQUE,
       model_version TEXT,
       script_primary TEXT,
@@ -181,16 +199,17 @@ async function runSchema() {
       polymarket_draw_prob REAL,
       polymarket_away_prob REAL,
       is_sharp_value BOOLEAN DEFAULT FALSE,
+      pick_id INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS prediction_picks (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL,
       engine_version TEXT NOT NULL,
       prediction_source TEXT NOT NULL,
-      generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      kickoff_at TIMESTAMPTZ,
+      generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      kickoff_at TEXT,
       market_key TEXT NOT NULL,
       selection TEXT NOT NULL,
       bookmaker_odds REAL,
@@ -217,174 +236,113 @@ async function runSchema() {
       away_goals INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    // Basketball specific tables to ensure they exist on Turso
+    `CREATE TABLE IF NOT EXISTS basketball_games (
+      id TEXT PRIMARY KEY,
+      league_id TEXT NOT NULL,
+      home_team TEXT NOT NULL,
+      away_team TEXT NOT NULL,
+      match_date TEXT NOT NULL,
+      status TEXT DEFAULT 'NS',
+      home_score INTEGER,
+      away_score INTEGER,
+      enriched INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS basketball_odds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL UNIQUE,
+      home_win REAL,
+      away_win REAL,
+      spread_home REAL,
+      spread_away REAL,
+      spread_line REAL,
+      over_under_line REAL,
+      over_odds REAL,
+      under_odds REAL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS basketball_predictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL UNIQUE,
+      prediction_json TEXT,
+      best_pick_market TEXT,
+      best_pick_selection TEXT,
+      best_pick_probability REAL,
+      best_pick_edge REAL,
+      confidence_score REAL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`
   ];
 
   for (const sql of statements) {
-    await db.execute(sql);
-  }
-
-  // Backfill missing meta column for older databases
-  const tableInfoQuery = await db.execute(`
-    SELECT column_name as name 
-    FROM information_schema.columns 
-    WHERE table_name = 'fixtures'
-  `);
-  const hasMeta = tableInfoQuery.rows.some((col) => col.name === "meta");
-  if (!hasMeta) {
-    await db.execute(`ALTER TABLE fixtures ADD COLUMN meta TEXT`);
-  }
-  const hasEnrichmentStatus = tableInfoQuery.rows.some((col) => col.name === "enrichment_status");
-  if (!hasEnrichmentStatus) {
-    await db.execute(`ALTER TABLE fixtures ADD COLUMN enrichment_status TEXT DEFAULT 'none'`);
-  }
-  const hasDataQuality = tableInfoQuery.rows.some((col) => col.name === "data_quality");
-  if (!hasDataQuality) {
-    await db.execute(`ALTER TABLE fixtures ADD COLUMN data_quality TEXT DEFAULT 'unknown'`);
-  }
-
-  const pred2Info = await db.execute(`
-    SELECT column_name as name
-    FROM information_schema.columns
-    WHERE table_name = 'predictions_v2'
-  `);
-  const hasPickId = pred2Info.rows.some((col) => col.name === "pick_id");
-  if (!hasPickId) {
-    await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN pick_id INTEGER`);
-  }
-
-  const ppInfo = await db.execute(`
-    SELECT column_name as name
-    FROM information_schema.columns
-    WHERE table_name = 'prediction_picks'
-  `);
-  const hasSig = ppInfo.rows.some((col) => col.name === "material_signature");
-  if (!hasSig) {
-    await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
-  }
-  const hasModelConfidence = ppInfo.rows.some((col) => col.name === "model_confidence");
-  if (!hasModelConfidence) {
-    await db.execute(`ALTER TABLE prediction_picks ADD COLUMN model_confidence TEXT`);
-  }
-
-  await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);
-
-  // Backfill columns added for country flags, team logos, and odds
-  const colMigrations = [
-    ["country_flag",    "ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''"],
-    ["home_team_logo",  "ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''"],
-    ["away_team_logo",  "ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''"],
-    ["odds_home",       "ALTER TABLE fixtures ADD COLUMN odds_home REAL"],
-    ["odds_draw",       "ALTER TABLE fixtures ADD COLUMN odds_draw REAL"],
-    ["odds_away",       "ALTER TABLE fixtures ADD COLUMN odds_away REAL"],
-    ["home_score",      "ALTER TABLE fixtures ADD COLUMN home_score INTEGER"],
-    ["away_score",      "ALTER TABLE fixtures ADD COLUMN away_score INTEGER"],
-    ["match_status",    "ALTER TABLE fixtures ADD COLUMN match_status TEXT DEFAULT 'NS'"],
-    ["live_minute",     "ALTER TABLE fixtures ADD COLUMN live_minute TEXT"],
-  ];
-  for (const [col, sql] of colMigrations) {
-    const exists = tableInfoQuery.rows.some((c) => c.name === col);
-    if (!exists) {
-      try { await db.execute(sql); } catch (_) {}
-    }
-  }
-
-  const hmTableInfo = await db.execute(`
-    SELECT column_name as name 
-    FROM information_schema.columns 
-    WHERE table_name = 'historical_matches'
-  `);
-  const hmCols = [
-    ["home_xg", "ALTER TABLE historical_matches ADD COLUMN home_xg REAL"],
-    ["away_xg", "ALTER TABLE historical_matches ADD COLUMN away_xg REAL"],
-    ["momentum", "ALTER TABLE historical_matches ADD COLUMN momentum TEXT"],
-    ["shotmap", "ALTER TABLE historical_matches ADD COLUMN shotmap TEXT"],
-  ];
-  for (const [colName, stmt] of hmCols) {
-    if (!hmTableInfo.rows.some((c) => c.name === colName)) {
-      try { await db.execute(stmt); } catch (e) {}
-    }
-  }
-
-  // Backfill columns for predictions_v2
-  try {
-    const p2TableInfo = await db.execute(`
-      SELECT column_name as name
-      FROM information_schema.columns
-      WHERE table_name = 'predictions_v2'
-    `);
-    const p2Cols = p2TableInfo.rows.map(c => c.name);
-    
-    if (!p2Cols.includes('prediction_json')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT`); } catch(e) {}
-    }
-    if (!p2Cols.includes('home_manager_tactics')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN home_manager_tactics TEXT`); } catch(e) {}
-    }
-    if (!p2Cols.includes('away_manager_tactics')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN away_manager_tactics TEXT`); } catch(e) {}
-    }
-    if (!p2Cols.includes('polymarket_home_prob')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_home_prob REAL`); } catch(e) {}
-    }
-    if (!p2Cols.includes('polymarket_draw_prob')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_draw_prob REAL`); } catch(e) {}
-    }
-    if (!p2Cols.includes('polymarket_away_prob')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN polymarket_away_prob REAL`); } catch(e) {}
-    }
-    if (!p2Cols.includes('is_sharp_value')) {
-      try { await db.execute(`ALTER TABLE predictions_v2 ADD COLUMN is_sharp_value BOOLEAN DEFAULT FALSE`); } catch(e) {}
-    }
-    // Fix confidence_volatility type: SQLite stored as REAL but should be TEXT for pg
     try {
-      await db.execute(`ALTER TABLE predictions_v2 ALTER COLUMN confidence_volatility TYPE TEXT USING confidence_volatility::TEXT`);
-    } catch(e) {} // ignore if already TEXT or if column doesn't exist yet
-  } catch (e) {}
-
-  // Backfill columns for push_tokens
-  try {
-    const ptTableInfo = await db.execute(`
-      SELECT column_name as name
-      FROM information_schema.columns
-      WHERE table_name = 'push_tokens'
-    `);
-    if (!ptTableInfo.rows.some((c) => c.name === 'updated_at')) {
-      try { await db.execute(`ALTER TABLE push_tokens ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`); } catch(e) {}
+      await db.execute(sql);
+    } catch(e) {
+      console.error("Error running schema:", sql, e.message);
     }
-  } catch (e) {}
+  }
 
-  // Safe drop for legacy trial_daily_counts table migrated from SQLite
-  try {
-    const tdInfo = await db.execute(`
-      SELECT column_name as name
-      FROM information_schema.columns
-      WHERE table_name = 'trial_daily_counts'
-    `);
-    const tdCols = (tdInfo.rows || []).map((c) => c.name);
-    if (tdCols.includes('date') && !tdCols.includes('date_str')) {
-      await db.execute(`DROP TABLE trial_daily_counts`);
-      console.log("✅ Dropped legacy trial_daily_counts table (schema mismatch)");
-      
-      // Re-create the correct schema
-      await db.execute(`
-        CREATE TABLE IF NOT EXISTS trial_daily_counts (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL,
-          date_str TEXT NOT NULL,
-          prediction_count INTEGER DEFAULT 0,
-          UNIQUE(user_id, date_str)
-        )
-      `);
+  // Auto-migrations for older tables using SQLite PRAGMA table_info
+  async function addColumnIfNotExists(tableName, columnName, columnDef) {
+    try {
+      const info = await db.execute(`PRAGMA table_info('${tableName}')`);
+      const exists = info.rows.some((c) => c.name === columnName);
+      if (!exists) {
+        await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+        console.log(`✅ Added column ${columnName} to ${tableName}`);
+      }
+    } catch (e) {
+      // Ignore if table doesn't exist yet
     }
-  } catch (e) {}
+  }
 
-  console.log("✅ Database tables ready!");
+  // Fixtures columns
+  await addColumnIfNotExists("fixtures", "meta", "TEXT");
+  await addColumnIfNotExists("fixtures", "enrichment_status", "TEXT DEFAULT 'none'");
+  await addColumnIfNotExists("fixtures", "data_quality", "TEXT DEFAULT 'unknown'");
+  await addColumnIfNotExists("fixtures", "country_flag", "TEXT DEFAULT ''");
+  await addColumnIfNotExists("fixtures", "home_team_logo", "TEXT DEFAULT ''");
+  await addColumnIfNotExists("fixtures", "away_team_logo", "TEXT DEFAULT ''");
+  await addColumnIfNotExists("fixtures", "odds_home", "REAL");
+  await addColumnIfNotExists("fixtures", "odds_draw", "REAL");
+  await addColumnIfNotExists("fixtures", "odds_away", "REAL");
+  await addColumnIfNotExists("fixtures", "home_score", "INTEGER");
+  await addColumnIfNotExists("fixtures", "away_score", "INTEGER");
+  await addColumnIfNotExists("fixtures", "match_status", "TEXT DEFAULT 'NS'");
+  await addColumnIfNotExists("fixtures", "live_minute", "TEXT");
+
+  // Predictions v2
+  await addColumnIfNotExists("predictions_v2", "pick_id", "INTEGER");
+  await addColumnIfNotExists("predictions_v2", "prediction_json", "TEXT");
+  await addColumnIfNotExists("predictions_v2", "home_manager_tactics", "TEXT");
+  await addColumnIfNotExists("predictions_v2", "away_manager_tactics", "TEXT");
+  await addColumnIfNotExists("predictions_v2", "polymarket_home_prob", "REAL");
+  await addColumnIfNotExists("predictions_v2", "polymarket_draw_prob", "REAL");
+  await addColumnIfNotExists("predictions_v2", "polymarket_away_prob", "REAL");
+  await addColumnIfNotExists("predictions_v2", "is_sharp_value", "BOOLEAN DEFAULT FALSE");
+
+  // Prediction Picks
+  await addColumnIfNotExists("prediction_picks", "material_signature", "TEXT");
+  await addColumnIfNotExists("prediction_picks", "model_confidence", "TEXT");
+
+  // Historical Matches
+  await addColumnIfNotExists("historical_matches", "home_xg", "REAL");
+  await addColumnIfNotExists("historical_matches", "away_xg", "REAL");
+  await addColumnIfNotExists("historical_matches", "momentum", "TEXT");
+  await addColumnIfNotExists("historical_matches", "shotmap", "TEXT");
+
+  // Push Tokens
+  await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+
+  console.log("✅ Database tables and migrations ready on Turso!");
 }
 
 await runSchema();

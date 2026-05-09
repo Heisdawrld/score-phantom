@@ -178,13 +178,13 @@ export async function checkResults(dateStr) {
       FROM fixtures f
       JOIN predictions_v2 p ON p.fixture_id = f.id
       LEFT JOIN (
-        SELECT DISTINCT ON (fixture_id)
-          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence, generated_at, kickoff_at
+        SELECT 
+          id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence, MAX(generated_at) as generated_at, kickoff_at
         FROM prediction_picks
         WHERE prediction_source = 'pre_match'
           AND kickoff_at IS NOT NULL
           AND generated_at < kickoff_at
-        ORDER BY fixture_id, generated_at DESC
+        GROUP BY fixture_id
       ) pp ON pp.fixture_id = f.id
       WHERE f.match_date LIKE ?
         AND p.best_pick_selection IS NOT NULL

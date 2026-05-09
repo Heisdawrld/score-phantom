@@ -106,14 +106,14 @@ router.get("/stats", async (req, res) => {
     // Monthly breakdown (last 3 months from live outcomes)
     const monthlyRes = await db.execute(`
       SELECT 
-        TO_CHAR(evaluated_at::date, 'YYYY-MM') as month,
+        strftime('%Y-%m', evaluated_at) as month,
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
-        AND evaluated_at >= NOW() - INTERVAL '90 days'
+        AND evaluated_at >= datetime('now', '-90 days')
         AND ${liveSportFilter}
-      GROUP BY TO_CHAR(evaluated_at::date, 'YYYY-MM')
+      GROUP BY month
       ORDER BY month DESC
       LIMIT 6
     `).catch(() => ({ rows: [] }));

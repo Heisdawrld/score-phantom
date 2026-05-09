@@ -52,11 +52,7 @@ const adminLimiter = rateLimit({
 // ── DB migrations ─────────────────────────────────────────────────────────────
 async function ensureColumn(table, col, sql) {
   try {
-    const info = await db.execute(`
-      SELECT column_name as name 
-      FROM information_schema.columns 
-      WHERE table_name = '${table}'
-    `);
+    const info = await db.execute(`PRAGMA table_info(${table})`);
     const exists = (info.rows || []).some(
       r => String(r.name).toLowerCase() === col.toLowerCase()
     );
@@ -67,7 +63,7 @@ async function ensureColumn(table, col, sql) {
 export async function initUsersTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE
     )
   `);
@@ -97,7 +93,7 @@ export async function initUsersTable() {
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       reference TEXT UNIQUE NOT NULL,
       amount INTEGER NOT NULL,
@@ -119,7 +115,7 @@ export async function initUsersTable() {
   // ── Partner commissions table ──────────────────────────────────────────────
   await db.execute(`
     CREATE TABLE IF NOT EXISTS partner_commissions (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       referrer_user_id INTEGER,
       referred_user_id INTEGER NOT NULL UNIQUE,
       payment_id INTEGER,
@@ -141,38 +137,29 @@ export async function initUsersTable() {
   await ensureColumn("partner_commissions", "notes",               "ALTER TABLE partner_commissions ADD COLUMN notes TEXT");
   // Migrate: make referrer_user_id nullable if it was created with NOT NULL
   try {
-    const _info2 = await db.execute(`
-      SELECT column_name as name, is_nullable
-      FROM information_schema.columns 
-      WHERE table_name = 'partner_commissions' AND column_name = 'referrer_user_id'
-    `);
+    const _info2 = await db.execute(`PRAGMA table_info(partner_commissions)`);
     const _refCol = (_info2.rows || []).find(r => String(r.name).toLowerCase() === "referrer_user_id");
     
-    if (_refCol && _refCol.is_nullable === 'NO') {
-      await db.execute("ALTER TABLE partner_commissions ALTER COLUMN referrer_user_id DROP NOT NULL");
-      console.log("[Migration] partner_commissions.referrer_user_id made nullable");
+    if (_refCol && _refCol.notnull === 1) {
+      console.log("[Migration] partner_commissions.referrer_user_id is NOT NULL. SQLite doesn't support DROP NOT NULL easily, skipping.");
     }
   } catch (e) {
     console.error("[Migration Error] partner_commissions:", e.message);
   }
 
   // Partners table — migrate to standalone schema (no user_id required)
-  const _ptInfo = await db.execute(`
-    SELECT column_name as name 
-    FROM information_schema.columns 
-    WHERE table_name = 'partners'
-  `);
+  const _ptInfo = await db.execute(`PRAGMA table_info(partners)`);
   const _ptCols = (_ptInfo.rows||[]).map(r=>String(r.name).toLowerCase());
   
   if (_ptCols.length === 0) {
     // Table doesn't exist, just create it
-    await db.execute("CREATE TABLE IF NOT EXISTS partners (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
   } else if (!_ptCols.includes("email")) {
     // Legacy table exists but missing 'email'
     try {
       await db.execute("ALTER TABLE partners RENAME TO partners_legacy");
     } catch(_){}
-    await db.execute("CREATE TABLE IF NOT EXISTS partners (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
     try {
       await db.execute("INSERT INTO partners (id,name,user_id,referral_code,commission_rate,created_at,last_payout_at) SELECT id,name,user_id,referral_code,commission_rate,created_at,last_payout_at FROM partners_legacy ON CONFLICT DO NOTHING");
       await db.execute("DROP TABLE IF EXISTS partners_legacy");
@@ -182,7 +169,7 @@ export async function initUsersTable() {
     await ensureColumn("partners","status","ALTER TABLE partners ADD COLUMN status TEXT DEFAULT 'active'");
     await ensureColumn("partners","notes","ALTER TABLE partners ADD COLUMN notes TEXT");
   }
-  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id SERIAL PRIMARY KEY, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 }
 
@@ -438,8 +425,7 @@ if (!admin.apps.length) {
       console.log('[Firebase Admin] ✓ Initialized with service account credentials');
     } catch (err) {
       console.error('[Firebase Admin] ✗ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', err.message);
-      console.error('[Firebase Admin] Make sure the env var is valid JSON (not base64, not escaped).');
-      process.exit(1);
+      console.error('[Firebase Admin] Make sure the env var is valid JSON. Continuing without Firebase.');
     }
   } else {
     // Fallback for local dev only — will NOT work on Render (no ADC available)

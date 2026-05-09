@@ -11,12 +11,12 @@ export function didHeadlinePickMateriallyChange(prevPick, nextPick) {
 async function initPredictionPicksTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prediction_picks (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       fixture_id TEXT NOT NULL,
       engine_version TEXT NOT NULL,
       prediction_source TEXT NOT NULL,
-      generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      kickoff_at TIMESTAMPTZ,
+      generated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      kickoff_at TIMESTAMP,
       market_key TEXT NOT NULL,
       selection TEXT NOT NULL,
       bookmaker_odds REAL,
@@ -30,8 +30,12 @@ async function initPredictionPicksTable() {
     )
   `);
 
-  await db.execute(`ALTER TABLE prediction_picks ADD COLUMN IF NOT EXISTS material_signature TEXT`);
-  await db.execute(`ALTER TABLE prediction_picks ADD COLUMN IF NOT EXISTS model_confidence TEXT`);
+  try {
+    const info = await db.execute(`PRAGMA table_info(prediction_picks)`);
+    const cols = (info.rows || []).map(r => String(r.name).toLowerCase());
+    if (!cols.includes("material_signature")) await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
+    if (!cols.includes("model_confidence")) await db.execute(`ALTER TABLE prediction_picks ADD COLUMN model_confidence TEXT`);
+  } catch (e) {}
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`);
   await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`);

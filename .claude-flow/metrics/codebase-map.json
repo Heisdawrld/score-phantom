@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-05-09T21:31:01.582Z",
+  "projectRoot": "c:\\Users\\Dawrld\\Downloads\\score-phantom-main",
+  "structure": {
+    "hasPackageJson": true,
+    "hasTsConfig": false,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1778362261582
+}

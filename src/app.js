@@ -21,16 +21,15 @@ import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js
 import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
-import { refreshAccuracyCache } from "./storage/accuracyCache.js";
+import { runMaintenanceJobs } from "./scripts/maintenance.js";
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
 dotenv.config();
 
 // ── Startup checks ────────────────────────────────────────────────────────────
-if (!process.env.DATABASE_URL) {
-  console.error("❌ FATAL: DATABASE_URL environment variable is required.");
-  console.error("   Set it in your Render dashboard (or .env file locally).");
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("❌ FATAL: TURSO_DATABASE_URL environment variable is required.");
   process.exit(1);
 }
 
@@ -405,6 +404,12 @@ app.listen(PORT, async () => {
   await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
   startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
+  
+  // Run maintenance jobs on startup and every 24 hours
+  runMaintenanceJobs().catch(err => console.error("[Maintenance] Startup run failed:", err.message));
+  setInterval(() => {
+    runMaintenanceJobs().catch(err => console.error("[Maintenance] Scheduled run failed:", err.message));
+  }, 24 * 60 * 60 * 1000);
 
   // Migrate fixtures table for new columns (idempotent)
   const fixtureMigrations = [
