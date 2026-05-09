@@ -88,6 +88,7 @@ export async function initUsersTable() {
     ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
     ["partner_id",                "ALTER TABLE users ADD COLUMN partner_id INTEGER"],
     ["username",                  "ALTER TABLE users ADD COLUMN username TEXT UNIQUE"],
+    ["token_version",             "ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
@@ -175,7 +176,11 @@ export async function initUsersTable() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function signToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ 
+    id: user.id, 
+    email: user.email,
+    token_version: user.token_version || 1 
+  }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 
@@ -294,12 +299,24 @@ function publicUser(user) {
 }
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const auth = req.headers.authorization || "";
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
     const token = auth.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Security: Check token version
+    const result = await db.execute({ 
+      sql: "SELECT id, email, token_version FROM users WHERE id = ? LIMIT 1", 
+      args: [decoded.id] 
+    });
+    const user = result.rows?.[0];
+    
+    if (!user || user.token_version !== decoded.token_version) {
+      return res.status(401).json({ error: "Session expired or invalidated. Please sign in again." });
+    }
+
     req.user = decoded;
     next();
   } catch {
@@ -316,7 +333,11 @@ export async function requirePremiumAccess(req, res, next) {
     const decoded = jwt.verify(parts[1], JWT_SECRET);
     const result  = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [decoded.id] });
     const user    = result.rows?.[0];
-    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    
+    if (!user || user.token_version !== decoded.token_version) {
+      return res.status(401).json({ error: "Session expired or invalidated." });
+    }
+
     const access = computeAccessStatus(user);
     req.user   = user;
     req.access = access;
@@ -896,7 +917,7 @@ router.post("/login", authLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code, token_version FROM users WHERE id = ? LIMIT 1`,
       args: [req.user.id],
     });
     const user = result.rows?.[0];
@@ -920,6 +941,19 @@ router.get("/me", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[Me]", err);
     return res.status(500).json({ error: "Failed to load account" });
+  }
+});
+
+// POST /api/auth/logout-all — increment token_version to invalidate all existing sessions
+router.post("/logout-all", requireAuth, async (req, res) => {
+  try {
+    await db.execute({
+      sql: "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+      args: [req.user.id]
+    });
+    return res.json({ success: true, message: "Logged out from all devices" });
+  } catch (err) {
+    return res.status(500).json({ error: "Logout failed" });
   }
 });
 

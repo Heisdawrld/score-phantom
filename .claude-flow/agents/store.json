@@ -55,6 +55,45 @@
       "createdAt": "2026-05-09T21:10:57.940Z",
       "model": "haiku",
       "modelRoutedBy": "router"
+    },
+    "agent-1778364272291-43xnw5": {
+      "agentId": "agent-1778364272291-43xnw5",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:04:32.292Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
+    },
+    "agent-1778364364940-arpol1": {
+      "agentId": "agent-1778364364940-arpol1",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:06:04.941Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
+    },
+    "agent-1778365671004-83s32u": {
+      "agentId": "agent-1778365671004-83s32u",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:27:51.004Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
     }
   },
   "version": "3.0.0"
