@@ -174,6 +174,31 @@ export default function BasketballGame() {
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
+        {/* Error state */}
+        {error && !isLoading && (
+          <div className="relative rounded-2xl overflow-hidden p-6 text-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 via-transparent to-transparent" />
+            <div className="relative z-10">
+              <AlertCircle className="w-10 h-10 text-red-400/60 mx-auto mb-3" />
+              <p className="text-sm font-bold text-white/60 mb-1">Prediction Unavailable</p>
+              <p className="text-xs text-white/30 max-w-[240px] mx-auto">
+                This fixture may not be synced yet. Try again shortly or check back closer to tip-off.
+              </p>
+              <button onClick={() => window.history.back()} className="mt-4 px-4 py-2 rounded-xl bg-white/[0.06] text-xs font-bold text-white/50 hover:bg-white/10 transition-all">
+                Go Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+            <p className="text-xs text-white/30">Loading prediction…</p>
+          </div>
+        )}
+
         <section className="premium-surface-orange rounded-[28px] p-5 overflow-hidden relative">
           <div className="absolute -right-12 -top-10 h-32 w-32 rounded-full bg-orange-400/12 blur-3xl" />
           <div className="flex items-center justify-between gap-3">
@@ -210,9 +235,6 @@ export default function BasketballGame() {
             </div>
           </div>
         </section>
-
-        {isLoading && <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-6 text-sm text-white/40">Checking match data...</div>}
-        {error && <div className="rounded-3xl border border-red-400/20 bg-red-400/[0.06] p-6 text-sm text-red-100/70">{(error as any).message || "Basketball prediction failed"}</div>}
 
         {showNoLinesState && (
           <section className="premium-surface-orange rounded-[30px] p-5 overflow-hidden relative">

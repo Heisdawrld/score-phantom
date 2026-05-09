@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { motion } from 'framer-motion';
 import {
   ChevronDown,
@@ -239,9 +239,24 @@ function LeagueGroup({ group, offset, openGame, expanded, onToggle }: {
 
 export default function Basketball() {
   const [, setLocation] = useLocation();
-  const [filter, setFilter] = useState('all');
-  const [scope, setScope] = useState<'major' | 'global'>('major');
-  const [selectedDate, setSelectedDate] = useState(() => buildDateTabs()[0].key);
+  const search = useSearch();
+
+  // ── URL-backed state so Back button restores everything ──────────────────
+  const urlParams = useMemo(() => new URLSearchParams(search || ''), [search]);
+  const filter = urlParams.get('filter') || 'all';
+  const scope = (urlParams.get('scope') as 'major' | 'global') || 'global';
+  const selectedDate = urlParams.get('date') || buildDateTabs()[0].key;
+
+  function updateUrl(overrides: Record<string, string>) {
+    const p = new URLSearchParams(urlParams);
+    Object.entries(overrides).forEach(([k, v]) => p.set(k, v));
+    setLocation(`/basketball?${p.toString()}`, { replace: true });
+  }
+
+  const setFilter = (v: string) => updateUrl({ filter: v });
+  const setScope = (v: 'major' | 'global') => updateUrl({ scope: v });
+  const setSelectedDate = (v: string) => updateUrl({ date: v });
+
   const [query, setQuery] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const dateTabs = useMemo(() => buildDateTabs(), []);
@@ -344,7 +359,7 @@ export default function Basketball() {
                 scope === 'global' ? "bg-orange-400/10 text-orange-200" : "text-white/25 hover:text-white/50"
               )}
             >
-              {scope === 'major' ? 'Major' : 'Global'}
+              {scope === 'global' ? 'Global' : 'Major'}
             </button>
             <span className="w-px h-4 bg-white/[0.06]" />
             {FILTERS.map((f) => (
@@ -387,7 +402,7 @@ export default function Basketball() {
                 group={group}
                 offset={i * 4}
                 openGame={openGame}
-                expanded={expandedGroups[group.id] ?? false}
+                expanded={expandedGroups[group.id] ?? true}
                 onToggle={() => toggleGroup(group.id)}
               />
             ))
