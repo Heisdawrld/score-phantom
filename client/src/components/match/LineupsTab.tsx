@@ -72,7 +72,15 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+      <div className="relative rounded-2xl overflow-hidden mb-4">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Starting XIs & Formations</p>
           {data?.beta && (
@@ -157,5 +165,6 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
         )}
       </div>
     </div>
+  </div>
   );
 }

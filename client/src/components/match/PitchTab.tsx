@@ -67,7 +67,15 @@ export function PitchTab({ matchData }: any) {
         </div>
       )}
       {/* ── LIVE MOMENTUM ── */}
-      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+      <div className="relative rounded-2xl overflow-hidden mb-2">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
         <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Live Match Momentum</p>
         <div className="h-32 w-full mt-2">
           {momentum && momentum.length > 0 ? (
@@ -102,8 +110,20 @@ export function PitchTab({ matchData }: any) {
         </div>
       </div>
 
+        </div>
+        </div>
+      </div>
+
       {/* ── SPATIAL SHOTMAP ── */}
-      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+      <div className="relative rounded-2xl overflow-hidden mb-2">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Spatial Shotmap</p>
           <div className="flex gap-2">
@@ -200,7 +220,15 @@ export function PitchTab({ matchData }: any) {
 
       {/* ── MATCH EVENTS TIMELINE ── */}
       {timelineEvents.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] mt-2">
+        <div className="relative rounded-2xl overflow-hidden mt-2 mb-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-4">Key Events</p>
           <div className="relative pl-4 border-l border-white/10 space-y-6">
             {timelineEvents.map((ev: any, idx: number) => (
@@ -219,6 +247,7 @@ export function PitchTab({ matchData }: any) {
                 </div>
               </div>
             ))}
+          </div>
           </div>
         </div>
       )}

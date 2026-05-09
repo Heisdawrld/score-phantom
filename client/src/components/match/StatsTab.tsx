@@ -45,7 +45,15 @@ export function StatsTab({ d }: any) {
         { label: fix.home_team_name || "Home", form: hf, fa: homeF },
         { label: fix.away_team_name || "Away", form: af, fa: awayF },
       ].map(({ label, form, fa }) => !fa ? null : (
-        <div key={label} className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div key={label} className="relative rounded-2xl overflow-hidden mb-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
           <p className="text-xs font-black text-white/60 uppercase tracking-wider mb-3">{label}</p>
           {/* Form bubbles */}
           <div className="flex items-center gap-2 mb-3">
@@ -78,12 +86,21 @@ export function StatsTab({ d }: any) {
               <p className="text-[9px] text-white/30 mt-0.5">BTTS</p>
             </div>
           </div>
+          </div>
         </div>
       ))}
 
       {/* ── HEAD TO HEAD ── */}
       {h2h.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div className="relative rounded-2xl overflow-hidden mt-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Head to Head</p>
           {h2hS && (
             <div className="grid grid-cols-3 gap-2 mb-4">
@@ -110,6 +127,7 @@ export function StatsTab({ d }: any) {
                 <span className="text-xs text-white/40 truncate flex-1">{m.away}</span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       )}
