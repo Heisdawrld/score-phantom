@@ -121,7 +121,7 @@ function SmartRoot() {
 
 function GlassBubbles() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" style={{ clipPath: 'inset(0)' }} aria-hidden="true">
       <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)", filter: "blur(80px)" }}/>
       <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)", filter: "blur(90px)" }}/>
       <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)", filter: "blur(60px)" }}/>

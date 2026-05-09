@@ -89,8 +89,8 @@ export default function Paywall() {
   return (
     <div className="min-h-screen bg-[#060a0e] relative text-white selection:bg-primary/30">
       {/* Cinematic Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100vw] h-[50vh] bg-primary/10 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[50vh] bg-primary/10 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
         <div className="absolute bottom-0 right-0 w-[50vw] h-[50vh] bg-blue-500/5 blur-[100px] rounded-full mix-blend-screen" />
         <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>

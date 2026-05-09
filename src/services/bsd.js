@@ -426,7 +426,7 @@ export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {})
   if (!teamId) return [];
 
   const dTo = new Date();
-  const yearsBack = opts.yearsBack || 1;
+  const yearsBack = opts.yearsBack || 2;
   const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
 
   const params = {
