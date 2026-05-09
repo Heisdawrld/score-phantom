@@ -73,7 +73,57 @@ function mapPredictionRow(row) {
   };
 }
 
+async function getTableColumns(tableName) {
+  try {
+    const info = await db.execute(`PRAGMA table_info('${tableName}')`);
+    return (info.rows || []).map((row) => String(row.name));
+  } catch {
+    return [];
+  }
+}
+
+async function dropIndexes(indexes = []) {
+  for (const index of indexes) {
+    try { await db.execute(`DROP INDEX IF EXISTS ${index}`); } catch {}
+  }
+}
+
+async function archiveLegacyTableIfNeeded(tableName, requiredColumns, indexes = []) {
+  const columns = await getTableColumns(tableName);
+  if (!columns.length) return false;
+  const colSet = new Set(columns);
+  const ok = requiredColumns.every((col) => colSet.has(col));
+  if (ok) return false;
+
+  const suffix = Date.now();
+  const archiveName = `${tableName}_legacy_${suffix}`;
+  console.warn(`[BasketballDB] Legacy ${tableName} schema detected. Archiving to ${archiveName}. Missing: ${requiredColumns.filter((c) => !colSet.has(c)).join(', ')}`);
+  await dropIndexes(indexes);
+  await db.execute(`ALTER TABLE ${tableName} RENAME TO ${archiveName}`);
+  return true;
+}
+
+async function ensureBasketballSchemaShape() {
+  await archiveLegacyTableIfNeeded(
+    'basketball_games',
+    ['league_key', 'external_game_id', 'odds_event_id', 'start_time', 'raw_json'],
+    ['idx_basketball_games_league_time']
+  );
+  await archiveLegacyTableIfNeeded(
+    'basketball_odds',
+    ['league_key', 'game_id', 'odds_event_id', 'bookmaker', 'market_key', 'selection', 'price', 'point'],
+    ['idx_basketball_odds_game', 'idx_basketball_odds_event']
+  );
+  await archiveLegacyTableIfNeeded(
+    'basketball_predictions',
+    ['league_key', 'game_id', 'engine_version', 'prediction_json', 'no_clear_edge'],
+    ['idx_basketball_predictions_game']
+  );
+}
+
 export async function initBasketballTables() {
+  await ensureBasketballSchemaShape();
+
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     league_key TEXT NOT NULL,
@@ -221,12 +271,18 @@ export async function findBasketballGameByExternalId(leagueKey, externalGameId) 
   await initBasketballTables();
   const keys = siblingLeagueKeys(leagueKey);
   const placeholders = keys.map(() => '?').join(', ');
+  const lookup = String(externalGameId || '');
+  const numericLookup = /^\d+$/.test(lookup) ? Number(lookup) : -1;
   const r = await db.execute({
     sql: `SELECT * FROM basketball_games
-          WHERE league_key IN (${placeholders}) AND external_game_id = ?
-          ORDER BY CASE WHEN league_key = ? THEN 0 ELSE 1 END, updated_at DESC
+          WHERE league_key IN (${placeholders})
+            AND (external_game_id = ? OR odds_event_id = ? OR id = ?)
+          ORDER BY
+            CASE WHEN league_key = ? THEN 0 ELSE 1 END,
+            CASE WHEN external_game_id = ? THEN 0 WHEN odds_event_id = ? THEN 1 ELSE 2 END,
+            updated_at DESC
           LIMIT 1`,
-    args: [...keys, String(externalGameId), String(leagueKey || '').toLowerCase()],
+    args: [...keys, lookup, lookup, numericLookup, String(leagueKey || '').toLowerCase(), lookup, lookup],
   });
   return r.rows?.[0] ? { ...r.rows[0], raw: safeParse(r.rows[0].raw_json, null) } : null;
 }
@@ -360,7 +416,6 @@ export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit =
   const keys = siblingLeagueKeys(leagueKey);
   const placeholders = keys.map(() => '?').join(', ');
 
-  // First: try exact match (fastest, most accurate for consistent sources like BallDontLie)
   let r = await db.execute({
     sql: `SELECT * FROM basketball_games
           WHERE league_key IN (${placeholders})
@@ -372,8 +427,6 @@ export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit =
     args: [...keys, beforeIso || new Date().toISOString(), teamName, teamName, limit],
   });
 
-  // Fallback: fuzzy LIKE match for API Sports leagues where team names may vary
-  // e.g. "Fenerbahce Beko" vs "Fenerbahce", "LA Lakers" vs "Los Angeles Lakers"
   if ((!r.rows || r.rows.length < 3) && teamName && teamName.length >= 3) {
     const fuzzy = `%${teamName.split(/\s+/).filter(w => w.length >= 3).slice(0, 2).join('%')}%`;
     if (fuzzy.length > 4) {
@@ -387,7 +440,6 @@ export async function getRecentTeamGames(leagueKey, teamName, beforeIso, limit =
               LIMIT ?`,
         args: [...keys, beforeIso || new Date().toISOString(), fuzzy, fuzzy, limit],
       });
-      // Merge results, preferring exact matches, then deduped by id
       const existingIds = new Set((r.rows || []).map(row => row.id));
       const merged = [...(r.rows || []), ...(r2.rows || []).filter(row => !existingIds.has(row.id))];
       return merged.slice(0, limit);
@@ -476,8 +528,7 @@ export async function getLatestBasketballPredictionSummaries(gameIds = [], { pre
   const ids = [...new Set((gameIds || []).map((id) => Number(id)).filter(Number.isFinite))];
   if (!ids.length) return new Map();
 
-  const args = preferredEngineVersion ? [...ids, preferredEngineVersion] : [...ids];
-  const preferredOrder = preferredEngineVersion ? 'CASE WHEN bp.engine_version = ? THEN 0 ELSE 1 END,' : '';
+  const args = [...ids];
   const placeholders = ids.map(() => '?').join(', ');
   const r = await db.execute({
     sql: `
@@ -535,10 +586,7 @@ export async function listBasketballPredictions({ leagueKey = null, from = null,
   if (to) { clauses.push('g.start_time <= ?'); args.push(to); }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-  const preferredOrder = engineVersion ? 'CASE WHEN bp.engine_version = ? THEN 0 ELSE 1 END,' : '';
-  const queryArgs = engineVersion
-    ? [...args, engineVersion, Math.min(Math.max(Number(limit || 50), 1), 200)]
-    : [...args, Math.min(Math.max(Number(limit || 50), 1), 200)];
+  const queryArgs = [...args, Math.min(Math.max(Number(limit || 50), 1), 200)];
   const r = await db.execute({
     sql: `
       SELECT *
