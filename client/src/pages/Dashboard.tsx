@@ -199,8 +199,8 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
 
       <Header />
@@ -271,31 +271,80 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
 
-        {/* ── Today's Top Pick ── */}
+        {/* ── Today's Top Pick — Premium Glow Card ── */}
         {heroPick && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            onClick={() => setLocation("/matches/" + heroPick.fixtureId)}
-            className="group w-full text-left rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/8 via-primary/4 to-transparent p-4 transition-all hover:border-primary/25 hover:shadow-[0_0_30px_rgba(16,231,116,0.08)]"
+            className="relative w-full rounded-2xl overflow-hidden"
           >
-            <div className="flex items-center gap-2 mb-3">
-              <Flame className="w-3.5 h-3.5 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/70">Top Pick</span>
+            {/* Cinematic green glow backdrop */}
+            <div className="absolute inset-0 z-0">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+              {/* Diagonal light streaks */}
+              <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+                background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+              }} />
+              <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+              <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-black text-white truncate">{heroPick.homeTeam} vs {heroPick.awayTeam}</p>
-                <p className="text-xs text-white/40 mt-1">{heroPick.tournamentName} · {toWAT(heroPick.matchTime)}</p>
-                <p className="text-sm font-black text-primary mt-2">{heroPick.pick}</p>
+
+            <button
+              onClick={() => setLocation("/matches/" + heroPick.fixtureId)}
+              className="relative z-10 w-full text-left p-5 border border-primary/15 rounded-2xl backdrop-blur-sm"
+            >
+              {/* Top bar: label + dismiss */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-primary" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Top Pick</span>
+                </div>
+                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-white/20 text-xs hover:bg-white/10 transition-colors" onClick={(e) => { e.stopPropagation(); }}>
+                  ×
+                </div>
               </div>
-              <div className="shrink-0 flex flex-col items-center gap-1">
-                <ConfidenceRing value={heroPick.confidence} size={44} />
-                <span className="text-[9px] font-bold text-white/30 uppercase">Conf.</span>
+
+              {/* Content: match info + confidence ring */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-3">
+                  <p className="text-base font-black text-white leading-tight">{heroPick.homeTeam} vs {heroPick.awayTeam}</p>
+                  <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90 hover:bg-white/[0.1] transition-colors" onClick={(e) => { e.stopPropagation(); setLocation("/matches/" + heroPick.fixtureId); }}>
+                    {heroPick.pick}
+                    <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+                  </button>
+                </div>
+
+                {/* Large circular confidence gauge */}
+                <div className="shrink-0 flex flex-col items-center">
+                  <div className="relative w-[72px] h-[72px]">
+                    {/* Background ring */}
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+                      <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                      <circle
+                        cx="36" cy="36" r="30" fill="none"
+                        stroke="url(#confGrad)"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(heroPick.confidence / 100) * 188.5} 188.5`}
+                      />
+                      <defs>
+                        <linearGradient id="confGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#10e774" />
+                          <stop offset="100%" stopColor="#0bc95f" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    {/* Center text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-lg font-black text-white leading-none">{heroPick.confidence}%</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">Conf.</span>
+                </div>
               </div>
-            </div>
-          </motion.button>
+            </button>
+          </motion.div>
         )}
 
         {/* ── Date Strip ── */}
