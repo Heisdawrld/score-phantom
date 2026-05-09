@@ -61,7 +61,6 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
         >
           Upgrade to Chat
         </button>
-        </div>
       </div>
     </div>
   );

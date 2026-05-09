@@ -108,11 +108,9 @@ export function PitchTab({ matchData }: any) {
           <span className="text-primary">{matchData?.fixture?.home_team_name}</span>
           <span className="text-blue-500">{matchData?.fixture?.away_team_name}</span>
         </div>
+        </div>
       </div>
 
-        </div>
-        </div>
-      </div>
 
       {/* ── SPATIAL SHOTMAP ── */}
       <div className="relative rounded-2xl overflow-hidden mb-2">
@@ -215,6 +213,7 @@ export function PitchTab({ matchData }: any) {
                <p className="text-[10px] text-white/30 mt-1">Awaiting spatial data from engine</p>
             </div>
           )}
+        </div>
         </div>
       </div>
 
