@@ -236,43 +236,8 @@ async function runSchema() {
       away_goals INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
-    // Basketball specific tables to ensure they exist on Turso
-    `CREATE TABLE IF NOT EXISTS basketball_games (
-      id TEXT PRIMARY KEY,
-      league_id TEXT NOT NULL,
-      home_team TEXT NOT NULL,
-      away_team TEXT NOT NULL,
-      match_date TEXT NOT NULL,
-      status TEXT DEFAULT 'NS',
-      home_score INTEGER,
-      away_score INTEGER,
-      enriched INTEGER DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS basketball_odds (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      game_id TEXT NOT NULL UNIQUE,
-      home_win REAL,
-      away_win REAL,
-      spread_home REAL,
-      spread_away REAL,
-      spread_line REAL,
-      over_under_line REAL,
-      over_odds REAL,
-      under_odds REAL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS basketball_predictions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      game_id TEXT NOT NULL UNIQUE,
-      prediction_json TEXT,
-      best_pick_market TEXT,
-      best_pick_selection TEXT,
-      best_pick_probability REAL,
-      best_pick_edge REAL,
-      confidence_score REAL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`,
+    // Basketball tables are owned by src/basketball/storage/basketballDb.js.
+    // Do not create legacy basketball tables here; that can block the current engine schema on Turso.
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
