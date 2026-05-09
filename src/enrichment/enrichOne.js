@@ -18,11 +18,26 @@ function parseScore(scoreStr) {
   return { home, away };
 }
 
+let historicalMetaColumnReady = false;
+
 async function ensureHistoricalMetaColumn() {
+  if (historicalMetaColumnReady) return;
+
   try {
-    await db.execute('ALTER TABLE historical_matches ADD COLUMN meta TEXT');
-  } catch (_) {
-    // column already exists / unsupported in this dialect — safe to ignore
+    const info = await db.execute("PRAGMA table_info('historical_matches')");
+    const hasMeta = (info.rows || []).some((col) => String(col.name) === 'meta');
+    if (!hasMeta) {
+      await db.execute('ALTER TABLE historical_matches ADD COLUMN meta TEXT');
+      console.log('[enrichOne] Added historical_matches.meta column');
+    }
+    historicalMetaColumnReady = true;
+  } catch (err) {
+    const msg = String(err?.message || err?.cause?.message || '').toLowerCase();
+    if (msg.includes('duplicate column') && msg.includes('meta')) {
+      historicalMetaColumnReady = true;
+      return;
+    }
+    console.warn('[enrichOne] Could not verify historical_matches.meta column:', err.message);
   }
 }
 
