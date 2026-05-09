@@ -295,8 +295,9 @@ export default function Basketball() {
 
   const openGame = (game: any) => {
     const id = game.external_game_id || game.odds_event_id || game.id;
+    const leagueKey = game.league_key || 'basketball';
     if (!id || String(id) === 'undefined' || String(id) === 'null') return;
-    setLocation(`/basketball/games/${game.league_key}/${id}`);
+    setLocation(`/basketball/games/${encodeURIComponent(String(leagueKey))}/${encodeURIComponent(String(id))}`);
   };
   const toggleGroup = (id: string) => setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
