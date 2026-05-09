@@ -257,24 +257,22 @@ export default function TopPicksToday() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenPanel(pick.fixtureId)}
                   className={cn(
-                    "relative rounded-2xl border p-4 cursor-pointer transition-all group",
-                    isTop
-                      ? "gradient-card-green glow-primary"
-                      : isTop3
-                      ? "glass-card border-white/10"
-                      : "glass-card"
+                    "relative rounded-2xl p-4 cursor-pointer transition-all group overflow-hidden",
+                    isTop ? "border border-primary/15" : "border glass-card border-white/10"
                   )}
                 >
-                  {/* Hot pick ribbon for #1 */}
                   {isTop && (
-                    <div className="absolute top-0 right-4 -translate-y-1/2">
-                      <span className="flex items-center gap-1 bg-primary text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full shadow-[0_0_16px_rgba(16,231,116,0.5)]">
-                        <Sparkles className="w-2.5 h-2.5" /> Hot Pick
-                      </span>
+                    <div className="absolute inset-0 z-0 pointer-events-none">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+                      <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+                        background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+                      }} />
+                      <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+                      <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
                     </div>
                   )}
 
-                  <div className="flex items-start gap-3">
+                  <div className="relative z-10 flex items-start gap-3">
                     {/* Rank */}
                     <div className="shrink-0 flex flex-col items-center gap-1 pt-0.5">
                       <span className="text-xl leading-none">{RANK_MEDALS[idx] ?? `#${idx + 1}`}</span>

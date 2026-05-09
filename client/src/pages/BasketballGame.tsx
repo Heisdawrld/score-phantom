@@ -239,28 +239,79 @@ export default function BasketballGame() {
 
         {!isLoading && !error && data && !showNoLinesState && (
           <>
-            <section className={cn("rounded-[30px] border p-5 overflow-hidden relative", noEdge ? "border-white/[0.06] bg-white/[0.025]" : "premium-surface-orange border-orange-300/20")}>
-              <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-400/10 blur-3xl" />
-              <div className="relative flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-200/65">Recommended Play</p>
-                  <h2 className={cn("mt-2 text-3xl font-black leading-tight", noEdge ? "text-white/55" : "text-orange-100")}>{rec.pick || "No Clear Edge"}</h2>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-orange-100">{rec.market || "Market"}</span>
-                    <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">{rec.riskLevel || "HIGH"} Risk</span>
-                    {rec.edgePoints != null && <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">+{rec.edgePoints} Edge</span>}
-                    {cacheMeta?.source && (
-                      <span className="rounded-full border border-white/[0.08] bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">
-                        {cacheMeta.source === "cache" ? "Cached model" : "Fresh rebuild"}
-                      </span>
-                    )}
+            <section className="relative rounded-2xl overflow-hidden mb-4">
+              {/* Cinematic green glow backdrop */}
+              <div className="absolute inset-0 z-0">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+                {/* Diagonal light streaks */}
+                <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+                  background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+                }} />
+                <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+                <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+              </div>
+
+              <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-primary text-sm">🎯</span>
+                    <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-center shrink-0">
-                  <p className="text-[9px] uppercase tracking-widest text-white/35">Phantom</p>
-                  <p className="text-2xl font-black text-primary">{rec.phantomScore || 0}</p>
+
+                {/* Match Pick & Ring */}
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-2">Our Best Bet</p>
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-2xl font-black text-white uppercase leading-tight">
+                      {rec.pick || "No Clear Edge"}
+                    </p>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90">
+                      {rec.pick || "No Clear Edge"}
+                      <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+                    </div>
+                  </div>
+
+                  {/* Large circular confidence gauge */}
+                  <div className="shrink-0 flex flex-col items-center">
+                    <div className="relative w-[80px] h-[80px]">
+                      {/* Background ring */}
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
+                        <circle
+                          cx="36" cy="36" r="30" fill="none"
+                          stroke="url(#confGradBB)"
+                          strokeWidth="4.5"
+                          strokeLinecap="round"
+                          strokeDasharray={`${((rec.phantomScore || 0) / 100) * 188.5} 188.5`}
+                        />
+                        <defs>
+                          <linearGradient id="confGradBB" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#10e774" />
+                            <stop offset="100%" stopColor="#0bc95f" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      {/* Center text */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-black text-white leading-none">{rec.phantomScore || 0}%</span>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">PHANTOM SCORE</span>
+                  </div>
                 </div>
-              </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">{rec.market || "Market"}</span>
+                  <span className="rounded-full border border-white/[0.08] bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/70">{rec.riskLevel || "HIGH RISK"}</span>
+                  {rec.edgePoints != null && <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">+{rec.edgePoints} Edge</span>}
+                  {cacheMeta?.source && (
+                    <span className="rounded-full border border-white/[0.08] bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">
+                      {cacheMeta.source === "cache" ? "Cached" : "Fresh"}
+                    </span>
+                  )}
+                </div>
 
               <div className="relative mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Metric label="Model" value={pct(rec.modelProbability)} />
@@ -270,11 +321,12 @@ export default function BasketballGame() {
 
               <div className="relative mt-4 space-y-2">
                 {userReasons.map((reason: string, i: number) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-white/55">
-                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-300" />
+                  <div key={i} className="flex items-start gap-2 text-xs text-white/70">
+                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                     <span>{reason}</span>
                   </div>
                 ))}
+              </div>
               </div>
             </section>
 

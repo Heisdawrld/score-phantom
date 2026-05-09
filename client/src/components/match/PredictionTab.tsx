@@ -167,15 +167,25 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── RECOMMENDATION CARD ── */}
+      {/* ── RECOMMENDATION CARD — Premium Glow Style ── */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 260, damping: 24 }}
-        className="relative rounded-2xl overflow-hidden border border-[#1a3526]"
-        style={{ background: "linear-gradient(135deg, #0a1f15 0%, #060f0b 100%)" }}>
-        <SpiralWatermark />
-        <div className="relative p-5">
+        className="relative rounded-2xl overflow-hidden"
+      >
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          {/* Diagonal light streaks */}
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+            background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+          }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+
+        <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}
@@ -234,29 +244,49 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           </div>
 
           {/* OUR BEST BET */}
-          <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Our Best Bet</p>
+          <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">Our Best Bet</p>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
-            className="flex items-start justify-between gap-3 mb-1">
-            <div className="flex-1">
+            className="flex items-center justify-between gap-4 mb-1">
+            <div className="min-w-0 flex-1 space-y-2">
               <p className="text-2xl font-black text-white uppercase leading-tight">
                 {rec.pick || "No clear pick"}
               </p>
-              {/* Model probability secondary stat */}
-              <p className="text-[10px] text-white/25 mt-1.5 tabular-nums">
-                Confidence: {rec.probability_pct || Math.round((rec.probability || 0) * 100)}%
-              </p>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90">
+                {rec.pick || "No clear pick"}
+                <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+              </div>
             </div>
-            {/* Confidence ring */}
-            <ConfidenceRing
-              value={phantomScore}
-              size={80}
-              strokeWidth={4.5}
-              showLabel
-              label="PHANTOM SCORE"
-            />
+            
+            {/* Large circular confidence gauge */}
+            <div className="shrink-0 flex flex-col items-center">
+              <div className="relative w-[80px] h-[80px]">
+                {/* Background ring */}
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
+                  <circle
+                    cx="36" cy="36" r="30" fill="none"
+                    stroke="url(#confGradTab)"
+                    strokeWidth="4.5"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(phantomScore / 100) * 188.5} 188.5`}
+                  />
+                  <defs>
+                    <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#10e774" />
+                      <stop offset="100%" stopColor="#0bc95f" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                {/* Center text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-black text-white leading-none">{phantomScore}%</span>
+                </div>
+              </div>
+              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">PHANTOM SCORE</span>
+            </div>
           </motion.div>
 
           {/* Edge vs bookmakers */}
