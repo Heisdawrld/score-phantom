@@ -1219,7 +1219,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
              p.best_pick_implied_probability, p.best_pick_edge,
-             p.best_pick_score, p.confidence_model, p.confidence_volatility,
+             p.best_pick_score, p.confidence_model, p.confidence_volatility, p.is_sharp_value,
              p.explanation_json, p.backup_picks_json,
              f.tournament_name, f.match_date, f.enrichment_status, f.data_quality,
              f.home_team_logo, f.away_team_logo, f.match_status
@@ -1311,6 +1311,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           h2h:       true, // always computed by engine
           xg:        row.best_pick_probability != null,
           tactical:  row.confidence_volatility != null,
+          sharp:     Number(row.is_sharp_value || 0) === 1,
         };
       } catch (_) {}
 
@@ -1345,6 +1346,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         time:        row.match_date ? (()=>{ try{ const d=new Date(row.match_date); return d.toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Lagos'}); }catch(e){ return null; } })() : null,
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,
+        sharp:       Number(row.is_sharp_value || 0) === 1,
         factors,
       };
     });

@@ -158,6 +158,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const homeManager = (data as any)?.features?.homeManager || null;
   const awayManager = (data as any)?.features?.awayManager || null;
   const polyOdds = (data as any)?.features?.polymarketOdds || null;
+  const sharp1x2 = polyOdds?.odds?.["1x2"] || null;
+  const hasSharpMoney1x2 = !!sharp1x2 && ["home", "draw", "away"].some((key) => {
+    const value = sharp1x2?.[key];
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
+  });
   const tacticalMatchup = (data as any)?.features?.tacticalMatchup || rec?.tacticalMatchup || null;
   const hasTacticalPanel = !!tacticalMatchup || !!homeManager || !!awayManager;
 
@@ -355,7 +360,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           )}
 
           {/* ── POLYMARKET SHARP ODDS ── */}
-          {polyOdds?.odds?.['1x2'] && (
+          {hasSharpMoney1x2 && (
             <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Polymarket Sharp Money</span>
@@ -364,15 +369,15 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
                   <p className="text-[9px] text-white/30 uppercase mb-1">Home (1)</p>
-                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].home * 100)}%</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.home * 100)}%</p>
                 </div>
                 <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
                   <p className="text-[9px] text-white/30 uppercase mb-1">Draw (X)</p>
-                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].draw * 100)}%</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.draw * 100)}%</p>
                 </div>
                 <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
                   <p className="text-[9px] text-white/30 uppercase mb-1">Away (2)</p>
-                  <p className="text-sm font-black text-white">{Math.round(polyOdds.odds['1x2'].away * 100)}%</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.away * 100)}%</p>
                 </div>
               </div>
               <p className="text-[9px] text-white/20 mt-2 italic text-center">Global sharp money implied probabilities</p>

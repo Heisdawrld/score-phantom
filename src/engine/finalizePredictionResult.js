@@ -47,7 +47,12 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     h2hUsed: (features.h2hMatchesAvailable || 0) > 0,
     xgUsed: xg.homeExpectedGoals > 0 && xg.awayExpectedGoals > 0,
     tacticalUsed: !!(features.tacticalMatchup && features.tacticalMatchup.tacticalConfidence !== 'low'),
-    sharpUsed: !!features.bestOdds,
+    sharpUsed: !!features.bestOdds || !!(
+      features.polymarketOdds?.odds &&
+      Object.values(features.polymarketOdds.odds).some((market) =>
+        market && typeof market === 'object' && Object.values(market).some((value) => Number.isFinite(value) && value > 0)
+      )
+    ),
     injuriesUsed: features.homeMissingXgImpact > 0 || features.awayMissingXgImpact > 0,
   };
 
