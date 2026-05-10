@@ -3,8 +3,17 @@ import { bsdFetchAll, normaliseBsdEventToFixture, extractOddsFromEvent } from '.
 
 dotenv.config();
 
-const TURSO_URL = 'https://scorephantom-heisdawrld.aws-eu-west-1.turso.io';
-const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzUyODg3NjEsImlkIjoiMDE5Y2YyM2EtNzkwMS03MTFhLWI5NDItYWU0ZDBlY2JkYjkxIiwicmlkIjoiZmNiZjE0ZTItZWJmYS00MzMyLWIxOTktN2RmZmIyOWUzYmJhIn0.XVNBBygoogICZz8ZpWKLzaqKUjHs-ZDRRrV_7YJMf_ScJgUT202uNmjZU4Wai1zzZ0z1PYqzGJ90hgYP-pceDw';
+function tursoHttpsBase() {
+  const fromEnv = process.env.TURSO_HTTP_URL?.replace(/\/$/, '');
+  if (fromEnv) return fromEnv;
+  const raw = process.env.TURSO_DATABASE_URL || '';
+  const trimmed = raw.replace(/^libsql:\/\//i, '').replace(/^https:\/\//i, '');
+  if (!trimmed) return null;
+  return `https://${trimmed}`;
+}
+
+const TURSO_URL = tursoHttpsBase();
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -15,6 +24,11 @@ function parseArgs(argv) {
     if (m) out[m[1]] = m[2];
   }
   return out;
+}
+
+if (!TURSO_URL || !TURSO_TOKEN) {
+  console.error('Missing TURSO_HTTP_URL or TURSO_DATABASE_URL + TURSO_AUTH_TOKEN.');
+  process.exit(1);
 }
 
 // Function to execute SQL using Turso's HTTP API directly (bypasses TCP firewall)
@@ -95,13 +109,19 @@ async function insertEvents(events) {
           args: [f.tournament_id, f.tournament_name, f.category_name, ''],
         },
         {
-          sql: `INSERT OR REPLACE INTO fixtures
-                  (id, home_team_id, away_team_id, tournament_id,
-                   home_team_name, away_team_name, tournament_name, category_name,
-                   match_date, match_url, match_status, home_score, away_score,
-                   home_team_logo, away_team_logo,
-                   bsd_league_id, bsd_home_api_id, bsd_away_api_id, bsd_event_api_id, enriched)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+          sql: `INSERT INTO fixtures
+                 (id, home_team_id, away_team_id, tournament_id,
+                  home_team_name, away_team_name, tournament_name, category_name,
+                  match_date, match_url, home_score, away_score,
+                  match_status, home_team_logo, away_team_logo,
+                  bsd_league_id, bsd_home_api_id, bsd_away_api_id, bsd_event_api_id, enriched)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                 ON CONFLICT (id) DO UPDATE SET
+                   home_score = EXCLUDED.home_score,
+                   away_score = EXCLUDED.away_score,
+                   match_status = EXCLUDED.match_status,
+                   home_team_logo = EXCLUDED.home_team_logo,
+                   away_team_logo = EXCLUDED.away_team_logo`,
           args: [
             f.match_id, f.home_team_id, f.away_team_id, f.tournament_id,
             f.home_team_name, f.away_team_name, f.tournament_name, f.category_name,
@@ -116,9 +136,13 @@ async function insertEvents(events) {
       const odds = extractOddsFromEvent(event, f.match_id);
       if (odds.home || odds.draw || odds.away) {
         statements.push({
-          sql: `INSERT OR REPLACE INTO fixture_odds
-                  (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO fixture_odds
+                    (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT (fixture_id) DO UPDATE SET
+                    home = EXCLUDED.home, draw = EXCLUDED.draw, away = EXCLUDED.away,
+                    btts_yes = EXCLUDED.btts_yes, btts_no = EXCLUDED.btts_no,
+                    over_under = EXCLUDED.over_under`,
           args: [
             odds.fixture_id, odds.home, odds.draw, odds.away,
             odds.btts_yes, odds.btts_no, JSON.stringify(odds.over_under || {}),

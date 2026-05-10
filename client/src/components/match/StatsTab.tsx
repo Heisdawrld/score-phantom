@@ -1,33 +1,30 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
-
-const RISK_LABELS: Record<string, string> = {
-  SAFE: 'Stable',
-  MODERATE: 'Calculated',
-  AGGRESSIVE: 'High Variance',
-  VOLATILE: 'High Variance',
-};
-function riskColor(r: string) {
-  const l = (r || '').toUpperCase();
-  if (l === 'SAFE') return 'text-primary';
-  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
-  return 'text-blue-400';
-}
+import { cn, fuzzyTeamMatch, sortMatchesByDateDesc } from "@/lib/utils";
 
 export function StatsTab({ d }: any) {
-  const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length ? d.meta.h2h : [];
-  const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length ? d.meta.homeForm : [];
-  const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length ? d.meta.awayForm : [];
+  const rawH2h =
+    Array.isArray(d?.h2h) && d.h2h.length
+      ? d.h2h
+      : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length
+        ? d.meta.h2h
+        : [];
+  const rawHf =
+    Array.isArray(d?.homeForm) && d.homeForm.length
+      ? d.homeForm
+      : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length
+        ? d.meta.homeForm
+        : [];
+  const rawAf =
+    Array.isArray(d?.awayForm) && d.awayForm.length
+      ? d.awayForm
+      : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length
+        ? d.meta.awayForm
+        : [];
+  const h2h = sortMatchesByDateDesc(rawH2h);
+  const hf = sortMatchesByDateDesc(rawHf);
+  const af = sortMatchesByDateDesc(rawAf);
   const fix = d?.fixture || {};
   const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
-  const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
+  const isHome = (m: any, t: string) => fuzzyTeamMatch(m.home, t);
   const resultOf = (m: any, t: string) => { const { h, a } = parseScore(m); const home = isHome(m, t); const sc = home ? h : a; const conc = home ? a : h; return sc > conc ? "W" : sc === conc ? "D" : "L"; };
   const rColor = (r: string) => r === "W" ? "bg-primary text-black" : r === "D" ? "bg-amber-400 text-black" : "bg-red-500 text-white";
   const formAnalysis = (form: any[], teamName: string) => {
@@ -66,7 +63,15 @@ export function StatsTab({ d }: any) {
         { label: fix.home_team_name || "Home", form: hf, fa: homeF },
         { label: fix.away_team_name || "Away", form: af, fa: awayF },
       ].map(({ label, form, fa }) => !fa ? null : (
-        <div key={label} className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div key={label} className="relative rounded-2xl overflow-hidden mb-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
           <p className="text-xs font-black text-white/60 uppercase tracking-wider mb-3">{label}</p>
           {/* Form bubbles */}
           <div className="flex items-center gap-2 mb-3">
@@ -99,12 +104,21 @@ export function StatsTab({ d }: any) {
               <p className="text-[9px] text-white/30 mt-0.5">BTTS</p>
             </div>
           </div>
+          </div>
         </div>
       ))}
 
       {/* ── HEAD TO HEAD ── */}
       {h2h.length > 0 && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+        <div className="relative rounded-2xl overflow-hidden mt-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Head to Head</p>
           {h2hS && (
             <div className="grid grid-cols-3 gap-2 mb-4">
@@ -131,6 +145,7 @@ export function StatsTab({ d }: any) {
                 <span className="text-xs text-white/40 truncate flex-1">{m.away}</span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       )}

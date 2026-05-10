@@ -14,25 +14,22 @@ function fuzzyTeamMatch(a, b) {
  * buildFeatureVector.js
  *
  * Assembles all prediction features for a fixture.
- * Combines:
- *   - Historical form from historical_matches table
- *   - Team profiles (aggregated stats) from fixtures.meta
- *   - Standings + table context from fixtures.meta
- *   - Optional lineup modifier from fixtures.meta
- *   - Odds from fixture_odds table
+ * Combines historical form, team profiles, standings, lineup modifiers,
+ * odds, and league identity for calibration.
  */
 
 import db from '../config/database.js';
 import { safeNum } from '../utils/math.js';
 import { computeFormFeatures } from './computeFormFeatures.js';
+import { computeLastMatchMemory } from './computeLastMatchMemory.js';
 import { computeSplitFeatures } from './computeSplitFeatures.js';
 import { computeH2HFeatures } from './computeH2HFeatures.js';
 import { computeTeamStrength } from './computeTeamStrength.js';
 import { computeContextFeatures } from './computeContextFeatures.js';
 import { computeVolatilityFeatures } from './computeVolatilityFeatures.js';
 import { computeMarketFeatures } from './computeMarketFeatures.js';
-
-// ── DB helpers ────────────────────────────────────────────────────────────────
+import { computeBsdIntelligenceFeatures } from './computeBsdIntelligenceFeatures.js';
+import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
 async function getMatches(fixtureId, type) {
   const result = await db.execute({
@@ -56,7 +53,17 @@ async function getFixtureMeta(fixtureId) {
   }
 }
 
-// ── Table context builder ─────────────────────────────────────────────────────
+async function getFixtureContext(fixtureId) {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT tournament_id, tournament_name, category_name, home_team_id, away_team_id FROM fixtures WHERE id = ? LIMIT 1',
+      args: [fixtureId],
+    });
+    return result.rows?.[0] || {};
+  } catch {
+    return {};
+  }
+}
 
 function buildStandingsMap(standings = []) {
   const map = new Map();
@@ -102,12 +109,6 @@ function buildTableContext(homeTeamName, awayTeamName, standings, homeMomentum, 
   };
 }
 
-// ── Team profile features ─────────────────────────────────────────────────────
-
-/**
- * Extract prediction-relevant features from an aggregated team profile.
- * Returns null fields if profile is unavailable.
- */
 function extractProfileFeatures(profile) {
   if (!profile) {
     return {
@@ -120,6 +121,13 @@ function extractProfileFeatures(profile) {
       profileOver15Rate: null,
       homeWinRate: null,
       awayWinRate: null,
+      statsMatchesAvailable: 0,
+      avgPossession: null,
+      avgShotsFor: null,
+      avgShotsOnTargetFor: null,
+      avgDangerousAttacksFor: null,
+      avgCornersFor: null,
+      avgOpponentShotsOnTargetAllowed: null,
     };
   }
 
@@ -133,20 +141,24 @@ function extractProfileFeatures(profile) {
     profileOver15Rate: safeNum(profile.over15Rate, null),
     homeWinRate: safeNum(profile.homeWinRate, null),
     awayWinRate: safeNum(profile.awayWinRate, null),
+    statsMatchesAvailable: safeNum(profile.matchesAnalyzed, 0),
+    avgPossession: safeNum(profile.avgPossession ?? profile.possession ?? null, null),
+    avgShotsFor: safeNum(profile.avgShotsFor ?? profile.avgShots ?? null, null),
+    avgShotsOnTargetFor: safeNum(profile.avgShotsOnTargetFor ?? profile.avgShotsOnTarget ?? null, null),
+    avgDangerousAttacksFor: safeNum(profile.avgDangerousAttacksFor ?? profile.avgDangerousAttacks ?? null, null),
+    avgCornersFor: safeNum(profile.avgCornersFor ?? profile.avgCorners ?? null, null),
+    avgOpponentShotsOnTargetAllowed: safeNum(profile.avgOpponentShotsOnTargetAllowed ?? profile.avgShotsOnTargetAgainst ?? null, null),
   };
 }
 
-/**
- * Lineup modifier: adjust confidence flags based on lineup info.
- */
 function extractLineupModifiers(lineupModifier) {
   if (!lineupModifier) {
     return {
       hasLineup: false,
       homeLineupComplete: null,
       awayLineupComplete: null,
-      homeAttackerCount: null,
-      awayAttackerCount: null,
+      homeAttackers: null,
+      awayAttackers: null,
       homeHasKeeper: null,
       awayHasKeeper: null,
     };
@@ -155,31 +167,23 @@ function extractLineupModifiers(lineupModifier) {
     hasLineup: true,
     homeLineupComplete: lineupModifier.homeLineupConfirmed || false,
     awayLineupComplete: lineupModifier.awayLineupConfirmed || false,
-    homeAttackerCount: lineupModifier.homeAttackers || null,
-    awayAttackerCount: lineupModifier.awayAttackers || null,
+    homeAttackers: lineupModifier.homeAttackers || null,
+    awayAttackers: lineupModifier.awayAttackers || null,
     homeHasKeeper: lineupModifier.homeHasKeeper ?? true,
     awayHasKeeper: lineupModifier.awayHasKeeper ?? true,
   };
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
-
-/**
- * Build the full feature vector for a fixture.
- *
- * @param {string} fixtureId
- * @param {string} homeTeamName
- * @param {string} awayTeamName
- * @param {object|null} odds
- * @returns {object} full feature vector
- */
-export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null) {
-  const [h2hRaw, homeFormRaw, awayFormRaw, meta] = await Promise.all([
+export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, odds = null, metaOverride = null) {
+  const [h2hRaw, homeFormRaw, awayFormRaw, dbMeta, fixtureContext] = await Promise.all([
     getMatches(fixtureId, 'h2h'),
     getMatches(fixtureId, 'home_form'),
     getMatches(fixtureId, 'away_form'),
     getFixtureMeta(fixtureId),
+    getFixtureContext(fixtureId),
   ]);
+
+  const meta = resolveFixtureMeta(metaOverride, dbMeta);
 
   const standings = Array.isArray(meta?.standings) ? meta.standings : [];
   const standingsMap = buildStandingsMap(standings);
@@ -189,41 +193,59 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     meta?.homeMomentum, meta?.awayMomentum
   );
 
-  // ── Core form features ─────────────────────────────────────────────────────
   const homeFormFeatures = computeFormFeatures(homeFormRaw, homeTeamName, standingsMap);
   const awayFormFeatures = computeFormFeatures(awayFormRaw, awayTeamName, standingsMap);
-
-  // ── Venue split features ───────────────────────────────────────────────────
+  const homeLastMatchMemory = computeLastMatchMemory(homeFormRaw, homeTeamName);
+  const awayLastMatchMemory = computeLastMatchMemory(awayFormRaw, awayTeamName);
   const splitFeatures = computeSplitFeatures(homeFormFeatures, awayFormFeatures);
-
-  // ── H2H features ───────────────────────────────────────────────────────────
   const h2hFeatures = computeH2HFeatures(h2hRaw, homeTeamName, awayTeamName);
-
-  // ── Team strength ──────────────────────────────────────────────────────────
   const teamStrength = computeTeamStrength(homeFormFeatures, awayFormFeatures, tableContext, standings);
-
-  // ── Context features ───────────────────────────────────────────────────────
   const contextFeatures = computeContextFeatures(tableContext, standings);
-
-  // ── Volatility features ────────────────────────────────────────────────────
   const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures);
-
-  // ── Market features ────────────────────────────────────────────────────────
   const marketFeatures = computeMarketFeatures(odds);
 
-  // ── Team profile features (form-derived) ───────────────────────────────────
   const homeProfile = meta?.homeProfile || meta?.homeStats || null;
   const awayProfile = meta?.awayProfile || meta?.awayStats || null;
   const homeProfileFeatures = extractProfileFeatures(homeProfile);
   const awayProfileFeatures = extractProfileFeatures(awayProfile);
 
-  // ── Lineup modifiers ───────────────────────────────────────────────────────
   const lineupModifier = meta?.lineupModifier || null;
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
-  // ── INJURY & BSD LINEUP INJECTION ──────────────────────────────────────────
-  const missingPlayers = meta?.unavailable_players || null;
-  const predictedLineups = meta?.predicted_lineup || null;
+  const advancedOdds = meta?.odds_data || null;
+  const polymarketOdds = meta?.polymarket_odds || null;
+  const homeManager = meta?.home_manager || null;
+  const awayManager = meta?.away_manager || null;
+  const bsdPrediction = meta?.bsd_prediction || null;
+  const bestOdds = meta?.best_odds || null;
+
+  const eventContext = meta?.eventContext || null;
+  const refereeData = meta?.refereeData || null;
+  const venue = meta?.venue || null;
+  const metadata = meta?.metadata || null;
+  const metadataInsights = meta?.metadataInsights || null;
+  const refereeVolatility = meta?.refereeVolatility || null;
+  const deepPlayerIntel = meta?.deepPlayerIntel || null;
+  const playerStats = Array.isArray(meta?.playerStats) ? meta.playerStats : [];
+  const xgPerMinute = Array.isArray(meta?.xg_per_minute) ? meta.xg_per_minute : [];
+  const bsdHomeFormStats = meta?.bsd_home_form_stats || null;
+  const bsdAwayFormStats = meta?.bsd_away_form_stats || null;
+  const actualHomeXg = safeNum(meta?.actualHomeXg, null);
+  const actualAwayXg = safeNum(meta?.actualAwayXg, null);
+
+  const bsdIntelligenceFeatures = computeBsdIntelligenceFeatures({
+    standings,
+    homeTeam: homeTeamName,
+    awayTeam: awayTeamName,
+    homeTeamId: fixtureContext?.home_team_id,
+    awayTeamId: fixtureContext?.away_team_id,
+    homeManager,
+    awayManager,
+    playerStats,
+  });
+
+  const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
+  const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
 
   const injuryFeatures = {
     homeKeyMissing: 0,
@@ -234,38 +256,42 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   };
 
   if (missingPlayers) {
-    injuryFeatures.homeMissingCount = missingPlayers.home?.length || 0;
-    injuryFeatures.awayMissingCount = missingPlayers.away?.length || 0;
-    
-    // Very basic heuristic: if they have more than 3 players out, assume at least 1 is key
-    if (injuryFeatures.homeMissingCount >= 3) injuryFeatures.homeKeyMissing = 1;
-    if (injuryFeatures.awayMissingCount >= 3) injuryFeatures.awayKeyMissing = 1;
+    const homeMissing = missingPlayers.home || [];
+    const awayMissing = missingPlayers.away || [];
+    injuryFeatures.homeMissingCount = missingPlayers.homeMissingCount ?? homeMissing.length;
+    injuryFeatures.awayMissingCount = missingPlayers.awayMissingCount ?? awayMissing.length;
+
+    const isKeyPlayer = (p) => {
+      const reason = (p.reason || '').toLowerCase();
+      const status = (p.status || '').toLowerCase();
+      return reason.includes('key') || reason.includes('starter') || status === 'suspended' || p.rating >= 7.0;
+    };
+
+    injuryFeatures.homeKeyMissing = homeMissing.filter(isKeyPlayer).length;
+    injuryFeatures.awayKeyMissing = awayMissing.filter(isKeyPlayer).length;
+    if (injuryFeatures.homeKeyMissing === 0 && injuryFeatures.homeMissingCount >= 4) injuryFeatures.homeKeyMissing = 1;
+    if (injuryFeatures.awayKeyMissing === 0 && injuryFeatures.awayMissingCount >= 4) injuryFeatures.awayKeyMissing = 1;
   }
 
   const bsdLineupFeatures = {
     hasPredictedLineups: !!predictedLineups,
-    homePredictedStrength: 1.0, // Default multiplier
+    homePredictedStrength: 1.0,
     awayPredictedStrength: 1.0
   };
 
   if (predictedLineups) {
-    // If we have predicted lineups but high injury counts, we might penalize strength slightly
     if (injuryFeatures.homeKeyMissing > 0) bsdLineupFeatures.homePredictedStrength = 0.9;
     if (injuryFeatures.awayKeyMissing > 0) bsdLineupFeatures.awayPredictedStrength = 0.9;
   }
 
-  // ── Data completeness from enrichment ─────────────────────────────────────
   const completeness = meta?.completeness || null;
 
-  // Clean internal _teamGoals before returning
   delete homeFormFeatures._teamGoals;
   delete awayFormFeatures._teamGoals;
 
-  // ── Bookmaker implied probabilities (Layer 3 signal) ─────────────────────
-  // Convert decimal odds to implied probabilities for xG anchoring
   let impliedHomeProb = null;
   let impliedAwayProb = null;
-  let impliedOver25   = null;
+  let impliedOver25 = null;
   if (odds) {
     const margin = odds.home && odds.draw && odds.away
       ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
@@ -276,12 +302,15 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
   return {
     fixtureId,
+    leagueId: fixtureContext?.tournament_id || null,
+    tournamentName: fixtureContext?.tournament_name || '',
+    categoryName: fixtureContext?.category_name || '',
     homeTeam: homeTeamName,
     awayTeam: awayTeamName,
-
-    // Core feature groups (existing)
     homeFormFeatures,
     awayFormFeatures,
+    homeLastMatchMemory,
+    awayLastMatchMemory,
     splitFeatures,
     h2hFeatures,
     teamStrength,
@@ -289,22 +318,34 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     contextFeatures,
     volatilityFeatures,
     marketFeatures,
-
-    // Team profiles from form-derived data
     homeProfileFeatures,
     awayProfileFeatures,
-
-    // Lineup modifiers
     lineupFeatures,
+    bsdIntelligenceFeatures,
     injuryFeatures,
     bsdLineupFeatures,
-
-    // Data completeness from enrichment layer
     enrichmentCompleteness: completeness,
-
-    // Layer 3: bookmaker-implied probabilities (when odds available)
     impliedHomeProb,
     impliedAwayProb,
     impliedOver25,
+    actualHomeXg,
+    actualAwayXg,
+    xgPerMinute,
+    bsdHomeFormStats,
+    bsdAwayFormStats,
+    advancedOdds,
+    polymarketOdds,
+    homeManager,
+    awayManager,
+    bsdPrediction,
+    bestOdds,
+    eventContext,
+    refereeData,
+    refereeVolatility,
+    venue,
+    metadata,
+    metadataInsights,
+    playerStats,
+    deepPlayerIntel,
   };
 }

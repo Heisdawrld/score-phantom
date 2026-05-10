@@ -14,20 +14,21 @@ import {
   getHistoryRows,
   getOdds,
 } from "../services/predictionCache.js";
-import { bsdFetch } from '../services/bsd.js';
-import { getVapidPublicKey, saveSubscription, sendPushNotification } from "../services/notifications.js";
+import { bsdFetch, fetchManagerByTeamId } from '../services/bsd.js';
+import { refreshCoreFixtureMemory } from '../enrichment/refreshCoreMemory.js';
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
 import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFeatureVector.js";
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
 import { flattenFeatureVector } from "../features/flattenFeatureVector.js";
 import { estimateExpectedGoals } from "../probabilities/estimateExpectedGoals.js";
-import { classifyMatchScript } from "../scripts/archive/classifyMatchScript.js";
+import { classifyMatchScript } from "../scripts/classifyMatchScript.js";
 import { buildScoreMatrix, deriveMarketProbabilities } from "../probabilities/poisson.js";
 import { calibrateProbabilities } from "../probabilities/calibrateProbabilities.js";
 import { buildMarketCandidates } from "../markets/buildMarketCandidates.js";
 import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
 import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
+import { generateSimulationTimeline } from "../engine/generateSimulationTimeline.js";
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
@@ -62,6 +63,42 @@ function mapHistoryRow(row) {
         : null,
     date: row.date,
   };
+}
+
+function getLatestHistoryDate(rows = []) {
+  const timestamps = rows
+    .map((row) => new Date(row?.date || '').getTime())
+    .filter((value) => Number.isFinite(value));
+  if (!timestamps.length) return null;
+  return new Date(Math.max(...timestamps));
+}
+
+function needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h }) {
+  if (!fixture) return false;
+
+  const fixtureTs = new Date(fixture.match_date || '').getTime();
+  const maxStalenessMs = 90 * 24 * 60 * 60 * 1000;
+  const refreshCooldownMs = 6 * 60 * 60 * 1000;
+  const standings = Array.isArray(meta?.standings) ? meta.standings : [];
+  const recentRefreshTs = new Date(
+    meta?.dataFreshness?.coreMemoryRefreshedAt
+      || meta?.dataFreshness?.refreshedAt
+      || 0
+  ).getTime();
+  const refreshedRecently = Number.isFinite(recentRefreshTs) && recentRefreshTs > 0
+    && (Date.now() - recentRefreshTs) < refreshCooldownMs;
+
+  if (homeForm.length < 5 || awayForm.length < 5) return !refreshedRecently;
+  if (h2h.length < 5) return !refreshedRecently;
+  if (standings.length < 2) return !refreshedRecently;
+  if (!Number.isFinite(fixtureTs)) return false;
+
+  const latestHome = getLatestHistoryDate(homeForm);
+  const latestAway = getLatestHistoryDate(awayForm);
+  if (!latestHome || !latestAway) return !refreshedRecently;
+
+  return (fixtureTs - latestHome.getTime()) > maxStalenessMs
+    || (fixtureTs - latestAway.getTime()) > maxStalenessMs;
 }
 
 // ─── Auth / Access helpers ────────────────────────────────────────────────────
@@ -126,47 +163,99 @@ const TRIAL_DAILY_LIMIT = 15; // 15 predictions per day during free trial
 async function ensureDailyCountTable() {
   try {
     await db.execute(`
-    CREATE TABLE IF NOT EXISTS trial_daily_counts (
-      user_id INTEGER NOT NULL,
-      date TEXT NOT NULL,
-      count INTEGER DEFAULT 0,
-      PRIMARY KEY (user_id, date)
-    )
-  `);
-  } catch {}
+      CREATE TABLE IF NOT EXISTS trial_daily_counts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        date_str TEXT NOT NULL,
+        prediction_count INTEGER DEFAULT 0,
+        UNIQUE(user_id, date_str)
+      )
+    `);
+
+    async function hasColumn(columnName) {
+      try {
+        await db.execute(`SELECT ${columnName} FROM trial_daily_counts LIMIT 0`);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    const hasDateStr = await hasColumn('date_str');
+    const hasPredictionCount = await hasColumn('prediction_count');
+    const hasLegacyDate = await hasColumn('date');
+    const hasLegacyCount = await hasColumn('count');
+
+    if (!hasDateStr) {
+      await db.execute(`ALTER TABLE trial_daily_counts ADD COLUMN date_str TEXT`);
+    }
+    if (!hasPredictionCount) {
+      await db.execute(`ALTER TABLE trial_daily_counts ADD COLUMN prediction_count INTEGER DEFAULT 0`);
+    }
+
+    if (hasLegacyDate) {
+      await db.execute(`
+        UPDATE trial_daily_counts
+        SET date_str = COALESCE(NULLIF(date_str, ''), date)
+        WHERE date IS NOT NULL
+      `);
+    }
+    if (hasLegacyCount) {
+      await db.execute(`
+        UPDATE trial_daily_counts
+        SET prediction_count = CASE
+          WHEN count IS NOT NULL AND (prediction_count IS NULL OR prediction_count = 0) THEN count
+          ELSE COALESCE(prediction_count, 0)
+        END
+        WHERE count IS NOT NULL
+      `);
+    }
+
+    await db.execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_trial_daily_counts_user_date_str
+      ON trial_daily_counts(user_id, date_str)
+    `);
+  } catch (err) {
+    console.error("ensureDailyCountTable error:", err);
+  }
 }
 ensureDailyCountTable();
 
 async function getTodayCount(userId) {
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
   try {
     const r = await db.execute({
-      sql: `SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?`,
+      sql: `SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
     return { count: Number(r.rows?.[0]?.count || 0), today };
-  } catch {
+  } catch (err) {
+    console.error("getTodayCount error:", err);
     return { count: 0, today };
   }
 }
 
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const result = await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1
-            RETURNING count`,
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
+    await db.execute({
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
       args: [userId, today],
     });
-    const newCount = result.rows[0].count;
+    const result = await db.execute({
+      sql: `SELECT prediction_count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
+      args: [userId, today],
+    });
+    const newCount = result.rows[0].prediction_count;
     if (newCount > limit) {
       // Revert the increment since they hit the limit
       await decrementDailyCount(userId, today);
       return { allowed: false, today };
     }
     return { allowed: true, today };
-  } catch {
+  } catch (err) {
+    console.error("Error in incrementAndCheckDailyCount:", err);
     return { allowed: false, today: null };
   }
 }
@@ -174,20 +263,24 @@ async function incrementAndCheckDailyCount(userId, limit) {
 async function incrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date, count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date) DO UPDATE SET count = trial_daily_counts.count + 1`,
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
       args: [userId, today],
     });
-  } catch {}
+  } catch (err) {
+    console.error("Error in incrementDailyCount:", err);
+  }
 }
 
 async function decrementDailyCount(userId, today) {
   try {
     await db.execute({
-      sql: `UPDATE trial_daily_counts SET count = MAX(count - 1, 0) WHERE user_id = ? AND date = ?`,
+      sql: `UPDATE trial_daily_counts SET prediction_count = MAX(prediction_count - 1, 0) WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
-  } catch {}
+  } catch (err) {
+    console.error("Error in decrementDailyCount:", err);
+  }
 }
 
 // ─── Middleware: requireAdmin ──────────────────────────────────────────────────
@@ -340,7 +433,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
          f.home_score, f.away_score, f.match_status, f.live_minute,
          p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
          p.best_pick_score, p.best_pick_edge, p.best_pick_implied_probability,
-         p.confidence_model AS pick_confidence_level
+         p.confidence_model AS pick_confidence_level, p.confidence_volatility
    FROM fixtures f
    LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
    WHERE 1=1`;
@@ -365,7 +458,17 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     args.push(parseInt(limit, 10), parseInt(offset, 10));
 
     const result = await db.execute({ sql: query, args });
-    const fixtures = result.rows;
+    const fixtures = result.rows.map(f => {
+      const prob = parseFloat(f.best_pick_probability || 0);
+      const impl = parseFloat(f.best_pick_implied_probability || 0);
+      const edge = parseFloat(f.best_pick_edge || 0);
+      const vol = (f.confidence_volatility || '').toLowerCase();
+      
+      f.is_safe_bet = prob >= 0.72 && vol === 'low';
+      f.is_value_bet = impl > 0 && edge >= 0.08;
+      return f;
+    });
+
     // Fire-and-forget: enrich any fixtures with null status so badges update on next poll
     const _pending = fixtures.filter(f => !f.enrichment_status);
     if (_pending.length > 0 && !_bgEnrichRunning) {
@@ -701,24 +804,30 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     });
   }
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today   = lagosDt.split(',')[0].trim();
+    const d = new Date();
+    const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+
     const mode = req.query.mode === 'value' ? 'value' : 'safe';
 
     // Pull all today's qualifying predictions with enrichment + volatility data
     const pool = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away,
+                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away, f.match_status,
                    fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
             LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
-            WHERE f.match_date LIKE ?
+            WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
+              AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
               AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
             ORDER BY p.best_pick_probability DESC
             LIMIT 50`,
-      args: [`%${today}%`],
+      args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
     });
 
     const rows = pool.rows || [];
@@ -727,11 +836,12 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       // No cached predictions yet — run engine on qualifying fixtures and retry
       const fixtureResult = await db.execute({
         sql: `SELECT id FROM fixtures
-              WHERE match_date LIKE ?
+              WHERE (match_date LIKE ? OR match_date LIKE ? OR match_date LIKE ?)
+                AND match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
                 AND enrichment_status IN ('deep', 'basic', 'limited')
               ORDER BY CASE enrichment_status WHEN 'deep' THEN 1 WHEN 'basic' THEN 2 ELSE 3 END
               LIMIT 40`,
-        args: [`%${today}%`],
+        args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
       });
 
       const fixtureIds = (fixtureResult.rows || []).map(r => r.id);
@@ -760,17 +870,18 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
                      p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                      p.best_pick_score, p.confidence_model, p.confidence_volatility,
                      p.script_primary, p.no_safe_pick,
-                     f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away,
+                     f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away, f.match_status,
                      fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
               FROM predictions_v2 p
               JOIN fixtures f ON f.id = p.fixture_id
               LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
-              WHERE f.match_date LIKE ?
+              WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
                 AND p.best_pick_selection IS NOT NULL
+                AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
                 AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
               ORDER BY p.best_pick_probability DESC
               LIMIT 50`,
-        args: [`%${today}%`],
+        args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
       });
       rows.push(...(retryPool.rows || []));
     }
@@ -1090,7 +1201,6 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
   try {
     const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
     const today   = lagosDt.split(',')[0].trim();
-    // Also include yesterday (UTC shift) and tomorrow (late fixtures)
     const d = new Date();
     const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
@@ -1098,24 +1208,28 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     const limit        = Math.min(parseInt(req.query.limit || 20, 10), 50);
     const favoritesOnly = req.query.favorites === 'true';
 
-    // Build date filter — include yesterday, today, tomorrow to avoid timezone gaps
-    let dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
+    // Build date filter — include yesterday, today and tomorrow. 
+    // Yesterday is needed because a 01:00 AM Lagos game is 23:00 UTC yesterday!
+    // The match_status NOT IN ('FT',...) filter prevents old finished games from showing up.
+    const dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
     let args = [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`];
 
     // ── Step 1: Try to get picks from predictions_v2 ──────────────────────────
     let pickQuery = `
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-             p.best_pick_score, p.confidence_model, p.confidence_volatility,
+             p.best_pick_implied_probability, p.best_pick_edge,
+             p.best_pick_score, p.confidence_model, p.confidence_volatility, p.is_sharp_value,
              p.explanation_json, p.backup_picks_json,
              f.tournament_name, f.match_date, f.enrichment_status, f.data_quality,
-             f.home_team_logo, f.away_team_logo
+             f.home_team_logo, f.away_team_logo, f.match_status
       FROM predictions_v2 p
       JOIN fixtures f ON f.id = p.fixture_id
       WHERE ${dateFilter}
         AND p.best_pick_selection IS NOT NULL
         AND p.best_pick_probability >= 0.44
         AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
+        AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
     `;
     let pickArgs = [...args];
 
@@ -1163,8 +1277,9 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         const enrichedResult = await db.execute({
           sql: `SELECT f.id FROM fixtures f
                 LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
-                WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
+                WHERE ${dateFilter}
                   AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
+                  AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
                   AND p.fixture_id IS NULL
                 ORDER BY f.match_date ASC
                 LIMIT 15`,
@@ -1196,11 +1311,15 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           h2h:       true, // always computed by engine
           xg:        row.best_pick_probability != null,
           tactical:  row.confidence_volatility != null,
+          sharp:     Number(row.is_sharp_value || 0) === 1,
         };
       } catch (_) {}
 
       const prob   = parseFloat(row.best_pick_probability || 0);
+      const impl   = parseFloat(row.best_pick_implied_probability || 0);
+      const edge   = parseFloat(row.best_pick_edge || 0);
       const score  = parseFloat(row.best_pick_score || 0);
+      const vol    = (row.confidence_volatility || '').toLowerCase();
       // confidence_model is text: 'HIGH','MEDIUM','LOW','LEAN' — map to numeric
       const confMap = { HIGH: 90, MEDIUM: 60, LOW: 30, LEAN: 15 };
       const conf = confMap[(row.confidence_model || '').toUpperCase()] || 30;
@@ -1218,6 +1337,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         market:      row.best_pick_market,
         pick:        row.best_pick_selection,
         probability: parseFloat((prob * 100).toFixed(1)),
+        isSafeBet:   prob >= 0.72 && vol === 'low',
+        isValueBet:  impl > 0 && edge >= 0.08,
         score,
         confidence:  parseFloat(conf.toFixed(1)),
         composite:   parseFloat(composite.toFixed(1)),
@@ -1225,6 +1346,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         time:        row.match_date ? (()=>{ try{ const d=new Date(row.match_date); return d.toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Lagos'}); }catch(e){ return null; } })() : null,
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,
+        sharp:       Number(row.is_sharp_value || 0) === 1,
         factors,
       };
     });
@@ -1288,24 +1410,32 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
 // ─── GET /value-bet-today — Best value edge pick of the day ──────────────────
 router.get("/value-bet-today", requireAuth, async (req, res) => {
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const lagosDt = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' });
+    const today   = lagosDt.split(',')[0].trim();
+    const d = new Date();
+    const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     const result = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                    p.best_pick_implied_probability, p.best_pick_edge,
                    p.best_pick_score,
-                   f.tournament_name, f.match_date, f.enrichment_status
+                   f.tournament_name, f.match_date, f.enrichment_status, f.match_status,
+                   fo.home AS odds_home, fo.draw AS odds_draw, fo.away AS odds_away,
+                   fo.btts_yes AS odds_btts_yes, fo.btts_no AS odds_btts_no,
+                   fo.over_under
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
-            WHERE f.match_date LIKE ?
+            LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
+            WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
               AND p.best_pick_probability > 0.57
-              AND f.enrichment_status IN ('deep', 'basic')
+              AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
             ORDER BY COALESCE(p.best_pick_edge, 0) DESC,
                      COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC
             LIMIT 1`,
-      args: [`%${today}%`],
+      args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`]
     });
 
     const row = result.rows?.[0];
@@ -1404,7 +1534,7 @@ export function createTrialLimitGuard(trialDailyLimit = 15) {
     try {
       const today = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
       const r = await db.execute({
-        sql: "SELECT count FROM trial_daily_counts WHERE user_id = ? AND date = ?",
+        sql: "SELECT prediction_count as count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?",
         args: [req.user.id, today]
       });
       const currentCount = Number(r.rows?.[0]?.count || 0);
@@ -1454,7 +1584,7 @@ router.post('/push-token', requireAuth, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token required' });
-    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id', args: [req.user.id, token, 'web'] });
+    await db.execute({ sql: 'INSERT INTO push_tokens (user_id,token,platform,created_at,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (token) DO UPDATE SET user_id=excluded.user_id, updated_at=CURRENT_TIMESTAMP', args: [req.user.id, token, 'web'] });
     res.json({ ok: true });
   } catch(e) { console.error('[PushToken]',e.message); res.status(500).json({ error: 'Failed to save token' }); }
 });
@@ -1493,20 +1623,40 @@ router.post('/notifications/:id/read', requireAuth, async (req, res) => {
 router.get("/matches/:id", requireAuth, async (req, res) => {
   try {
     const fixtureId = req.params.id;
-    const bundle = await ensureFixtureData(fixtureId);
+    let bundle = await ensureFixtureData(fixtureId);
     if (!bundle) return res.status(404).json({ error: "Match not found" });
-    const { fixture, meta } = bundle;
-    const historyRows = await getHistoryRows(fixtureId);
-    
+
+    let { fixture, meta } = bundle;
+    let historyRows = await getHistoryRows(fixtureId);
+
     const formatScore = (r) => (r.home_goals != null && r.away_goals != null) ? `${r.home_goals}-${r.away_goals}` : "vs";
-    const h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
-    const homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
-    const awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+
+    if (needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h })) {
+      try {
+        console.log(`[MatchCenter] Refreshing stale core memory for fixture ${fixtureId}...`);
+        await refreshCoreFixtureMemory(fixture);
+        bundle = await ensureFixtureData(fixtureId);
+        if (bundle) {
+          fixture = bundle.fixture;
+          meta = bundle.meta;
+        }
+        historyRows = await getHistoryRows(fixtureId);
+        h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+        homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+        awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+      } catch (refreshErr) {
+        console.warn(`[MatchCenter] Core memory refresh failed for ${fixtureId}:`, refreshErr.message);
+      }
+    }
+
     let oddsRow = null;
     if (req.access.has_full_access) {
       oddsRow = await getOdds(fixtureId);
     }
-    const standings = meta?.standings || [];
+    const standings = Array.isArray(meta?.standings) ? meta.standings : [];
     
     // Live Match Bypass: If the match is currently live, fetch spatial data directly from BSD API
     const isLive = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(fixture.match_status || '');
@@ -1545,15 +1695,6 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
   }
 });
 
-// Push Notification Endpoints
-router.get("/notifications/vapidPublicKey", requireAuth, (req, res) => {
-  const publicKey = getVapidPublicKey();
-  if (!publicKey) {
-    return res.status(500).json({ error: "VAPID keys not configured" });
-  }
-  res.json({ publicKey });
-});
-
 // Teams Search Endpoint
 router.get("/teams", requireAuth, async (req, res) => {
   try {
@@ -1561,6 +1702,9 @@ router.get("/teams", requireAuth, async (req, res) => {
     // They are `tournament_id` and `tournament_name`.
     const result = await db.execute(`
       SELECT DISTINCT home_team_id as team_id, home_team_name as team_name, tournament_id as league_id, tournament_name as league_name
+      FROM fixtures
+      UNION
+      SELECT DISTINCT away_team_id as team_id, away_team_name as team_name, tournament_id as league_id, tournament_name as league_name
       FROM fixtures
       ORDER BY team_name ASC
     `);
@@ -1594,6 +1738,12 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     // 2. Flatten the vector for the engine
     const baselineVector = flattenFeatureVector(baselineVectorNested);
 
+    // Fetch managers for tactical influence
+    const [homeManager, awayManager] = await Promise.all([
+      fetchManagerByTeamId(home_team_id),
+      fetchManagerByTeamId(away_team_id)
+    ]);
+
     // 3. Run Base Model
     const baseScript = classifyMatchScript(baselineVector);
     const baseXg = estimateExpectedGoals(baselineVector, baseScript);
@@ -1601,6 +1751,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const baseRawProbs = deriveMarketProbabilities(baseScoreMatrix);
     const baseCalibratedProbs = calibrateProbabilities(baseRawProbs, baseScript);
     
+    // Evaluate predictability
+    const predictability = assessMatchPredictability(baselineVector, baseScript, baseCalibratedProbs);
+    baselineVector.predictability_score = predictability.predictable ? 0.8 : 0.4;
+
     const baseCandidates = buildMarketCandidates(baseCalibratedProbs, null);
     const baseMarkets = scoreMarketCandidates(baseCandidates, baseScript, baselineVector, {}, null);
 
@@ -1613,6 +1767,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const simScoreMatrix = buildScoreMatrix(simXg.homeExpectedGoals, simXg.awayExpectedGoals);
     const simRawProbs = deriveMarketProbabilities(simScoreMatrix);
     const simCalibratedProbs = calibrateProbabilities(simRawProbs, simScript);
+    
+    // Evaluate predictability
+    const simPredictability = assessMatchPredictability(simVector, simScript, simCalibratedProbs);
+    simVector.predictability_score = simPredictability.predictable ? 0.8 : 0.4;
 
     const simCandidates = buildMarketCandidates(simCalibratedProbs, null);
     const simMarkets = scoreMarketCandidates(simCandidates, simScript, simVector, {}, null);
@@ -1621,7 +1779,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     let shift_reason = "Variables adjusted.";
     const homeXgDiff = simXg.homeExpectedGoals - baseXg.homeExpectedGoals;
     const awayXgDiff = simXg.awayExpectedGoals - baseXg.awayExpectedGoals;
-    
+
     if (Math.abs(homeXgDiff) > 0.5 || Math.abs(awayXgDiff) > 0.5) {
       shift_reason = "The extreme variable changes caused a massive shift in expected attacking output, completely flipping the script.";
     } else if (homeXgDiff < -0.2 && modifiers.homeInjuries > 0) {
@@ -1636,10 +1794,13 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       shift_reason = "The applied variables caused minor probability shifts but did not fundamentally alter the game script.";
     }
 
+    // Generate Visual Match Script for 4-minute loop
+    const simulation_script = generateSimulationTimeline(simVector, simXg, simScript, homeManager, awayManager);
+
     // 7. Format output
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
-      market: m.id,
-      probability: m.probability,
+      market: m.marketKey,
+      probability: m.modelProbability,
       advisor_status: m.advisorStatus || 'GAMBLE'
     }));
 
@@ -1647,6 +1808,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
       success: true,
       simulation: {
         shift_reason,
+        simulation_script,
         base_model: {
           home_xg: baseXg.homeExpectedGoals.toFixed(2),
           away_xg: baseXg.awayExpectedGoals.toFixed(2),
@@ -1656,6 +1818,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
           home_xg: simXg.homeExpectedGoals.toFixed(2),
           away_xg: simXg.awayExpectedGoals.toFixed(2),
           markets: formatMarkets(simMarkets)
+        },
+        managers: {
+          home: homeManager,
+          away: awayManager
         }
       }
     });
@@ -1663,42 +1829,6 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Simulation error:", error);
     res.status(500).json({ error: "Failed to run simulation" });
-  }
-});
-
-router.post("/notifications/subscribe", requireAuth, async (req, res) => {
-  const subscription = req.body;
-  if (!subscription || !subscription.endpoint || !subscription.keys) {
-    return res.status(400).json({ error: "Invalid subscription object" });
-  }
-
-  try {
-    await saveSubscription(req.user.id, subscription);
-    res.status(201).json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to save subscription" });
-  }
-});
-
-router.post("/admin/notify", requireAdmin, async (req, res) => {
-  const { title, body, userId } = req.body;
-  
-  if (!title || !body) {
-    return res.status(400).json({ error: "Missing title or body" });
-  }
-
-  try {
-    const payload = { title, body };
-    if (userId) {
-      await sendPushNotification(userId, payload);
-    } else {
-      // Broadcast logic would go here if implemented, or loop over users
-      return res.status(501).json({ error: "Broadcast not yet implemented, please provide userId" });
-    }
-    
-    res.json({ success: true, message: "Notification sent" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to send notification" });
   }
 });
 

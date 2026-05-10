@@ -42,6 +42,9 @@ class ErrorBoundary extends React.Component<
 
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
+import Basketball from "@/pages/Basketball";
+import BasketballGame from "@/pages/BasketballGame";
+import BasketballAdmin from "@/pages/BasketballAdmin";
 import Paywall from "@/pages/Paywall";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
@@ -118,7 +121,7 @@ function SmartRoot() {
 
 function GlassBubbles() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" style={{ clipPath: 'inset(0)' }} aria-hidden="true">
       <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)", filter: "blur(80px)" }}/>
       <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)", filter: "blur(90px)" }}/>
       <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)", filter: "blur(60px)" }}/>
@@ -142,6 +145,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/basketball" component={BasketballAdmin} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
@@ -149,6 +153,8 @@ function Router() {
       <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchCenter} />} />
+      <Route path="/basketball" component={() => <ProtectedRoute component={Basketball} />} />
+      <Route path="/basketball/games/:league/:externalId" component={() => <ProtectedRoute component={BasketballGame} />} />
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/acca" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/simulator" component={() => <ProtectedRoute component={Simulator} />} />

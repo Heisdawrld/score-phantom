@@ -14,8 +14,31 @@ function parseScore(scoreStr) {
   const parts = scoreStr.split('-');
   const home = parseInt(parts[0], 10);
   const away = parseInt(parts[1], 10);
-  if (isNaN(home) || isNaN(away)) return { home: null, away: null };
+  if (isNaN(home) || isNaN(away)) return { home, away };
   return { home, away };
+}
+
+let historicalMetaColumnReady = false;
+
+async function ensureHistoricalMetaColumn() {
+  if (historicalMetaColumnReady) return;
+
+  try {
+    const info = await db.execute("PRAGMA table_info('historical_matches')");
+    const hasMeta = (info.rows || []).some((col) => String(col.name) === 'meta');
+    if (!hasMeta) {
+      await db.execute('ALTER TABLE historical_matches ADD COLUMN meta TEXT');
+      console.log('[enrichOne] Added historical_matches.meta column');
+    }
+    historicalMetaColumnReady = true;
+  } catch (err) {
+    const msg = String(err?.message || err?.cause?.message || '').toLowerCase();
+    if (msg.includes('duplicate column') && msg.includes('meta')) {
+      historicalMetaColumnReady = true;
+      return;
+    }
+    console.warn('[enrichOne] Could not verify historical_matches.meta column:', err.message);
+  }
 }
 
 function normalizeMatch(match) {
@@ -27,6 +50,19 @@ function normalizeMatch(match) {
     competition: match?.competition || null,
     home_xg: match?.home_xg || null,
     away_xg: match?.away_xg || null,
+    meta: match?.meta || {
+      bsd_id: match?._bsdId ?? null,
+      bsd_api_id: match?._bsdApiId ?? null,
+      home_api_id: match?._homeApiId ?? null,
+      away_api_id: match?._awayApiId ?? null,
+      stats: match?.stats ?? match?.matchStats ?? null,
+      incidents: match?.incidents ?? match?.events ?? null,
+      cards: match?.cards ?? null,
+      possession: match?.possession ?? null,
+      shots: match?.shots ?? null,
+      shots_on_target: match?.shots_on_target ?? null,
+      raw_status: match?.status ?? null,
+    },
   };
 }
 
@@ -35,7 +71,8 @@ function normalizeMatch(match) {
  * and the fixtures.meta JSON field.
  */
 export async function storeEnrichment(fixtureId, data, markEnriched = true) {
-  // Clear and re-insert historical match rows
+  await ensureHistoricalMetaColumn();
+
   await db.execute({
     sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
@@ -51,7 +88,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     const matches = Array.isArray(data?.[section.key]) ? data[section.key] : [];
 
     for (const match of matches) {
-      // Skip synthetic form records (from standings) — they bias the prediction engine
       if (match._synthetic) continue;
 
       const normalized = normalizeMatch(match);
@@ -63,8 +99,8 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
             fixture_id, type, date,
             home_team, away_team,
             home_goals, away_goals,
-            home_xg, away_xg
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            home_xg, away_xg, meta
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         args: [
           fixtureId,
@@ -75,16 +111,16 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
           home,
           away,
           normalized.home_xg,
-          normalized.away_xg
+          normalized.away_xg,
+          JSON.stringify(normalized.meta || {})
         ],
       });
     }
   }
 
-  // Store odds if present
   if (data?.odds) {
     await db.execute({
-        sql: `
+      sql: `
         INSERT INTO fixture_odds (
           fixture_id,
           home, draw, away,
@@ -102,13 +138,26 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
         data.odds.away ?? null,
         data.odds.btts_yes ?? null,
         data.odds.btts_no ?? null,
-        data.odds.over_under ? JSON.stringify(data.odds.over_under) : null,
+        data.odds.over_under ?? null,
       ],
     });
   }
 
-  // Store everything in fixtures.meta — including team profiles
+  const refreshedAt = new Date().toISOString();
   const meta = {
+    enrichedAt: refreshedAt,
+    bsdRefreshedAt: refreshedAt,
+    dataFreshness: {
+      provider: 'BSD',
+      refreshedAt,
+      h2hCount: Array.isArray(data?.h2h) ? data.h2h.length : 0,
+      homeFormCount: Array.isArray(data?.homeForm) ? data.homeForm.length : 0,
+      awayFormCount: Array.isArray(data?.awayForm) ? data.awayForm.length : 0,
+      standingsCount: Array.isArray(data?.standings) ? data.standings.length : 0,
+      hasHomeStats: !!data?.homeStats,
+      hasAwayStats: !!data?.awayStats,
+      hasMatchStats: !!data?.matchStats,
+    },
     standings: Array.isArray(data?.standings) ? data.standings : [],
     homeStats: data?.homeStats ?? null,
     awayStats: data?.awayStats ?? null,
@@ -118,7 +167,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     completeness: data?.completeness ?? null,
     homeMomentum: data?.homeMomentum ?? null,
     awayMomentum: data?.awayMomentum ?? null,
-    // Keep form arrays in meta for backward compatibility
     h2h: Array.isArray(data?.h2h) ? data.h2h : [],
     homeForm: Array.isArray(data?.homeForm) ? data.homeForm : [],
     awayForm: Array.isArray(data?.awayForm) ? data.awayForm : [],
@@ -127,10 +175,32 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     actualHomeXg: data?.actualHomeXg ?? null,
     actualAwayXg: data?.actualAwayXg ?? null,
     shotmap: data?.shotmap ?? null,
+    lineups: data?.lineups ?? null,
+    predicted_lineup: data?.lineups ?? null,
+    unavailable_players: data?.injuries ?? null,
+    average_positions: data?.average_positions ?? null,
+    momentum: data?.momentum ?? null,
+    xg_per_minute: data?.xg_per_minute ?? null,
+    bsd_home_form_stats: data?.bsdHomeFormStats ?? null,
+    bsd_away_form_stats: data?.bsdAwayFormStats ?? null,
+    odds_data: data?.oddsData ?? null,
+    polymarket_odds: data?.polymarketOdds ?? null,
+    home_manager: data?.homeManager ?? null,
+    away_manager: data?.awayManager ?? null,
+    bsd_prediction: data?.bsdPrediction ?? null,
+
+    // Full BSD intelligence bridge: fetched -> stored -> loaded -> used.
+    refereeData: data?.refereeData ?? null,
+    refereeVolatility: data?.refereeVolatility ?? null,
+    injuries: data?.injuries ?? null,
+    metadata: data?.metadata ?? null,
+    metadataInsights: data?.metadataInsights ?? null,
+    eventContext: data?.eventContext ?? null,
+    venue: data?.venue ?? null,
+    playerStats: Array.isArray(data?.playerStats) ? data.playerStats : [],
+    deepPlayerIntel: data?.deepPlayerIntel ?? null,
   };
 
-  // Derive enrichment_status and data_quality from completeness tier
-  const completenessScore = data?.completeness?.score ?? 0;
   const completenessTier = data?.completeness?.tier ?? 'thin';
   const tierMap = {
     rich:    { enrichment_status: 'deep',     data_quality: 'excellent' },
@@ -161,14 +231,13 @@ export async function enrichFixture(fixture) {
 
   const hasUsableData = (data.homeForm?.length > 0) || (data.awayForm?.length > 0);
 
-    if (!hasUsableData) {
-      console.warn(
-        `[enrichOne] No usable form data for fixture ${fixture.id} ` +
-        `(${fixture.home_team_name} vs ${fixture.away_team_name}) — marking as no_data to clear queue`
-      );
-    }
+  if (!hasUsableData) {
+    console.warn(
+      `[enrichOne] No usable form data for fixture ${fixture.id} ` +
+      `(${fixture.home_team_name} vs ${fixture.away_team_name}) — marking as no_data to clear queue`
+    );
+  }
 
-    // FIX: Always mark enriched=1 so the queue doesn't get permanently stuck in an infinite loop
-    await storeEnrichment(fixture.id, data, true);
-    return data;
+  await storeEnrichment(fixture.id, data, true);
+  return data;
 }

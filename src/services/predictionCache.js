@@ -15,16 +15,22 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchPredictedLineup, bsdFetch } from './bsd.js';
-// Odds are now sourced from fixture_odds table (written at seed time from BSD events)
-// No external odds service needed.
+import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds } from './bsd.js';
+import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
+// Odds are now sourced from fixture_odds table and live BSD v2 odds as fallback.
 
 // Cache is valid for 6 hours — predictions refresh each morning via automation
 const CACHE_VALID_HOURS = 6;
 
+/** Re-fetch BSD enrichment (form/H2H → historical_matches) even when enriched=1 */
+const ENRICHMENT_REFRESH_HOURS = Number(process.env.ENRICHMENT_REFRESH_HOURS || CACHE_VALID_HOURS);
+
+/** Fixtures kicking off sooner get tighter enrichment TTL */
+const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS || 36);
+
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.6.0'; // Bumped for injury & lineup injection
+const CURRENT_ENGINE_VERSION = '2.8.9'; // Bumped: audited whole market ranking + headline eligibility
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -35,6 +41,65 @@ function safeJsonParse(value, fallback = {}) {
     return JSON.parse(value);
   } catch {
     return fallback;
+  }
+}
+
+function hasAnyOdds(odds) {
+  if (!odds) return false;
+  if (Number(odds.home) > 1 || Number(odds.draw) > 1 || Number(odds.away) > 1) return true;
+  if (Number(odds.btts_yes) > 1 || Number(odds.btts_no) > 1) return true;
+  const ou = odds.over_under || {};
+  return Object.values(ou).some(v => Number(v) > 1);
+}
+
+function mapBestOddsToFixtureOdds(bestOdds) {
+  if (!bestOdds) return null;
+  const mapped = {
+    home: bestOdds.home_win ?? bestOdds.home ?? null,
+    draw: bestOdds.draw ?? null,
+    away: bestOdds.away_win ?? bestOdds.away ?? null,
+    btts_yes: bestOdds.btts_yes ?? null,
+    btts_no: bestOdds.btts_no ?? null,
+    over_under: {
+      over_1_5: bestOdds.over_15 ?? bestOdds.over_15_goals ?? null,
+      over_2_5: bestOdds.over_25 ?? bestOdds.over_25_goals ?? null,
+      over_3_5: bestOdds.over_35 ?? bestOdds.over_35_goals ?? null,
+      under_1_5: bestOdds.under_15 ?? bestOdds.under_15_goals ?? null,
+      under_2_5: bestOdds.under_25 ?? bestOdds.under_25_goals ?? null,
+      under_3_5: bestOdds.under_35 ?? bestOdds.under_35_goals ?? null,
+    },
+    betLinkSportybet: null,
+    betLinkBet365: null,
+  };
+  return hasAnyOdds(mapped) ? mapped : null;
+}
+
+async function upsertFixtureOdds(fixtureId, odds) {
+  if (!fixtureId || !hasAnyOdds(odds)) return;
+  try {
+    await db.execute({
+      sql: `INSERT INTO fixture_odds
+              (fixture_id, home, draw, away, btts_yes, btts_no, over_under)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (fixture_id) DO UPDATE SET
+              home = COALESCE(EXCLUDED.home, fixture_odds.home),
+              draw = COALESCE(EXCLUDED.draw, fixture_odds.draw),
+              away = COALESCE(EXCLUDED.away, fixture_odds.away),
+              btts_yes = COALESCE(EXCLUDED.btts_yes, fixture_odds.btts_yes),
+              btts_no = COALESCE(EXCLUDED.btts_no, fixture_odds.btts_no),
+              over_under = EXCLUDED.over_under`,
+      args: [
+        String(fixtureId),
+        odds.home ?? null,
+        odds.draw ?? null,
+        odds.away ?? null,
+        odds.btts_yes ?? null,
+        odds.btts_no ?? null,
+        JSON.stringify(odds.over_under || {}),
+      ],
+    });
+  } catch (err) {
+    console.warn(`[predictionCache] Failed to persist live BSD odds for ${fixtureId}:`, err.message);
   }
 }
 
@@ -105,10 +170,10 @@ export async function getFixtureById(fixtureId) {
 
 export async function getHistoryRows(fixtureId) {
   const result = await db.execute({
-    sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`,
+    sql: `SELECT * FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
   });
-  return result.rows || [];
+  return sortHistoryRowsChronologically(result.rows || []);
 }
 
 export async function getOdds(fixtureId) {
@@ -141,6 +206,57 @@ function hasUsableHistory(historyRows) {
   return homeCount > 0 && awayCount > 0;
 }
 
+function rowDateMs(d) {
+  const t = new Date(d || 0).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** Match engine + UI: newest form/H2H first per section (string dates can collation-wobble in SQL-only sorts). */
+function sortHistoryRowsChronologically(rows) {
+  const list = rows || [];
+  const desc = (a, b) => rowDateMs(b.date) - rowDateMs(a.date);
+  const byType = (t) => list.filter((r) => r.type === t).sort(desc);
+  return [...byType('away_form'), ...byType('h2h'), ...byType('home_form')];
+}
+
+function fixtureKickoffMs(fixture) {
+  const t = new Date(fixture?.match_date || 0).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function needsEnrichmentRefresh(fixture, historyRows) {
+  if (!fixture.enriched || !hasUsableHistory(historyRows)) return true;
+
+  const meta = safeJsonParse(fixture?.meta, {});
+  const ts = meta?.dataFreshness?.refreshedAt || meta?.enrichedAt || meta?.bsdRefreshedAt;
+  if (!ts) {
+    console.log(`[predictionCache] No enrichment timestamp on fixture ${fixture.id} — refreshing`);
+    return true;
+  }
+  const parsed = new Date(ts).getTime();
+  if (Number.isNaN(parsed)) {
+    console.log(`[predictionCache] Bad enrichment timestamp on fixture ${fixture.id} — refreshing`);
+    return true;
+  }
+  const age = (Date.now() - parsed) / 3600000;
+  const maxAge = ENRICHMENT_REFRESH_HOURS;
+  if (age >= maxAge) {
+    console.log(`[predictionCache] Enrichment stale (${age.toFixed(1)}h >= ${maxAge}h) for fixture ${fixture.id}`);
+    return true;
+  }
+  const kick = fixtureKickoffMs(fixture);
+  const soon =
+    kick != null &&
+    kick > Date.now() &&
+    kick - Date.now() < ENRICHMENT_IMMINENT_HOURS * 3600000;
+  const imminentTtl = Math.min(maxAge, Math.max(2, Number(process.env.ENRICHMENT_IMMINENT_REFRESH_HOURS || 3)));
+  if (soon && age >= imminentTtl) {
+    console.log(`[predictionCache] Enrichment imminent-kickoff refresh (${age.toFixed(1)}h >= ${imminentTtl}h) for fixture ${fixture.id}`);
+    return true;
+  }
+  return false;
+}
+
 // ── Cache check ───────────────────────────────────────────────────────────────
 
 async function isCacheFresh(fixtureId) {
@@ -170,7 +286,7 @@ export async function ensureFixtureData(fixtureId) {
 
   let historyRows = await getHistoryRows(fixtureId);
 
-  if (!fixture.enriched || !hasUsableHistory(historyRows)) {
+  if (!fixture.enriched || !hasUsableHistory(historyRows) || needsEnrichmentRefresh(fixture, historyRows)) {
     try {
       await enrichFixture(fixture);
       fixture = await getFixtureById(fixtureId);
@@ -180,26 +296,53 @@ export async function ensureFixtureData(fixtureId) {
     }
   }
 
-  // Odds are seeded from BSD at fixture seed time — just read from DB
+  // Read DB odds first, then fall back to live BSD v2 odds below.
   let odds = await getOdds(fixtureId);
 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 
-  // ── INJECT LIVE INJURIES AND PREDICTED LINEUPS ──
+  // ── INJECT LIVE INJURIES, LINEUPS AND BEST ODDS ──
+  // BSD v1 /predictions is intentionally not called here. It is optional, slow under load,
+  // and must never block ScorePhantom's own engine. The engine uses BSD v2 data + our model.
   try {
-    if (fixture.bsd_event_api_id) {
-      const liveData = await bsdFetch(`/events/${fixture.id}/`);
-      if (liveData?.unavailable_players) {
-        meta.unavailable_players = liveData.unavailable_players;
+    const bsdInternalEventId = fixture.id ? String(fixture.id) : null;
+
+    if (bsdInternalEventId) {
+      async function attachMissingPlayerStats(players = []) {
+        return Promise.all(
+          players.map(async (p) => {
+            const playerId = p?.player?.id || p?.player_id || p?.id || null;
+            const stats = playerId ? await fetchPlayerStats(playerId) : null;
+            return { ...p, stats };
+          })
+        );
       }
-      
-      const lineupData = await fetchPredictedLineup(fixture.bsd_event_api_id);
-      if (lineupData?.lineups) {
-        meta.predicted_lineup = lineupData.lineups;
+
+      const [lineupData, bestOdds] = await Promise.all([
+        fetchPredictedLineup(bsdInternalEventId),
+        fetchBestOdds(bsdInternalEventId),
+      ]);
+
+      if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
+      if (lineupData?.unavailable_players) {
+        meta.unavailable_players = {
+          home: await attachMissingPlayerStats(lineupData.unavailable_players.home || []),
+          away: await attachMissingPlayerStats(lineupData.unavailable_players.away || []),
+        };
+      }
+
+      const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
+      if (liveOdds) {
+        meta.best_odds = bestOdds;
+        if (!hasAnyOdds(odds)) {
+          odds = liveOdds;
+          console.log(`[predictionCache] Using live BSD odds fallback for fixture ${fixtureId}`);
+        }
+        await upsertFixtureOdds(fixtureId, liveOdds);
       }
     }
   } catch (err) {
-    console.error(`[predictionCache] Failed to fetch injuries/lineup for ${fixtureId}:`, err.message);
+    console.error(`[predictionCache] Failed to fetch injuries/lineup/odds for ${fixtureId}:`, err.message);
   }
 
   return { fixture, historyRows, odds, meta };
@@ -209,24 +352,18 @@ export async function ensureFixtureData(fixtureId) {
 
 async function savePredictionToCache(fixtureId, prediction, engineResult) {
   const rec = prediction || {};
-  const bestPick = rec.predictions?.recommendation;
-  const gameScript = rec.gameScript || {};
-  const dataQuality = rec.dataQuality || {};
-
-  // Volatility: convert numeric score to string label
-  const volRaw = gameScript.volatility || 'MEDIUM';
-  const volStr = typeof volRaw === 'number'
-    ? (volRaw >= 0.7 ? 'high' : volRaw >= 0.4 ? 'medium' : 'low')
-    : String(volRaw).toLowerCase();
-
-  const noSafePick = !bestPick || bestPick.market === 'No Edge' || !bestPick.pick || bestPick.pick === 'No Clear Edge' ? 1 : 0;
+  const bp = engineResult?.bestPick || null;
+  const conf = engineResult?.confidence || {};
+  const script = engineResult?.script || {};
+  const volStr = String(conf.volatility || 'medium').toLowerCase();
+  const noSafePick = !bp || engineResult?.noSafePick ? 1 : 0;
 
   try {
     // Write prediction_json blob
     await db.execute({
       sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
       args: [
-        JSON.stringify({ prediction, engineResult: null, engineVersion: CURRENT_ENGINE_VERSION }),
+        JSON.stringify({ prediction, engineResult, engineVersion: CURRENT_ENGINE_VERSION }),
         String(fixtureId),
       ],
     });
@@ -242,28 +379,29 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         confidence_volatility = ?,
         script_primary        = ?,
         no_safe_pick          = ?,
+        pick_id               = ?,
         home_team             = ?,
         away_team             = ?,
         updated_at            = ?
       WHERE fixture_id = ?`,
       args: [
-        noSafePick ? null : (bestPick?.market    || null),
-        noSafePick ? null : (bestPick?.pick       || null),
-        noSafePick ? null : (bestPick?.probability != null ? bestPick.probability : null),
-        noSafePick ? null : (bestPick?.compositeScore ?? bestPick?.edgeScore ?? bestPick?.score ?? null),
-        noSafePick ? null : (bestPick?.modelConfidence || null),
+        noSafePick ? null : (bp?.marketKey || null),
+        noSafePick ? null : (bp?.selection || null),
+        noSafePick ? null : (bp?.modelProbability ?? null),
+        noSafePick ? null : (bp?.finalScore ?? null),
+        noSafePick ? null : (conf?.model || null),
         volStr,
-        gameScript.script || null,
+        script.primary || null,
         noSafePick,
-        rec.fixture?.homeTeam || null,
-        rec.fixture?.awayTeam || null,
+        engineResult?.pickId ?? null,
+        engineResult?.homeTeam || rec.fixture?.homeTeam || null,
+        engineResult?.awayTeam || rec.fixture?.awayTeam || null,
         new Date().toISOString(),
         String(fixtureId),
       ],
     });
-    console.log(`[predictionCache] Flat columns written for fixture ${fixtureId}`);
   } catch (err) {
-    console.error('[predictionCache] savePredictionToCache failed:', err.message);
+    console.error(`[predictionCache] Error saving prediction ${fixtureId}:`, err.message);
   }
 }
 
@@ -337,6 +475,34 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
 
   // ── Run the engine ────────────────────────────────────────────────────────
   const engineResult = await runPredictionEngine(fixtureId, bundle);
+
+  if (engineResult && !engineResult.noSafePick && engineResult.bestPick) {
+    const kickoffDate = fixture?.match_date ? new Date(fixture.match_date) : null;
+    const kickoffAt = kickoffDate && !isNaN(kickoffDate.getTime()) ? kickoffDate.toISOString() : null;
+    const now = new Date();
+    const generatedAt = now.toISOString();
+    const predictionSource = kickoffAt && now.getTime() < new Date(kickoffAt).getTime() ? 'pre_match' : 'post_match_backfill';
+
+    const bp = engineResult.bestPick;
+    const insertedId = await insertPredictionPickIfMaterialChange({
+      fixture_id: String(fixtureId),
+      engine_version: CURRENT_ENGINE_VERSION,
+      prediction_source: predictionSource,
+      generated_at: generatedAt,
+      kickoff_at: kickoffAt,
+      market_key: bp.marketKey || '',
+      selection: bp.selection || '',
+      bookmaker_odds: bp.bookmakerOdds ?? null,
+      implied_probability: bp.impliedProbability ?? null,
+      edge: bp.edge ?? null,
+      model_probability: bp.modelProbability ?? null,
+      model_confidence: engineResult?.confidence?.model || null,
+      phantom_score: null,
+      volatility_score: engineResult?.script?.volatilityScore ?? null,
+    });
+
+    if (insertedId != null) engineResult.pickId = insertedId;
+  }
 
   const homeTeam = engineResult.homeTeam || fixture.home_team_name || '';
   const awayTeam = engineResult.awayTeam || fixture.away_team_name || '';

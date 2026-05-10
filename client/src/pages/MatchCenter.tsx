@@ -2,13 +2,14 @@ import { useState, useRef, useEffect, lazy, Suspense, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
+
 
 const PredictionTab = lazy(() => import("@/components/match/PredictionTab").then(m => ({ default: m.PredictionTab })));
 const StatsTab = lazy(() => import("@/components/match/StatsTab").then(m => ({ default: m.StatsTab })));
@@ -18,6 +19,12 @@ const LineupsTab = lazy(() => import("@/components/match/LineupsTab").then(m => 
 const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").then(m => ({ default: m.PhantomChatTab })));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function ordinal(n: number) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 export function SpiralWatermark() {
   return (
@@ -42,37 +49,13 @@ const TABS = [
   { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
 ];
 
-
-// ── Prediction Tab ──────────────────────────────────────────────────────────
-
-
-
-// ── Stats Tab ───────────────────────────────────────────────────────────────
-
-
-
-// ── League Tab ──────────────────────────────────────────────────────────────
-
-
-
-// ── Pitch Tab ────────────────────────────────────────────────────────────────
-
-
-// ── Lineups Tab ───────────────────────────────────────────────────────────────
-
-
-// ── PhantomChat Tab ─────────────────────────────────────────────────────────
-
-
-
 // ── Main MatchCenter ────────────────────────────────────────────────────────
 
 export default function MatchCenter() {
   const params = useParams();
-  const fixtureId = params.id;
+  const fixtureId = params?.id;
   const [, setLocation] = useLocation();
-  const { data: user } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
+  const { user, isPremium, isLoading: authLoading } = useAccess();
   const [tab, setTab] = useState("Prediction");
 
   // Scroll to top when MatchCenter loads
@@ -84,12 +67,18 @@ export default function MatchCenter() {
       queryKey: ["/api/matches", fixtureId],
       queryFn: () => fetchApi("/matches/" + fixtureId),
       staleTime: 30 * 1000,
+      refetchInterval: (query) => {
+        const d = query?.state?.data as any;
+        const status = String(d?.fixture?.match_status || "").toUpperCase();
+        return ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(status) ? 30000 : false;
+      },
       enabled: !!fixtureId,
     });
   const d = data as any;
   const fix = d?.fixture || {};
-  const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(fix.match_status || "");
-  const isFT = ["FT", "AET", "Pen"].includes(fix.match_status || "");
+  const statusUpper = String(fix.match_status || "").toUpperCase();
+  const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(statusUpper);
+  const isFT = ["FT", "AET", "PEN_FT", "PEN", "PENS"].includes(statusUpper) || String(fix.match_status || "") === "Pen";
   const matchTime = fix.match_date
       ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "";
@@ -135,7 +124,7 @@ export default function MatchCenter() {
             <TeamLogo src={fix.home_team_logo} name={fix.home_team_name || "Home"} size="lg" />
             <span className="text-sm font-black text-white">{(fix.home_team_name || "Home").slice(0, 3).toUpperCase()}</span>
             {homePos && (
-              <span className="text-[9px] text-white/30">{homePos.position}th · {homePos.points} PTS</span>
+              <span className="text-[9px] text-white/30">{ordinal(homePos.position)} · {homePos.points} PTS</span>
             )}
           </div>
 
@@ -166,7 +155,7 @@ export default function MatchCenter() {
             <TeamLogo src={fix.away_team_logo} name={fix.away_team_name || "Away"} size="lg" />
             <span className="text-sm font-black text-white">{(fix.away_team_name || "Away").slice(0, 3).toUpperCase()}</span>
             {awayPos && (
-              <span className="text-[9px] text-white/30">{awayPos.position}th · {awayPos.points} PTS</span>
+              <span className="text-[9px] text-white/30">{ordinal(awayPos.position)} · {awayPos.points} PTS</span>
             )}
           </div>
         </div>
@@ -199,10 +188,23 @@ export default function MatchCenter() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.15 }}>
                 <Suspense fallback={<div className="flex justify-center py-20"><div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /></div>}>
-                  {tab === "Prediction" && <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />}
+                  {tab === "Prediction" && (
+                    <>
+                      {isFT && (
+                        <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-3 flex items-start gap-2">
+                          <Info className="w-4 h-4 text-amber-300 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[11px] font-black text-amber-200 uppercase tracking-[0.14em]">Match Completed</p>
+                            <p className="text-[11px] text-amber-100/60 leading-snug mt-1">Prediction is shown for review only. This is not an active pick.</p>
+                          </div>
+                        </div>
+                      )}
+                      <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />
+                    </>
+                  )}
                   {tab === "Stats" && <StatsTab d={d} />}
                   {tab === "Pitch" && <PitchTab matchData={d} />}
-                  {tab === "Lineups" && <LineupsTab matchData={d} />}
+                  {tab === "Lineups" && <LineupsTab matchData={d} fixtureId={fixtureId} />}
                   {tab === "League" && <LeagueTab d={d} />}
                   {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />}
                 </Suspense>

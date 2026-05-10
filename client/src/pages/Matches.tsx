@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { motion } from "framer-motion";
 import { Search, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,9 +25,8 @@ function getDates() {
 }
 
 export default function Matches() {
-  const { data: user } = useAuth();
   const [, setLocation] = useLocation();
-  const isPremium = (user as any)?.has_access;
+  const { user, isPremium } = useAccess();
   const todayIso = new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"});
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [search, setSearch] = useState("");

@@ -43,6 +43,9 @@ export default function Landing() {
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
   const heroY = useTransform(scrollY, [0, 400], [0, 100]);
+  const goToLogin = () => setLocation("/login");
+  const goToSignup = () => setLocation("/login?mode=signup");
+  const goToTrackRecord = () => setLocation("/track-record");
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white overflow-x-hidden selection:bg-primary/30">
@@ -50,20 +53,23 @@ export default function Landing() {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[80vw] h-[60vh] bg-primary/10 blur-[120px] opacity-60 rounded-full mix-blend-screen" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vh] bg-blue-500/5 blur-[100px] rounded-full mix-blend-screen" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.apply/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
       {/* ── NAV ─────────────────────────────────────────────── */}
       <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#060a0e]/50 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Zap className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center overflow-hidden p-1">
+            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="font-black tracking-wide text-lg">ScorePhantom</span>
+          <span className="font-black tracking-wide text-lg">Score<span className="text-primary">Phantom</span></span>
         </div>
-        <div className="flex items-center gap-4">
-          <button onClick={() => setLocation("/login")} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Log in</button>
-          <button onClick={() => setLocation("/login")} className="px-4 py-2 rounded-full bg-white text-black text-sm font-black hover:scale-95 transition-transform">Get Started</button>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button onClick={goToLogin} className="text-xs sm:text-sm font-semibold text-white/70 hover:text-white transition-colors whitespace-nowrap">Log in</button>
+          <button onClick={goToSignup} className="px-3 sm:px-4 py-2 rounded-full bg-white text-black text-xs sm:text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)] whitespace-nowrap">
+            <span className="sm:hidden">Start Free</span>
+            <span className="hidden sm:inline">Start Free Trial</span>
+          </button>
         </div>
       </nav>
 
@@ -74,7 +80,7 @@ export default function Landing() {
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8">
             <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">The Next-Gen Betting Edge</span>
+            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">AI-Powered Predictions</span>
           </motion.div>
 
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
@@ -85,18 +91,18 @@ export default function Landing() {
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
             className="text-lg sm:text-xl text-white/50 mb-10 leading-relaxed max-w-2xl mx-auto font-medium">
-            ScorePhantom ingests millions of data points to surface high-value betting edges, exact win probabilities, and smart accumulators.
+            ScorePhantom analyzes thousands of data points to find high-probability predictions across football and basketball.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToSignup}
               className="group relative h-14 px-8 rounded-full font-black text-black text-base overflow-hidden transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
               style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
               <span className="relative flex items-center gap-2">Start 7-Day Free Trial <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
             </button>
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToTrackRecord}
               className="h-14 px-8 rounded-full font-bold text-white bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.08] transition-colors flex items-center gap-2">
               View Track Record
             </button>
@@ -256,10 +262,10 @@ export default function Landing() {
             Unlock the algorithm.
           </h2>
           <p className="text-white/50 mb-10 text-lg max-w-xl mx-auto">
-            Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep AI match analysis for just ₦3,000/month.
+            Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep model analysis for just ₦3,000/month.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={() => setLocation("/login")}
+            <button onClick={goToSignup}
               className="w-full sm:w-auto px-10 h-14 rounded-full font-black text-black text-base transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
               style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
               Start 7-Day Free Trial

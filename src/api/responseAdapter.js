@@ -9,8 +9,6 @@ function safeNum(val, fallback = 0) {
   return isNaN(n) ? fallback : n;
 }
 
-// ── Script name mapping: SP2 engine → SP1 frontend ──────────────────────────
-
 const SCRIPT_MAP = {
   dominant_home_pressure: "dominant_home",
   dominant_away_pressure: "dominant_away",
@@ -38,60 +36,91 @@ const SCRIPT_DESCRIPTIONS = {
   chaotic: "Unpredictable match with high variance",
 };
 
-// ── Human-readable reason code labels ──────────────────────────────────────
-
 const REASON_LABELS = {
-  home_strength_gap_high:          "Home team holds a clear quality advantage",
-  away_strength_advantage:         "Away team is the stronger side on paper",
-  massive_table_gap:               "Huge league table gap between these sides",
-  home_form_strong:                "Home team in red-hot form — last 5 games dominant",
-  home_form_poor:                  "Home team struggling — poor results recently",
-  strong_away_form:                "Away side coming in with superior recent form",
-  away_form_poor:                  "Away team on a poor run of results",
-  home_scoring_rate_strong:        "Home team scores frequently at home",
-  strong_home_venue_record:        "Excellent home record — rarely drop points here",
-  poor_away_venue_record:          "Away side rarely wins on the road",
-  away_struggles_to_score_away:    "Away team low on goals when travelling",
-  away_defense_weak_away:          "Away defence leaks goals on the road",
-  home_defense_strong:             "Home team hard to score against",
-  away_failed_to_score_often:      "Away team blanked in several recent matches",
-  home_failed_to_score_often:      "Home team blanked in several recent matches",
-  h2h_btts_rate_high:              "H2H: both teams score in most meetings",
-  h2h_low_scoring_history:         "H2H: matches between these sides stay low-scoring",
-  h2h_high_scoring_history:        "H2H: these sides produce high-scoring games",
-  h2h_historically_under:          "H2H: rarely goes over 2.5 goals between them",
-  btts_profile_high:               "Both teams have scored in most of their recent games",
-  btts_profile_low:                "Neither team scores consistently — low BTTS rate",
-  both_teams_high_scoring_tendency:"Both sides involved in high-scoring games this season",
-  both_teams_low_scoring_tendency: "Both teams trend low-scoring this season",
-  projected_home_control:          "Model expects home side to control this match",
-  projected_away_control:          "Model expects away side to dominate tempo",
-  projected_open_game:             "Model projects an open, end-to-end encounter",
-  low_event_profile:               "Model projects a tight, cagey battle",
-  home_in_relegation_fight:        "Home side under relegation pressure — must win",
-  away_in_relegation_fight:        "Away side fighting to avoid the drop",
-  home_title_race_pressure:        "Home team in title race — must take all 3 points",
-  high_volatility_warning:         "⚠️ High match volatility — unpredictable outcome",
-  upset_risk_elevated:             "⚠️ Upset risk is elevated for this fixture",
-  low_data_quality:                "⚠️ Limited historical data — reduced confidence",
+  MODEL_ONLY_NO_ODDS:                 "Model-only pick — no bookmaker odds were available for this market",
+  home_strength_gap_high:          "Home side maintains a dominant baseline quality advantage",
+  away_strength_advantage:         "Away side projects superior baseline metrics",
+  massive_table_gap:               "Significant structural disparity in league standings",
+  home_form_strong:                "Home side executing at peak efficiency (last 5 games)",
+  home_form_poor:                  "Home side exhibiting structural decline in recent fixtures",
+  strong_away_form:                "Away side sustaining high-performance metrics on the road",
+  away_form_poor:                  "Away side struggling with sustained performance drops",
+  home_scoring_rate_strong:        "Home side generates high-probability chances consistently",
+  strong_home_venue_record:        "Home venue advantage yields a high win-probability baseline",
+  poor_away_venue_record:          "Away side historically underperforms expected metrics on the road",
+  away_struggles_to_score_away:    "Away side struggles to convert expected goals (xG) away",
+  away_defense_weak_away:          "Away side concedes high-quality chances in transition",
+  home_defense_strong:             "Home side demonstrates elite defensive block stability",
+  away_failed_to_score_often:      "Away side shows recurring offensive stagnation",
+  home_failed_to_score_often:      "Home side struggles to penetrate low defensive blocks",
+  h2h_btts_rate_high:              "Historical matchups show structural vulnerabilities for both sides",
+  h2h_low_scoring_history:         "Historical matchups heavily favor defensive game scripts",
+  h2h_high_scoring_history:        "Historical matchups produce volatile, high-event game scripts",
+  h2h_historically_under:          "Matchup historically produces a low-variance event profile",
+  btts_profile_high:               "Both sides exhibit high-variance offensive transitions",
+  btts_profile_low:                "Both sides favor low-event, possession-heavy structures",
+  both_teams_high_scoring_tendency:"Both sides consistently outperform baseline xG metrics",
+  both_teams_low_scoring_tendency: "Both sides consistently underperform baseline xG metrics",
+  projected_home_control:          "Model projects home side to monopolize possession and tempo",
+  projected_away_control:          "Model projects away side to control spatial progression",
+  projected_open_game:             "Model projects a highly volatile, transitional game state",
+  low_event_profile:               "Model projects a cagey, low-event tactical stalemate",
+  home_in_relegation_fight:        "Home side forced into aggressive script due to table pressure",
+  away_in_relegation_fight:        "Away side forced into aggressive script due to table pressure",
+  home_title_race_pressure:        "Home side requires maximal points for title progression",
+  high_volatility_warning:         "⚠️ High match volatility — outcome variance is elevated",
+  upset_risk_elevated:             "⚠️ Upset risk detected — structural vulnerabilities present",
+  low_data_quality:                "⚠️ Limited data baseline — predictive confidence reduced",
+  metadata_goals_trend:            "BSD pre-match facts point toward a goals-friendly matchup",
+  metadata_scoring_warning:        "BSD pre-match facts flag a scoring concern",
+  metadata_clean_sheet_signal:     "BSD pre-match facts support a clean-sheet angle",
+  metadata_unbeaten_signal:        "BSD pre-match facts show an unbeaten/team-strength signal",
+  metadata_derby_context:          "BSD metadata flags derby/rivalry context, increasing volatility",
 };
 
 function humanizeReasonCode(code) {
   if (REASON_LABELS[code]) return REASON_LABELS[code];
-  // Fallback: prettify raw code
-  return code
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return String(code || '').replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Confidence / Fit / Value mappings ────────────────────────────────────────
+function collectBsdInsightReasons(fv = {}) {
+  const reasons = [];
+  const coreGap = safeNum(fv.corePlayerGap, 0);
+  const hCore = safeNum(fv.homeCorePlayerScore, 0);
+  const aCore = safeNum(fv.awayCorePlayerScore, 0);
+  if (fv.hasDeepPlayerIntel && Math.abs(coreGap) >= 0.35) {
+    if (coreGap > 0) reasons.push(`BSD player-career layer gives ${fv.homeTeam || 'home'} the stronger core-player impact (${hCore.toFixed(2)} vs ${aCore.toFixed(2)})`);
+    else reasons.push(`BSD player-career layer gives ${fv.awayTeam || 'away'} the stronger core-player impact (${aCore.toFixed(2)} vs ${hCore.toFixed(2)})`);
+  }
+
+  const hRating = safeNum(fv.homeCoreAvgRating, null);
+  const aRating = safeNum(fv.awayCoreAvgRating, null);
+  if (hRating != null && aRating != null && Math.abs(hRating - aRating) >= 0.25) {
+    if (hRating > aRating) reasons.push(`${fv.homeTeam || 'Home'} has the stronger average core-player rating from BSD career data`);
+    else reasons.push(`${fv.awayTeam || 'Away'} has the stronger average core-player rating from BSD career data`);
+  }
+
+  const refChaos = safeNum(fv.refereeVolatilityChaos, null);
+  const refStrict = safeNum(fv.refereeVolatilityStrictness, null);
+  if (refChaos != null && refChaos >= 0.72) reasons.push(`BSD referee history indicates elevated chaos/card volatility (${Math.round(refChaos * 100)}%)`);
+  else if (refStrict != null && refStrict >= 0.75) reasons.push(`BSD referee profile suggests a strict officiating style`);
+  if (fv.refereeRedCardWarning) reasons.push(`BSD referee history flags above-normal red-card risk`);
+
+  const codes = Array.isArray(fv.metadataReasonCodes) ? fv.metadataReasonCodes : [];
+  for (const code of codes.slice(0, 3)) {
+    reasons.push(humanizeReasonCode(code));
+  }
+  if (fv.hasMetadataPreview && safeNum(fv.metadataFactCount, 0) > 0) {
+    reasons.push(`BSD match metadata adds ${fv.metadataFactCount} pre-match fact${fv.metadataFactCount === 1 ? '' : 's'} to the context layer`);
+  }
+
+  return [...new Set(reasons)].slice(0, 6);
+}
 
 function mapModelConfidence(probability, dataCompletenessScore) {
   const p = safeNum(probability, 0);
-  // Penalise confidence when data is sparse
   const dataQuality = safeNum(dataCompletenessScore, 0.5);
   const penalisedP = dataQuality < 0.35 ? p * 0.88 : dataQuality < 0.55 ? p * 0.94 : p;
-
   if (penalisedP >= 0.78) return "HIGH";
   if (penalisedP >= 0.65) return "MEDIUM";
   if (penalisedP >= 0.56) return "LEAN";
@@ -105,35 +134,54 @@ function mapTacticalFit(tacticalFitScore) {
   return "WEAK";
 }
 
-// ── Risk / Edge label passthrough ─────────────────────────────────────────────
-// riskLevel and edgeLabel are attached by selectBestPick — pass them through.
-// Fallback for any cached picks that predate the new engine.
-function resolveRiskLevel(pick) {
-  if (pick?.riskLevel) return pick.riskLevel;
-  // Heuristic fallback from probability + market key
-  const prob = safeNum(pick?.modelProbability, 0);
-  const mk   = (pick?.marketKey || '').toLowerCase();
-  const isStable = ['under_35','under_25','double_chance_home','double_chance_away',
-                    'home_under_15','away_under_15','dnb_home','dnb_away'].includes(mk);
-  if (prob >= 0.72 && isStable) return 'SAFE';
-  if (prob >= 0.65) return 'MODERATE';
+function resolveRiskLevel(pick, phantomScore) {
+  const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
+  if (ps >= 0.72) return 'SAFE';
+  if (ps >= 0.60) return 'MODERATE';
   return 'AGGRESSIVE';
 }
 
-function resolveEdgeLabel(pick) {
-  if (pick?.edgeLabel) return pick.edgeLabel;
-  const prob = safeNum(pick?.modelProbability, 0);
-  const risk = resolveRiskLevel(pick);
-  if (prob >= 0.70) return risk === 'SAFE' ? 'STRONG EDGE (SAFE)' : 'STRONG EDGE (AGGRESSIVE)';
-  if (prob >= 0.62) return 'LEAN';
+function resolveEdgeLabel(pick, phantomScore) {
+  if (pick?.modelOnly || pick?.isModelOnly) return 'MODEL-ONLY';
+  const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
+  const risk = resolveRiskLevel(pick, phantomScore);
+  if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
+  if (ps >= 0.65) return 'MODERATE EDGE';
+  if (ps >= 0.55) return 'LEAN';
   return 'NO EDGE';
 }
 
-function mapValueRating(edgeScore) {
+/**
+ * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
+ * Keep this conservative: a high raw model probability is not enough to show PICK THIS.
+ */
+function computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+  const ps = safeNum(phantomScore, 0);
+  const edge = safeNum(edgeScore, 0);
+  const dataQ = safeNum(dataCompletenessScore, 0.5);
+  const risk = String(riskLevel || '').toUpperCase();
+
+  if (ps >= 0.68 && risk !== 'AGGRESSIVE' && dataQ >= 0.35 && edge >= 0.02) return 'FIRE';
+  if (ps >= 0.55) return 'GAMBLE';
+  return 'AVOID';
+}
+
+function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+  const computed = computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore);
+  const s = String(status || '').toUpperCase();
+
+  // Never allow stale/legacy FIRE to override the conservative score/risk gate.
+  if (computed !== 'FIRE') return computed;
+  if (s === 'AVOID') return 'AVOID';
+  return 'FIRE';
+}
+
+function mapValueRating(edgeScore, modelOnly = false) {
+  if (modelOnly) return "MODEL";
   const s = safeNum(edgeScore, 0);
-  if (s >= 0.72) return "STRONG";
-  if (s >= 0.66) return "GOOD";
-  if (s >= 0.60) return "FAIR";
+  if (s >= 0.15) return "STRONG";
+  if (s >= 0.08) return "GOOD";
+  if (s >= 0.04) return "FAIR";
   return "WEAK";
 }
 
@@ -144,11 +192,6 @@ function mapVolatility(volatilityScore) {
   return "LOW";
 }
 
-// ── Pick label formatting ────────────────────────────────────────────────────
-
-// Direct lookup table for all internal marketKey values produced by buildMarketCandidates.
-// The selection field from that module is already perfectly formatted, but we want team names
-// substituted in for home/away references.
 const PICK_LABEL_MAP = {
   home_win:             (h)    => `${h || "Home"} Win`,
   away_win:             (h, a) => `${a || "Away"} Win`,
@@ -178,134 +221,108 @@ const PICK_LABEL_MAP = {
 
 function formatPickLabel(marketKey, selection, homeTeam, awayTeam) {
   if (!marketKey) return selection || "No Clear Edge";
-
   const key = (marketKey || "").toLowerCase().replace(/-/g, "_");
-
-  // Primary path: use the direct lookup table (covers all buildMarketCandidates keys)
-  if (PICK_LABEL_MAP[key]) {
-    return PICK_LABEL_MAP[key](homeTeam, awayTeam);
-  }
-
-  // Secondary path: legacy/external market keys (over_under category, 1x2, etc.)
+  if (PICK_LABEL_MAP[key]) return PICK_LABEL_MAP[key](homeTeam, awayTeam);
   const sel = (selection || "").toLowerCase().replace(/-/g, "_");
-
   if (key === "over_under" || key === "goals_ou") {
-    if (sel.startsWith("over_")) {
-      const val = sel.replace("over_", "").replace("_", ".");
-      return `Over ${val} Goals`;
-    }
-    if (sel.startsWith("under_")) {
-      const val = sel.replace("under_", "").replace("_", ".");
-      return `Under ${val} Goals`;
-    }
+    if (sel.startsWith("over_")) return `Over ${sel.replace("over_", "").replace("_", ".")} Goals`;
+    if (sel.startsWith("under_")) return `Under ${sel.replace("under_", "").replace("_", ".")} Goals`;
   }
-
   if (key === "1x2" || key === "match_winner") {
     if (sel === "home" || sel === "1") return `${homeTeam || "Home"} Win`;
     if (sel === "away" || sel === "2") return `${awayTeam || "Away"} Win`;
     if (sel === "draw" || sel === "x") return "Draw";
   }
-
   if (key === "double_chance") {
     if (sel === "1x" || sel === "home_draw") return `${homeTeam || "Home"} or Draw`;
     if (sel === "2x" || sel === "away_draw") return `${awayTeam || "Away"} or Draw`;
     if (sel === "12" || sel === "home_away") return "Home or Away Win";
   }
-
   if (key === "dnb" || key === "draw_no_bet") {
     if (sel === "home") return `${homeTeam || "Home"} Win (DNB)`;
     if (sel === "away") return `${awayTeam || "Away"} Win (DNB)`;
   }
-
   if (key === "asian_handicap" || key === "handicap") {
     if (sel.includes("home")) return `${homeTeam || "Home"} Handicap`;
     if (sel.includes("away")) return `${awayTeam || "Away"} Handicap`;
   }
-
   if (key === "win_either_half") {
     if (sel === "home") return `${homeTeam || "Home"} Win Either Half`;
     if (sel === "away") return `${awayTeam || "Away"} Win Either Half`;
   }
-
-  // Fallback: use raw selection string (may already be human-readable)
-  if (selection) {
-    return selection.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
+  if (selection) return selection.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return marketKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Market name mapping ─────────────────────────────────────────────────────
-
 function mapMarketName(marketKey) {
   const key = (marketKey || "").toLowerCase();
-  // Over/Under markets
   if (key === "over_under" || key === "goals_ou") return "Over/Under";
   if (key === "over_15" || key === "over_25" || key === "over_35") return "Over/Under";
   if (key === "under_25" || key === "under_35") return "Over/Under";
-  // BTTS
   if (key === "btts" || key === "btts_yes" || key === "btts_no" || key === "both_teams_to_score") return "Both Teams to Score";
-  // Match result
   if (key === "1x2" || key === "match_winner" || key === "home_win" || key === "away_win" || key === "draw") return "Match Result";
-  // Double Chance
   if (key === "double_chance" || key === "double_chance_home" || key === "double_chance_away") return "Double Chance";
-  // Draw No Bet
   if (key === "dnb" || key === "draw_no_bet" || key === "dnb_home" || key === "dnb_away") return "Draw No Bet";
-  // Asian Handicap
   if (key === "asian_handicap" || key === "handicap") return "Asian Handicap";
-  // Team goals (home/away over/under)
   if (key.startsWith("home_over_") || key.startsWith("home_under_")) return "Home Team Goals";
   if (key.startsWith("away_over_") || key.startsWith("away_under_")) return "Away Team Goals";
-  // Win Either Half
   if (key === "win_either_half_home" || key === "win_either_half_away") return "Win Either Half";
   return marketKey ? marketKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unknown";
 }
 
-// ── Build a candidate pick object (shared for recommendation + backups) ─────
-
-// Team-total markets (home/away over/under) are niche — cap displayed probability at 93%
-// to avoid misleading users with 95%+ confidence on low-liquidity markets.
 const NICHE_MARKETS = new Set([
   'home_over_05', 'home_over_15', 'home_over_25', 'home_under_15',
   'away_over_05', 'away_over_15', 'away_over_25', 'away_under_15',
 ]);
+const DISPLAY_MAX_PROBABILITY_PCT = 87.0;
 
 function capProbabilityPct(marketKey, rawPct) {
   const key = (marketKey || '').toLowerCase();
+  if (rawPct > DISPLAY_MAX_PROBABILITY_PCT) return DISPLAY_MAX_PROBABILITY_PCT;
   if (NICHE_MARKETS.has(key) && rawPct > 93) return 93.0;
   return rawPct;
 }
 
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
   if (!pick) return null;
-
+  const isModelOnly = !!(pick.modelOnly || pick.isModelOnly);
   const probability = safeNum(pick.modelProbability, 0);
-  // Use real betting edge (model prob - implied prob) when odds are available,
-  // fall back to ranking score only when no odds data exists
-  const edgeScore = pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0);
+  const edgeScore = isModelOnly ? 0 : (pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0));
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
-  const rawPct = parseFloat((probability * 100).toFixed(1));
+  const rawProbPct = parseFloat((probability * 100).toFixed(1));
+  const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+  const compositeRaw = safeNum(pick.finalScore, probability);
+  const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
+  const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
+  const phantomScorePct = parseFloat((phantomScoreRaw * 100).toFixed(1));
+  const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
+  const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
+  const advisorStatus = normalizeAdvisorStatus(pick.advisor_status, phantomScoreRaw, riskLvl, edgeScore, dataCompletenessScore);
 
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
-    probability_pct: capProbabilityPct(pick.marketKey, rawPct),
+    probability_pct: rawProbPct,
+    phantom_score_pct: phantomScorePct,
+    score: compositeScore,
     edgeScore,
-    modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
+    modelConfidence: modelConf,
     tacticalFit: mapTacticalFit(tacticalFitScore),
-    valueRating: mapValueRating(edgeScore),
-    riskLevel: resolveRiskLevel(pick),
-    edgeLabel: resolveEdgeLabel(pick),
+    valueRating: mapValueRating(edgeScore, isModelOnly),
+    riskLevel: riskLvl,
+    edgeLabel: edgeLbl,
     reasons: (pick.reasons || []).map(humanizeReasonCode),
+    advisor_status: advisorStatus,
     no_edge: !!(pick.edge != null && pick.edge <= 0),
+    modelOnly: isModelOnly,
+    isModelOnly,
+    isSafeBet: !isModelOnly && phantomScorePct >= 72 && riskLvl === 'SAFE',
+    isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
+    isSharpValue: !isModelOnly && (pick.isSharpValue || false),
   };
 }
 
-// ── Main adapter ─────────────────────────────────────────────────────────────
-
-/**
- * Transform SP2 engine result to SP1 React frontend format.
- */
 export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const {
     fixtureId,
@@ -317,15 +334,11 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     allCandidates = [],
     noSafePick,
     noSafePickReason,
-    confidence = {},
     reasonCodes = [],
     rankedMarkets = [],
-    features,
-    dataQuality,
     correctScoreProbs,
   } = engineResult;
 
-  // Data completeness — read from flat feature vector passed through engine result
   const featureVector = engineResult?.features || {};
   const dataCompletenessScore = safeNum(
     featureVector.dataCompletenessScore ??
@@ -333,7 +346,6 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     engineResult?.volatilityFeatures?.dataCompletenessScore,
     0.5
   );
-  // Derive tier from score if enrichmentTier is missing (old enrichment records lack it)
   const enrichmentTier = featureVector.enrichmentTier || (() => {
     const s = dataCompletenessScore;
     if (s >= 0.8) return 'rich';
@@ -342,79 +354,95 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     return 'thin';
   })();
 
-  // ── Game Script ──────────────────────────────────────────────────────────
   const sp2Script = script.primary || "balanced";
   const sp1Script = SCRIPT_MAP[sp2Script] || sp2Script;
   const volatilityScore = safeNum(script.volatilityScore, 0.5);
-
+  const fv = featureVector || {};
+  const rawStrengthGap = safeNum(fv.homeStrengthGap, 0) - safeNum(fv.awayStrengthGap, 0);
   const gameScript = {
     script: sp1Script,
     label: SCRIPT_LABELS[sp1Script] || sp1Script.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     description: SCRIPT_DESCRIPTIONS[sp1Script] || "Standard match dynamics expected",
     volatility: mapVolatility(volatilityScore),
-    strengthGap: safeNum(script.strengthGap, 0),
-    homeStrength: safeNum(script.homeStrength, 0),
-    awayStrength: safeNum(script.awayStrength, 0),
+    strengthGap: parseFloat(rawStrengthGap.toFixed(3)),
+    homeStrength: safeNum(fv.homeAttackRating01 ?? fv.homeAvgScored, 0),
+    awayStrength: safeNum(fv.awayAttackRating01 ?? fv.awayAvgScored, 0),
   };
 
-  // ── Model ────────────────────────────────────────────────────────────────
   const lambdaHome = safeNum(expectedGoals.home, 1.2);
   const lambdaAway = safeNum(expectedGoals.away, 1.0);
   const totalXg = safeNum(expectedGoals.total, lambdaHome + lambdaAway);
-
   const model = { lambdaHome, lambdaAway, totalXg };
 
-  // ── Predictions: match_result (percentages 0-100) ────────────────────────
   const cp = calibratedProbs || {};
   const match_result = {
     home: parseFloat((safeNum(cp.homeWin, 0.35) * 100).toFixed(1)),
     draw: parseFloat((safeNum(cp.draw, 0.28) * 100).toFixed(1)),
     away: parseFloat((safeNum(cp.awayWin, 0.35) * 100).toFixed(1)),
   };
-
-  // ── Predictions: over_under (decimals 0-1) ──────────────────────────────
   const over_under = {
+    over_1_5: safeNum(cp.over15, 0.72),
+    under_1_5: safeNum(cp.under15, 0.28),
     over_2_5: safeNum(cp.over25, 0.45),
     under_2_5: safeNum(cp.under25, 0.55),
-    over_1_5: safeNum(cp.over15, 0.72),
     over_3_5: safeNum(cp.over35, 0.25),
+    under_3_5: safeNum(cp.under35, 0.75),
   };
-
-  // ── Predictions: btts (decimals 0-1) ────────────────────────────────────
   const btts = {
     yes: safeNum(cp.bttsYes, 0.45),
     no: safeNum(cp.bttsNo, 0.55),
   };
 
-  // ── Human-readable reasons ───────────────────────────────────────────────
   const humanReasonCodes = (reasonCodes || []).map(humanizeReasonCode);
-
-  // Add a data quality warning if completeness is low
+  const bsdInsightReasons = collectBsdInsightReasons({ ...fv, homeTeam, awayTeam });
+  for (const r of bsdInsightReasons) {
+    if (!humanReasonCodes.includes(r)) humanReasonCodes.push(r);
+  }
   if (dataCompletenessScore < 0.4 && !humanReasonCodes.some(r => r.includes("Limited data"))) {
     humanReasonCodes.push("⚠️ Limited historical data — predictions carry higher uncertainty");
   }
 
-  // ── Recommendation ──────────────────────────────────────────────────────
   let recommendation;
   if (bestPick && !noSafePick) {
+    const isModelOnly = !!(bestPick.modelOnly || bestPick.isModelOnly);
     const probability = safeNum(bestPick.modelProbability, 0);
-    const edgeScore = bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0);
+    const edgeScore = isModelOnly ? 0 : (bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0));
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
-
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
+    const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+    const compositeRaw = safeNum(bestPick.finalScore, probability);
+    const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
+    const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
+    const phantomScorePct = capProbabilityPct(bestPick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
+    const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
+    const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
+    const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore, dataCompletenessScore);
+
+    const reasons = isModelOnly
+      ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
+      : humanReasonCodes;
+
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
       probability,
       probability_pct: capProbabilityPct(bestPick.marketKey, rawRecPct),
+      phantom_score_pct: phantomScorePct,
+      score: compositeScore,
       edgeScore,
-      modelConfidence: mapModelConfidence(probability, dataCompletenessScore),
+      modelConfidence: modelConf,
       tacticalFit: mapTacticalFit(tacticalFitScore),
-      valueRating: mapValueRating(edgeScore),
-      riskLevel: resolveRiskLevel(bestPick),
-      edgeLabel: resolveEdgeLabel(bestPick),
-      reasons: humanReasonCodes,
+      valueRating: mapValueRating(edgeScore, isModelOnly),
+      riskLevel: riskLvl2,
+      edgeLabel: edgeLbl2,
+      reasons,
+      advisor_status: advisorStatus,
       no_edge: false,
+      modelOnly: isModelOnly,
+      isModelOnly,
+      isSafeBet: !isModelOnly && advisorStatus === 'FIRE' && phantomScorePct >= 68 && riskLvl2 !== 'AGGRESSIVE',
+      isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
+      isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
     };
   } else {
     recommendation = {
@@ -422,26 +450,24 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       pick: "No Clear Edge",
       probability: 0,
       probability_pct: 0,
+      phantom_score_pct: 0,
+      score: 0,
       edgeScore: 0,
       modelConfidence: "LOW",
       tacticalFit: "WEAK",
       valueRating: "WEAK",
-      reasons: [noSafePickReason || "Insufficient edge or data quality"],
+      reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
+      advisor_status: "AVOID",
       no_edge: true,
     };
   }
 
-  // ── Backup Picks ────────────────────────────────────────────────────────
   const backup_picks = (backupPicks || []).slice(0, 5)
     .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore))
     .filter(Boolean);
-
-  // ── All Candidates ──────────────────────────────────────────────────────
   const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore))
     .filter(Boolean);
-
-  // ── Correct Score ───────────────────────────────────────────────────────
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({
     score: cs.score || `${cs.home}-${cs.away}`,
     probability: safeNum(cs.probability || cs.prob, 0),

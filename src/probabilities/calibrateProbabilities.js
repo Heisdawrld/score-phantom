@@ -8,7 +8,7 @@ import { clamp } from '../utils/math.js';
  * 2. After any adjustment, enforce: under_X = 1 - over_X for each line.
  * 3. Enforce monotonic ordering: over15 >= over25 >= over35.
  */
-export function calibrateProbabilities(rawProbs, scriptOutput) {
+export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = null) {
   const script = scriptOutput || {};
   const primary = script.primary || '';
 
@@ -19,6 +19,20 @@ export function calibrateProbabilities(rawProbs, scriptOutput) {
   function adj(key, delta) {
     if (cal[key] == null) return;
     cal[key] = parseFloat(clamp(cal[key] + delta, 0.01, 0.99).toFixed(4));
+  }
+
+  // Polymarket Blending (Sharp Baseline)
+  if (polymarketOdds && polymarketOdds.odds) {
+     const pOdds = polymarketOdds.odds;
+     if (pOdds['1x2']) {
+       if (cal.homeWin && pOdds['1x2'].home) cal.homeWin = parseFloat(((cal.homeWin * 0.70) + (pOdds['1x2'].home * 0.30)).toFixed(4));
+       if (cal.draw && pOdds['1x2'].draw) cal.draw = parseFloat(((cal.draw * 0.70) + (pOdds['1x2'].draw * 0.30)).toFixed(4));
+       if (cal.awayWin && pOdds['1x2'].away) cal.awayWin = parseFloat(((cal.awayWin * 0.70) + (pOdds['1x2'].away * 0.30)).toFixed(4));
+     }
+     if (pOdds.btts) {
+       if (cal.bttsYes && pOdds.btts.yes) cal.bttsYes = parseFloat(((cal.bttsYes * 0.60) + (pOdds.btts.yes * 0.40)).toFixed(4));
+       if (cal.bttsNo && pOdds.btts.no) cal.bttsNo = parseFloat(((cal.bttsNo * 0.60) + (pOdds.btts.no * 0.40)).toFixed(4));
+     }
   }
 
   // Script-based micro-adjustments (tiny — ≤ 0.04 per field)

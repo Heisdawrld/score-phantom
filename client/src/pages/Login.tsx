@@ -261,7 +261,7 @@ export default function Login() {
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary/10 blur-[120px] mix-blend-screen" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-500/5 blur-[120px] mix-blend-screen" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.apply/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -272,6 +272,10 @@ export default function Login() {
             className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.1)]">
             <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain animate-logo-glow" />
           </motion.div>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="premium-chip text-primary border-primary/20 bg-primary/10">Free 7-Day Trial</span>
+            <span className="premium-chip">No Card Required</span>
+          </div>
         </div>
 
         {/* Card */}
@@ -312,8 +316,8 @@ export default function Login() {
                   </AnimatePresence>
 
                   <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3">
-                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
-                    <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData({ ...formData, password: v })} error={errors.password} />
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData(prev => ({ ...prev, password: v }))} error={errors.password} />
 
 
                     <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={loginMutation.isPending}
@@ -375,8 +379,8 @@ export default function Login() {
                     )}
                   </AnimatePresence>
                   <form onSubmit={handleEmailSignUp} className="flex flex-col gap-3">
-                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="you@example.com" error={errors.email} />
-                    <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData({ ...formData, password: v }); setErrors({ ...errors, password: undefined }); }} error={errors.password} />
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData(prev => ({ ...prev, password: v })); setErrors(prev => ({ ...prev, password: undefined })); }} error={errors.password} />
                     <PasswordInput label="Confirm Password" value={confirmPassword} onChange={(v) => { setConfirmPassword(v); setConfirmPasswordError(""); }} error={confirmPasswordError} />
                     <div>
                       <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
@@ -461,14 +465,14 @@ export default function Login() {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
         </div>
 
-        {/* Stats strip */}
+        {/* Trust strip */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }}
           className="flex items-center gap-6 text-center">
-          <div><p className="text-primary font-black text-lg leading-tight">500+</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Matches/week</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">7D</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Free trial</p></div>
           <div className="w-px h-7 bg-white/8" />
-          <div><p className="text-primary font-black text-lg leading-tight">Model</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Predictions</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">15</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Daily picks</p></div>
           <div className="w-px h-7 bg-white/8" />
-          <div><p className="text-primary font-black text-lg leading-tight">73%</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Accuracy</p></div>
+          <div><p className="text-primary font-black text-lg leading-tight">2</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Sports live</p></div>
         </motion.div>
 
         {/* WhatsApp support — for users who lost premium access */}

@@ -9,8 +9,12 @@ import { safeNum } from '../utils/math.js';
 const STABLE_MARKETS = new Set([
   'under_35', 'under_25',
   'double_chance_home', 'double_chance_away',
-  'home_under_15', 'away_under_15',
   'dnb_home', 'dnb_away',
+]);
+
+/** Team-goal unders — niche, confusing for users, deprioritized from best picks */
+const DEPRIORITIZED_MARKETS = new Set([
+  'home_under_15', 'away_under_15',
 ]);
 
 /**
@@ -33,28 +37,41 @@ const VOLATILE_MARKETS = new Set([
 export function computeRiskLevel(pick, features, script) {
   if (!pick) return 'AGGRESSIVE';
 
-  const prob       = safeNum(pick.modelProbability, 0);
-  const chaos      = safeNum(features?.matchChaosScore, 0.5);
-  const upsetRisk  = safeNum(features?.upsetRiskScore, 0.5);
-  const marketKey  = pick.marketKey || '';
-  const isStable   = STABLE_MARKETS.has(marketKey);
-  const isVolatile = VOLATILE_MARKETS.has(marketKey);
+  const prob        = safeNum(pick.modelProbability, 0);
+  const chaos       = safeNum(features?.matchChaosScore, 0.5);
+  const marketKey   = pick.marketKey || '';
+  const isStable    = STABLE_MARKETS.has(marketKey);
+  const isVolatile  = VOLATILE_MARKETS.has(marketKey);
   const scriptPrimary = script?.primary || '';
-  const isChaotic  = scriptPrimary === 'chaotic_unreliable' ||
-                     scriptPrimary === 'open_end_to_end';
+  const isChaotic   = scriptPrimary === 'chaotic_unreliable' ||
+                      scriptPrimary === 'open_end_to_end';
 
-  // SAFE: high prob + stable market + low chaos
-  if (prob >= 0.72 && isStable && chaos < 0.45 && upsetRisk < 0.45) return 'SAFE';
-  // Also SAFE: very high probability on any non-volatile market, very calm game
-  if (prob >= 0.78 && !isVolatile && chaos < 0.35) return 'SAFE';
+  // ── Probability is the PRIMARY driver ────────────────────────────────────
+  // A high-confidence pick should NEVER be labelled HIGH RISK.
+  // Risk reflects how certain the model is, not the market type alone.
 
-  // AGGRESSIVE: chaotic game, or high chaos, or volatile market without strong backing
-  if (isChaotic) return 'AGGRESSIVE';
-  if (chaos >= 0.65 || upsetRisk >= 0.65) return 'AGGRESSIVE';
-  if (isVolatile && prob < 0.70) return 'AGGRESSIVE';
+  // Very high confidence (≥74%) → SAFE unless extreme chaos
+  if (prob >= 0.74) {
+    if (isChaotic && chaos >= 0.80) return 'MODERATE'; // extreme chaos downgrade
+    return 'SAFE';
+  }
 
-  // MODERATE: everything in between
-  return 'MODERATE';
+  // Good confidence (65-74%) → SAFE on stable markets, MODERATE elsewhere
+  if (prob >= 0.65) {
+    if (isChaotic && chaos >= 0.72) return 'AGGRESSIVE';
+    if (isStable && chaos < 0.55) return 'SAFE';
+    return 'MODERATE';
+  }
+
+  // Moderate confidence (58-65%) → MODERATE unless chaotic
+  if (prob >= 0.58) {
+    if (isChaotic || chaos >= 0.68) return 'AGGRESSIVE';
+    if (isVolatile) return 'AGGRESSIVE';
+    return 'MODERATE';
+  }
+
+  // Low confidence (<58%) → always AGGRESSIVE (HIGH RISK)
+  return 'AGGRESSIVE';
 }
 
 // ── Edge label classification ─────────────────────────────────────────────────
@@ -71,12 +88,12 @@ export function computeRiskLevel(pick, features, script) {
 export function computeEdgeLabel(pick, riskLevel) {
   const prob = safeNum(pick?.modelProbability, 0);
 
-  if (prob >= 0.70) {
-    return riskLevel === 'SAFE'
-      ? 'STRONG EDGE (SAFE)'
-      : 'STRONG EDGE (AGGRESSIVE)';
+  if (prob >= 0.74) {
+    // Both SAFE and MODERATE at this probability = strong edge, just differ in consistency
+    return riskLevel === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
   }
-  if (prob >= 0.62) return 'LEAN';
+  if (prob >= 0.65) return 'MODERATE EDGE';
+  if (prob >= 0.55) return 'LEAN';
   return 'NO EDGE';
 }
 
@@ -86,7 +103,9 @@ function annotatePick(pick, features, script) {
   if (!pick) return pick;
   const riskLevel = computeRiskLevel(pick, features, script);
   const edgeLabel = computeEdgeLabel(pick, riskLevel);
-  return { ...pick, riskLevel, edgeLabel };
+  // Deprioritized markets get a flag so the UI can still show them but they rank lower
+  const isDeprioritized = DEPRIORITIZED_MARKETS.has(pick.marketKey);
+  return { ...pick, riskLevel, edgeLabel, isDeprioritized };
 }
 
 // ── Main selector ────────────────────────────────────────────────────────────
@@ -110,17 +129,53 @@ function annotatePick(pick, features, script) {
  * @returns {{ bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied }}
  */
 export function selectBestPick(rankedCandidates, scriptOutput, featureVector, options = {}) {
-  const ranked = rankedCandidates || [];
+  const ranked = rankedCandidates ? [...rankedCandidates] : [];
   const fv     = featureVector   || {};
   const script = scriptOutput    || {};
 
+  // Polymarket Sharp Value Check
+  if (fv.polymarketOdds && fv.polymarketOdds.odds) {
+    ranked.forEach(pick => {
+      let polyProb = null;
+      if (pick.market === 'match_winner' && fv.polymarketOdds.odds['1x2'] && pick.selection) {
+         polyProb = fv.polymarketOdds.odds['1x2'][pick.selection.toLowerCase()];
+      } else if (pick.market === 'both_teams_to_score' && fv.polymarketOdds.odds.btts && pick.selection) {
+         polyProb = fv.polymarketOdds.odds.btts[pick.selection.toLowerCase()];
+      } else if (pick.market === 'over_under' && fv.polymarketOdds.odds.over_under && pick.selection) {
+         const parts = pick.selection.split('_');
+         if (parts.length > 1) {
+           const key = `${parts[0]}_${parts[1].replace('.', '')}`;
+           polyProb = fv.polymarketOdds.odds.over_under[key];
+         }
+      }
+
+      const prob = pick.modelProbability !== undefined ? pick.modelProbability : pick.probability;
+      if (polyProb && prob !== undefined && Math.abs(prob - polyProb) > 0.12) {
+         pick.isSharpValue = true;
+         if (pick.finalScore !== undefined) pick.finalScore += 0.5;
+         else if (pick.score !== undefined) pick.score += 0.5;
+         
+         console.log(`[selectBestPick] SHARP VALUE DETECTED: ${pick.market} ${pick.selection}. Model: ${prob.toFixed(2)}, Poly: ${polyProb.toFixed(2)}`);
+      }
+    });
+
+    // Sort again in case Sharp Value changed scores
+    ranked.sort((a, b) => {
+      const scoreA = a.finalScore !== undefined ? a.finalScore : (a.score || 0);
+      const scoreB = b.finalScore !== undefined ? b.finalScore : (b.score || 0);
+      return scoreB - scoreA;
+    });
+  }
+
   const matchChaosScore = safeNum(fv.matchChaosScore, 0.5);
+
+  const annotated = ranked.map(p => annotatePick(p, fv, script));
 
   // Rule 1: chaotic script with high confidence
   if (script.primary === 'chaotic_unreliable' && safeNum(script.confidence, 0) > 0.65) {
     return {
       bestPick: null,
-      backupPicks: ranked.slice(0, 2).map(p => annotatePick(p, fv, script)),
+      backupPicks: annotated.slice(0, 2),
       noSafePick: true,
       noSafePickReason: 'Match classified as chaotic_unreliable with high confidence',
     };
@@ -130,7 +185,7 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
   if (matchChaosScore > 0.88) {
     return {
       bestPick: null,
-      backupPicks: ranked.slice(0, 2).map(p => annotatePick(p, fv, script)),
+      backupPicks: annotated.slice(0, 2),
       noSafePick: true,
       noSafePickReason: 'Match chaos score too high — insufficient data or volatile match',
     };
@@ -151,7 +206,7 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
   if (topProb < 0.60) {
     return {
       bestPick: null,
-      backupPicks: ranked.slice(0, 2).map(p => annotatePick(p, fv, script)),
+      backupPicks: annotated.slice(0, 2),
       noSafePick: true,
       noSafePickReason: `Best pick probability too low (${(topProb * 100).toFixed(1)}% < 60% minimum)`,
     };
@@ -207,7 +262,7 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
 
       return {
         bestPick: null,
-        backupPicks: ranked.slice(0, 2).map(p => annotatePick(p, fv, script)),
+        backupPicks: annotated.slice(0, 2),
         noSafePick: true,
         noSafePickReason: `Top two picks too close (gap=${gap.toFixed(3)}) — no clear best market`,
       };
@@ -215,9 +270,11 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
   }
 
   // Rule 4: pick the winner
+  const best = annotated[0] || null;
+
   return {
-    bestPick:  annotatePick(ranked[0], fv, script),
-    backupPicks: ranked.slice(1, 3).map(p => annotatePick(p, fv, script)),
+    bestPick: best,
+    backupPicks: annotated.slice(1, 3),
     noSafePick: false,
     noSafePickReason: null,
   };

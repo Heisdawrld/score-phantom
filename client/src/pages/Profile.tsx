@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth, useLogout } from "@/hooks/use-auth";
+import { useAccess } from "@/hooks/use-access";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -21,7 +22,10 @@ const P_FEATS = [
 ];
 
 export default function Profile() {
-  const { data: user } = useAuth();
+  const { user, isPremium, isTrial, isLoading } = useAccess();
+  // isSubscribed = actual paying subscriber (not just trial)
+  const isSubscribed = (user as any)?.subscription_active === true
+    || (user as any)?.access_status === "active";
   const logout = useLogout();
   const [, nav] = useLocation();
   const { toast } = useToast();
@@ -45,14 +49,13 @@ export default function Profile() {
     }
   };
 
-  const isPremium = (user as any)?.access_status === "active";
-  const isTrial = (user as any)?.access_status === "trial";
   const isExpired = (user as any)?.access_status === "expired";
 
   const email = (user as any)?.email || "";
   const username = (user as any)?.username || "";
   const dn = username || email.split("@")[0] || "User";
   const ini = dn.charAt(0).toUpperCase();
+  const referralLink = `${window.location.origin}/login?ref=${(user as any)?.own_referral_code || ""}`;
 
   const trialEnd = (user as any)?.trial_ends_at ? new Date((user as any).trial_ends_at) : null;
   const premEnd = (user as any)?.subscription_expires_at ? new Date((user as any).subscription_expires_at) : null;
@@ -60,7 +63,7 @@ export default function Profile() {
 
   const { data: td } = useQuery({
     queryKey: ["/api/track-record"],
-    queryFn: () => fetchApi("/track-record?days=30"),
+    queryFn: () => fetchApi("/track-record?days=30&sport=football"),
     staleTime: 300000,
   });
   const st = (td as any)?.overallStats || {};
@@ -77,24 +80,30 @@ export default function Profile() {
     { icon: BarChart2, label: "Track Record", sub: "Win rates & prediction history", go: "/track-record" },
     { icon: Heart, label: "Favourite Leagues", sub: "Personalise your match feed", go: "/league-favorites" },
   ];
+  const quickActions = [
+    { icon: CreditCard, label: "Billing", go: "/billing" },
+    { icon: BarChart2, label: "Track", go: "/track-record" },
+    { icon: Heart, label: "Leagues", go: "/league-favorites" },
+  ];
 
   return (
     <div className="min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
-      {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/[0.04] px-4 py-4">
-        <h1 className="text-xl font-black text-white tracking-wide">Account</h1>
+        <h1 className="text-xl font-black text-white tracking-tight">Account</h1>
+        <p className="text-[11px] text-white/30 mt-0.5">{email}</p>
       </div>
 
-      <div className="px-4 py-5 flex flex-col gap-4 relative z-10">
+      <div className="px-4 py-5 mx-auto max-w-2xl flex flex-col gap-4 relative z-10">
         {/* ── Profile Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-4 p-5 rounded-2xl glass-card"
+          className="premium-surface flex items-center gap-4 p-5 rounded-[28px] overflow-hidden relative"
         >
+          <div className="absolute -right-10 -top-8 h-28 w-28 rounded-full bg-primary/12 blur-3xl pointer-events-none" />
           {/* Avatar */}
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/25 flex items-center justify-center text-2xl font-black text-primary shadow-[0_0_20px_rgba(16,231,116,0.1)]">
             {ini}
@@ -103,12 +112,12 @@ export default function Profile() {
             <p className="text-lg font-black text-white capitalize truncate">{dn}</p>
             <p className="text-xs text-white/35 truncate">{email}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {isPremium && (
+              {isSubscribed && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-0.5">
                   <Crown size={10} /> PREMIUM
                 </span>
               )}
-              {isTrial && (
+              {isTrial && !isSubscribed && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2.5 py-0.5">
                   <Zap size={10} /> FREE TRIAL
                 </span>
@@ -123,6 +132,30 @@ export default function Profile() {
               </span>
             </div>
           </div>
+          <div className="hidden sm:block premium-stat min-w-[116px] text-center">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/28">Access</p>
+            <p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-white/78">
+              {isSubscribed ? "Premium" : isTrial ? "Trial" : "Expired"}
+            </p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03 }}
+          className="grid grid-cols-3 gap-2"
+        >
+          {quickActions.map(({ icon: Icon, label, go }) => (
+            <button
+              key={label}
+              onClick={() => nav(go)}
+              className="premium-stat px-3 py-4 text-center hover:bg-white/[0.05] transition-all"
+            >
+              <Icon size={16} className="mx-auto text-primary" />
+              <p className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/55">{label}</p>
+            </button>
+          ))}
         </motion.div>
 
         {/* ── Performance Card ── */}
@@ -131,7 +164,7 @@ export default function Profile() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="rounded-2xl glass-card p-4"
+            className="premium-surface rounded-[28px] p-4"
           >
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
@@ -143,7 +176,7 @@ export default function Profile() {
                 { label: "Won", val: st.wins || 0, color: "text-emerald-400" },
                 { label: "Lost", val: st.losses || 0, color: "text-red-400" },
               ].map(s => (
-                <div key={s.label} className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
+                <div key={s.label} className="premium-stat text-center">
                   <p className={"text-2xl font-black tabular-nums " + s.color}>{s.val}</p>
                   <p className="text-[9px] text-white/30 uppercase tracking-wider mt-0.5">{s.label}</p>
                 </div>
@@ -157,7 +190,7 @@ export default function Profile() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
-          className="rounded-2xl border overflow-hidden mb-6"
+          className="rounded-[28px] border overflow-hidden mb-6"
           style={{
             borderColor: isPremium ? "rgba(245,158,11,0.2)" : isTrial ? "rgba(16,231,116,0.2)" : "rgba(239,68,68,0.2)",
             background: isPremium
@@ -171,8 +204,8 @@ export default function Profile() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <CreditCard size={14} className={isPremium ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400"} />
-                <p className={"text-xs font-black uppercase tracking-widest " + (isPremium ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400")}>
-                  {isPremium ? "Premium Plan" : isTrial ? "Free Trial" : "Trial Expired"}
+                <p className={"text-xs font-black uppercase tracking-widest " + (isSubscribed ? "text-amber-400" : isTrial ? "text-primary" : "text-red-400")}>
+                  {isSubscribed ? "Premium Plan" : isTrial ? "Free Trial" : "Trial Expired"}
                 </p>
               </div>
               {!isPremium && (
@@ -205,10 +238,17 @@ export default function Profile() {
 
           <div className="px-4 pb-4 border-t border-white/[0.04] pt-3">
             <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">
-              {isPremium ? "Your access" : "Premium unlocks"}
+              {isSubscribed ? "Your access" : isTrial ? "Trial access" : "Premium unlocks"}
             </p>
             <div className="grid grid-cols-1 gap-1.5">
-              {P_FEATS.map(({ i: Icon, l }, idx) => (
+              {[
+                { i: Zap, l: isSubscribed ? "Unlimited predictions — no daily cap" : isTrial ? "15 predictions per day" : "Unlimited predictions — no daily cap" },
+                { i: TrendingUp, l: "Real odds + value bet detection" },
+                { i: Crown, l: "Daily ACCA Builder" },
+                { i: Star, l: "PhantomChat — deep match analysis" },
+                { i: BarChart2, l: "Top Picks ranked by edge strength" },
+                { i: Shield, l: "Full track record & results history" },
+              ].map(({ i: Icon, l }, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <div className={"w-4 h-4 rounded flex items-center justify-center shrink-0 " + (isPremium ? "text-primary" : "text-white/15")}>
                     {isPremium ? <CheckCircle size={12} /> : <Lock size={10} />}
@@ -222,7 +262,7 @@ export default function Profile() {
 
         {/* Referral System */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
-          <div className="bg-[#121212] rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
+          <div className="premium-surface rounded-[28px] p-5 relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none"/>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -236,15 +276,15 @@ export default function Profile() {
             
             {refStats && (
               <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                <div className="premium-stat text-center">
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Referrals</p>
                   <p className="text-lg font-black text-white">{(refStats as any).total_referrals}</p>
                 </div>
-                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                <div className="premium-stat text-center">
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Pending</p>
                   <p className="text-lg font-black text-amber-400">₦{(refStats as any).pending_commission.toLocaleString()}</p>
                 </div>
-                <div className="bg-black/20 rounded-xl p-3 border border-white/5 text-center">
+                <div className="premium-stat text-center">
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Earned</p>
                   <p className="text-lg font-black text-primary">₦{(refStats as any).settled_commission.toLocaleString()}</p>
                 </div>
@@ -263,7 +303,7 @@ export default function Profile() {
                 </button>
               </div>
               <div className="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-white/5">
-                <span className="text-sm font-medium text-white/70 truncate mr-3">score-phantom.com/login?ref={(user as any)?.own_referral_code || ""}</span>
+                    <span className="text-sm font-medium text-white/70 truncate mr-3">{referralLink}</span>
                 <button 
                   onClick={copyReferralLink}
                   className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-sm font-medium text-primary transition-colors shrink-0"
@@ -285,7 +325,7 @@ export default function Profile() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 * i }}
                 onClick={() => nav(go)}
-                className="flex items-center gap-4 p-4 rounded-2xl glass-card glass-card-hover transition-all text-left w-full"
+                className="premium-surface flex items-center gap-4 p-4 rounded-[24px] transition-all text-left w-full hover:bg-white/[0.05]"
               >
                 <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
                   <Icon size={16} className="text-white/45" />

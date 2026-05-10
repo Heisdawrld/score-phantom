@@ -52,11 +52,7 @@ const adminLimiter = rateLimit({
 // ── DB migrations ─────────────────────────────────────────────────────────────
 async function ensureColumn(table, col, sql) {
   try {
-    const info = await db.execute(`
-      SELECT column_name as name 
-      FROM information_schema.columns 
-      WHERE table_name = '${table}'
-    `);
+    const info = await db.execute(`PRAGMA table_info(${table})`);
     const exists = (info.rows || []).some(
       r => String(r.name).toLowerCase() === col.toLowerCase()
     );
@@ -67,7 +63,7 @@ async function ensureColumn(table, col, sql) {
 export async function initUsersTable() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE
     )
   `);
@@ -92,12 +88,13 @@ export async function initUsersTable() {
     ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
     ["partner_id",                "ALTER TABLE users ADD COLUMN partner_id INTEGER"],
     ["username",                  "ALTER TABLE users ADD COLUMN username TEXT UNIQUE"],
+    ["token_version",             "ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       reference TEXT UNIQUE NOT NULL,
       amount INTEGER NOT NULL,
@@ -119,7 +116,7 @@ export async function initUsersTable() {
   // ── Partner commissions table ──────────────────────────────────────────────
   await db.execute(`
     CREATE TABLE IF NOT EXISTS partner_commissions (
-      id SERIAL PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       referrer_user_id INTEGER,
       referred_user_id INTEGER NOT NULL UNIQUE,
       payment_id INTEGER,
@@ -140,35 +137,30 @@ export async function initUsersTable() {
   await ensureColumn("partner_commissions", "payout_batch_id",     "ALTER TABLE partner_commissions ADD COLUMN payout_batch_id TEXT");
   await ensureColumn("partner_commissions", "notes",               "ALTER TABLE partner_commissions ADD COLUMN notes TEXT");
   // Migrate: make referrer_user_id nullable if it was created with NOT NULL
-  let _refCol;
   try {
-    const _info2 = await db.execute(`
-      SELECT column_name as name, is_nullable
-      FROM information_schema.columns 
-      WHERE table_name = 'partner_commissions' AND column_name = 'referrer_user_id'
-    `);
-    _refCol = (_info2.rows || []).find(r => String(r.name).toLowerCase() === "referrer_user_id");
-  } catch(e){}
-  if (_refCol && _refCol.is_nullable === 'NO') {
-    await db.execute("ALTER TABLE partner_commissions RENAME TO partner_commissions_legacy2");
-    await db.execute("CREATE TABLE partner_commissions (id SERIAL PRIMARY KEY, partner_id INTEGER, referrer_user_id INTEGER, referred_user_id INTEGER NOT NULL UNIQUE, payment_id INTEGER, gross_amount INTEGER NOT NULL, commission_rate REAL NOT NULL DEFAULT 0.25, commission_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, settled_at TIMESTAMP, payment_reference TEXT, paid_at TIMESTAMP, payout_batch_id TEXT, notes TEXT)");
-    await db.execute("INSERT INTO partner_commissions (id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes) SELECT id,partner_id,referrer_user_id,referred_user_id,payment_id,gross_amount,commission_rate,commission_amount,status,created_at,settled_at,payment_reference,paid_at,payout_batch_id,notes FROM partner_commissions_legacy2 ON CONFLICT DO NOTHING");
-    await db.execute("DROP TABLE IF EXISTS partner_commissions_legacy2");
-    console.log("[Migration] partner_commissions.referrer_user_id made nullable");
+    const _info2 = await db.execute(`PRAGMA table_info(partner_commissions)`);
+    const _refCol = (_info2.rows || []).find(r => String(r.name).toLowerCase() === "referrer_user_id");
+    
+    if (_refCol && _refCol.notnull === 1) {
+      console.log("[Migration] partner_commissions.referrer_user_id is NOT NULL. SQLite doesn't support DROP NOT NULL easily, skipping.");
+    }
+  } catch (e) {
+    console.error("[Migration Error] partner_commissions:", e.message);
   }
 
   // Partners table — migrate to standalone schema (no user_id required)
-  const _ptInfo = await db.execute(`
-    SELECT column_name as name 
-    FROM information_schema.columns 
-    WHERE table_name = 'partners'
-  `);
+  const _ptInfo = await db.execute(`PRAGMA table_info(partners)`);
   const _ptCols = (_ptInfo.rows||[]).map(r=>String(r.name).toLowerCase());
-  if (!_ptCols.includes("email")) {
+  
+  if (_ptCols.length === 0) {
+    // Table doesn't exist, just create it
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
+  } else if (!_ptCols.includes("email")) {
+    // Legacy table exists but missing 'email'
     try {
       await db.execute("ALTER TABLE partners RENAME TO partners_legacy");
     } catch(_){}
-    await db.execute("CREATE TABLE IF NOT EXISTS partners (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
+    await db.execute("CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT, user_id INTEGER, referral_code TEXT NOT NULL UNIQUE, commission_rate REAL NOT NULL DEFAULT 0.25, status TEXT NOT NULL DEFAULT 'active', notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_payout_at TIMESTAMP)");
     try {
       await db.execute("INSERT INTO partners (id,name,user_id,referral_code,commission_rate,created_at,last_payout_at) SELECT id,name,user_id,referral_code,commission_rate,created_at,last_payout_at FROM partners_legacy ON CONFLICT DO NOTHING");
       await db.execute("DROP TABLE IF EXISTS partners_legacy");
@@ -178,13 +170,17 @@ export async function initUsersTable() {
     await ensureColumn("partners","status","ALTER TABLE partners ADD COLUMN status TEXT DEFAULT 'active'");
     await ensureColumn("partners","notes","ALTER TABLE partners ADD COLUMN notes TEXT");
   }
-  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id SERIAL PRIMARY KEY, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+  await db.execute("CREATE TABLE IF NOT EXISTS partner_referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE, referral_code TEXT, assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function signToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ 
+    id: user.id, 
+    email: user.email,
+    token_version: user.token_version || 1 
+  }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 
@@ -233,21 +229,48 @@ export function computeAccessStatus(user) {
     };
   }
   const now = new Date();
-  const trialActive   = user?.trial_ends_at           && new Date(user.trial_ends_at)           > now;
-  const premiumActive = user?.premium_expires_at      && new Date(user.premium_expires_at)      > now;
-  const subActive     = user?.subscription_expires_at && new Date(user.subscription_expires_at) > now;
-  let status = "expired";
-  if (premiumActive || subActive) status = "active";
-  else if (trialActive)           status = "trial";
   
+  // Clean up potential invalid dates from CSV imports
+  const parsedTrialEnds = user?.trial_ends_at ? new Date(user.trial_ends_at) : null;
+  const trialIsValid = parsedTrialEnds && !isNaN(parsedTrialEnds.getTime());
+  
+  const parsedPremiumExpires = user?.premium_expires_at ? new Date(user.premium_expires_at) : null;
+  const premiumIsValid = parsedPremiumExpires && !isNaN(parsedPremiumExpires.getTime());
+
+  const parsedSubExpires = user?.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
+  const subIsValid = parsedSubExpires && !isNaN(parsedSubExpires.getTime());
+
+  const trialActive   = trialIsValid && parsedTrialEnds > now;
+  const premiumActive = premiumIsValid && parsedPremiumExpires > now;
+  const subActive     = subIsValid && parsedSubExpires > now;
+  
+  let status = "expired";
+  
+  // If they have no valid trial date but their DB status explicitly says "trial", 
+  // give them a fallback grace period so they aren't instantly blocked.
+  let isFallbackTrial = false;
+  if (!trialIsValid && user?.status === "trial" && !premiumActive && !subActive) {
+    isFallbackTrial = true;
+    status = "trial";
+  }
+  
+  let isFallbackPremium = false;
+  if (!premiumIsValid && user?.status === "premium" && !subActive) {
+    isFallbackPremium = true;
+    status = "active";
+  }
+
+  if (premiumActive || subActive || isFallbackPremium) status = "active";
+  else if (trialActive || isFallbackTrial)           status = "trial";
+
   // Add referral code to the payload
   const referralCode  = user?.own_referral_code || null;
 
   return {
     status,
-    trial_active:        !!trialActive,
-    subscription_active: !!(premiumActive || subActive),
-    has_full_access:     !!trialActive || !!premiumActive || !!subActive,
+    trial_active:        !!trialActive || isFallbackTrial,
+    subscription_active: !!(premiumActive || subActive || isFallbackPremium),
+    has_full_access:     !!trialActive || isFallbackTrial || !!premiumActive || !!subActive || isFallbackPremium,
     referral_code:       referralCode,
   };
 }
@@ -256,28 +279,44 @@ function publicUser(user) {
   if (user.own_referral_code) { user.own_referral_code = user.own_referral_code; } // Just to be safe
   const access = computeAccessStatus(user);
   return {
-    id:                    user.id,
-    email:                 user.email,
-    username:              user.username,
-    status:                user.status,
-    trial_ends_at:         user.trial_ends_at,
-    premium_expires_at:    user.premium_expires_at,
+    id:                      user.id,
+    email:                   user.email,
+    username:                user.username,
+    status:                  user.status,
+    trial_ends_at:           user.trial_ends_at,
+    premium_expires_at:      user.premium_expires_at,
     subscription_expires_at: user.subscription_expires_at,
-    subscription_code:     user.subscription_code,
-    has_access:            access.has_full_access,
-    access_status:         access.status,
-    email_verified:        user.email_verified === 1 || user.email_verified === true,
-    own_referral_code:     user.own_referral_code || null,
+    subscription_code:       user.subscription_code,
+    has_access:              access.has_full_access,
+    access_status:           access.status,
+    // Explicit access flags so the frontend hook can read them directly
+    trial_active:            access.trial_active,
+    subscription_active:     access.subscription_active,
+    has_full_access:         access.has_full_access,
+    email_verified:          user.email_verified === 1 || user.email_verified === true,
+    own_referral_code:       user.own_referral_code || null,
   };
 }
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const auth = req.headers.authorization || "";
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
     const token = auth.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Security: Check token version
+    const result = await db.execute({ 
+      sql: "SELECT id, email, token_version FROM users WHERE id = ? LIMIT 1", 
+      args: [decoded.id] 
+    });
+    const user = result.rows?.[0];
+    
+    if (!user || user.token_version !== decoded.token_version) {
+      return res.status(401).json({ error: "Session expired or invalidated. Please sign in again." });
+    }
+
     req.user = decoded;
     next();
   } catch {
@@ -294,7 +333,11 @@ export async function requirePremiumAccess(req, res, next) {
     const decoded = jwt.verify(parts[1], JWT_SECRET);
     const result  = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [decoded.id] });
     const user    = result.rows?.[0];
-    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    
+    if (!user || user.token_version !== decoded.token_version) {
+      return res.status(401).json({ error: "Session expired or invalidated." });
+    }
+
     const access = computeAccessStatus(user);
     req.user   = user;
     req.access = access;
@@ -403,8 +446,7 @@ if (!admin.apps.length) {
       console.log('[Firebase Admin] ✓ Initialized with service account credentials');
     } catch (err) {
       console.error('[Firebase Admin] ✗ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', err.message);
-      console.error('[Firebase Admin] Make sure the env var is valid JSON (not base64, not escaped).');
-      process.exit(1);
+      console.error('[Firebase Admin] Make sure the env var is valid JSON. Continuing without Firebase.');
     }
   } else {
     // Fallback for local dev only — will NOT work on Render (no ADC available)
@@ -833,20 +875,36 @@ router.post("/login", authLimiter, async (req, res) => {
         const user = result.rows?.[0];
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const storedHash = user.password_hash || user.password;
-    if (!storedHash)
-      return res.status(400).json({ error: "Account password not set. Please sign up again." });
+    if (!storedHash) {
+      // The user exists in the database (likely from a CSV import), but has no password set.
+      // Let's set their password right now so they can log in seamlessly!
+      const hashedPassword = await bcrypt.hash(String(password || ""), 10);
+      await db.execute({
+        sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
+        args: [hashedPassword, user.id]
+      });
+      // The password is now set and implicitly verified since they just "created" it
+    } else {
+      // Normal login check
+      const ok = await bcrypt.compare(String(password || ""), String(storedHash));
+      if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    }
 
-    const ok = await bcrypt.compare(String(password || ""), String(storedHash));
-    if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    // Refresh user object to ensure we have the latest state
+    const refresh = await db.execute({
+      sql: "SELECT * FROM users WHERE id = ? LIMIT 1",
+      args: [user.id]
+    });
+    const finalUser = refresh.rows?.[0];
 
-    await ensureReferralCode(user);
+    await ensureReferralCode(finalUser);
 
-    const token   = signToken(user);
-    const access  = computeAccessStatus(user);
+    const token   = signToken(finalUser);
+    const access  = computeAccessStatus(finalUser);
     const isAdmin = ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL;
     return res.json({
       token,
-      user: { ...publicUser(user), ...(isAdmin ? { is_admin: true } : {}) },
+      user: { ...publicUser(finalUser), ...(isAdmin ? { is_admin: true } : {}) },
       has_access:    access.has_full_access,
       access_status: access.status,
     });
@@ -859,7 +917,7 @@ router.post("/login", authLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code FROM users WHERE id = ? LIMIT 1`,
+      sql: `SELECT id, email, username, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code, token_version FROM users WHERE id = ? LIMIT 1`,
       args: [req.user.id],
     });
     const user = result.rows?.[0];
@@ -883,6 +941,19 @@ router.get("/me", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[Me]", err);
     return res.status(500).json({ error: "Failed to load account" });
+  }
+});
+
+// POST /api/auth/logout-all — increment token_version to invalidate all existing sessions
+router.post("/logout-all", requireAuth, async (req, res) => {
+  try {
+    await db.execute({
+      sql: "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+      args: [req.user.id]
+    });
+    return res.json({ success: true, message: "Logged out from all devices" });
+  } catch (err) {
+    return res.status(500).json({ error: "Logout failed" });
   }
 });
 

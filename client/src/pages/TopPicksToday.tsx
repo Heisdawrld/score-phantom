@@ -5,12 +5,12 @@ import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
-import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock } from "lucide-react";
+import { useAccess } from "@/hooks/use-access";
+import { ChevronLeft, Flame, Target, Shield, Clock, TrendingUp, Sparkles, Activity, Users, Zap, Brain, Filter, Lock, CloudRain, AlertTriangle, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { AIAdvisorBadge, AdvisorStatus } from "@/components/ui/AIAdvisorBadge";
+import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 
@@ -31,7 +31,21 @@ interface Pick {
   time: string;
   enrichment?: string;
   dataQuality?: string;
-  factors?: { form: boolean; h2h: boolean; xg: boolean; tactical: boolean } | null;
+  isSafeBet?: boolean;
+  isValueBet?: boolean;
+  advisor_status?: string;
+  factors?: {
+    form?: boolean;
+    h2h?: boolean;
+    xg?: boolean;
+    tactical?: boolean;
+    weather?: boolean;
+    injury?: boolean;
+    referee?: boolean;
+    venue?: boolean;
+    lineup?: boolean;
+    sharp?: boolean;
+  } | null;
 }
 
 function formatMarket(key: string): string {
@@ -54,33 +68,37 @@ function formatMarket(key: string): string {
   return map[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function FactorTag({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+function FactorTag({ icon, label, active, tone = "primary" }: { icon: React.ReactNode; label: string; active: boolean; tone?: "primary" | "blue" | "amber" | "green" }) {
   if (!active) return null;
+  const styles = {
+    primary: "text-primary border-primary/25 bg-primary/[0.06]",
+    blue: "text-blue-300 border-blue-400/25 bg-blue-400/[0.06]",
+    amber: "text-amber-300 border-amber-400/25 bg-amber-400/[0.06]",
+    green: "text-emerald-300 border-emerald-400/25 bg-emerald-400/[0.06]",
+  }[tone];
   return (
-    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold text-primary border-primary/25 bg-primary/[0.06]">
+    <span className={cn("inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border font-bold", styles)}>
       {icon}{label}
     </span>
   );
 }
 
-type FilterMode = "all" | "elite" | "high_edge" | "value";
+type FilterMode = "all" | "elite" | "safe" | "value";
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading: authLoading } = useAuth();
-  const isPremium = user?.access_status === "active" || (user as any)?.subscription_active || (user as any)?.is_admin;
+  const { user, isSubscribed, isLoading: authLoading } = useAccess();
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
-  const savedScrollRef = useRef(0);
-  const handleOpenPanel = (id: string) => { savedScrollRef.current = window.scrollY; setSelectedFixtureId(id); };
-  const handleClosePanel = () => { setSelectedFixtureId(null); requestAnimationFrame(() => window.scrollTo(0, savedScrollRef.current)); };
+  const handleOpenPanel = (id: string) => setLocation(`/match/${id}`);
+  const handleClosePanel = () => {};
 
   const { data, isLoading } = useQuery({
     queryKey: ["top-picks-today"],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
-    enabled: !authLoading && !!isPremium,
+    enabled: !authLoading && !!isSubscribed,
   });
 
   useScrollRestoration("top_picks", !isLoading);
@@ -89,7 +107,7 @@ export default function TopPicksToday() {
   const { data: resultsData } = useQuery({
     queryKey: ["pick-results-7d"],
     queryFn: () => fetchApi("/track-record?days=7"),
-    enabled: !authLoading && !!isPremium,
+    enabled: !authLoading && !!isSubscribed,
     staleTime: 10 * 60 * 1000,
   });
   const weekStats = (resultsData as any)?.overallStats || null;
@@ -98,16 +116,16 @@ export default function TopPicksToday() {
 
   // Apply filter
   const picks = allPicks.filter(p => {
+    if (filter === "safe") return p.isSafeBet;
+    if (filter === "value") return p.isValueBet;
     const comp = p.composite ?? p.score * 100;
     if (filter === "elite") return comp >= 65;
-    if (filter === "high_edge") return comp >= 52;
-    if (filter === "value") return p.probability >= 65;
     return true;
   });
 
   if (authLoading) return <div className="min-h-screen bg-background" />;
 
-  if (!isPremium) {
+  if (!isSubscribed) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -156,82 +174,68 @@ export default function TopPicksToday() {
       </div>
       <Header />
 
-      <div className="flex-1 w-full max-w-lg mx-auto px-4 pt-6 space-y-6 relative z-10">
+      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10">
 
         {/* ── Page header ── */}
-        <div className="flex items-center gap-3 pt-6 mb-1">
-          <button onClick={() => setLocation("/")} className="p-2 hover:bg-white/5 rounded-xl transition shrink-0">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black flex items-center gap-2">
-              <Flame className="w-6 h-6 text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.6)]" />
-              Best Tips Today
-            </h1>
-            <p className="text-xs text-white/30 mt-0.5">
-              Ranked by composite score — confidence, edge, tactical fit &amp; form
-            </p>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setLocation("/")} className="p-2 hover:bg-white/5 rounded-xl transition shrink-0">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div>
+                <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-400" />
+                  Today's Picks
+                </h1>
+                <p className="text-xs text-white/30 mt-0.5">
+                  {allPicks.length} picks ranked by composite score
+                </p>
+              </div>
+            </div>
+            {avgConf && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/8 border border-primary/15 shrink-0">
+                <span className="text-xs font-bold text-primary">{avgConf}%</span>
+                <span className="text-[9px] text-white/30">avg</span>
+              </div>
+            )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* ── Summary stats ── */}
-        {allPicks.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 my-5">
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-white">{allPicks.length}</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Tips Today</p>
-            </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-primary">{avgConf}%</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Avg Confidence</p>
-            </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-xl font-black text-emerald-400">{eliteCount}</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider">Elite Picks</p>
-            </div>
+        {/* ── Filter + Track Strip ── */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5 overflow-x-auto hide-scrollbar">
+            {[
+              { key: "all" as FilterMode, label: "All" },
+              { key: "safe" as FilterMode, label: "Safe" },
+              { key: "value" as FilterMode, label: "Value" },
+              { key: "elite" as FilterMode, label: "Elite" },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-[10px] text-[10px] font-bold uppercase tracking-wider transition-all shrink-0",
+                  filter === f.key
+                    ? "bg-primary/12 text-primary"
+                    : "text-white/25 hover:text-white/50"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
-        )}
-
-        {/* ── Filter Tabs ── */}
-        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mb-4 touch-pan-x overscroll-x-contain">
-          {[
-            { key: "all" as FilterMode, label: "All Picks" },
-            { key: "elite" as FilterMode, label: "Elite" },
-            { key: "high_edge" as FilterMode, label: "High Edge" },
-            { key: "value" as FilterMode, label: "Value" },
-          ].map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all",
-                filter === f.key
-                  ? "bg-primary/15 border-primary/30 text-primary"
-                  : "bg-white/[0.03] border-white/[0.06] text-white/30 hover:text-white/50"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+          {weekStats && weekStats.totalPicks > 0 && (
+            <div className="flex items-center gap-1.5 ml-auto shrink-0">
+              <TrendingUp className="w-3 h-3 text-primary" />
+              <span className="text-[10px] text-white/35">
+                <span className="text-primary font-bold">{weekStats.wins}W</span>
+                <span className="mx-0.5">·</span>
+                <span className="text-red-400 font-bold">{weekStats.losses}L</span>
+              </span>
+            </div>
+          )}
         </div>
-
-        {/* ── 7-Day Track Record Strip ── */}
-        {weekStats && weekStats.totalPicks > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 px-4 py-2.5 rounded-xl glass-card mb-4"
-          >
-            <TrendingUp className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-[11px] text-white/50">
-              7-Day Record: <span className="text-primary font-bold">{weekStats.wins}W</span>
-              <span className="mx-1">·</span>
-              <span className="text-red-400 font-bold">{weekStats.losses}L</span>
-              <span className="mx-1">·</span>
-              <span className="text-white font-bold">{(weekStats.winRate || 0).toFixed(0)}% WR</span>
-            </span>
-          </motion.div>
-        )}
 
         {/* ── Pick Cards ── */}
         {picks.length > 0 ? (
@@ -240,6 +244,7 @@ export default function TopPicksToday() {
               const quality = getConfidenceTier(pick.composite ?? pick.score * 100);
               const isTop3 = idx < 3;
               const isTop = idx === 0;
+              const isDeepData = ['deep', 'rich', 'excellent'].includes(String(pick.enrichment || pick.dataQuality || '').toLowerCase());
 
               return (
                 <motion.div
@@ -251,24 +256,22 @@ export default function TopPicksToday() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenPanel(pick.fixtureId)}
                   className={cn(
-                    "relative rounded-2xl border p-4 cursor-pointer transition-all group",
-                    isTop
-                      ? "gradient-card-green glow-primary"
-                      : isTop3
-                      ? "glass-card border-white/10"
-                      : "glass-card"
+                    "relative rounded-2xl p-4 cursor-pointer transition-all group overflow-hidden deco-corners",
+                    isTop ? "border border-primary/15" : "border glass-card border-white/10"
                   )}
                 >
-                  {/* Hot pick ribbon for #1 */}
                   {isTop && (
-                    <div className="absolute top-0 right-4 -translate-y-1/2">
-                      <span className="flex items-center gap-1 bg-primary text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full shadow-[0_0_16px_rgba(16,231,116,0.5)]">
-                        <Sparkles className="w-2.5 h-2.5" /> Hot Pick
-                      </span>
+                    <div className="absolute inset-0 z-0 pointer-events-none">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+                      <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+                        background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+                      }} />
+                      <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+                      <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
                     </div>
                   )}
 
-                  <div className="flex items-start gap-3">
+                  <div className="relative z-10 flex items-start gap-3">
                     {/* Rank */}
                     <div className="shrink-0 flex flex-col items-center gap-1 pt-0.5">
                       <span className="text-xl leading-none">{RANK_MEDALS[idx] ?? `#${idx + 1}`}</span>
@@ -294,6 +297,16 @@ export default function TopPicksToday() {
                                 <Clock className="w-2.5 h-2.5" />{pick.time}
                               </span>
                             )}
+                            {pick.isSafeBet && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                                Safe Bet
+                              </span>
+                            )}
+                            {pick.isValueBet && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" /> Value Bet
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -316,18 +329,22 @@ export default function TopPicksToday() {
                           <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
                         <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
-                        <AIAdvisorBadge status={(pick.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} />
+                        <ModelAdvisorBadge status={(pick.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} />
                       </div>
 
                       {/* Analysis factor tags */}
-                      {pick.factors && (
-                        <div className="mt-2 flex items-center gap-1 flex-wrap">
-                          <FactorTag icon={<Activity className="w-2 h-2" />} label="Form" active={pick.factors.form} />
-                          <FactorTag icon={<Users className="w-2 h-2" />} label="H2H" active={pick.factors.h2h} />
-                          <FactorTag icon={<Zap className="w-2 h-2" />} label="xG" active={pick.factors.xg} />
-                          <FactorTag icon={<Brain className="w-2 h-2" />} label="Tactical" active={pick.factors.tactical} />
-                        </div>
-                      )}
+                      <div className="mt-2 flex items-center gap-1 flex-wrap">
+                        <FactorTag icon={<Activity className="w-2 h-2" />} label="Form" active={!!pick.factors?.form} />
+                        <FactorTag icon={<Users className="w-2 h-2" />} label="H2H" active={!!pick.factors?.h2h} />
+                        <FactorTag icon={<Zap className="w-2 h-2" />} label="xG" active={!!pick.factors?.xg} />
+                        <FactorTag icon={<Brain className="w-2 h-2" />} label="Tactical" active={!!pick.factors?.tactical} />
+                        <FactorTag icon={<Shield className="w-2 h-2" />} label="Deep Data" active={isDeepData} tone="green" />
+                        <FactorTag icon={<CloudRain className="w-2 h-2" />} label="Weather" active={!!pick.factors?.weather} tone="blue" />
+                        <FactorTag icon={<AlertTriangle className="w-2 h-2" />} label="Injury" active={!!pick.factors?.injury || !!pick.factors?.lineup} tone="amber" />
+                        <FactorTag icon={<MapPin className="w-2 h-2" />} label="Venue" active={!!pick.factors?.venue} tone="blue" />
+                        <FactorTag icon={<Shield className="w-2 h-2" />} label="Referee" active={!!pick.factors?.referee} tone="amber" />
+                        <FactorTag icon={<Sparkles className="w-2 h-2" />} label="Sharp" active={!!pick.factors?.sharp} tone="green" />
+                      </div>
 
                       {/* Composite score bar */}
                       <div className="mt-2.5 flex items-center gap-2">
@@ -371,7 +388,6 @@ export default function TopPicksToday() {
           </p>
         )}
       </div>
-      <PredictionPanel fixtureId={selectedFixtureId} onClose={handleClosePanel} />
     </div>
   );
 }

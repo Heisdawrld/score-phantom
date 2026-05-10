@@ -1,25 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
-
-const RISK_LABELS: Record<string, string> = {
-  SAFE: 'Stable',
-  MODERATE: 'Calculated',
-  AGGRESSIVE: 'High Variance',
-  VOLATILE: 'High Variance',
-};
-function riskColor(r: string) {
-  const l = (r || '').toUpperCase();
-  if (l === 'SAFE') return 'text-primary';
-  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
-  return 'text-blue-400';
-}
 
 export function LeagueTab({ d }: any) {
   const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
@@ -34,7 +14,15 @@ export function LeagueTab({ d }: any) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+      <div className="relative rounded-2xl overflow-hidden mb-2">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
         <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">
           {fix.tournament_name || "League"} Table
         </p>
@@ -69,13 +57,22 @@ export function LeagueTab({ d }: any) {
           })}
         </div>
       </div>
+      </div>
 
       {/* Team position highlight */}
       {[fix.home_team_name, fix.away_team_name].filter(Boolean).map((team: string) => {
         const row = st.find((r: any) => (r.team || "").toLowerCase().includes(team.toLowerCase().split(" ")[0]));
         if (!row) return null;
         return (
-          <div key={team} className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
+          <div key={team} className="relative rounded-2xl overflow-hidden mb-2">
+            {/* Cinematic green glow backdrop */}
+            <div className="absolute inset-0 z-0 pointer-events-none">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+              <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+              <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+              <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+            </div>
+            <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
             <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-2">{team}</p>
             <div className="grid grid-cols-3 gap-2">
               <div className="text-center">
@@ -94,6 +91,7 @@ export function LeagueTab({ d }: any) {
                 <p className="text-[9px] text-white/30 uppercase">Goal Diff</p>
               </div>
             </div>
+          </div>
           </div>
         );
       })}

@@ -44,41 +44,42 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
     const now = new Date();
     const todayStart = now.toISOString().slice(0, 10);
 
-    const [totalResult, usersResult, paymentsToday, totalRevenue, pendingResult] = await Promise.all([
+    const [totalResult, usersResult, paymentsToday, verifiedPayments, pendingResult] = await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM users`),
       db.execute(`SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at FROM users`),
       db.execute({
-        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND paid_at::date = ?`,
-        args: [todayStart],
+        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND CAST(paid_at AS TEXT) LIKE ?`,
+        args: [`${todayStart}%`],
       }),
-      // Revenue = verified payments + estimated from premium users without payment records (manual upgrades)
-      db.execute(`
-        SELECT
-          COUNT(*) as count,
-          COALESCE(SUM(amount), 0) +
-          (SELECT COUNT(*) * 3000 FROM users
-           WHERE (status = 'premium' OR (premium_expires_at IS NOT NULL AND premium_expires_at > NOW()))
-           AND id NOT IN (SELECT DISTINCT user_id FROM payments WHERE status = 'verified')
-          ) as total
-        FROM payments WHERE status = 'verified'
-      `),
+      db.execute(`SELECT DISTINCT user_id, amount FROM payments WHERE status = 'verified'`),
       db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
     ]);
 
     const users = usersResult.rows || [];
+    const verifiedUserIds = new Set((verifiedPayments.rows || []).map(p => p.user_id));
+    const rawTotalRevenue = (verifiedPayments.rows || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    
     let activeCount = 0;
     let trialCount = 0;
     let expiredCount = 0;
+    let manualPremiumCount = 0;
 
     for (const user of users) {
       const access = computeAccessStatus(user);
-      if (access.subscription_active) activeCount++;
-      else if (access.trial_active) trialCount++;
-      else expiredCount++;
+      if (access.subscription_active) {
+        activeCount++;
+        if (!verifiedUserIds.has(user.id)) {
+          manualPremiumCount++;
+        }
+      } else if (access.trial_active) {
+        trialCount++;
+      } else {
+        expiredCount++;
+      }
     }
 
     const totalUsers   = Number(totalResult.rows[0].count || 0);
-    const totalRev     = Number(totalRevenue.rows[0].total || 0);
+    const totalRev     = rawTotalRevenue + (manualPremiumCount * 3000);
     const todayPay     = Number(paymentsToday.rows[0].count || 0);
     const todayRev     = Number(paymentsToday.rows[0].total || 0);
 
@@ -93,7 +94,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
       revenue: {
         currency: 'NGN',
         total: totalRev,
-        total_payments: Number(totalRevenue.rows[0].count || 0),
+        total_payments: (verifiedPayments.rows || []).length,
         pending_verification: Number(pendingResult.rows[0].count || 0),
       },
       today: {
@@ -510,6 +511,22 @@ router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res)
   }
 });
 
+// ── POST /push-broadcast — send manual push notification to all users
+router.post("/push-broadcast", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { title, message, url } = req.body;
+    if (!title || !message) return res.status(400).json({ error: "Title and message are required" });
+
+    const { broadcastPush } = await import("../services/pushService.js");
+    const result = await broadcastPush({ title, body: message, url: url || "/" });
+    
+    return res.json({ success: true, sentCount: result.sent });
+  } catch (err) {
+    console.error("[Admin Push] Failed:", err);
+    res.status(500).json({ error: "Failed to broadcast push notifications" });
+  }
+});
+
 // ── GET /system-health — check all integrations ───────────────────────────────
 router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
   try {
@@ -518,9 +535,11 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
     // BSD API
     try {
-      const bsdKey = process.env.BZZOIRO_API_KEY || "";
+      const bsdKey = process.env.BSD_API_KEY || "";
       if (!bsdKey) { checks.bsd_api = "no_key"; } else {
-        const r = await fetch(`https://sports.bzzoiro.com/api/leagues/?key=${bsdKey}`);
+        const r = await fetch(`https://sports.bzzoiro.com/api/leagues/`, {
+          headers: { Authorization: `Token ${bsdKey}` }
+        });
         checks.bsd_api = r.ok ? "ok" : ("error:" + r.status);
       }
     } catch(e) { checks.bsd_api = "fetch_error"; }
@@ -687,16 +706,22 @@ router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res
 router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const date = req.query.date || new Date(Date.now()-86400000).toLocaleString("en-CA",{timeZone:"Africa/Lagos"}).split(",")[0].trim();
-    const bsdKey = process.env.BZZOIRO_API_KEY || "";
+    const bsdKey = process.env.BSD_API_KEY || "";
     const hmRes = await db.execute({sql:"SELECT COUNT(*) cnt,MIN(date) earliest,MAX(date) latest FROM historical_matches WHERE home_goals IS NOT NULL AND date LIKE ?",args:["%"+date+"%"]});
     const hmSample = await db.execute({sql:"SELECT home_team,away_team,home_goals,away_goals,date FROM historical_matches WHERE home_goals IS NOT NULL ORDER BY date DESC LIMIT 5",args:[]});
     const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
     let apiRaw=null,apiError=null;
-    try { 
-      const r = await fetch(`https://sports.bzzoiro.com/api/events/?key=${bsdKey}&date_from=${date}&date_to=${date}`);
-      const data = await r.json();
-      apiRaw={success:r.ok, fixtureCount:(data.events||data||[]).length, sample:(data.events||data||[]).slice(0,2)}; 
-    } catch(e){apiError=e.message;}
+    try {
+        const r = await fetch(`https://sports.bzzoiro.com/api/events/?date_from=${date}&date_to=${date}`, {
+          headers: { Authorization: `Token ${bsdKey}` }
+        });
+        if (r.ok) {
+          const data = await r.json();
+          apiRaw={success:r.ok, fixtureCount:(data.events||data||[]).length, sample:(data.events||data||[]).slice(0,2)}; 
+        } else {
+          apiRaw={success:false, status:r.status};
+        }
+      } catch(e){apiError=e.message;}
 
     return res.json({date,historicalMatchesForDate:hmRes.rows[0],historicalSample:hmSample.rows,predictionOutcomes:poRes.rows,bsdFixtures:{raw:apiRaw,error:apiError}});
   } catch(err){ return res.status(500).json({error:err.message}); }
@@ -802,8 +827,8 @@ router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
     const result = await db.execute(
       "SELECT pt.id as partner_id, pt.name, pt.email, pt.referral_code, pt.commission_rate, pt.status, pt.notes, pt.created_at, pt.last_payout_at," +
       " (SELECT COUNT(*) FROM partner_referrals WHERE partner_id = pt.id) as total_referred_signups," +
-      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND status = 'trial' AND trial_ends_at > NOW()) as total_referred_trials," +
-      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND (status = 'premium' OR (subscription_expires_at IS NOT NULL AND subscription_expires_at > NOW()))) as total_referred_premium," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND status = 'trial' AND datetime(trial_ends_at) > datetime('now')) as total_referred_trials," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND (status = 'premium' OR (subscription_expires_at IS NOT NULL AND datetime(subscription_expires_at) > datetime('now')))) as total_referred_premium," +
       " COUNT(DISTINCT CASE WHEN pc.status IN ('pending','paid','settled') THEN pc.referred_user_id END) as total_referred_paid," +
       " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
       " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +
@@ -829,7 +854,7 @@ router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res)
       " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
       " FROM users u" +
       " INNER JOIN partner_commissions pc ON pc.referrer_user_id = u.id AND pc.partner_id IS NULL" +
-      " GROUP BY u.id HAVING total_commission > 0 ORDER BY pending_commission DESC"
+      " GROUP BY u.id HAVING COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) > 0 ORDER BY pending_commission DESC"
     );
     return res.json({ commissions: result.rows || [] });
   } catch (err) { console.error("[Admin/standard-commissions]", err); return res.status(500).json({ error: err.message }); }

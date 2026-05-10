@@ -1,13 +1,5 @@
 import { safeNum } from '../utils/math.js';
 
-/**
- * Hard cap on any single market probability.
- * Poisson maths can produce 92-97% on extremely low-xG matches (Under 2.5 on tight scripts).
- * These are mathematically defensible but a massive credibility red flag on the UI.
- * We cap at 87% — still a very high confidence rating, but looks realistic to a user.
- */
-const MAX_MODEL_PROBABILITY = 0.87;
-
 const MARKET_DEFINITIONS = [
   { marketKey: 'home_win',           selection: 'Home Win',             probKey: 'homeWin' },
   { marketKey: 'away_win',           selection: 'Away Win',             probKey: 'awayWin' },
@@ -59,7 +51,7 @@ export function buildMarketCandidates(calibratedProbs, odds) {
     candidates.push({
       marketKey: def.marketKey,
       selection: def.selection,
-      modelProbability: parseFloat(Math.min(modelProbability, MAX_MODEL_PROBABILITY).toFixed(4)),
+      modelProbability: parseFloat(Math.max(0, Math.min(1, modelProbability)).toFixed(4)),
       impliedProbability: null,
       edge: null,
       finalScore: 0,

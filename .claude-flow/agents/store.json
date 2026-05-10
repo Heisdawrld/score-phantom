@@ -1,0 +1,100 @@
+{
+  "agents": {
+    "agent-1778358935317-4gigao": {
+      "agentId": "agent-1778358935317-4gigao",
+      "agentType": "architect",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic",
+        "task": "Summarize"
+      },
+      "createdAt": "2026-05-09T20:35:35.333Z",
+      "model": "haiku",
+      "modelRoutedBy": "router"
+    },
+    "agent-1778360526613-1rlpa4": {
+      "agentId": "agent-1778360526613-1rlpa4",
+      "agentType": "architect",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic",
+        "task": " Review the Turso database migration and the memory"
+      },
+      "createdAt": "2026-05-09T21:02:06.629Z",
+      "model": "haiku",
+      "modelRoutedBy": "router"
+    },
+    "agent-1778361054787-yliwcf": {
+      "agentId": "agent-1778361054787-yliwcf",
+      "agentType": "reviewer",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic",
+        "task": "Audit"
+      },
+      "createdAt": "2026-05-09T21:10:54.799Z",
+      "model": "haiku",
+      "modelRoutedBy": "router"
+    },
+    "agent-1778361057923-ii5vj5": {
+      "agentId": "agent-1778361057923-ii5vj5",
+      "agentType": "security-auditor",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic",
+        "task": "Perform"
+      },
+      "createdAt": "2026-05-09T21:10:57.940Z",
+      "model": "haiku",
+      "modelRoutedBy": "router"
+    },
+    "agent-1778364272291-43xnw5": {
+      "agentId": "agent-1778364272291-43xnw5",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:04:32.292Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
+    },
+    "agent-1778364364940-arpol1": {
+      "agentId": "agent-1778364364940-arpol1",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:06:04.941Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
+    },
+    "agent-1778365671004-83s32u": {
+      "agentId": "agent-1778365671004-83s32u",
+      "agentType": "coder",
+      "status": "idle",
+      "health": 1,
+      "taskCount": 0,
+      "config": {
+        "provider": "anthropic"
+      },
+      "createdAt": "2026-05-09T22:27:51.004Z",
+      "model": "sonnet",
+      "modelRoutedBy": "default"
+    }
+  },
+  "version": "3.0.0"
+}

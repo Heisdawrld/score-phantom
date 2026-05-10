@@ -86,6 +86,12 @@ export function buildConfidenceProfile(bestPick, featureVector) {
     if (volatility === 'low') volatility = 'medium';
   }
 
+  // ── Fix Contradiction: High Variance should suppress High Confidence ──────
+  if (volatility === 'high' && (model === 'high' || model === 'medium')) {
+    model = 'lean'; // Downgrade confidence if match is highly volatile
+    if (!dataQualityNote) dataQualityNote = "⚠️ High variance detected — confidence downgraded";
+  }
+
   // Step 3 (User spec): CONTEXT affects confidence, NOT xG
   // Lineup missing = unpredictable team composition = lower confidence
   const hasLineupData = fv.hasLineupData || false;

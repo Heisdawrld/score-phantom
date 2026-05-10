@@ -3,19 +3,39 @@ import { NotificationCenter } from '@/components/NotificationCenter';
 import { Link, useLocation } from "wouter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import {
-  Zap, Crown, LogOut, User, Copy, Check, ChevronDown,
-  LayoutDashboard, ShieldCheck, Flame, Trophy, BarChart2, Star
-} from "lucide-react";
+   Zap, Crown, LogOut, User, Copy, Check, ChevronDown,
+  LayoutDashboard, Flame, Trophy, Star, ShieldCheck
+ } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
-const DESKTOP_NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/picks", label: "Top Picks", icon: Flame },
-  { href: "/acca", label: "Daily ACCA", icon: Zap },
-  { href: "/track-record", label: "Record", icon: Trophy },
-  { href: "/results", label: "Results", icon: BarChart2 },
-];
+function SportSwitcher({ location }: { location: string }) {
+  const isBasketball = location.startsWith("/basketball");
+  return (
+    <div className="flex items-center rounded-2xl border border-white/[0.08] bg-black/25 p-1 backdrop-blur-xl">
+      <Link href="/">
+        <button
+          className={cn(
+            "px-3 md:px-4 py-2 rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-[0.22em] transition-all",
+            !isBasketball ? "bg-primary/15 text-primary shadow-[0_0_18px_rgba(16,231,116,0.14)]" : "text-white/40 hover:text-white/70"
+          )}
+        >
+          Football
+        </button>
+      </Link>
+      <Link href="/basketball">
+        <button
+          className={cn(
+            "px-3 md:px-4 py-2 rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-[0.22em] transition-all",
+            isBasketball ? "bg-orange-400/15 text-orange-200 shadow-[0_0_18px_rgba(251,146,60,0.12)]" : "text-white/40 hover:text-white/70"
+          )}
+        >
+          Basketball
+        </button>
+      </Link>
+    </div>
+  );
+}
 
 function PlanBadge({ status }: { status: string }) {
   if (status === "active")
@@ -64,8 +84,8 @@ export function Header() {
   const initials = displayUsername.slice(0, 2).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/[0.02] bg-[#060a0e]/80 backdrop-blur-2xl">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 w-full border-b border-white/[0.04] bg-[#060a0e]/82 backdrop-blur-2xl">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-3">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-4 group shrink-0">
           <div className="w-10 h-10 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_15px_rgba(16,231,116,0.05)] group-hover:shadow-[0_0_20px_rgba(16,231,116,0.15)] transition-all overflow-hidden p-1.5">
@@ -74,37 +94,47 @@ export function Header() {
           <span className="font-display text-2xl tracking-wider text-white hidden sm:block">SCORE<span className="text-primary">PHANTOM</span></span>
         </Link>
 
-        {/* Desktop Nav — hidden on mobile, shown md+ */}
+        {/* Center: Sport Switcher */}
         {!isLoading && user && (
-          <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center">
-            {DESKTOP_NAV.map(({ href, label, icon: Icon }) => {
+          <div className="hidden md:flex flex-1 justify-center">
+            <SportSwitcher location={location} />
+          </div>
+        )}
+
+        {/* Mobile: Sport switcher (compact) */}
+        {!isLoading && user && (
+          <div className="md:hidden flex-1 flex justify-center">
+            <SportSwitcher location={location} />
+          </div>
+        )}
+
+        {/* Right: primary nav + account */}
+        {!isLoading && user && (
+          <nav className="hidden lg:flex items-center gap-1 shrink-0">
+            {[
+              { href: "/matches", label: "Matches", icon: LayoutDashboard },
+              { href: "/picks", label: "Top Picks", icon: Flame },
+              { href: "/track-record", label: "Track Record", icon: Trophy },
+            ].map(({ href, label, icon: Icon }) => {
               const isActive = href === "/" ? location === "/" : location.startsWith(href);
               return (
                 <Link key={href} href={href}>
                   <button
                     className={cn(
-                      "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-300",
+                      "relative flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-bold transition-all duration-200",
                       isActive
-                        ? "text-primary bg-primary/8"
-                        : "text-white/40 hover:text-white hover:bg-white/5"
+                        ? "text-primary bg-primary/10"
+                        : "text-white/45 hover:text-white hover:bg-white/5"
                     )}
                   >
-                    <Icon className={cn("w-4 h-4 transition-transform", isActive ? "scale-110" : "opacity-60")} />
+                    <Icon className={cn("w-4 h-4", isActive ? "opacity-90" : "opacity-60")} />
                     {label}
-                    {isActive && (
-                      <motion.div 
-                        layoutId="nav-active"
-                        className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full shadow-[0_0_8px_rgba(16,231,116,0.5)]" 
-                      />
-                    )}
                   </button>
                 </Link>
               );
             })}
           </nav>
         )}
-
-        {/* Mobile Logo centered (optional but let's keep it simple) */}
 
         {/* Right side — Notification + User */}
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
@@ -200,15 +230,6 @@ export function Header() {
                           <span className="text-xs font-bold">Leagues Tracker</span>
                         </div>
                       </Link>
-                      {/* Admin link */}
-                      {user.email?.toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase() && (
-                        <Link href="/admin" onClick={() => setOpen(false)}>
-                          <div className="px-4 py-2.5 rounded-xl hover:bg-primary/10 transition-all cursor-pointer flex items-center gap-3 text-primary">
-                            <ShieldCheck className="w-4 h-4" />
-                            <span className="text-xs font-bold">Admin Panel</span>
-                          </div>
-                        </Link>
-                      )}
                     </div>
 
                     {/* Upgrade CTA */}

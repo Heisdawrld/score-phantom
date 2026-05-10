@@ -2,11 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { AIAdvisorBadge, AdvisorStatus } from "@/components/ui/AIAdvisorBadge";
+import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 import { SpiralWatermark } from "@/pages/MatchCenter";
 
@@ -71,7 +71,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
         <div>
           <p className="text-white font-black text-xl mb-1.5">🔒 Premium Angle</p>
           <p className="text-white/60 text-xs leading-relaxed max-w-[240px] mx-auto">
-            Unlock the exact AI prediction, winning probabilities, and bookmaker value edge for this match.
+            Unlock the exact model prediction, winning probabilities, and bookmaker value edge for this match.
           </p>
         </div>
         <button
@@ -106,7 +106,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   }
 
   const rec = (data as any)?.predictions?.recommendation || {};
-  const conf = Math.round((rec.probability || 0) * 100);
+  const phantomScore = rec.phantom_score_pct ?? rec.probability_pct ?? Math.round((rec.probability || 0) * 100);
+  const tier = getConfidenceTier(phantomScore);
   const backups = (data as any)?.predictions?.backup_picks || [];
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
@@ -127,17 +128,43 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     : pickLo.includes("win") ? oddsData.away
     : null;
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
-  const edgePct = impliedPct != null ? (conf - impliedPct) : null;
+  const edgePct = impliedPct != null ? (phantomScore - impliedPct) : null;
   const hasValue = edgePct != null && edgePct > 2;
+  const isSharpValue = rec.isSharpValue === true;
   const betLink = oddsData?.betLinkSportybet || null;
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
-  const riskLabel = rec.riskLevel || (conf >= 75 ? "SAFE" : conf >= 60 ? "MODERATE" : "AGGRESSIVE");
+  const riskLabel = (rec.riskLevel || (phantomScore >= 68 ? "SAFE" : phantomScore >= 58 ? "MODERATE" : "AGGRESSIVE")).toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
-  const edgeLabel = rec.edgeLabel || (conf >= 75 ? "STRONG EDGE" : conf >= 60 ? "MODERATE EDGE" : "LEAN");
-  const confLevel = (rec.modelConfidence || (conf >= 75 ? "HIGH" : conf >= 60 ? "MEDIUM" : "LOW")).toUpperCase();
+  const edgeLabel = rec.edgeLabel || (phantomScore >= 68 ? "STRONG EDGE" : phantomScore >= 58 ? "MODERATE EDGE" : "LEAN");
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
+  
+  // Use the engine's advisor status directly for the verdict, falling back to tier logic only if missing
+  const verdictLabel = rec.advisor_status === 'AVOID' ? 'AVOID' 
+    : rec.advisor_status === 'WATCH' ? 'WATCH'
+    : rec.advisor_status === 'PLAYABLE' ? 'PLAYABLE'
+    : rec.advisor_status === 'FIRE' ? 'STRONG'
+    : tier.label;
+
+  const verdictColor =
+    verdictLabel === "STRONG" ? "text-primary" :
+    verdictLabel === "PLAYABLE" ? "text-blue-400" :
+    verdictLabel === "WATCH" ? "text-amber-400" :
+    "text-red-400";
+    
+  const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";
+
+  const homeManager = (data as any)?.features?.homeManager || null;
+  const awayManager = (data as any)?.features?.awayManager || null;
+  const polyOdds = (data as any)?.features?.polymarketOdds || null;
+  const sharp1x2 = polyOdds?.odds?.["1x2"] || null;
+  const hasSharpMoney1x2 = !!sharp1x2 && ["home", "draw", "away"].some((key) => {
+    const value = sharp1x2?.[key];
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
+  });
+  const tacticalMatchup = (data as any)?.features?.tacticalMatchup || rec?.tacticalMatchup || null;
+  const hasTacticalPanel = !!tacticalMatchup || !!homeManager || !!awayManager;
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -145,13 +172,31 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── RECOMMENDATION CARD ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-[#1a3526]"
-        style={{ background: "linear-gradient(135deg, #0a1f15 0%, #060f0b 100%)" }}>
-        <SpiralWatermark />
-        <div className="relative p-5">
+      {/* ── RECOMMENDATION CARD — Premium Glow Style ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 24 }}
+        className="relative rounded-2xl overflow-hidden"
+      >
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          {/* Diagonal light streaks */}
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
+            background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
+          }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+
+        <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm deco-corners deco-glow-top">
           {/* Header */}
-          <div className="flex items-center justify-between mb-3">
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex items-center justify-between mb-3">
              <div className="flex items-center gap-2">
                <span className="text-primary text-sm">🎯</span>
                <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
@@ -160,65 +205,126 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 if (navigator.share) {
                    navigator.share({
                       title: "ScorePhantom Edge",
-                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${conf}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
+                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${phantomScore}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
                    }).catch(()=>{});
                 }
              }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
                 <Share2 size={14} className="text-white/50 hover:text-white" />
              </button>
-          </div>
+          </motion.div>
 
-          {/* Badges row */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            <AIAdvisorBadge status={advisorStatus} />
-            <ConfidenceBadge value={conf} size="md" />
-            <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-wide">
-              {edgeLabel}
+          {/* Badges row: Verdict, Risk, Style */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="flex flex-wrap gap-2 mb-3">
+            <ModelAdvisorBadge status={advisorStatus} />
+            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
+              {riskPill}
             </span>
-          </div>
+            {rec.isSafeBet && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
+                CONTROL
+              </span>
+            )}
+            {rec.isValueBet && !isSharpValue && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> VALUE
+              </span>
+            )}
+            {isSharpValue && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
+                <TrendingUp className="w-3 h-3" /> SHARP VALUE
+              </span>
+            )}
+          </motion.div>
 
-          {/* Confidence label */}
+          {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[9px] text-white/25 uppercase tracking-wider">Conf:</span>
-            <span className={cn("text-[10px] font-black uppercase", confLevel === "HIGH" ? "text-primary" : confLevel === "MEDIUM" ? "text-blue-400" : "text-amber-400")}>
-              CONFIDENCE {confLevel}
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
+            <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
+              {verdictLabel}
             </span>
           </div>
 
           {/* OUR BEST BET */}
-          <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Our Best Bet</p>
-          <div className="flex items-start justify-between gap-3 mb-1">
-            <div className="flex-1">
+          <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">Our Best Bet</p>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
+            className="flex items-center justify-between gap-4 mb-1">
+            <div className="min-w-0 flex-1 space-y-2">
               <p className="text-2xl font-black text-white uppercase leading-tight">
                 {rec.pick || "No clear pick"}
               </p>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90">
+                {rec.pick || "No clear pick"}
+                <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+              </div>
             </div>
-            {/* Confidence ring */}
-            <ConfidenceRing
-              value={conf}
-              size={80}
-              strokeWidth={4.5}
-              showLabel
-              label="MODEL PROBABILITY"
-            />
-          </div>
+            
+            {/* Large circular confidence gauge */}
+            <div className="shrink-0 flex flex-col items-center">
+              <div className="relative w-[80px] h-[80px]">
+                {/* Background ring */}
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
+                  <circle
+                    cx="36" cy="36" r="30" fill="none"
+                    stroke="url(#confGradTab)"
+                    strokeWidth="4.5"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(phantomScore / 100) * 188.5} 188.5`}
+                  />
+                  <defs>
+                    <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#10e774" />
+                      <stop offset="100%" stopColor="#0bc95f" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                {/* Center text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-black text-white leading-none">{phantomScore}%</span>
+                </div>
+              </div>
+              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">PHANTOM SCORE</span>
+            </div>
+          </motion.div>
 
           {/* Edge vs bookmakers */}
-          {hasValue && edgePct != null && (
-            <div className="flex items-center gap-2 mt-2 mb-3">
+          {isSharpValue ? (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
+                SHARP MONEY ALERT
+              </span>
+              <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
+            </motion.div>
+          ) : hasValue && edgePct != null ? (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
-                {edgeLabel}
+                ACTIONABLE EDGE
               </span>
               <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
-            </div>
-          )}
+            </motion.div>
+          ) : null}
 
-          {/* ── MATCH SCRIPT ── */}
+          {/* ── PHANTOM DECISION STACK ── */}
           {scriptLabel && (
             <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-white/30">→</span>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Match Script</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
@@ -247,6 +353,120 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                   <div className="text-center">
                     <p className="text-sm font-black text-blue-400 tabular-nums">{matchResult.away}%</p>
                     <p className="text-[8px] text-white/25 uppercase">Away</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── POLYMARKET SHARP ODDS ── */}
+          {hasSharpMoney1x2 && (
+            <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Polymarket Sharp Money</span>
+                {isSharpValue && <TrendingUp size={12} className="text-[#E5F522]" />}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Home (1)</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.home * 100)}%</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Draw (X)</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.draw * 100)}%</p>
+                </div>
+                <div className="rounded-xl p-2.5 text-center bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">Away (2)</p>
+                  <p className="text-sm font-black text-white">{Math.round(sharp1x2.away * 100)}%</p>
+                </div>
+              </div>
+              <p className="text-[9px] text-white/20 mt-2 italic text-center">Global sharp money implied probabilities</p>
+            </div>
+          )}
+
+          {/* ── TACTICAL MATCHUP ── */}
+          {hasTacticalPanel && (
+            <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Tactical Matchup</p>
+                {tacticalMatchup?.tacticalConfidence && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-white/40">
+                    Conf: {tacticalMatchup.tacticalConfidence.toUpperCase()}
+                  </span>
+                )}
+              </div>
+
+              {tacticalMatchup?.summary && (
+                <p className="text-[11px] text-white/60 leading-snug mb-4">
+                  {tacticalMatchup.summary}
+                </p>
+              )}
+
+              {(homeManager || awayManager) && (
+                <div className="flex items-start justify-between gap-4">
+                  {/* Home Manager */}
+                  <div className="flex-1 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                      {homeManager ? (
+                        <img src={`https://sports.bzzoiro.com/img/manager/${homeManager.id}/`} alt={homeManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{homeManager?.short_name || homeManager?.name || "Unknown"}</p>
+                    <p className="text-[9px] text-white/30 uppercase">{homeManager?.preferred_formation || "Unknown"}</p>
+                    
+                    {homeManager?.tactical_styles?.[0] && (
+                      <div className="mt-2 inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">{homeManager.tactical_styles[0].emoji}</span>
+                        <span className="text-[9px] text-white/50">{homeManager.tactical_styles[0].name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center pt-4 opacity-30">
+                    <span className="text-[10px] font-black italic">VS</span>
+                  </div>
+
+                  {/* Away Manager */}
+                  <div className="flex-1 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 overflow-hidden mx-auto mb-2 bg-black/40">
+                      {awayManager ? (
+                        <img src={`https://sports.bzzoiro.com/img/manager/${awayManager.id}/`} alt={awayManager.name} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/20 text-[10px]">N/A</div>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-bold text-white leading-tight mb-0.5">{awayManager?.short_name || awayManager?.name || "Unknown"}</p>
+                    <p className="text-[9px] text-white/30 uppercase">{awayManager?.preferred_formation || "Unknown"}</p>
+                    
+                    {awayManager?.tactical_styles?.[0] && (
+                      <div className="mt-2 inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">{awayManager.tactical_styles[0].emoji}</span>
+                        <span className="text-[9px] text-white/50">{awayManager.tactical_styles[0].name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tactical Stats Comparison */}
+              {(homeManager?.avg_possession || awayManager?.avg_possession) && (
+                <div className="mt-4 pt-4 border-t border-white/[0.05] flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60">{homeManager?.avg_possession?.toFixed(1) || "-"}%</span>
+                    <span className="text-white/30 uppercase">Possession</span>
+                    <span className="font-bold text-white/60">{awayManager?.avg_possession?.toFixed(1) || "-"}%</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60 capitalize">{homeManager?.defensive_line || "-"}</span>
+                    <span className="text-white/30 uppercase">Def. Line</span>
+                    <span className="font-bold text-white/60 capitalize">{awayManager?.defensive_line || "-"}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-bold text-white/60">{homeManager?.pressing_intensity?.toFixed(2) || "-"}</span>
+                    <span className="text-white/30 uppercase">Press Intensity</span>
+                    <span className="font-bold text-white/60">{awayManager?.pressing_intensity?.toFixed(2) || "-"}</span>
                   </div>
                 </div>
               )}
@@ -343,7 +563,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── OTHER GOOD OPTIONS ── */}
       {backups.length > 0 && (
@@ -351,7 +571,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>
           <div className="flex flex-col gap-2">
             {backups.slice(0, 3).map((p: any, i: number) => {
-              const bpConf = Math.round((p.probability || 0) * 100);
+              const bpConf = p.phantom_score_pct ?? p.probability_pct ?? Math.round((p.probability || 0) * 100);
               const tier = getConfidenceTier(bpConf);
               return (
                 <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
@@ -363,7 +583,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-black text-primary tabular-nums">{bpConf}%</span>
+                    <span className="text-sm font-black text-primary tabular-nums">{bpConf.toFixed(0)}%</span>
                     <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full border", tier.cls)}>{tier.label}</span>
                   </div>
                 </div>

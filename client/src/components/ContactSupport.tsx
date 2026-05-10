@@ -16,6 +16,7 @@ const WHATSAPP_MESSAGE = encodeURIComponent(
 
 export function ContactSupport() {
   const [open, setOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { data: user } = useAuth();
 
   // Only show when logged in
@@ -28,16 +29,25 @@ export function ContactSupport() {
     <>
       {/* Floating button */}
       <motion.button
+        drag
+        dragConstraints={{ left: -window.innerWidth + 80, right: 0, top: -window.innerHeight + 80, bottom: 0 }}
+        dragElastic={0.1}
+        dragMomentum={false}
+        whileDrag={{ scale: 1.1, cursor: "grabbing" }}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setTimeout(() => setIsDragging(false), 150)}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 2, type: "spring", stiffness: 300 }}
-        onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-[#25D366] shadow-[0_4px_20px_rgba(37,211,102,0.4)] flex items-center justify-center hover:brightness-110 active:scale-95 transition-all"
+        onClick={() => {
+          if (!isDragging) setOpen(true);
+        }}
+        className="fixed bottom-[calc(4.9rem+env(safe-area-inset-bottom))] right-2.5 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] shadow-[0_4px_16px_rgba(37,211,102,0.24)] transition-all hover:brightness-110 active:scale-95 cursor-grab touch-none md:right-5 md:bottom-24 md:h-12 md:w-12 md:shadow-[0_4px_18px_rgba(37,211,102,0.32)]"
         aria-label="Contact Support"
       >
-        <MessageCircle className="w-7 h-7 text-white fill-white" />
-        {/* Pulse ring */}
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-30" />
+        <MessageCircle className="h-4.5 w-4.5 fill-white text-white pointer-events-none md:h-6 md:w-6" />
+        {/* Softer pulse ring */}
+        <span className="pointer-events-none absolute inset-0 hidden rounded-full bg-[#25D366] opacity-15 animate-ping md:block" />
       </motion.button>
 
       {/* Modal */}

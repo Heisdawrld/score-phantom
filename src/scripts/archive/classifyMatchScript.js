@@ -1,5 +1,4 @@
-import { safeNum, clamp } from '../../utils/math.js';
-import { scoreControlModel } from './scoreControlModel.js';
+export { classifyMatchScript } from '../classifyMatchScript.js';
 
 /**
  * Classify the match script from feature vector.

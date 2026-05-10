@@ -1,22 +1,8 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { ChevronRight, Lock, Sparkles } from "lucide-react";
 import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
-import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
-
-function toWAT(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch { return ''; }
-}
 
 export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
   const [, setLocation] = useLocation();
@@ -33,15 +19,15 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
-        className="rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent p-4 flex items-center gap-4 cursor-pointer hover:bg-amber-500/8 transition-all"
+        className="premium-surface rounded-[28px] p-4 flex items-center gap-4 cursor-pointer hover:bg-white/[0.05] transition-all"
         onClick={() => setLocation("/paywall")}
       >
-        <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
-          <span className="text-lg">🔥</span>
+        <div className="w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+          <Sparkles className="w-5 h-5 text-amber-300" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-bold text-amber-400">Value Bet of the Day</p>
-          <p className="text-xs text-white/40 mt-0.5">Upgrade to see today's highest edge pick</p>
+          <p className="text-sm font-black text-amber-300">Value Bet of the Day</p>
+          <p className="text-xs text-white/40 mt-0.5">Upgrade to unlock today&apos;s best mispriced football edge.</p>
         </div>
         <Lock className="w-4 h-4 text-white/20 shrink-0" />
       </motion.div>
@@ -50,38 +36,58 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
 
   if (!data?.found) return null;
 
+  const getOddsForSelection = (market: string, selection: string) => {
+    if (!data) return null;
+    if (market === "1x2") {
+      if (selection === "1") return data.odds_home;
+      if (selection === "X") return data.odds_draw;
+      if (selection === "2") return data.odds_away;
+    }
+    if (market === "over_under_25") {
+      if (selection === "OVER") return data.odds_over_25;
+      if (selection === "UNDER") return data.odds_under_25;
+    }
+    if (market === "btts") {
+      if (selection === "YES") return data.odds_btts_yes;
+      if (selection === "NO") return data.odds_btts_no;
+    }
+    return null;
+  };
+
+  const currentOdds = getOddsForSelection(data.best_pick_market, data.best_pick_selection);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.25 }}
-      className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-500/8 via-amber-500/3 to-transparent p-4 cursor-pointer hover:border-amber-500/35 transition-all"
+      className="premium-surface rounded-[28px] p-5 cursor-pointer hover:bg-white/[0.05] transition-all"
       onClick={() => setLocation("/matches/" + data.fixtureId)}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🔥</span>
-          <span className="text-[10px] font-black text-amber-400 uppercase tracking-[0.15em]">Value Bet of the Day</span>
-        </div>
-        <ChevronRight className="w-4 h-4 text-amber-400/40" />
+      <div className="flex items-center justify-between mb-4">
+        <span className="premium-chip border-amber-300/20 bg-amber-400/10 text-amber-300">Best Value Today</span>
+        <ChevronRight className="w-4 h-4 text-amber-300/50" />
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white truncate">{data.homeTeam} vs {data.awayTeam}</p>
-          <p className="text-[10px] text-white/30 mt-0.5">{data.tournament}</p>
-          <p className="text-xs font-bold text-amber-400 mt-1">{data.selection}</p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <div className="text-center">
-            <p className="text-lg font-black text-primary tabular-nums">{data.probability?.toFixed(0)}%</p>
-            <p className="text-[8px] text-white/25 uppercase">Model</p>
+
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div>
+          <p className="text-lg font-black text-white leading-tight">{data.homeTeam} vs {data.awayTeam}</p>
+          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-white/30">{data.tournament}</p>
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-400/10 border border-amber-300/20 px-3 py-1">
+            <span className="text-[11px] font-black text-amber-300 uppercase tracking-[0.14em]">{data.selection}</span>
+            {currentOdds && <span className="text-[11px] font-black text-primary">@{currentOdds.toFixed(2)}</span>}
           </div>
-          {data.edge != null && (
-            <div className="text-center">
-              <p className="text-lg font-black text-amber-400 tabular-nums">+{data.edge?.toFixed(0)}%</p>
-              <p className="text-[8px] text-white/25 uppercase">Edge</p>
-            </div>
-          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="premium-stat text-center">
+            <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-1">Model</p>
+            <p className="text-xl font-black text-white/90 tabular-nums">{data.probability?.toFixed(0)}%</p>
+          </div>
+          <div className="premium-stat text-center border-amber-300/20 bg-amber-400/[0.06]">
+            <p className="text-[9px] text-amber-300/60 font-bold uppercase tracking-wider mb-1">Edge</p>
+            <p className="text-xl font-black text-amber-300 tabular-nums">+{data.edge?.toFixed(0)}%</p>
+          </div>
         </div>
       </div>
     </motion.div>

@@ -7,26 +7,29 @@ import { fileURLToPath } from "url";
 import routes from "./api/routes.js";
 import adminRoutes from "./api/adminRoutes.js";
 import trackRecordRoutes from "./api/trackRecordRoutes.js";
+import basketballRoutes from "./basketball/routes/basketballRoutes.js";
+import { initBasketballTables } from "./basketball/storage/basketballDb.js";
+import { startBasketballAutoSync } from "./basketball/jobs/basketballAutoSync.js";
 import { initBacktestingTable } from "./storage/backtesting.js";
 import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
 import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
+import { requireAdminSecret, requireAdminAccess } from "./middlewares/adminGuard.js";
 import { seedFixtures } from './services/fixtureSeeder.js';
 import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
 import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
-import { refreshAccuracyCache } from "./storage/accuracyCache.js";
+import { runMaintenanceJobs } from "./scripts/maintenance.js";
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
 dotenv.config();
 
 // ── Startup checks ────────────────────────────────────────────────────────────
-if (!process.env.DATABASE_URL) {
-  console.error("❌ FATAL: DATABASE_URL environment variable is required.");
-  console.error("   Set it in your Render dashboard (or .env file locally).");
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("❌ FATAL: TURSO_DATABASE_URL environment variable is required.");
   process.exit(1);
 }
 
@@ -34,6 +37,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Trust proxy for Render deployment to fix express-rate-limit IP detection
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 
 // CORS - allow APP_URL and onrender.com
@@ -58,8 +65,100 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api", routes);
+app.use("/api/basketball", basketballRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api/admin", adminRoutes);
+
+// Accurate BSD v2 health check for the React admin panel. This route is registered
+// before adminRoutes so it overrides the older v1 health check inside adminRoutes.js.
+app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
+  try {
+    const checks = {};
+    try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
+    try {
+      const bsdKey = process.env.BSD_API_KEY || "";
+      if (!bsdKey) {
+        checks.bsd_api = "no_key";
+      } else {
+        const { fetchLeagues } = await import('./services/bsd.js');
+        const leagues = await fetchLeagues();
+        checks.bsd_api = leagues.length > 0 ? "ok" : "error:no_leagues";
+        checks.bsd_leagues = leagues.length;
+      }
+    } catch (e) {
+      checks.bsd_api = "fetch_error";
+      checks.bsd_error = e.message;
+    }
+    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
+    checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
+    checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
+    checks.basketball = (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'odds_configured' : 'odds_missing';
+    const allOk = Object.values(checks).every(v => typeof v !== 'string' || v === 'ok' || v.includes('configured'));
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2 + Basketball Beta' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Rich admin engine report. Registered before adminRoutes to guarantee a stable
+// control-room payload even if older adminRoutes.js has a simpler engine-stats route.
+app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
+  try {
+    const { getAccuracySummary } = await import('./storage/accuracyCache.js');
+    const summary = await getAccuracySummary();
+    const topMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 8);
+    const weakMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 8);
+    const topLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 10);
+    const weakLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 10);
+
+    let predictionCounts = { total: 0, fire: 0, gamble: 0, avoid: 0, no_safe: 0 };
+    try {
+      const r = await db.execute(`
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN advisor_status = 'FIRE' THEN 1 ELSE 0 END) AS fire,
+          SUM(CASE WHEN advisor_status = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
+          SUM(CASE WHEN advisor_status = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
+          SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
+        FROM predictions_v2
+      `);
+      predictionCounts = {
+        total: Number(r.rows?.[0]?.total || 0),
+        fire: Number(r.rows?.[0]?.fire || 0),
+        gamble: Number(r.rows?.[0]?.gamble || 0),
+        avoid: Number(r.rows?.[0]?.avoid || 0),
+        no_safe: Number(r.rows?.[0]?.no_safe || 0),
+      };
+    } catch (e) {
+      predictionCounts.error = e.message;
+    }
+
+    return res.json({
+      status: 'ok',
+      generatedAt: new Date().toISOString(),
+      predictionCounts,
+      totalOutcomes: summary.totalOutcomes || 0,
+      cacheAge: summary.cacheAge,
+      marketBreakdown: summary.marketBreakdown || [],
+      marketScriptCombos: summary.marketScriptCombos || [],
+      leagueMarketBreakdown: summary.leagueMarketBreakdown || [],
+      topMarkets,
+      weakMarkets,
+      topLeagueMarkets,
+      weakLeagueMarkets,
+      recommendations: [
+        weakLeagueMarkets.length ? 'Review restricted league-market combos before trusting them in ACCA.' : 'No league-market weakness detected yet.',
+        (summary.totalOutcomes || 0) < 50 ? 'Learning sample is still small; calibration will remain conservative.' : 'Outcome sample is large enough for stronger calibration reads.',
+        'Use FIRE picks for premium surfacing and keep GAMBLE picks separate from ACCA unless volatility is low.',
+      ],
+    });
+  } catch (err) {
+    console.error('[Admin Engine Stats] failed:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.use("/api/admin", requireAdminSecret, adminRoutes);
 app.use("/api/track-record", trackRecordRoutes);
 
 // Duplicate /api/admin/seed removed — handled by adminRoutes.js
@@ -302,20 +401,15 @@ app.listen(PORT, async () => {
   console.log("[Live] BSD live score watcher started");
   await initUsersTable();
   await initPredictionsTable();
+  await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
+  startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
-
-  // Migrate fixtures table for new columns (idempotent)
-  const fixtureMigrations = [
-    "ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''",
-    "ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''",
-    "ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''",
-    "ALTER TABLE fixtures ADD COLUMN odds_home REAL",
-    "ALTER TABLE fixtures ADD COLUMN odds_draw REAL",
-    "ALTER TABLE fixtures ADD COLUMN odds_away REAL",
-  ];
-  for (const sql of fixtureMigrations) {
-    try { await db.execute(sql); } catch (_) {}
-  }
+  
+  // Run maintenance jobs on startup and every 24 hours
+  runMaintenanceJobs().catch(err => console.error("[Maintenance] Startup run failed:", err.message));
+  setInterval(() => {
+    runMaintenanceJobs().catch(err => console.error("[Maintenance] Scheduled run failed:", err.message));
+  }, 24 * 60 * 60 * 1000);
 
   await autoSeed();
 

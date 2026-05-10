@@ -1,35 +1,23 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
-import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
+import { motion } from "framer-motion";
+import { Activity, Flame, Star, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
-import { TeamLogo } from "@/components/TeamLogo";
 
-function toWAT(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch { return ''; }
-}
-
-export function QuickActions({ onTopPicks, onAcca, onLive, onValueBets }: {
+export function QuickActions({
+  onTopPicks,
+  onAcca,
+  onLive,
+  onValueBets,
+}: {
   onTopPicks: () => void;
   onAcca: () => void;
   onLive: () => void;
   onValueBets: () => void;
 }) {
-  const [, setLocation] = useLocation();
   const items = [
-    { label: "Top Picks", sub: "Updated daily", icon: <Flame className="w-5 h-5" />, color: "text-orange-400", onClick: onTopPicks },
-    { label: "ACCA Builder", sub: "Smart combos", icon: <Zap className="w-5 h-5" />, color: "text-blue-400", onClick: onAcca },
-    { label: "Live Tracker", sub: "Track in real-time", icon: <Activity className="w-5 h-5" />, color: "text-emerald-400", onClick: onLive },
-    { label: "Value Bets", sub: "High edge plays", icon: <Star className="w-5 h-5" />, color: "text-amber-400", onClick: onValueBets },
+    { label: "Top Picks", sub: "Daily ranked board", icon: Flame, color: "text-orange-300", onClick: onTopPicks },
+    { label: "ACCA Lab", sub: "Smart combo builder", icon: Zap, color: "text-sky-300", onClick: onAcca },
+    { label: "Live Pulse", sub: "Real-time watchlist", icon: Activity, color: "text-emerald-300", onClick: onLive },
+    { label: "Value Edge", sub: "Best mispriced spots", icon: Star, color: "text-amber-300", onClick: onValueBets },
   ];
 
   return (
@@ -37,23 +25,31 @@ export function QuickActions({ onTopPicks, onAcca, onLive, onValueBets }: {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.15 }}
-      className="grid grid-cols-4 gap-2"
+      className="grid grid-cols-2 lg:grid-cols-4 gap-3"
     >
-      {items.map((item) => (
-        <motion.button
-          key={item.label}
-          whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={item.onClick}
-          className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl glass-card glass-card-hover transition-all"
-        >
-          <div className={cn("w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center", item.color)}>
-            {item.icon}
-          </div>
-          <span className={cn("text-[10px] font-bold", item.color)}>{item.label}</span>
-          <span className="text-[8px] text-white/25">{item.sub}</span>
-        </motion.button>
-      ))}
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <motion.button
+            key={item.label}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={item.onClick}
+            className="premium-surface rounded-[24px] p-4 text-left transition-all hover:bg-white/[0.05]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className={cn("flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.08] bg-black/25", item.color)}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/22">Open</span>
+            </div>
+            <div className="mt-4">
+              <p className={cn("text-sm font-black", item.color)}>{item.label}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/38">{item.sub}</p>
+            </div>
+          </motion.button>
+        );
+      })}
     </motion.div>
   );
 }

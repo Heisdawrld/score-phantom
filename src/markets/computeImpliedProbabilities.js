@@ -7,12 +7,12 @@ const ODDS_MAP = {
   home_win: ['home', 'homeWin', 'home_win', '1'],
   draw: ['draw', 'x', 'X', 'draw_odds'],
   away_win: ['away', 'awayWin', 'away_win', '2'],
-  over_15: ['over_1_5', 'over15', 'over_1.5'],
-  over_25: ['over_2_5', 'over25', 'over_2.5'],
-  over_35: ['over_3_5', 'over35', 'over_3.5'],
-  under_15: ['under_1_5', 'under15', 'under_1.5'],
-  under_25: ['under_2_5', 'under25', 'under_2.5'],
-  under_35: ['under_3_5', 'under35', 'under_3.5'],
+  over_15: ['over_15', 'over_1_5', 'over15', 'over_1.5'],
+  over_25: ['over_25', 'over_2_5', 'over25', 'over_2.5'],
+  over_35: ['over_35', 'over_3_5', 'over35', 'over_3.5'],
+  under_15: ['under_15', 'under_1_5', 'under15', 'under_1.5'],
+  under_25: ['under_25', 'under_2_5', 'under25', 'under_2.5'],
+  under_35: ['under_35', 'under_3_5', 'under35', 'under_3.5'],
   btts_yes: ['btts_yes', 'bttsYes', 'both_teams_score_yes'],
   btts_no: ['btts_no', 'bttsNo', 'both_teams_score_no'],
 };
@@ -50,24 +50,41 @@ function lookupOdds(marketKey, oddsSnapshot) {
  *
  * @param {MarketCandidate[]} candidates
  * @param {object|null} oddsSnapshot
+ * @param {object|null} [features]
  * @returns {MarketCandidate[]}
  */
-export function computeImpliedProbabilities(candidates, oddsSnapshot) {
+export function computeImpliedProbabilities(candidates, oddsSnapshot, features) {
   return candidates.map((candidate) => {
     const decimalOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
 
-    if (!decimalOdds || decimalOdds <= 1.0) {
-      return { ...candidate, impliedProbability: null, edge: null };
+    if (decimalOdds && decimalOdds > 1.0) {
+      const impliedProbability = parseFloat((1 / decimalOdds).toFixed(4));
+      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
+
+      return {
+        ...candidate,
+        impliedProbability,
+        edge,
+        bookmakerOdds: decimalOdds,
+      };
     }
 
-    const impliedProbability = parseFloat((1 / decimalOdds).toFixed(4));
-    const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
+    // Look for advanced odds if basic odds are missing
+    const adv = features?.advancedOdds || null;
+    const advOdds = lookupOdds(candidate.marketKey, adv);
 
-    return {
-      ...candidate,
-      impliedProbability,
-      edge,
-      bookmakerOdds: decimalOdds,
-    };
+    if (advOdds && advOdds > 1.0) {
+      const impliedProbability = parseFloat((1 / advOdds).toFixed(4));
+      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
+
+      return {
+        ...candidate,
+        impliedProbability,
+        edge,
+        bookmakerOdds: advOdds,
+      };
+    }
+
+    return { ...candidate, impliedProbability: null, edge: null };
   });
 }
