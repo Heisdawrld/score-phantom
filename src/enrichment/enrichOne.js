@@ -14,7 +14,7 @@ function parseScore(scoreStr) {
   const parts = scoreStr.split('-');
   const home = parseInt(parts[0], 10);
   const away = parseInt(parts[1], 10);
-  if (isNaN(home) || isNaN(away)) return { home: null, away: null };
+  if (isNaN(home) || isNaN(away)) return { home, away };
   return { home, away };
 }
 
@@ -143,7 +143,21 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     });
   }
 
+  const refreshedAt = new Date().toISOString();
   const meta = {
+    enrichedAt: refreshedAt,
+    bsdRefreshedAt: refreshedAt,
+    dataFreshness: {
+      provider: 'BSD',
+      refreshedAt,
+      h2hCount: Array.isArray(data?.h2h) ? data.h2h.length : 0,
+      homeFormCount: Array.isArray(data?.homeForm) ? data.homeForm.length : 0,
+      awayFormCount: Array.isArray(data?.awayForm) ? data.awayForm.length : 0,
+      standingsCount: Array.isArray(data?.standings) ? data.standings.length : 0,
+      hasHomeStats: !!data?.homeStats,
+      hasAwayStats: !!data?.awayStats,
+      hasMatchStats: !!data?.matchStats,
+    },
     standings: Array.isArray(data?.standings) ? data.standings : [],
     homeStats: data?.homeStats ?? null,
     awayStats: data?.awayStats ?? null,
