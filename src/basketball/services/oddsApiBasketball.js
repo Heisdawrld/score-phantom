@@ -1,4 +1,5 @@
 import { getBasketballLeague, getEnabledBasketballLeagues } from '../config/leagues.js';
+import { resolveBasketballTeamLogo } from '../utils/teamLogos.js';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const DEFAULT_REGIONS = process.env.BASKETBALL_ODDS_REGIONS || 'us';
@@ -105,27 +106,35 @@ export async function fetchAllEnabledBasketballOdds(options = {}) {
 }
 
 export function normalizeOddsEventGame(raw, leagueKey) {
+  const homeTeam = raw.home_team || '';
+  const awayTeam = raw.away_team || '';
   return {
     external_event_id: raw.id,
     league_key: leagueKey,
     sport_key: raw.sport_key,
     sport_title: raw.sport_title,
     commence_time: raw.commence_time,
-    home_team: raw.home_team,
-    away_team: raw.away_team,
+    home_team: homeTeam,
+    away_team: awayTeam,
+    home_team_logo: resolveBasketballTeamLogo({ leagueKey, teamName: homeTeam }),
+    away_team_logo: resolveBasketballTeamLogo({ leagueKey, teamName: awayTeam }),
     bookmakers: [],
   };
 }
 
 export function normalizeOddsGame(raw, leagueKey) {
+  const homeTeam = raw.home_team || '';
+  const awayTeam = raw.away_team || '';
   return {
     external_event_id: raw.id,
     league_key: leagueKey,
     sport_key: raw.sport_key,
     sport_title: raw.sport_title,
     commence_time: raw.commence_time,
-    home_team: raw.home_team,
-    away_team: raw.away_team,
+    home_team: homeTeam,
+    away_team: awayTeam,
+    home_team_logo: resolveBasketballTeamLogo({ leagueKey, teamName: homeTeam }),
+    away_team_logo: resolveBasketballTeamLogo({ leagueKey, teamName: awayTeam }),
     bookmakers: Array.isArray(raw.bookmakers) ? raw.bookmakers : [],
   };
 }

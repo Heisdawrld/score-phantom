@@ -1,4 +1,5 @@
 import db from '../../config/database.js';
+import { resolveBasketballTeamLogo } from '../utils/teamLogos.js';
 
 function json(value) {
   try { return JSON.stringify(value ?? null); } catch { return null; }
@@ -88,6 +89,13 @@ async function dropIndexes(indexes = []) {
   }
 }
 
+async function addColumnIfMissing(tableName, columnName, definition) {
+  const columns = await getTableColumns(tableName);
+  if (!columns.includes(columnName)) {
+    await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+}
+
 async function archiveLegacyTableIfNeeded(tableName, requiredColumns, indexes = []) {
   const columns = await getTableColumns(tableName);
   if (!columns.length) return false;
@@ -139,6 +147,12 @@ export async function initBasketballTables() {
     away_team TEXT NOT NULL,
     home_team_abbr TEXT,
     away_team_abbr TEXT,
+    home_team_logo TEXT,
+    away_team_logo TEXT,
+    league_name TEXT,
+    league_country TEXT,
+    league_logo TEXT,
+    country_flag TEXT,
     home_score INTEGER,
     away_score INTEGER,
     neutral_site INTEGER DEFAULT 0,
@@ -194,15 +208,34 @@ export async function initBasketballTables() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_odds_game ON basketball_odds(league_key, game_id, market_key)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_odds_event ON basketball_odds(league_key, odds_event_id, bookmaker, market_key, selection, point)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_basketball_predictions_game ON basketball_predictions(league_key, game_id)`);
+  await addColumnIfMissing('basketball_games', 'home_team_logo', 'TEXT');
+  await addColumnIfMissing('basketball_games', 'away_team_logo', 'TEXT');
+  await addColumnIfMissing('basketball_games', 'league_name', 'TEXT');
+  await addColumnIfMissing('basketball_games', 'league_country', 'TEXT');
+  await addColumnIfMissing('basketball_games', 'league_logo', 'TEXT');
+  await addColumnIfMissing('basketball_games', 'country_flag', 'TEXT');
 }
 
 export async function upsertBasketballGame(game) {
   await initBasketballTables();
+  const raw = game.raw || game;
+  const resolvedHomeLogo = game.home_team_logo || raw?.homeTeamLogo || raw?.teams?.home?.logo || resolveBasketballTeamLogo({
+    leagueKey: game.league_key,
+    teamName: game.home_team,
+    teamAbbr: game.home_team_abbr,
+  });
+  const resolvedAwayLogo = game.away_team_logo || raw?.awayTeamLogo || raw?.teams?.away?.logo || resolveBasketballTeamLogo({
+    leagueKey: game.league_key,
+    teamName: game.away_team,
+    teamAbbr: game.away_team_abbr,
+  });
   const result = await db.execute({
     sql: `INSERT INTO basketball_games
       (league_key, external_game_id, odds_event_id, source, season, status, period, clock, start_time,
-       home_team, away_team, home_team_abbr, away_team_abbr, home_score, away_score, neutral_site, raw_json, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       home_team, away_team, home_team_abbr, away_team_abbr, home_team_logo, away_team_logo,
+       league_name, league_country, league_logo, country_flag,
+       home_score, away_score, neutral_site, raw_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(league_key, external_game_id) DO UPDATE SET
         odds_event_id = COALESCE(EXCLUDED.odds_event_id, basketball_games.odds_event_id),
         source = COALESCE(EXCLUDED.source, basketball_games.source),
@@ -215,6 +248,12 @@ export async function upsertBasketballGame(game) {
         away_team = EXCLUDED.away_team,
         home_team_abbr = COALESCE(EXCLUDED.home_team_abbr, basketball_games.home_team_abbr),
         away_team_abbr = COALESCE(EXCLUDED.away_team_abbr, basketball_games.away_team_abbr),
+        home_team_logo = COALESCE(EXCLUDED.home_team_logo, basketball_games.home_team_logo),
+        away_team_logo = COALESCE(EXCLUDED.away_team_logo, basketball_games.away_team_logo),
+        league_name = COALESCE(EXCLUDED.league_name, basketball_games.league_name),
+        league_country = COALESCE(EXCLUDED.league_country, basketball_games.league_country),
+        league_logo = COALESCE(EXCLUDED.league_logo, basketball_games.league_logo),
+        country_flag = COALESCE(EXCLUDED.country_flag, basketball_games.country_flag),
         home_score = EXCLUDED.home_score,
         away_score = EXCLUDED.away_score,
         neutral_site = COALESCE(EXCLUDED.neutral_site, basketball_games.neutral_site),
@@ -234,6 +273,12 @@ export async function upsertBasketballGame(game) {
       game.away_team,
       game.home_team_abbr || null,
       game.away_team_abbr || null,
+      resolvedHomeLogo || null,
+      resolvedAwayLogo || null,
+      game.league_name || null,
+      game.league_country || null,
+      game.league_logo || null,
+      game.country_flag || null,
       game.home_score ?? null,
       game.away_score ?? null,
       game.neutral_site ? 1 : 0,

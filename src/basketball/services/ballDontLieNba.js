@@ -1,3 +1,5 @@
+import { resolveBasketballTeamLogo } from '../utils/teamLogos.js';
+
 const BALLDONTLIE_BASE = process.env.BALLDONTLIE_NBA_BASE_URL || 'https://api.balldontlie.io/v1';
 
 function apiKey() {
@@ -53,6 +55,10 @@ export async function fetchNbaGame(gameId) {
 }
 
 export function normalizeNbaGame(game) {
+  const homeName = game.home_team?.full_name || game.home_team?.name || '';
+  const awayName = game.visitor_team?.full_name || game.visitor_team?.name || '';
+  const homeAbbr = game.home_team?.abbreviation || '';
+  const awayAbbr = game.visitor_team?.abbreviation || '';
   return {
     external_game_id: String(game.id),
     league_key: 'nba',
@@ -62,10 +68,12 @@ export function normalizeNbaGame(game) {
     period: game.period ?? null,
     clock: game.time || null,
     start_time: game.datetime || game.date || null,
-    home_team: game.home_team?.full_name || game.home_team?.name || '',
-    away_team: game.visitor_team?.full_name || game.visitor_team?.name || '',
-    home_team_abbr: game.home_team?.abbreviation || '',
-    away_team_abbr: game.visitor_team?.abbreviation || '',
+    home_team: homeName,
+    away_team: awayName,
+    home_team_abbr: homeAbbr,
+    away_team_abbr: awayAbbr,
+    home_team_logo: resolveBasketballTeamLogo({ leagueKey: 'nba', teamName: homeName, teamAbbr: homeAbbr }),
+    away_team_logo: resolveBasketballTeamLogo({ leagueKey: 'nba', teamName: awayName, teamAbbr: awayAbbr }),
     home_score: game.home_team_score ?? null,
     away_score: game.visitor_team_score ?? null,
     raw: game,
