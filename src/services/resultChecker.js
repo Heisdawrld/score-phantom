@@ -1,4 +1,6 @@
-// resultChecker.js — Checks match results using BSD (Bzzoiro Sports Data)
+// RuFlo-powered fixes for Score Phantom
+// File: src/services/resultChecker.js - Updated to fix profit units and sharp value detection
+
 import db from '../config/database.js';
 import { fetchFixturesByDate } from './bsd.js';
 
@@ -92,7 +94,7 @@ export async function checkResults(dateStr) {
     }
   } catch(buildErr) { console.warn('[ResultChecker] Auto-build warning:', buildErr.message); }
 
-  const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
+  const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model, p.best_pick_implied_probability, p.best_pick_edge FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
   const fixtures = predRes.rows || [];
   console.log('[ResultChecker] Found', fixtures.length, 'predictions to check for', date);
   if (!fixtures.length) return { checked: 0, date, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
@@ -117,10 +119,33 @@ export async function checkResults(dateStr) {
     }
 
     const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
+    
+    // Calculate profit units based on implied probability vs model probability
+    let profitUnits = 0;
+    if (outcome === 'win') {
+      // For a win, profit = (implied_odds * probability) - 1
+      // Since we don't have actual odds, we'll use a simplified approach:
+      // If implied probability is lower than model probability, it's good value
+      const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
+      const modelProb = parseFloat(fix.best_pick_probability || 0);
+      
+      // Simple profit calculation: difference between probabilities * 10 (arbitrary scale)
+      if (impliedProb > 0 && modelProb > 0) {
+        profitUnits = Math.max(0, (impliedProb - modelProb) * 10);
+      }
+    } else if (outcome === 'loss') {
+      // Loss = -1 unit stake
+      profitUnits = -1;
+    }
+    
+    // Determine if this is a sharp value pick (high edge)
+    const edge = parseFloat(fix.best_pick_edge || 0);
+    const isSharpValue = edge > 0.15; // Edge > 15% is considered sharp value
+    
     try {
       await db.execute({ 
-        sql: 'INSERT INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT (fixture_id) DO UPDATE SET home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, full_score=EXCLUDED.full_score, outcome=EXCLUDED.outcome, evaluated_at=CURRENT_TIMESTAMP', 
-        args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score.home, score.away, score.home + '-' + score.away, outcome] 
+        sql: 'INSERT INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at,profit_units,is_sharp_value) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?) ON CONFLICT (fixture_id) DO UPDATE SET home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, full_score=EXCLUDED.full_score, outcome=EXCLUDED.outcome, evaluated_at=CURRENT_TIMESTAMP, profit_units=EXCLUDED.profit_units, is_sharp_value=EXCLUDED.is_sharp_value', 
+        args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score.home, score.away, score.home + '-' + score.away, outcome, profitUnits, isSharpValue ? 1 : 0] 
       });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;
