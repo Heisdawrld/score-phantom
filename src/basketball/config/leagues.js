@@ -23,8 +23,8 @@ export const BASKETBALL_LEAGUES = {
     oddsSportKey: 'basketball_ncaab',
     ballDontLieBaseUrl: null,
     dataSource: 'odds_api_first',
-    enabled: false,
-    launchTier: 'paused',
+    enabled: true,
+    launchTier: 'v1',
     minDataQuality: 0.65,
     gates: {
       moneylineEdge: 0.06,
@@ -69,22 +69,49 @@ export const BASKETBALL_LEAGUES = {
   },
 };
 
+const API_SPORTS_LEAGUE_OVERRIDES = {
+  apisports_12: {
+    label: 'NBA',
+    sportName: 'Basketball',
+    minDataQuality: 0.55,
+    gates: {
+      moneylineEdge: 0.04,
+      spreadEdgePoints: 3.5,
+      totalEdgePoints: 5.5,
+      minModelProbability: 0.56,
+    },
+  },
+  apisports_120: {
+    label: 'EuroLeague',
+    sportName: 'Basketball',
+    minDataQuality: 0.58,
+    gates: {
+      moneylineEdge: 0.05,
+      spreadEdgePoints: 4.5,
+      totalEdgePoints: 6.0,
+      minModelProbability: 0.57,
+    },
+  },
+};
+
 export function isApiSportsLeagueKey(leagueKey = '') {
   return String(leagueKey || '').toLowerCase().startsWith('apisports_');
 }
 
 export function getApiSportsGenericLeague(leagueKey = 'apisports_basketball') {
+  const key = String(leagueKey || 'apisports_basketball').toLowerCase();
+  const override = API_SPORTS_LEAGUE_OVERRIDES[key] || null;
   return {
-    key: String(leagueKey || 'apisports_basketball').toLowerCase(),
-    label: 'Global Basketball',
-    sportName: 'Basketball',
+    key,
+    label: override?.label || 'Global Basketball',
+    sportName: override?.sportName || 'Basketball',
     oddsSportKey: null,
     ballDontLieBaseUrl: null,
     dataSource: 'api_sports_basketball',
     enabled: true,
-    launchTier: 'v1-global',
-    minDataQuality: 0.42,
-    gates: {
+    launchTier: override ? 'v1-targeted' : 'v1-global',
+    minDataQuality: override?.minDataQuality ?? 0.42,
+    gates: override?.gates || {
       moneylineEdge: 0.05,
       spreadEdgePoints: 5.0,
       totalEdgePoints: 7.0,

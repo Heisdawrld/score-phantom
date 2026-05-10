@@ -22,9 +22,9 @@ const FILTERS = [
   { key: 'my', label: 'Fav' },
 ];
 
-const MY_LEAGUE_HINTS = ['nba', 'ncaab', 'euroleague', 'champions', 'basketball africa', 'bbl', 'acb', 'liga', 'higher league', 'pba'];
-const MAJOR_HINTS = ['nba', 'wnba', 'ncaab', 'wncaab', 'euroleague'];
-const MAJOR_KEYS = new Set(['nba', 'wnba', 'ncaab', 'ncaaw', 'apisports_12', 'apisports_120']);
+const MY_LEAGUE_HINTS = ['nba', 'wnba', 'ncaab', 'euroleague'];
+const MAJOR_HINTS = ['nba', 'wnba', 'ncaab', 'euroleague'];
+const MAJOR_KEYS = new Set(['nba', 'wnba', 'ncaab', 'apisports_120']);
 
 function lagosDate(offset = 0) {
   const d = new Date(Date.now() + offset * DAY_MS);

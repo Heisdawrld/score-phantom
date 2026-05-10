@@ -24,7 +24,10 @@ async function runExternalBasketballSync(reason = 'scheduled') {
   externalSyncRunning = true;
   try {
     console.log(`[BasketballAutoSync] External sync started (${reason})`);
-    const result = await syncBasketballV1({ includeNbaGames: false, daysAhead: 2 });
+    const result = await syncBasketballV1({
+      includeNbaGames: reason === 'startup',
+      daysAhead: 7,
+    });
     console.log('[BasketballAutoSync] External sync complete:', JSON.stringify(result));
     return result;
   } catch (err) {
