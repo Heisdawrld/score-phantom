@@ -44,6 +44,45 @@ function isPredictionFresh(game, row) {
   return ageMs <= 6 * 60 * 60 * 1000;
 }
 
+async function safeDbQuery(db, label, sql, args = []) {
+  try {
+    const result = await db.execute({ sql, args });
+    return { ok: true, rows: result.rows || [], rowsAffected: result.rowsAffected || 0 };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+
+async function tableInfo(db, table) {
+  const result = await safeDbQuery(db, `schema:${table}`, `PRAGMA table_info('${table}')`);
+  return result.ok ? result.rows : { error: result.error };
+}
+
+async function tableCount(db, table) {
+  const result = await safeDbQuery(db, `count:${table}`, `SELECT COUNT(*) AS count FROM ${table}`);
+  if (!result.ok) return { error: result.error };
+  return Number(result.rows?.[0]?.count || 0);
+}
+
+function compactRaw(value) {
+  if (!value) return null;
+  let raw = value;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { return { parseError: true, preview: raw.slice(0, 160) }; }
+  }
+  const league = raw?.league || raw?.raw?.league || null;
+  const teams = raw?.teams || raw?.raw?.teams || null;
+  const country = raw?.country || raw?.raw?.country || null;
+  return {
+    league: league ? { id: league.id, name: league.name, country: league.country, logo: league.logo } : null,
+    country: country ? { name: country.name, flag: country.flag } : null,
+    teams: teams ? {
+      home: teams.home ? { id: teams.home.id, name: teams.home.name, logo: teams.home.logo } : null,
+      away: teams.away ? { id: teams.away.id, name: teams.away.name, logo: teams.away.logo } : null,
+    } : null,
+  };
+}
+
 router.get('/leagues', (req, res) => {
   res.json({
     enabled: getEnabledBasketballLeagues(),
@@ -166,6 +205,170 @@ router.post('/admin/init', requireAdminSecret, async (req, res) => {
   try {
     await initBasketballTables();
     res.json({ ok: true, message: 'Basketball tables ready' });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.get('/admin/db-audit', requireAdminSecret, async (req, res) => {
+  try {
+    const { default: db } = await import('../../config/database.js');
+    await initBasketballTables();
+
+    const now = new Date();
+    const from = req.query.from || new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const to = req.query.to || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const league = req.query.league ? String(req.query.league).toLowerCase() : null;
+    const externalId = req.query.externalId ? String(req.query.externalId) : null;
+
+    const schemas = {
+      basketball_games: await tableInfo(db, 'basketball_games'),
+      basketball_odds: await tableInfo(db, 'basketball_odds'),
+      basketball_predictions: await tableInfo(db, 'basketball_predictions'),
+      fixtures: await tableInfo(db, 'fixtures'),
+      historical_matches: await tableInfo(db, 'historical_matches'),
+      prediction_outcomes: await tableInfo(db, 'prediction_outcomes'),
+    };
+
+    const counts = {
+      basketball_games: await tableCount(db, 'basketball_games'),
+      basketball_odds: await tableCount(db, 'basketball_odds'),
+      basketball_predictions: await tableCount(db, 'basketball_predictions'),
+      fixtures: await tableCount(db, 'fixtures'),
+      predictions_v2: await tableCount(db, 'predictions_v2'),
+      prediction_outcomes: await tableCount(db, 'prediction_outcomes'),
+    };
+
+    const gamesSampleQ = await safeDbQuery(db, 'basketball_games_sample', `
+      SELECT id, league_key, external_game_id, odds_event_id, source, status, start_time,
+             home_team, away_team, home_score, away_score, raw_json, updated_at
+      FROM basketball_games
+      WHERE start_time >= ? AND start_time <= ?
+      ORDER BY start_time ASC
+      LIMIT 30
+    `, [from, to]);
+
+    const sampleGames = (gamesSampleQ.rows || []).map((row) => ({
+      ...row,
+      raw_json: compactRaw(row.raw_json),
+    }));
+
+    const sourceBreakdown = await safeDbQuery(db, 'source_breakdown', `
+      SELECT COALESCE(source, 'unknown') AS source, COUNT(*) AS count
+      FROM basketball_games
+      GROUP BY COALESCE(source, 'unknown')
+      ORDER BY count DESC
+    `);
+
+    const leagueBreakdown = await safeDbQuery(db, 'league_breakdown', `
+      SELECT league_key, COALESCE(source, 'unknown') AS source, COUNT(*) AS count,
+             MIN(start_time) AS first_start, MAX(start_time) AS last_start
+      FROM basketball_games
+      GROUP BY league_key, COALESCE(source, 'unknown')
+      ORDER BY count DESC
+      LIMIT 40
+    `);
+
+    const duplicates = await safeDbQuery(db, 'duplicate_match_shape', `
+      SELECT league_key, date(start_time) AS day, lower(home_team) AS home, lower(away_team) AS away,
+             COUNT(*) AS count, GROUP_CONCAT(id) AS ids, GROUP_CONCAT(COALESCE(source, 'unknown')) AS sources
+      FROM basketball_games
+      WHERE start_time >= ? AND start_time <= ?
+      GROUP BY league_key, date(start_time), lower(home_team), lower(away_team)
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC
+      LIMIT 30
+    `, [from, to]);
+
+    const oddsByGame = await safeDbQuery(db, 'odds_by_game', `
+      SELECT g.id, g.league_key, g.external_game_id, g.odds_event_id, g.home_team, g.away_team,
+             COUNT(o.id) AS odds_rows,
+             COUNT(DISTINCT o.bookmaker) AS bookmakers,
+             COUNT(DISTINCT o.market_key) AS markets
+      FROM basketball_games g
+      LEFT JOIN basketball_odds o ON o.game_id = g.id
+      WHERE g.start_time >= ? AND g.start_time <= ?
+      GROUP BY g.id
+      ORDER BY odds_rows DESC, g.start_time ASC
+      LIMIT 40
+    `, [from, to]);
+
+    const predictionLinks = await safeDbQuery(db, 'prediction_links', `
+      SELECT g.id, g.league_key, g.external_game_id, g.home_team, g.away_team,
+             COUNT(p.id) AS prediction_rows,
+             MAX(p.updated_at) AS latest_prediction,
+             MAX(p.engine_version) AS engine_version,
+             MAX(p.best_pick_market) AS market,
+             MAX(p.best_pick_selection) AS selection,
+             MAX(p.no_clear_edge) AS no_clear_edge
+      FROM basketball_games g
+      LEFT JOIN basketball_predictions p ON p.game_id = g.id
+      WHERE g.start_time >= ? AND g.start_time <= ?
+      GROUP BY g.id
+      ORDER BY prediction_rows DESC, g.start_time ASC
+      LIMIT 40
+    `, [from, to]);
+
+    const orphanOdds = await safeDbQuery(db, 'orphan_odds', `
+      SELECT COUNT(*) AS count
+      FROM basketball_odds o
+      LEFT JOIN basketball_games g ON g.id = o.game_id
+      WHERE o.game_id IS NOT NULL AND g.id IS NULL
+    `);
+
+    const orphanPredictions = await safeDbQuery(db, 'orphan_predictions', `
+      SELECT COUNT(*) AS count
+      FROM basketball_predictions p
+      LEFT JOIN basketball_games g ON g.id = p.game_id
+      WHERE g.id IS NULL
+    `);
+
+    let clickLookup = null;
+    if (league && externalId) {
+      try {
+        const game = await findBasketballGameByExternalId(league, externalId);
+        clickLookup = game ? {
+          found: true,
+          game: {
+            id: game.id,
+            league_key: game.league_key,
+            external_game_id: game.external_game_id,
+            odds_event_id: game.odds_event_id,
+            source: game.source,
+            home_team: game.home_team,
+            away_team: game.away_team,
+            start_time: game.start_time,
+            raw_json: compactRaw(game.raw_json || game.raw),
+          },
+          oddsRows: (await getBasketballOddsForGame(game.id)).length,
+          prediction: await getLatestBasketballPrediction(game.id, { leagueKey: game.league_key, preferredEngineVersion: BASKETBALL_ENGINE_VERSION }),
+        } : { found: false, league, externalId };
+      } catch (err) {
+        clickLookup = { found: false, league, externalId, error: err.message };
+      }
+    }
+
+    res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      window: { from, to },
+      engineVersion: BASKETBALL_ENGINE_VERSION,
+      selectedApiSports: getApiSportsTopBasketballLeagues({ limit: 15 }),
+      enabledLeagues: getEnabledBasketballLeagues().map((l) => l.key),
+      schemas,
+      counts,
+      sourceBreakdown: sourceBreakdown.rows || sourceBreakdown,
+      leagueBreakdown: leagueBreakdown.rows || leagueBreakdown,
+      sampleGames,
+      duplicates: duplicates.rows || duplicates,
+      oddsByGame: oddsByGame.rows || oddsByGame,
+      predictionLinks: predictionLinks.rows || predictionLinks,
+      integrity: {
+        orphanOdds: orphanOdds.rows?.[0]?.count ?? orphanOdds,
+        orphanPredictions: orphanPredictions.rows?.[0]?.count ?? orphanPredictions,
+      },
+      clickLookup,
+    });
   } catch (err) {
     handleError(res, err);
   }
