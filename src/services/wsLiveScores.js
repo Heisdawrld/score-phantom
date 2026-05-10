@@ -127,6 +127,48 @@ async function updateLiveFixtureMeta(fixtureId, finalOrLiveEvent, partialLiveSta
   }
 }
 
+async function saveFinishedMatchMemory({ fixtureId, matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap }) {
+  const update = await db.execute({
+    sql: `UPDATE historical_matches
+          SET type = 'h2h',
+              date = ?,
+              home_team = ?,
+              away_team = ?,
+              home_goals = ?,
+              away_goals = ?,
+              home_xg = ?,
+              away_xg = ?,
+              momentum = ?,
+              shotmap = ?
+          WHERE fixture_id = ?`,
+    args: [matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap, fixtureId],
+  });
+
+  if ((update.rowsAffected || 0) > 0) return { action: 'updated', rowsAffected: update.rowsAffected || 0 };
+
+  try {
+    await db.execute({
+      sql: `INSERT INTO historical_matches
+             (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap)
+            VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [fixtureId, matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap],
+    });
+    return { action: 'inserted', rowsAffected: 1 };
+  } catch (err) {
+    // If another live poll inserted it first, update once more. This keeps the path safe without requiring a UNIQUE constraint.
+    if (String(err.message || '').toLowerCase().includes('unique')) {
+      const retry = await db.execute({
+        sql: `UPDATE historical_matches
+              SET type = 'h2h', date = ?, home_team = ?, away_team = ?, home_goals = ?, away_goals = ?, home_xg = ?, away_xg = ?, momentum = ?, shotmap = ?
+              WHERE fixture_id = ?`,
+        args: [matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap, fixtureId],
+      });
+      return { action: 'updated_after_race', rowsAffected: retry.rowsAffected || 0 };
+    }
+    throw err;
+  }
+}
+
 async function notifyMatchSubscribers(fixtureId, homeTeam, awayTeam, homeScore, awayScore, minute) {
   try {
     const r = await db.execute({ sql: 'SELECT DISTINCT ms.user_id, pt.token FROM match_subscriptions ms LEFT JOIN push_tokens pt ON pt.user_id=ms.user_id WHERE ms.fixture_id=?', args: [fixtureId] });
@@ -201,27 +243,19 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
        sh = evt.shotmap ? JSON.stringify(evt.shotmap) : null;
      }
      
-     await db.execute({
-        sql: `INSERT INTO historical_matches 
-               (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap) 
-              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (fixture_id) DO UPDATE SET
-                type = EXCLUDED.type,
-                date = EXCLUDED.date,
-                home_team = EXCLUDED.home_team,
-                away_team = EXCLUDED.away_team,
-                home_goals = EXCLUDED.home_goals,
-                away_goals = EXCLUDED.away_goals,
-                home_xg = EXCLUDED.home_xg,
-                away_xg = EXCLUDED.away_xg,
-                momentum = EXCLUDED.momentum,
-                shotmap = EXCLUDED.shotmap`,
-        args: [
-          fixtureId, f.match_date, f.home_team_name, f.away_team_name, 
-          homeScore, awayScore, hXg, aXg, mmt, sh
-        ]
+     const memorySave = await saveFinishedMatchMemory({
+       fixtureId,
+       matchDate: f.match_date,
+       homeTeam: f.home_team_name,
+       awayTeam: f.away_team_name,
+       homeScore,
+       awayScore,
+       homeXg: hXg,
+       awayXg: aXg,
+       momentum: mmt,
+       shotmap: sh,
      });
-     console.log(`[Engine] Saved finished match memory to H2H for ${f.home_team_name} vs ${f.away_team_name}`);
+     console.log(`[Engine] Saved finished match memory to H2H for ${f.home_team_name} vs ${f.away_team_name} (${memorySave.action})`);
   }
 
   const pred = await db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id = ? LIMIT 1', args: [fixtureId] });
