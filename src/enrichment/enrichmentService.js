@@ -9,6 +9,7 @@
 import {
   extractFormFromStandings,
   fetchTeamRecentEvents,
+  deriveH2H,
   fetchStandings,
   fetchPredictedLineup,
   fetchEventOdds,
@@ -337,22 +338,32 @@ export async function fetchAndStoreEnrichment(fixture) {
     console.warn('[enrichmentService] Event detail fetch failed:', err.message);
   }
 
-  const homeFormRaw = (await fetchTeamRecentEvents(fixture.home_team_id, fixture.home_team_name)).map(normaliseEventToForm).filter(Boolean);
-  const awayFormRaw = (await fetchTeamRecentEvents(fixture.away_team_id, fixture.away_team_name)).map(normaliseEventToForm).filter(Boolean);
+  const dateTo = fixture.match_date || null;
+  const homeFormRaw = (await fetchTeamRecentEvents(fixture.home_team_id, fixture.home_team_name, 10, { yearsBack: 2, maxPages: 8, dateTo })).map(normaliseEventToForm).filter(Boolean);
+  const awayFormRaw = (await fetchTeamRecentEvents(fixture.away_team_id, fixture.away_team_name, 10, { yearsBack: 2, maxPages: 8, dateTo })).map(normaliseEventToForm).filter(Boolean);
   const localHome = await fetchLocalTeamForm(fixture.home_team_name);
   const localAway = await fetchLocalTeamForm(fixture.away_team_name);
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
   const homeFormMerged = mergeForm(homeFormRaw, localHome);
   const awayFormMerged = mergeForm(awayFormRaw, localAway);
-  const h2hMerged = bsdH2H.length > 0 ? mergeForm(bsdH2H, localH2h) : mergeForm([], localH2h);
+  const derivedBsdH2h = bsdH2H.length >= 5
+    ? bsdH2H
+    : await deriveH2H(
+        fixture.home_team_id,
+        fixture.home_team_name,
+        fixture.away_team_id,
+        fixture.away_team_name,
+        { target: 5, dateTo }
+      );
+  const h2hMerged = mergeForm(derivedBsdH2h.length > 0 ? derivedBsdH2h : bsdH2H, localH2h).slice(0, 5);
 
   await sleep(300);
   const standingsRaw = await fetchStandings(fixture.tournament_id).catch(() => []);
   const standings = (standingsRaw || []).map(normaliseStandingsRow);
   const homeFormFallback = homeFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
   const awayFormFallback = awayFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
-  const homeFormFinal = filterRelevantForm(homeFormMerged.length >= homeFormFallback.length ? homeFormMerged : homeFormFallback, fixture.home_team_name, 50);
-  const awayFormFinal = filterRelevantForm(awayFormMerged.length >= awayFormFallback.length ? awayFormMerged : awayFormFallback, fixture.away_team_name, 50);
+  const homeFormFinal = filterRelevantForm(homeFormMerged.length >= homeFormFallback.length ? homeFormMerged : homeFormFallback, fixture.home_team_name, 5);
+  const awayFormFinal = filterRelevantForm(awayFormMerged.length >= awayFormFallback.length ? awayFormMerged : awayFormFallback, fixture.away_team_name, 5);
   const homeProfile = buildTeamProfile(fixture.home_team_name, homeFormFinal, []);
   const awayProfile = buildTeamProfile(fixture.away_team_name, awayFormFinal, []);
 

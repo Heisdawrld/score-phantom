@@ -425,21 +425,45 @@ export async function fetchEventDetail(eventId, full = false) {
 export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {}) {
   if (!teamId) return [];
 
-  const dTo = new Date();
+  const dTo = opts.dateTo ? new Date(opts.dateTo) : new Date();
+  const resolvedTo = Number.isNaN(dTo.getTime()) ? new Date() : dTo;
   const yearsBack = opts.yearsBack || 2;
-  const dFrom = new Date(dTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
+  const dFrom = new Date(resolvedTo.getTime() - yearsBack * 365 * 24 * 60 * 60 * 1000);
+
+  const windowLimit = Math.min(
+    Math.max(Number(opts.pageLimit || opts.fetchWindow || Math.max(n, 25)), 10),
+    200,
+  );
 
   const params = {
     status: 'finished',
     date_from: dFrom.toISOString(),
-    date_to: dTo.toISOString(),
-    limit: Math.min(Math.max(Number(n) || 50, 10), 200),
+    date_to: resolvedTo.toISOString(),
+    limit: windowLimit,
   };
 
   if (opts.leagueId) params.league_id = opts.leagueId;
 
-  const data = await bsdFetch(`/teams/${teamId}/fixtures/`, params, { cacheable: false });
-  const results = asArray(data);
+  let data = await bsdFetch(`/teams/${teamId}/fixtures/`, params);
+  const totalCount = Number(data?.count || 0);
+
+  // BSD returns this endpoint oldest-first, so we jump straight to the tail window
+  // instead of paging through years of history just to get the latest five matches.
+  if (totalCount > windowLimit) {
+    data = await bsdFetch(`/teams/${teamId}/fixtures/`, {
+      ...params,
+      offset: Math.max(totalCount - windowLimit, 0),
+    });
+  }
+
+  if (!data) {
+    data = await bsdFetchAll(`/teams/${teamId}/fixtures/`, params, {
+      limit: windowLimit,
+      maxPages: Math.min(Math.max(Number(opts.maxPages || 4), 1), 10),
+    });
+  }
+
+  const results = asArray(data, null);
 
   const teamSearchText = teamName ? String(teamName).trim().toLowerCase() : '';
   let filteredResults = results || [];
@@ -468,16 +492,17 @@ export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamNa
   if (!homeTeamId || !awayTeamId) return [];
 
   const target = Number(opts.target ?? 10);
-  const fetchCount = Math.max(60, target * 6);
+  const fetchCount = Math.min(200, Math.max(80, target * 24));
 
   const [homeEvents, awayEvents] = await Promise.all([
-    fetchTeamRecentEvents(homeTeamId, homeTeamName, fetchCount, { yearsBack: 4 }),
-    fetchTeamRecentEvents(awayTeamId, awayTeamName, fetchCount, { yearsBack: 4 }),
+    fetchTeamRecentEvents(homeTeamId, homeTeamName, fetchCount, { yearsBack: 4, pageLimit: fetchCount, dateTo: opts.dateTo || null }),
+    fetchTeamRecentEvents(awayTeamId, awayTeamName, fetchCount, { yearsBack: 4, pageLimit: fetchCount, dateTo: opts.dateTo || null }),
   ]);
 
   const awayIds = new Set((awayEvents || []).map(e => String(e.id)));
   return (homeEvents || [])
     .filter(e => awayIds.has(String(e.id)))
+    .sort((a, b) => new Date(b.event_date) - new Date(a.event_date))
     .slice(0, target)
     .map(e => normaliseEventToForm(e))
     .filter(Boolean);

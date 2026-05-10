@@ -15,6 +15,7 @@ import {
   getOdds,
 } from "../services/predictionCache.js";
 import { bsdFetch, fetchManagerByTeamId } from '../services/bsd.js';
+import { refreshCoreFixtureMemory } from '../enrichment/refreshCoreMemory.js';
 import { buildFeatureVector } from "../features/buildFeatureVector.js";
 import { buildHypotheticalFeatureVector } from "../features/buildHypotheticalFeatureVector.js";
 import { modifyFeatureVectorForSimulation } from "../features/modifyFeatureVector.js";
@@ -62,6 +63,33 @@ function mapHistoryRow(row) {
         : null,
     date: row.date,
   };
+}
+
+function getLatestHistoryDate(rows = []) {
+  const timestamps = rows
+    .map((row) => new Date(row?.date || '').getTime())
+    .filter((value) => Number.isFinite(value));
+  if (!timestamps.length) return null;
+  return new Date(Math.max(...timestamps));
+}
+
+function needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h }) {
+  if (!fixture) return false;
+
+  const fixtureTs = new Date(fixture.match_date || '').getTime();
+  const maxStalenessMs = 90 * 24 * 60 * 60 * 1000;
+  const standings = Array.isArray(meta?.standings) ? meta.standings : [];
+
+  if (homeForm.length < 5 || awayForm.length < 5 || h2h.length < 5) return true;
+  if (standings.length < 2) return true;
+  if (!Number.isFinite(fixtureTs)) return false;
+
+  const latestHome = getLatestHistoryDate(homeForm);
+  const latestAway = getLatestHistoryDate(awayForm);
+  if (!latestHome || !latestAway) return true;
+
+  return (fixtureTs - latestHome.getTime()) > maxStalenessMs
+    || (fixtureTs - latestAway.getTime()) > maxStalenessMs;
 }
 
 // ─── Auth / Access helpers ────────────────────────────────────────────────────
@@ -1584,20 +1612,40 @@ router.post('/notifications/:id/read', requireAuth, async (req, res) => {
 router.get("/matches/:id", requireAuth, async (req, res) => {
   try {
     const fixtureId = req.params.id;
-    const bundle = await ensureFixtureData(fixtureId);
+    let bundle = await ensureFixtureData(fixtureId);
     if (!bundle) return res.status(404).json({ error: "Match not found" });
-    const { fixture, meta } = bundle;
-    const historyRows = await getHistoryRows(fixtureId);
-    
+
+    let { fixture, meta } = bundle;
+    let historyRows = await getHistoryRows(fixtureId);
+
     const formatScore = (r) => (r.home_goals != null && r.away_goals != null) ? `${r.home_goals}-${r.away_goals}` : "vs";
-    const h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
-    const homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
-    const awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+    let awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+
+    if (needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h })) {
+      try {
+        console.log(`[MatchCenter] Refreshing stale core memory for fixture ${fixtureId}...`);
+        await refreshCoreFixtureMemory(fixture);
+        bundle = await ensureFixtureData(fixtureId);
+        if (bundle) {
+          fixture = bundle.fixture;
+          meta = bundle.meta;
+        }
+        historyRows = await getHistoryRows(fixtureId);
+        h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+        homeForm = historyRows.filter(r => r.type === "home_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+        awayForm = historyRows.filter(r => r.type === "away_form").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
+      } catch (refreshErr) {
+        console.warn(`[MatchCenter] Core memory refresh failed for ${fixtureId}:`, refreshErr.message);
+      }
+    }
+
     let oddsRow = null;
     if (req.access.has_full_access) {
       oddsRow = await getOdds(fixtureId);
     }
-    const standings = meta?.standings || [];
+    const standings = Array.isArray(meta?.standings) ? meta.standings : [];
     
     // Live Match Bypass: If the match is currently live, fetch spatial data directly from BSD API
     const isLive = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(fixture.match_status || '');
