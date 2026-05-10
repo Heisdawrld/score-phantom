@@ -3,8 +3,17 @@ import { bsdFetchAll, normaliseBsdEventToFixture, extractOddsFromEvent } from '.
 
 dotenv.config();
 
-const TURSO_URL = 'https://scorephantom-heisdawrld.aws-eu-west-1.turso.io';
-const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzUyODg3NjEsImlkIjoiMDE5Y2YyM2EtNzkwMS03MTFhLWI5NDItYWU0ZDBlY2JkYjkxIiwicmlkIjoiZmNiZjE0ZTItZWJmYS00MzMyLWIxOTktN2RmZmIyOWUzYmJhIn0.XVNBBygoogICZz8ZpWKLzaqKUjHs-ZDRRrV_7YJMf_ScJgUT202uNmjZU4Wai1zzZ0z1PYqzGJ90hgYP-pceDw';
+function tursoHttpsBase() {
+  const fromEnv = process.env.TURSO_HTTP_URL?.replace(/\/$/, '');
+  if (fromEnv) return fromEnv;
+  const raw = process.env.TURSO_DATABASE_URL || '';
+  const trimmed = raw.replace(/^libsql:\/\//i, '').replace(/^https:\/\//i, '');
+  if (!trimmed) return null;
+  return `https://${trimmed}`;
+}
+
+const TURSO_URL = tursoHttpsBase();
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -15,6 +24,11 @@ function parseArgs(argv) {
     if (m) out[m[1]] = m[2];
   }
   return out;
+}
+
+if (!TURSO_URL || !TURSO_TOKEN) {
+  console.error('Missing TURSO_HTTP_URL or TURSO_DATABASE_URL + TURSO_AUTH_TOKEN.');
+  process.exit(1);
 }
 
 // Function to execute SQL using Turso's HTTP API directly (bypasses TCP firewall)

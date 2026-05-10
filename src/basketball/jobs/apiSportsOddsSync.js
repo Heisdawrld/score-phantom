@@ -14,8 +14,8 @@ function apiSportsGameId(externalGameId = '') {
   return match ? Number(match[1]) : null;
 }
 
-export async function syncApiSportsBasketballOddsCached({ daysAhead = 2, date = null, leagueLimit = 12, maxGames = 40 } = {}) {
-  const safeDays = Math.min(Math.max(Number(daysAhead || 2), 1), 2);
+export async function syncApiSportsBasketballOddsCached({ daysAhead = 7, date = null, leagueLimit = 12, maxGames = 40 } = {}) {
+  const safeDays = Math.min(Math.max(Number(daysAhead || 7), 1), 7);
   const dates = date ? [date] : Array.from({ length: safeDays }, (_, i) => isoDate(i));
   const selectedLeagues = getApiSportsTopBasketballLeagues({ limit: leagueLimit });
   const allowedKeys = new Set(selectedLeagues.map((l) => l.key));

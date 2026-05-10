@@ -102,12 +102,14 @@ export async function testApiSportsBasketballCoverage({ daysAhead = 2, maxLeague
   };
 }
 
-export async function syncApiSportsBasketballGames({ daysAhead = 2, date = null, selectedOnly = true } = {}) {
-  return syncApiSportsBasketballGamesCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date, selectedOnly });
+export async function syncApiSportsBasketballGames({ daysAhead = 7, date = null, selectedOnly = true } = {}) {
+  const n = Math.min(Math.max(Number(daysAhead || 7), 1), 14);
+  return syncApiSportsBasketballGamesCached({ daysAhead: n, date, selectedOnly });
 }
 
-export async function syncApiSportsBasketballOdds({ daysAhead = 2, date = null, leagueLimit = 12, maxGames = 40 } = {}) {
-  return syncApiSportsBasketballOddsCached({ daysAhead: Math.min(Number(daysAhead || 2), 2), date, leagueLimit, maxGames });
+export async function syncApiSportsBasketballOdds({ daysAhead = 7, date = null, leagueLimit = 12, maxGames = 40 } = {}) {
+  const n = Math.min(Math.max(Number(daysAhead || 7), 1), 7);
+  return syncApiSportsBasketballOddsCached({ daysAhead: n, date, leagueLimit, maxGames });
 }
 
 export async function syncBasketballEvents({ leagueKey = null, daysAhead = 7 } = {}) {
@@ -173,8 +175,9 @@ export async function syncBasketballV1({ includeNbaGames = false, leagueKey = nu
   const output = { apiSports: null, apiSportsOdds: null, nbaGames: 'skipped_auto_sync', events: null, odds: null };
 
   if (includeApiSports) {
-    output.apiSports = await syncApiSportsBasketballGames({ daysAhead: Math.min(Number(daysAhead || 2), 2), selectedOnly: true });
-    output.apiSportsOdds = await syncApiSportsBasketballOdds({ daysAhead: Math.min(Number(daysAhead || 2), 2) });
+    const windowDays = Math.min(Math.max(Number(daysAhead || 7), 1), 14);
+    output.apiSports = await syncApiSportsBasketballGames({ daysAhead: windowDays, selectedOnly: true });
+    output.apiSportsOdds = await syncApiSportsBasketballOdds({ daysAhead: Math.min(windowDays, 7) });
   }
 
   if (includeNbaGames && (!leagueKey || leagueKey === 'nba')) {
@@ -199,7 +202,7 @@ export async function syncBasketballV1({ includeNbaGames = false, leagueKey = nu
 export async function runBasketballPredictions({ leagueKey = null, limit = 120 } = {}) {
   await initBasketballTables();
   const from = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-  const to = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const games = await listBasketballGames({ leagueKey, from, to, limit });
   const results = [];
 

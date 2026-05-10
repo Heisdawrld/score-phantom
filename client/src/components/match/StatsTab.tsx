@@ -1,12 +1,30 @@
-import { cn } from "@/lib/utils";
+import { cn, fuzzyTeamMatch, sortMatchesByDateDesc } from "@/lib/utils";
 
 export function StatsTab({ d }: any) {
-  const h2h = Array.isArray(d?.h2h) && d.h2h.length ? d.h2h : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length ? d.meta.h2h : [];
-  const hf = Array.isArray(d?.homeForm) && d.homeForm.length ? d.homeForm : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length ? d.meta.homeForm : [];
-  const af = Array.isArray(d?.awayForm) && d.awayForm.length ? d.awayForm : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length ? d.meta.awayForm : [];
+  const rawH2h =
+    Array.isArray(d?.h2h) && d.h2h.length
+      ? d.h2h
+      : Array.isArray(d?.meta?.h2h) && d.meta.h2h.length
+        ? d.meta.h2h
+        : [];
+  const rawHf =
+    Array.isArray(d?.homeForm) && d.homeForm.length
+      ? d.homeForm
+      : Array.isArray(d?.meta?.homeForm) && d.meta.homeForm.length
+        ? d.meta.homeForm
+        : [];
+  const rawAf =
+    Array.isArray(d?.awayForm) && d.awayForm.length
+      ? d.awayForm
+      : Array.isArray(d?.meta?.awayForm) && d.meta.awayForm.length
+        ? d.meta.awayForm
+        : [];
+  const h2h = sortMatchesByDateDesc(rawH2h);
+  const hf = sortMatchesByDateDesc(rawHf);
+  const af = sortMatchesByDateDesc(rawAf);
   const fix = d?.fixture || {};
   const parseScore = (m: any) => { const parts = String(m.score || "0-0").split("-").map(Number); return { h: parts[0] || 0, a: parts[1] || 0 }; };
-  const isHome = (m: any, t: string) => (m.home || "").toLowerCase().includes((t || "").toLowerCase().split(" ")[0]);
+  const isHome = (m: any, t: string) => fuzzyTeamMatch(m.home, t);
   const resultOf = (m: any, t: string) => { const { h, a } = parseScore(m); const home = isHome(m, t); const sc = home ? h : a; const conc = home ? a : h; return sc > conc ? "W" : sc === conc ? "D" : "L"; };
   const rColor = (r: string) => r === "W" ? "bg-primary text-black" : r === "D" ? "bg-amber-400 text-black" : "bg-red-500 text-white";
   const formAnalysis = (form: any[], teamName: string) => {

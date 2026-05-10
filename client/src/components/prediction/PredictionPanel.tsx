@@ -7,7 +7,7 @@ import {
   CheckCircle2, AlertTriangle, Lock, Crown, ExternalLink, MessageSquare,
   BarChart2, Star
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, fuzzyTeamMatch, sortMatchesByDateDesc } from "@/lib/utils";
 import { ChatInterface } from "./ChatInterface";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
@@ -38,16 +38,14 @@ function getFormResult(
   const g1 = parseInt(parts[0], 10);
   const g2 = parseInt(parts[1], 10);
   if (isNaN(g1) || isNaN(g2)) return "?";
-  const tLower = teamName.toLowerCase();
-  const tWords = tLower.split(/[\s-]+/).filter(w => w.length >= 3);
-  const mHome = (match.home || "").toLowerCase();
-  const mAway = (match.away || "").toLowerCase();
-  const isHome = mHome.includes(tLower.slice(0, 6)) || tWords.some(w => mHome.includes(w));
-  const isAway = mAway.includes(tLower.slice(0, 6)) || tWords.some(w => mAway.includes(w));
   let gf: number, ga: number;
-  if (isHome) { gf = g1; ga = g2; }
-  else if (isAway) { gf = g2; ga = g1; }
-  else return "?";
+  if (fuzzyTeamMatch(match.home, teamName)) {
+    gf = g1;
+    ga = g2;
+  } else if (fuzzyTeamMatch(match.away, teamName)) {
+    gf = g2;
+    ga = g1;
+  } else return "?";
   return gf > ga ? "W" : gf === ga ? "D" : "L";
 }
 
@@ -761,8 +759,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                             <h4 className="text-[10px] tracking-widest text-muted-foreground uppercase font-bold mb-3 ml-1">Recent Form (Last 6)</h4>
                             <div className={cn("space-y-2.5", !isPremium && "blur-sm pointer-events-none select-none opacity-70")}>
                               {[
-                                { label: fixture?.homeTeam, form: data?.meta?.homeForm ?? [] },
-                                { label: fixture?.awayTeam, form: data?.meta?.awayForm ?? [] },
+                                { label: fixture?.homeTeam, form: sortMatchesByDateDesc((data?.meta?.homeForm ?? []) as { date?: string }[]) },
+                                { label: fixture?.awayTeam, form: sortMatchesByDateDesc((data?.meta?.awayForm ?? []) as { date?: string }[]) },
                               ].map(({ label, form }) => (
                                 <div key={label ?? "team"} className="flex items-center gap-3">
                                   <p className="text-xs font-semibold w-24 truncate shrink-0 text-muted-foreground">{label}</p>

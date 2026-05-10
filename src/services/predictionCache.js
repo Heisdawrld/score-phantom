@@ -22,6 +22,12 @@ import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks
 // Cache is valid for 6 hours — predictions refresh each morning via automation
 const CACHE_VALID_HOURS = 6;
 
+/** Re-fetch BSD enrichment (form/H2H → historical_matches) even when enriched=1 */
+const ENRICHMENT_REFRESH_HOURS = Number(process.env.ENRICHMENT_REFRESH_HOURS || CACHE_VALID_HOURS);
+
+/** Fixtures kicking off sooner get tighter enrichment TTL */
+const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS || 36);
+
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
 const CURRENT_ENGINE_VERSION = '2.8.9'; // Bumped: audited whole market ranking + headline eligibility
@@ -164,10 +170,10 @@ export async function getFixtureById(fixtureId) {
 
 export async function getHistoryRows(fixtureId) {
   const result = await db.execute({
-    sql: `SELECT * FROM historical_matches WHERE fixture_id = ? ORDER BY type, date DESC`,
+    sql: `SELECT * FROM historical_matches WHERE fixture_id = ?`,
     args: [fixtureId],
   });
-  return result.rows || [];
+  return sortHistoryRowsChronologically(result.rows || []);
 }
 
 export async function getOdds(fixtureId) {
@@ -200,6 +206,57 @@ function hasUsableHistory(historyRows) {
   return homeCount > 0 && awayCount > 0;
 }
 
+function rowDateMs(d) {
+  const t = new Date(d || 0).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** Match engine + UI: newest form/H2H first per section (string dates can collation-wobble in SQL-only sorts). */
+function sortHistoryRowsChronologically(rows) {
+  const list = rows || [];
+  const desc = (a, b) => rowDateMs(b.date) - rowDateMs(a.date);
+  const byType = (t) => list.filter((r) => r.type === t).sort(desc);
+  return [...byType('away_form'), ...byType('h2h'), ...byType('home_form')];
+}
+
+function fixtureKickoffMs(fixture) {
+  const t = new Date(fixture?.match_date || 0).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function needsEnrichmentRefresh(fixture, historyRows) {
+  if (!fixture.enriched || !hasUsableHistory(historyRows)) return true;
+
+  const meta = safeJsonParse(fixture?.meta, {});
+  const ts = meta?.dataFreshness?.refreshedAt || meta?.enrichedAt || meta?.bsdRefreshedAt;
+  if (!ts) {
+    console.log(`[predictionCache] No enrichment timestamp on fixture ${fixture.id} — refreshing`);
+    return true;
+  }
+  const parsed = new Date(ts).getTime();
+  if (Number.isNaN(parsed)) {
+    console.log(`[predictionCache] Bad enrichment timestamp on fixture ${fixture.id} — refreshing`);
+    return true;
+  }
+  const age = (Date.now() - parsed) / 3600000;
+  const maxAge = ENRICHMENT_REFRESH_HOURS;
+  if (age >= maxAge) {
+    console.log(`[predictionCache] Enrichment stale (${age.toFixed(1)}h >= ${maxAge}h) for fixture ${fixture.id}`);
+    return true;
+  }
+  const kick = fixtureKickoffMs(fixture);
+  const soon =
+    kick != null &&
+    kick > Date.now() &&
+    kick - Date.now() < ENRICHMENT_IMMINENT_HOURS * 3600000;
+  const imminentTtl = Math.min(maxAge, Math.max(2, Number(process.env.ENRICHMENT_IMMINENT_REFRESH_HOURS || 3)));
+  if (soon && age >= imminentTtl) {
+    console.log(`[predictionCache] Enrichment imminent-kickoff refresh (${age.toFixed(1)}h >= ${imminentTtl}h) for fixture ${fixture.id}`);
+    return true;
+  }
+  return false;
+}
+
 // ── Cache check ───────────────────────────────────────────────────────────────
 
 async function isCacheFresh(fixtureId) {
@@ -229,7 +286,7 @@ export async function ensureFixtureData(fixtureId) {
 
   let historyRows = await getHistoryRows(fixtureId);
 
-  if (!fixture.enriched || !hasUsableHistory(historyRows)) {
+  if (!fixture.enriched || !hasUsableHistory(historyRows) || needsEnrichmentRefresh(fixture, historyRows)) {
     try {
       await enrichFixture(fixture);
       fixture = await getFixtureById(fixtureId);
