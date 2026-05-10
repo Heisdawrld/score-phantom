@@ -11,19 +11,25 @@ import {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function ensureColumns() {
-  const cols = [
-    `ALTER TABLE fixtures ADD COLUMN country_flag TEXT DEFAULT ''`,
-    `ALTER TABLE fixtures ADD COLUMN home_team_logo TEXT DEFAULT ''`,
-    `ALTER TABLE fixtures ADD COLUMN away_team_logo TEXT DEFAULT ''`,
-    `ALTER TABLE fixtures ADD COLUMN odds_home REAL`,
-    `ALTER TABLE fixtures ADD COLUMN odds_draw REAL`,
-    `ALTER TABLE fixtures ADD COLUMN odds_away REAL`,
-    `ALTER TABLE fixtures ADD COLUMN home_score INTEGER`,
-    `ALTER TABLE fixtures ADD COLUMN away_score INTEGER`,
-    `ALTER TABLE fixtures ADD COLUMN match_status TEXT DEFAULT 'NS'`,
-    `ALTER TABLE fixtures ADD COLUMN live_minute TEXT`,
+  const info = await db.execute(`PRAGMA table_info('fixtures')`);
+  const columns = new Set((info.rows || []).map((row) => row.name));
+  const defs = [
+    ['country_flag', `TEXT DEFAULT ''`],
+    ['home_team_logo', `TEXT DEFAULT ''`],
+    ['away_team_logo', `TEXT DEFAULT ''`],
+    ['odds_home', `REAL`],
+    ['odds_draw', `REAL`],
+    ['odds_away', `REAL`],
+    ['home_score', `INTEGER`],
+    ['away_score', `INTEGER`],
+    ['match_status', `TEXT DEFAULT 'NS'`],
+    ['live_minute', `TEXT`],
   ];
-  for (const sql of cols) { try { await db.execute(sql); } catch (_) {} }
+  for (const [name, def] of defs) {
+    if (!columns.has(name)) {
+      await db.execute(`ALTER TABLE fixtures ADD COLUMN ${name} ${def}`);
+    }
+  }
 }
 
 function getAllowedLeagueIds() {

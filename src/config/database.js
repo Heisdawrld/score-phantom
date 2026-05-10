@@ -258,14 +258,28 @@ async function runSchema() {
   // Auto-migrations for older tables using SQLite PRAGMA table_info
   async function addColumnIfNotExists(tableName, columnName, columnDef) {
     try {
-      const info = await db.execute(`PRAGMA table_info('${tableName}')`);
-      const exists = info.rows.some((c) => c.name === columnName);
+      await db.execute(`SELECT ${columnName} FROM ${tableName} LIMIT 0`);
+      const exists = true;
       if (!exists) {
         await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
         console.log(`✅ Added column ${columnName} to ${tableName}`);
       }
     } catch (e) {
+      const message = String(e?.message || '');
+      if (message.includes('no such column')) {
+        await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+        console.log(`✅ Added column ${columnName} to ${tableName}`);
+      }
       // Ignore if table doesn't exist yet
+    }
+  }
+
+  async function hasColumn(tableName, columnName) {
+    try {
+      await db.execute(`SELECT ${columnName} FROM ${tableName} LIMIT 0`);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -306,6 +320,35 @@ async function runSchema() {
 
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+
+  // Trial counts compatibility for older Turso snapshots:
+  // legacy shape was (user_id, date, count); current app expects (user_id, date_str, prediction_count)
+  await addColumnIfNotExists("trial_daily_counts", "date_str", "TEXT");
+  await addColumnIfNotExists("trial_daily_counts", "prediction_count", "INTEGER DEFAULT 0");
+
+  const hasLegacyDate = await hasColumn("trial_daily_counts", "date");
+  const hasLegacyCount = await hasColumn("trial_daily_counts", "count");
+  if (hasLegacyDate) {
+    await db.execute(`
+      UPDATE trial_daily_counts
+      SET date_str = COALESCE(NULLIF(date_str, ''), date)
+      WHERE date IS NOT NULL
+    `);
+  }
+  if (hasLegacyCount) {
+    await db.execute(`
+      UPDATE trial_daily_counts
+      SET prediction_count = CASE
+        WHEN count IS NOT NULL AND (prediction_count IS NULL OR prediction_count = 0) THEN count
+        ELSE COALESCE(prediction_count, 0)
+      END
+      WHERE count IS NOT NULL
+    `);
+  }
+  await db.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trial_daily_counts_user_date_str
+    ON trial_daily_counts(user_id, date_str)
+  `);
 
   console.log("✅ Database tables and migrations ready on Turso!");
 }

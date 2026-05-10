@@ -134,6 +134,50 @@ async function ensureDailyCountTable() {
         UNIQUE(user_id, date_str)
       )
     `);
+
+    async function hasColumn(columnName) {
+      try {
+        await db.execute(`SELECT ${columnName} FROM trial_daily_counts LIMIT 0`);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    const hasDateStr = await hasColumn('date_str');
+    const hasPredictionCount = await hasColumn('prediction_count');
+    const hasLegacyDate = await hasColumn('date');
+    const hasLegacyCount = await hasColumn('count');
+
+    if (!hasDateStr) {
+      await db.execute(`ALTER TABLE trial_daily_counts ADD COLUMN date_str TEXT`);
+    }
+    if (!hasPredictionCount) {
+      await db.execute(`ALTER TABLE trial_daily_counts ADD COLUMN prediction_count INTEGER DEFAULT 0`);
+    }
+
+    if (hasLegacyDate) {
+      await db.execute(`
+        UPDATE trial_daily_counts
+        SET date_str = COALESCE(NULLIF(date_str, ''), date)
+        WHERE date IS NOT NULL
+      `);
+    }
+    if (hasLegacyCount) {
+      await db.execute(`
+        UPDATE trial_daily_counts
+        SET prediction_count = CASE
+          WHEN count IS NOT NULL AND (prediction_count IS NULL OR prediction_count = 0) THEN count
+          ELSE COALESCE(prediction_count, 0)
+        END
+        WHERE count IS NOT NULL
+      `);
+    }
+
+    await db.execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_trial_daily_counts_user_date_str
+      ON trial_daily_counts(user_id, date_str)
+    `);
   } catch (err) {
     console.error("ensureDailyCountTable error:", err);
   }

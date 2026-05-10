@@ -1,5 +1,10 @@
 import db from '../config/database.js';
 
+async function getTableColumns(tableName) {
+  const result = await db.execute(`PRAGMA table_info('${tableName}')`);
+  return new Set((result.rows || []).map((row) => String(row.name || '').toLowerCase()));
+}
+
 async function runMaintenanceJobs() {
   console.log("🧹 Starting Scheduled Maintenance Jobs (Memory Pruner)...");
   
@@ -18,11 +23,11 @@ async function runMaintenanceJobs() {
 
     // JOB 2: Inactive Free User Cleanup
     console.log("Running Job 2: Cleaning up inactive free-trial users...");
-    // Identify users in trial_daily_counts who haven't logged in for 30+ days.
-    // Note: Depends on user schema (assuming users table exists if using custom auth or we track it via counts).
+    const trialColumns = await getTableColumns('trial_daily_counts');
+    const trialDateColumn = trialColumns.has('date_str') ? 'date_str' : 'date';
     const pruneUsersRes = await db.execute(`
       DELETE FROM trial_daily_counts 
-      WHERE date_str < date('now', '-30 days')
+      WHERE ${trialDateColumn} < date('now', '-30 days')
     `);
     console.log(`✅ Removed ${pruneUsersRes.rowsAffected} stale daily trial counts.`);
 
