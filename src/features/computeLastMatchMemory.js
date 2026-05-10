@@ -16,7 +16,12 @@ function parseMeta(match) {
   const raw = match?.meta || match?.metadata || match?.raw_json || null;
   if (!raw) return {};
   if (typeof raw === 'object') return raw || {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function getCardSignal(match, teamName, isHome) {
