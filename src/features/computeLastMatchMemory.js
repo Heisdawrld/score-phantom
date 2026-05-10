@@ -15,7 +15,7 @@ function fuzzyTeamMatch(a, b) {
 function parseMeta(match) {
   const raw = match?.meta || match?.metadata || match?.raw_json || null;
   if (!raw) return {};
-  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'object') return raw || {};
   try { return JSON.parse(raw); } catch { return {}; }
 }
 

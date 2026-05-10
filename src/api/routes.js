@@ -78,15 +78,24 @@ function needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h }) {
 
   const fixtureTs = new Date(fixture.match_date || '').getTime();
   const maxStalenessMs = 90 * 24 * 60 * 60 * 1000;
+  const refreshCooldownMs = 6 * 60 * 60 * 1000;
   const standings = Array.isArray(meta?.standings) ? meta.standings : [];
+  const recentRefreshTs = new Date(
+    meta?.dataFreshness?.coreMemoryRefreshedAt
+      || meta?.dataFreshness?.refreshedAt
+      || 0
+  ).getTime();
+  const refreshedRecently = Number.isFinite(recentRefreshTs) && recentRefreshTs > 0
+    && (Date.now() - recentRefreshTs) < refreshCooldownMs;
 
-  if (homeForm.length < 5 || awayForm.length < 5 || h2h.length < 5) return true;
-  if (standings.length < 2) return true;
+  if (homeForm.length < 5 || awayForm.length < 5) return !refreshedRecently;
+  if (h2h.length < 5) return !refreshedRecently;
+  if (standings.length < 2) return !refreshedRecently;
   if (!Number.isFinite(fixtureTs)) return false;
 
   const latestHome = getLatestHistoryDate(homeForm);
   const latestAway = getLatestHistoryDate(awayForm);
-  if (!latestHome || !latestAway) return true;
+  if (!latestHome || !latestAway) return !refreshedRecently;
 
   return (fixtureTs - latestHome.getTime()) > maxStalenessMs
     || (fixtureTs - latestAway.getTime()) > maxStalenessMs;
