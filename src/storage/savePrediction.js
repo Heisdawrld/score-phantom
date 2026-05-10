@@ -1,8 +1,24 @@
 import db from '../config/database.js';
 
 const MODEL_VERSION = '2.3.1';
+let predictionsTableReady = false;
+
+async function getTableColumns(tableName) {
+  const info = await db.execute(`PRAGMA table_info('${tableName}')`);
+  return new Set((info.rows || []).map((column) => String(column.name)));
+}
+
+async function addColumnIfMissing(tableName, columns, columnName, columnDef) {
+  if (columns.has(columnName)) return false;
+  await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+  columns.add(columnName);
+  console.log(`[PredictionsMigration] Added ${tableName}.${columnName}`);
+  return true;
+}
 
 export async function initPredictionsTable() {
+  if (predictionsTableReady) return;
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS predictions_v2 (
       fixture_id TEXT PRIMARY KEY,
@@ -42,32 +58,33 @@ export async function initPredictionsTable() {
     )
   `);
 
-  // Migrate existing table — add missing columns if they don't exist
+  const columns = await getTableColumns('predictions_v2');
   const migrations = [
-    `ALTER TABLE predictions_v2 ADD COLUMN script_primary TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN script_secondary TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN script_confidence REAL`,
-    `ALTER TABLE predictions_v2 ADD COLUMN explanation_text TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN no_safe_pick_reason TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN backup_picks_json TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN home_team TEXT`,
-    `ALTER TABLE predictions_v2 ADD COLUMN away_team TEXT`,
-    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_implied_probability REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_edge REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN best_pick_score REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN confidence_model TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN confidence_value TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN confidence_volatility TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN prediction_json TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN home_manager_tactics TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN away_manager_tactics TEXT",
-    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_home_prob REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_draw_prob REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN polymarket_away_prob REAL",
-    "ALTER TABLE predictions_v2 ADD COLUMN is_sharp_value INTEGER DEFAULT 0",
+    ['script_primary', 'TEXT'],
+    ['script_secondary', 'TEXT'],
+    ['script_confidence', 'REAL'],
+    ['explanation_text', 'TEXT'],
+    ['no_safe_pick_reason', 'TEXT'],
+    ['backup_picks_json', 'TEXT'],
+    ['home_team', 'TEXT'],
+    ['away_team', 'TEXT'],
+    ['best_pick_implied_probability', 'REAL'],
+    ['best_pick_edge', 'REAL'],
+    ['best_pick_score', 'REAL'],
+    ['confidence_model', 'TEXT'],
+    ['confidence_value', 'TEXT'],
+    ['confidence_volatility', 'TEXT'],
+    ['prediction_json', 'TEXT'],
+    ['home_manager_tactics', 'TEXT'],
+    ['away_manager_tactics', 'TEXT'],
+    ['polymarket_home_prob', 'REAL'],
+    ['polymarket_draw_prob', 'REAL'],
+    ['polymarket_away_prob', 'REAL'],
+    ['is_sharp_value', 'INTEGER DEFAULT 0'],
   ];
-  for (const sql of migrations) {
-    try { await db.execute(sql); } catch (_) { /* column already exists */ }
+
+  for (const [columnName, columnDef] of migrations) {
+    await addColumnIfMissing('predictions_v2', columns, columnName, columnDef);
   }
 
   // Ensure indexes exist for cache lookup performance
@@ -77,6 +94,8 @@ export async function initPredictionsTable() {
   for (const sql of indexes) {
     try { await db.execute(sql); } catch (_) { /* already exists */ }
   }
+
+  predictionsTableReady = true;
 }
 
 /**
