@@ -5,7 +5,7 @@ import { LeagueLogo } from "@/components/LeagueLogo";
 export function LeagueTab({ d }: any) {
   const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
   const fix = d?.fixture || {};
-  const leagueId = fix.bsd_league_id || fix.tournament_id || null;
+  const leagueId = fix.tournament_id || null;
 
   if (!st.length) return (
     <div className="text-center py-12 text-white/25">

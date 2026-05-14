@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ChevronRight, Lock, Sparkles } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { getOddsForPick } from "@/lib/utils";
 
 export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
   const [, setLocation] = useLocation();
@@ -36,25 +37,30 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
 
   if (!data?.found) return null;
 
-  const getOddsForSelection = (market: string, selection: string) => {
-    if (!data) return null;
-    if (market === "1x2") {
-      if (selection === "1") return data.odds_home;
-      if (selection === "X") return data.odds_draw;
-      if (selection === "2") return data.odds_away;
-    }
-    if (market === "over_under_25") {
-      if (selection === "OVER") return data.odds_over_25;
-      if (selection === "UNDER") return data.odds_under_25;
-    }
-    if (market === "btts") {
-      if (selection === "YES") return data.odds_btts_yes;
-      if (selection === "NO") return data.odds_btts_no;
-    }
-    return null;
+  // Build an odds object compatible with getOddsForPick from the flat value-bet response
+  const oddsObj = {
+    home: data.odds_home,
+    draw: data.odds_draw,
+    away: data.odds_away,
+    over_2_5: data.odds_over_25,
+    under_2_5: data.odds_under_25,
+    btts_yes: data.odds_btts_yes,
+    btts_no: data.odds_btts_no,
   };
-
-  const currentOdds = getOddsForSelection(data.best_pick_market, data.best_pick_selection);
+  const selectionLabel = data.best_pick_selection === "1" ? "Home Win"
+    : data.best_pick_selection === "2" ? "Away Win"
+    : data.best_pick_selection === "X" ? "Draw"
+    : data.best_pick_selection === "OVER" ? "Over 2.5"
+    : data.best_pick_selection === "UNDER" ? "Under 2.5"
+    : data.best_pick_selection === "YES" ? "BTTS Yes"
+    : data.best_pick_selection === "NO" ? "BTTS No"
+    : data.best_pick_selection;
+  const marketLabel = data.best_pick_market === "1x2" ? "match result"
+    : data.best_pick_market === "over_under_25" ? "over/under"
+    : data.best_pick_market === "btts" ? "btts"
+    : data.best_pick_market;
+  const oddsPick = getOddsForPick(oddsObj, selectionLabel || "", marketLabel || "");
+  const currentOdds = oddsPick?.value ?? null;
 
   return (
     <motion.div

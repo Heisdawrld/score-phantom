@@ -30,7 +30,7 @@ export function LeagueGroup({
   isPremium: boolean;
 }) {
   // Derive league_id from the first fixture if not passed explicitly
-  const leagueId = tournamentId || fixtures[0]?.bsd_league_id || fixtures[0]?.tournament_id || null;
+  const leagueId = tournamentId || fixtures[0]?.tournament_id || null;
   const storageKey = `league-expanded-${tournament}`;
   const [open, setOpen] = useState(() => {
     const saved = sessionStorage.getItem(storageKey);

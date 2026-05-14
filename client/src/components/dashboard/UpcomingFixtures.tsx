@@ -39,7 +39,7 @@ export function UpcomingFixtures({ fixtures, onSelect }: { fixtures: any[]; onSe
           const homeName = f.home_team_name || "Home";
           const awayName = f.away_team_name || "Away";
           const league = f.tournament_name || "Competition";
-          const leagueId = f.bsd_league_id || f.tournament_id || null;
+          const leagueId = f.tournament_id || null;
 
           return (
             <button

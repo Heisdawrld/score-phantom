@@ -904,8 +904,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         sql: `SELECT id FROM fixtures
               WHERE (match_date LIKE ? OR match_date LIKE ? OR match_date LIKE ?)
                 AND match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
-                AND enrichment_status IN ('deep', 'basic', 'limited')
-              ORDER BY CASE enrichment_status WHEN 'deep' THEN 1 WHEN 'basic' THEN 2 ELSE 3 END
+                AND enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
+              ORDER BY CASE enrichment_status WHEN 'deep' THEN 1 WHEN 'basic' THEN 2 WHEN 'limited' THEN 3 WHEN 'none' THEN 4 ELSE 5 END
               LIMIT 40`,
         args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
       });

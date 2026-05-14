@@ -305,6 +305,17 @@ export async function buildAcca(rows, mode = 'safe') {
   }
 
   if (selected.length < targetMin) {
+    // Check if all rows were filtered by no_safe_pick — give a specific message
+    const noSafePickCount = rows.filter(r => r.no_safe_pick).length;
+    const totalRows = rows.length;
+    let message;
+    if (totalRows > 0 && noSafePickCount === totalRows) {
+      message = `${totalRows} fixture(s) scanned but none had a safe enough pick for an ACCA. Model confidence is too low across the board — check back after more data enriches.`;
+    } else if (totalRows > 0 && noSafePickCount > 0 && candidates.length === 0) {
+      message = `${noSafePickCount} of ${totalRows} fixture(s) had no safe pick. The remaining fixtures didn't meet ACCA quality thresholds. ScorePhantom will not force filler selections.`;
+    } else {
+      message = `Only ${selected.length} ACCA-grade pick(s) found. ScorePhantom will not force filler selections.`;
+    }
     return {
       accaType: null,
       totalMatches: selected.length,
@@ -312,7 +323,9 @@ export async function buildAcca(rows, mode = 'safe') {
       riskLevel: null,
       picks: [],
       insights: buildInsights(selected, candidates, mode),
-      message: `Only ${selected.length} ACCA-grade pick(s) found. ScorePhantom will not force filler selections.`,
+      message,
+      noSafePickCount,
+      totalScanned: totalRows,
     };
   }
 

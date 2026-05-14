@@ -121,9 +121,9 @@ export default function MatchCenter() {
 
         {/* Tournament + time info */}
         <div className="flex items-center justify-center gap-1.5 mb-3">
-          {(fix.bsd_league_id || fix.tournament_id) && (
+          {fix.tournament_id && (
             <img
-              src={`https://sports.bzzoiro.com/img/league/${fix.bsd_league_id || fix.tournament_id}/`}
+              src={`https://sports.bzzoiro.com/img/league/${fix.tournament_id}/`}
               className="w-3.5 h-3.5 rounded-sm object-contain"
               onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
               alt={fix.tournament_name || ""}
