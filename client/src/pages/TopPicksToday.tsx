@@ -28,6 +28,7 @@ interface Pick {
   confidence: number;
   composite: number;
   tournament: string;
+  tournamentId?: string | number | null;
   time: string;
   enrichment?: string;
   dataQuality?: string;
@@ -288,7 +289,15 @@ export default function TopPicksToday() {
                           </div>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {pick.tournament && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-white/35 uppercase">
+                              <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-white/35 uppercase">
+                                {pick.tournamentId && (
+                                  <img
+                                    src={`https://sports.bzzoiro.com/img/league/${pick.tournamentId}/`}
+                                    className="w-3 h-3 rounded-sm object-contain"
+                                    onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
+                                    alt={pick.tournament}
+                                  />
+                                )}
                                 {pick.tournament}
                               </span>
                             )}

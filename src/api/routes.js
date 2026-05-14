@@ -1234,7 +1234,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
              p.best_pick_implied_probability, p.best_pick_edge,
              p.best_pick_score, p.confidence_model, p.confidence_volatility, p.is_sharp_value,
              p.explanation_json, p.backup_picks_json,
-             f.tournament_name, f.match_date, f.enrichment_status, f.data_quality,
+             f.tournament_name, f.tournament_id, f.match_date, f.enrichment_status, f.data_quality,
              f.home_team_logo, f.away_team_logo, f.match_status
       FROM predictions_v2 p
       JOIN fixtures f ON f.id = p.fixture_id
@@ -1356,6 +1356,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         confidence:  parseFloat(conf.toFixed(1)),
         composite:   parseFloat(composite.toFixed(1)),
         tournament:  row.tournament_name,
+        tournamentId: row.tournament_id,
         time:        row.match_date ? (()=>{ try{ const d=new Date(row.match_date); return d.toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Lagos'}); }catch(e){ return null; } })() : null,
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,

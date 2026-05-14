@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { TeamLogo } from "@/components/TeamLogo";
+import { LeagueLogo } from "@/components/LeagueLogo";
 import { cn } from "@/lib/utils";
 
 function toWAT(dateStr: string): string {
@@ -14,40 +15,22 @@ function toWAT(dateStr: string): string {
   }
 }
 
-function getCountryEmoji(countryName: string): string {
-  if (!countryName) return "🌍";
-  const lower = countryName.toLowerCase();
-  if (lower.includes("england") || lower.includes("premier")) return "🏴";
-  if (lower.includes("spain") || lower.includes("la liga")) return "🇪🇸";
-  if (lower.includes("italy") || lower.includes("serie a")) return "🇮🇹";
-  if (lower.includes("germany") || lower.includes("bundesliga")) return "🇩🇪";
-  if (lower.includes("france") || lower.includes("ligue 1")) return "🇫🇷";
-  if (lower.includes("netherlands") || lower.includes("eredivisie")) return "🇳🇱";
-  if (lower.includes("portugal") || lower.includes("primeira")) return "🇵🇹";
-  if (lower.includes("brazil")) return "🇧🇷";
-  if (lower.includes("argentina")) return "🇦🇷";
-  if (lower.includes("belgium")) return "🇧🇪";
-  if (lower.includes("turkey")) return "🇹🇷";
-  if (lower.includes("greece")) return "🇬🇷";
-  if (lower.includes("scotland")) return "🏴";
-  if (lower.includes("europe") || lower.includes("champions") || lower.includes("uefa")) return "🇪🇺";
-  if (lower.includes("world") || lower.includes("international")) return "🌍";
-  return "⚽";
-}
-
 export function LeagueGroup({
   tournament,
+  tournamentId,
   fixtures,
   onSelectFixture,
   defaultOpen = false,
 }: {
   tournament: string;
+  tournamentId?: string | number | null;
   fixtures: any[];
   onSelectFixture: (id: string) => void;
   defaultOpen: boolean;
   isPremium: boolean;
 }) {
-  const countryFlag = fixtures[0]?.category_name ? getCountryEmoji(fixtures[0].category_name) : "";
+  // Derive league_id from the first fixture if not passed explicitly
+  const leagueId = tournamentId || fixtures[0]?.bsd_league_id || fixtures[0]?.tournament_id || null;
   const storageKey = `league-expanded-${tournament}`;
   const [open, setOpen] = useState(() => {
     const saved = sessionStorage.getItem(storageKey);
@@ -73,7 +56,7 @@ export function LeagueGroup({
         onClick={handleToggle}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-sm leading-none shrink-0">{countryFlag}</span>
+          <LeagueLogo leagueId={leagueId} name={tournament} size="sm" />
           <h3 className="truncate text-[11px] font-bold uppercase tracking-wider text-white/50 group-hover:text-white/70 transition-colors">
             {tournament}
           </h3>
@@ -122,12 +105,12 @@ export function LeagueGroup({
                   {/* Teams */}
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
-                      <TeamLogo src={fixture.home_team_logo} name={fixture.home_team_name} size="sm" />
+                      <TeamLogo src={fixture.home_team_logo} name={fixture.home_team_name} teamId={fixture.home_team_id} size="sm" />
                       <span className="text-xs font-bold text-white truncate">{fixture.home_team_name}</span>
                       {hasScore && <span className="ml-auto text-sm font-black tabular-nums text-white">{fixture.home_score}</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <TeamLogo src={fixture.away_team_logo} name={fixture.away_team_name} size="sm" />
+                      <TeamLogo src={fixture.away_team_logo} name={fixture.away_team_name} teamId={fixture.away_team_id} size="sm" />
                       <span className="text-xs font-bold text-white/60 truncate">{fixture.away_team_name}</span>
                       {hasScore && <span className="ml-auto text-sm font-black tabular-nums text-white/60">{fixture.away_score}</span>}
                     </div>

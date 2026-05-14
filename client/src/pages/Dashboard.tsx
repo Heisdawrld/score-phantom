@@ -439,6 +439,7 @@ export default function Dashboard() {
               <LeagueGroup
                 key={groupId}
                 tournament={group.label}
+                tournamentId={groupId}
                 fixtures={group.fixtures}
                 onSelectFixture={handleSelectFixture}
                 defaultOpen={false}

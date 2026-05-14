@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { TeamLogo } from "@/components/TeamLogo";
+import { LeagueLogo } from "@/components/LeagueLogo";
 
 function toWAT(dateStr: string): string {
   try {
@@ -38,6 +39,7 @@ export function UpcomingFixtures({ fixtures, onSelect }: { fixtures: any[]; onSe
           const homeName = f.home_team_name || "Home";
           const awayName = f.away_team_name || "Away";
           const league = f.tournament_name || "Competition";
+          const leagueId = f.bsd_league_id || f.tournament_id || null;
 
           return (
             <button
@@ -52,17 +54,20 @@ export function UpcomingFixtures({ fixtures, onSelect }: { fixtures: any[]; onSe
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <TeamLogo src={f.home_team_logo} name={homeName} />
+                  <TeamLogo src={f.home_team_logo} name={homeName} teamId={f.home_team_id} />
                   <span className="text-sm font-black text-white truncate">{homeName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <TeamLogo src={f.away_team_logo} name={awayName} />
+                  <TeamLogo src={f.away_team_logo} name={awayName} teamId={f.away_team_id} />
                   <span className="text-sm font-black text-white/78 truncate">{awayName}</span>
                 </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-[10px] text-white/30 uppercase tracking-wider truncate">{league}</p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <LeagueLogo leagueId={leagueId} name={league} size="sm" />
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider truncate">{league}</p>
+                </div>
                 <span className="premium-chip text-primary border-primary/20 bg-primary/10">View</span>
               </div>
             </button>

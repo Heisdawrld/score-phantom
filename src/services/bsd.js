@@ -12,7 +12,8 @@
 
 const BSD_API_KEY = process.env.BSD_API_KEY || '';
 const BSD_BASE = process.env.BSD_BASE_URL || 'https://sports.bzzoiro.com/api/v2';
-const BSD_V1_BASE = 'https://sports.bzzoiro.com/api';
+// V1 base removed — all endpoints migrated to v2.
+// If a v1 endpoint is ever needed again, re-add: const BSD_V1_BASE = 'https://sports.bzzoiro.com/api';
 const IMG_BASE = 'https://sports.bzzoiro.com/img';
 
 const _cache = new Map();
@@ -520,9 +521,17 @@ export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamNa
 
 // ── Live scores ───────────────────────────────────────────────────────────────
 
+/**
+ * Fetch live matches using the dedicated /events/live/ endpoint.
+ * This endpoint returns a lightweight list of matches in their live window
+ * (from event_date − 5 min through ~10 min after final whistle).
+ * Cached in Redis with 30s TTL on the BSD side.
+ */
 export async function fetchLiveMatches() {
-  const events = await bsdFetchAll('/events/', { status: 'inprogress' }, { maxPages: 2 });
-  return attachLeagueObjects(events || []);
+  const data = await bsdFetch('/events/live/');
+  if (!data) return [];
+  const events = data.events || asArray(data) || [];
+  return attachLeagueObjects(events);
 }
 
 // ── Lineups / players / managers / referees / venues ─────────────────────────
@@ -603,9 +612,33 @@ function normalizePredictionRow(exact) {
   };
 }
 
+/**
+ * Fetch the BSD CatBoost ML prediction for a specific event.
+ * Uses the v2 /events/{id}/prediction/ endpoint (direct lookup, no pagination).
+ * Falls back to /predictions/?date_from=...&date_to=... if the direct endpoint returns 404.
+ */
 export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
-  if (!eventId || !matchDateIso) return null;
+  if (!eventId) return null;
 
+  // Primary: direct event prediction endpoint (v2)
+  const direct = await bsdFetch(`/events/${eventId}/prediction/`);
+  if (direct) {
+    const mkt = direct.markets || {};
+    const mr = mkt.match_result || {};
+    const eg = mkt.expected_goals || {};
+    const rec = direct.recommendations || {};
+    return {
+      prediction: mr.predicted === 'H' ? 'home_win' : mr.predicted === 'A' ? 'away_win' : mr.predicted === 'D' ? 'draw' : null,
+      homeWinProb: mr.prob_home != null ? mr.prob_home / 100 : null,
+      drawProb: mr.prob_draw != null ? mr.prob_draw / 100 : null,
+      awayWinProb: mr.prob_away != null ? mr.prob_away / 100 : null,
+      expectedHomeGoals: eg.home ?? null,
+      expectedAwayGoals: eg.away ?? null,
+    };
+  }
+
+  // Fallback: search predictions by date (for events without direct prediction)
+  if (!matchDateIso) return null;
   const date = String(matchDateIso).slice(0, 10);
   const limit = 50;
   let offset = 0;
@@ -616,13 +649,12 @@ export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
       date_to: date,
       limit,
       offset,
-    }, { base: BSD_V1_BASE });
+    });
 
     const rows = asArray(data);
     const exact = rows.find((r) => {
       const event = r.event || {};
-      return String(event.id ?? r.event) === String(eventId)
-        || String(event.api_id ?? '') === String(eventId);
+      return String(event.id ?? r.event) === String(eventId);
     });
 
     if (exact) return normalizePredictionRow(exact);
@@ -633,10 +665,19 @@ export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
   return null;
 }
 
+/**
+ * Fetch Polymarket prediction-market prices for a specific event.
+ * Uses the v2 /events/{id}/polymarket/ endpoint.
+ */
 export async function fetchPolymarketOdds(eventId) {
   if (!eventId) return null;
-  const data = await bsdFetch('/odds/polymarket/', { event: eventId }, { base: BSD_V1_BASE });
-  return asArray(data)[0] || null;
+  const data = await bsdFetch(`/events/${eventId}/polymarket/`);
+  if (!data) return null;
+  // v2 returns the polymarket object directly (not paginated)
+  if (data.prices || data.odds) return data;
+  // Fallback: if it's somehow an array, return first item
+  if (Array.isArray(data)) return data[0] || null;
+  return data;
 }
 
 // ── Data normalisation helpers ────────────────────────────────────────────────

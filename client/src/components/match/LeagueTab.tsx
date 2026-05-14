@@ -1,9 +1,11 @@
 import { Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LeagueLogo } from "@/components/LeagueLogo";
 
 export function LeagueTab({ d }: any) {
   const st = Array.isArray(d?.standings) && d.standings.length ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
   const fix = d?.fixture || {};
+  const leagueId = fix.bsd_league_id || fix.tournament_id || null;
 
   if (!st.length) return (
     <div className="text-center py-12 text-white/25">
@@ -23,7 +25,8 @@ export function LeagueTab({ d }: any) {
           <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
         </div>
         <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <LeagueLogo leagueId={leagueId} name={fix.tournament_name || "League"} size="sm" />
           {fix.tournament_name || "League"} Table
         </p>
         {/* Table header */}

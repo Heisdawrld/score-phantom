@@ -533,7 +533,7 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     try {
       const bsdKey = process.env.BSD_API_KEY || "";
       if (!bsdKey) { checks.bsd_api = "no_key"; } else {
-        const r = await fetch(`https://sports.bzzoiro.com/api/leagues/`, {
+        const r = await fetch(`https://sports.bzzoiro.com/api/v2/leagues/?limit=1`, {
           headers: { Authorization: `Token ${bsdKey}` }
         });
         checks.bsd_api = r.ok ? "ok" : ("error:" + r.status);
@@ -807,12 +807,12 @@ router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => 
     const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
     let apiRaw=null,apiError=null;
     try {
-        const r = await fetch(`https://sports.bzzoiro.com/api/events/?date_from=${date}&date_to=${date}`, {
+        const r = await fetch(`https://sports.bzzoiro.com/api/v2/events/?date_from=${date}&date_to=${date}&limit=5`, {
           headers: { Authorization: `Token ${bsdKey}` }
         });
         if (r.ok) {
           const data = await r.json();
-          apiRaw={success:r.ok, fixtureCount:(data.events||data||[]).length, sample:(data.events||data||[]).slice(0,2)}; 
+          apiRaw={success:r.ok, fixtureCount:(data.results||data.events||[]).length, sample:(data.results||data.events||[]).slice(0,2)}; 
         } else {
           apiRaw={success:false, status:r.status};
         }

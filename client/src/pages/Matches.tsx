@@ -92,9 +92,12 @@ export default function Matches() {
           return (
             <div key={tourneyId} className="mb-1">
               <div className="flex items-center gap-2 px-1 mb-1.5">
-                {flag
-                  ? <img src={flag} className="w-4 h-4 rounded-sm object-contain" onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}/>
-                  : <span className="text-sm">🏆</span>}
+                <img
+                  src={`https://sports.bzzoiro.com/img/league/${tourneyId}/`}
+                  className="w-4 h-4 rounded-sm object-contain"
+                  onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
+                  alt={leagueName}
+                />
                 <span className="text-[11px] font-black text-white/50 uppercase tracking-wider truncate">{leagueName}</span>
               </div>
               <div className="flex flex-col gap-1.5">
