@@ -177,6 +177,11 @@ app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
 });
 
+// Serve standalone admin page (engine room)
+app.get("/admin.html", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "admin.html"));
+});
+
 // SPA fallback — serve index.html for all non-API routes
   app.get("*", (req, res) => {
     // Stop the server from trying to serve index.html as a fallback for missing Vite chunks or API calls.
