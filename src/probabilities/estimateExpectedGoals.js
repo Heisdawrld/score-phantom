@@ -1,19 +1,28 @@
 import { safeNum, clamp } from "../utils/math.js";
 import { computeFormDerivedBoosts } from "./computeFormDerivedBoosts.js";
 
-const LEAGUE_AVG = 1.35;
+// ── League-aware defaults (overridden by feature vector league context) ──────
+// These are ONLY used as fallbacks when no league-specific data is available.
+const GLOBAL_LEAGUE_AVG = 1.35;
 const HOME_ADV = 1.10;
 
 function computeBaseXg(fv) {
+  // Use league-specific average goals per team — THIS IS THE KEY FIX.
+  // Previously hardcoded at 1.35, which underestimated xG for high-scoring
+  // leagues (Swiss SL ~1.50, Eredivisie ~1.55, Bundesliga ~1.57) and
+  // overestimated for low-scoring leagues (Serie A ~1.30, Ligue 1 ~1.33).
+  const LEAGUE_AVG = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_LEAGUE_AVG);
+  const homeAdv = fv.isNeutralGround ? 1.0 : HOME_ADV;
+
   const hAS = safeNum(fv.homeAvgScored, LEAGUE_AVG), aAS = safeNum(fv.awayAvgScored, LEAGUE_AVG*0.9);
   const hAC = safeNum(fv.homeAvgConceded, LEAGUE_AVG), aAC = safeNum(fv.awayAvgConceded, LEAGUE_AVG);
   const hAtk = clamp(hAS/LEAGUE_AVG,0.3,2.2), aAtk = clamp(aAS/LEAGUE_AVG,0.3,2.2);
   const hDef = clamp(hAC/LEAGUE_AVG,0.3,1.8), aDef = clamp(aAC/LEAGUE_AVG,0.3,1.8);
-  const homeAdv = fv.isNeutralGround ? 1.0 : HOME_ADV;
   return { homeXg: hAtk*aDef*LEAGUE_AVG*homeAdv, awayXg: aAtk*hDef*LEAGUE_AVG };
 }
 
 function applyThinDataRegression(homeXg, awayXg, fv) {
+  const LEAGUE_AVG = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_LEAGUE_AVG);
   const min = Math.min(safeNum(fv.homeMatchesAvailable,5), safeNum(fv.awayMatchesAvailable,5));
   if (min < 3) return { homeXg: homeXg*0.5+LEAGUE_AVG*HOME_ADV*0.5, awayXg: awayXg*0.5+LEAGUE_AVG*0.5 };
   if (min < 5) return { homeXg: homeXg*0.75+LEAGUE_AVG*HOME_ADV*0.25, awayXg: awayXg*0.75+LEAGUE_AVG*0.25 };
@@ -28,6 +37,7 @@ function applyVenueAnchoring(homeXg, awayXg, fv) {
 }
 
 function applyScriptAdjustments(homeXg, awayXg, script, fv) {
+  const LEAGUE_AVG = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_LEAGUE_AVG);
   const p = script.primary||"";
   if (p==="open_end_to_end") { homeXg += 0.25; awayXg += 0.25; }
   else if (p==="tight_low_event") { homeXg-=0.15; awayXg-=0.15; }
@@ -66,6 +76,89 @@ function applyOddsAnchor(homeXg, awayXg, fv) {
   const scale = clamp(blended/Math.max(0.5,engTotal), 0.78, 1.25);
   console.log("[xG] L3 odds anchor over25="+impl.toFixed(2)+" implied="+implTotal.toFixed(2)+" blended="+blended.toFixed(2)+" scale="+scale.toFixed(2));
   return { homeXg: homeXg*scale, awayXg: awayXg*scale };
+}
+
+/**
+ * NEW: Blend H2H average goals into the xG estimate.
+ *
+ * H2H data was previously computed but never used in xG estimation.
+ * This is critical because some fixtures have high-scoring H2H histories
+ * (e.g., Sion vs Lugano averages 3.2 goals) that form data alone misses.
+ *
+ * Strategy: If we have 3+ H2H matches, blend H2H total with current total
+ * using a weight that depends on how many H2H matches we have.
+ * - 3-4 H2H matches: 15% weight (limited data, form still dominates)
+ * - 5-6 H2H matches: 22% weight (moderate evidence)
+ * - 7+ H2H matches:  28% weight (strong H2H signal)
+ *
+ * The H2H total is split proportionally between home and away xG.
+ */
+function applyH2HBlend(homeXg, awayXg, fv) {
+  const h2hAvg = safeNum(fv.h2hAvgGoals, null);
+  const h2hCount = safeNum(fv.h2hMatchesAvailable, 0);
+
+  if (h2hAvg == null || h2hCount < 3) return { homeXg, awayXg };
+
+  // Weight based on sample size
+  let h2hWeight;
+  if (h2hCount >= 7) h2hWeight = 0.28;
+  else if (h2hCount >= 5) h2hWeight = 0.22;
+  else h2hWeight = 0.15;
+
+  const currentTotal = homeXg + awayXg;
+  const h2hTotal = h2hAvg;
+
+  // Blend totals
+  const blendedTotal = currentTotal * (1 - h2hWeight) + h2hTotal * h2hWeight;
+
+  // Split proportionally between home/away (maintain the home/away ratio from form)
+  const homeShare = currentTotal > 0 ? homeXg / currentTotal : 0.55;
+  const newHomeXg = blendedTotal * homeShare;
+  const newAwayXg = blendedTotal * (1 - homeShare);
+
+  console.log(`[xG] H2H blend: ${h2hCount} matches, avg=${h2hAvg.toFixed(2)}, weight=${(h2hWeight*100).toFixed(0)}%, total ${currentTotal.toFixed(2)}→${blendedTotal.toFixed(2)}`);
+
+  return { homeXg: newHomeXg, awayXg: newAwayXg };
+}
+
+/**
+ * NEW: League Over/Under rate adjustment.
+ *
+ * Even after using league-specific xG, the Poisson model can still produce
+ * misaligned probabilities if the league has unusual goal distributions.
+ * This adjustment nudges total xG based on the league's actual Over 3.5 rate:
+ *
+ * - If league Over 3.5 rate > 35%: xG total gets a small boost (+1-6%)
+ * - If league Over 3.5 rate < 25%: xG total gets a small reduction (-1-4%)
+ *
+ * This ensures that leagues known for high-scoring games (Swiss SL, Eredivisie)
+ * get xG estimates that reflect their actual goal distribution, not just the
+ * average goals per team.
+ */
+function applyLeagueGoalRateAdjustment(homeXg, awayXg, fv) {
+  const leagueOver35Rate = safeNum(fv.leagueOver35Rate, 0.30);
+  const leagueOver25Rate = safeNum(fv.leagueOver25Rate, 0.50);
+
+  // Calculate adjustment based on how far the league deviates from "typical"
+  // Typical league: O3.5 ≈ 30%, O2.5 ≈ 50%
+  const over35Deviation = leagueOver35Rate - 0.30;
+  const over25Deviation = leagueOver25Rate - 0.50;
+
+  // Weighted combination (O3.5 deviation matters more for xG calibration)
+  const totalDeviation = (over35Deviation * 0.65) + (over25Deviation * 0.35);
+
+  // Scale the deviation into a multiplier (max ±6%)
+  const multiplier = 1 + clamp(totalDeviation * 0.30, -0.06, 0.06);
+
+  if (Math.abs(multiplier - 1.0) >= 0.005) {
+    const totalBefore = homeXg + awayXg;
+    homeXg *= multiplier;
+    awayXg *= multiplier;
+    const totalAfter = homeXg + awayXg;
+    console.log(`[xG] League goal rate adjustment: O3.5=${(leagueOver35Rate*100).toFixed(0)}% O2.5=${(leagueOver25Rate*100).toFixed(0)}% mult=${multiplier.toFixed(3)} total ${totalBefore.toFixed(2)}→${totalAfter.toFixed(2)}`);
+  }
+
+  return { homeXg, awayXg };
 }
 
 function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
@@ -281,8 +374,19 @@ function applyBsdContextAdjustments(homeXg, awayXg, fv) {
   return { homeXg: h, awayXg: a };
 }
 
+/**
+ * xG capping — raised from 4.5 to 5.5 total.
+ *
+ * Previously capped at 4.5, which prevented the model from expressing
+ * high-scoring expectations (e.g., Swiss SL shootouts, Eredivisie matches).
+ * A 4.5 cap means the model can never predict more than ~65% Over 3.5,
+ * which systematically biased UNDER predictions for high-scoring leagues.
+ *
+ * New cap of 5.5 allows the model to express "this could be a shootout"
+ * while still preventing extreme values from noisy data.
+ */
 function capXg(homeXg, awayXg, baseHome, baseAway) {
-  const cap = (h,a) => { h=clamp(h,0.2,2.5); a=clamp(a,0.2,2.5); const t=h+a; if(t>4.5){const s=4.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;} if(t<0.8){const s=0.8/t;a*=s;} return {h,a}; };
+  const cap = (h,a) => { h=clamp(h,0.2,2.8); a=clamp(a,0.2,2.8); const t=h+a; if(t>5.5){const s=5.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;} if(t<0.8){const s=0.8/t;a*=s;} return {h,a}; };
   const {h:fh,a:fa}=cap(homeXg,awayXg), {h:bh,a:ba}=cap(baseHome,baseAway);
   return { homeExpectedGoals:parseFloat(fh.toFixed(3)), awayExpectedGoals:parseFloat(fa.toFixed(3)), totalExpectedGoals:parseFloat((fh+fa).toFixed(3)), baseHomeXg:parseFloat(bh.toFixed(3)), baseAwayXg:parseFloat(ba.toFixed(3)) };
 }
@@ -295,6 +399,8 @@ export function estimateExpectedGoals(fv, script) {
   const baseHomeXg = homeXg, baseAwayXg = awayXg;
   ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applyH2HBlend(homeXg, awayXg, fv));             // NEW: wire H2H data
+  ({ homeXg, awayXg } = applyLeagueGoalRateAdjustment(homeXg, awayXg, fv)); // NEW: league O3.5 rate
   ({ homeXg, awayXg } = applyAdvancedTacticalAI(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdIntelligenceAdjustments(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyDeepBsdSignals(homeXg, awayXg, fv));

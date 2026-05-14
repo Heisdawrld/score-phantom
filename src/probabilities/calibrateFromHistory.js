@@ -9,11 +9,12 @@
  * This is NOT capping or shrinking — it's Bayesian updating with observed data.
  *
  * Design principles:
- * 1. Conservative: only adjusts when we have sufficient samples (50+)
+ * 1. Conservative: only adjusts when we have sufficient samples (30+)
  * 2. Gradual: maximum 25% regression toward observed rates
  * 3. Direction-preserving: never flips the direction of a signal
  * 4. Market-specific: different markets get different adjustments
  * 5. Odds-band aware: a 1.50 pick has different accuracy than a 2.50 pick
+ * 6. League-aware: league-market data directly adjusts probabilities
  */
 
 import { getProbabilityAdjustmentFactor, getOddsBandAccuracy } from '../storage/accuracyCache.js';
@@ -21,6 +22,9 @@ import { clamp } from '../utils/math.js';
 
 // Minimum samples before we trust the adjustment enough to apply it
 const MIN_SAMPLES_FOR_ADJUSTMENT = 30;
+
+// Minimum samples for league-market calibration
+const LEAGUE_MIN_SAMPLES = 15;
 
 // Maximum regression toward observed rate (0.25 = pull 25% of the way from model to reality)
 const MAX_REGRESSION = 0.25;
@@ -30,18 +34,37 @@ const ODDS_BAND_WEIGHT = 0.60;
 const MARKET_WEIGHT = 0.40;
 
 /**
+ * Get league-specific win rate for a market.
+ * Returns { winRate, samples } or null if insufficient data.
+ */
+function getLeagueMarketWinRate(leagueId, tournamentName, marketKey, cache) {
+  if (!cache || !marketKey) return null;
+  const byLeagueMarket = cache.byLeagueMarket || {};
+  const normalizeLeagueKey = (v) => v ? String(v).trim().toLowerCase() : null;
+  const keys = [normalizeLeagueKey(leagueId), normalizeLeagueKey(tournamentName)].filter(Boolean);
+  for (const leagueKey of keys) {
+    const entry = byLeagueMarket[`${leagueKey}::${marketKey}`];
+    if (entry && entry.samples >= LEAGUE_MIN_SAMPLES) {
+      return { winRate: entry.weightedWinRate || entry.winRate, samples: entry.samples };
+    }
+  }
+  return null;
+}
+
+/**
  * Calibrate probabilities based on historical accuracy data.
  *
  * For each market probability, checks:
  * 1. General market win rate (e.g., "over_25 historically wins 58% of the time")
  * 2. Odds-band win rate (e.g., "over_25 at odds 1.70-2.00 wins 53% of the time")
+ * 3. League-market win rate (e.g., "under_35 in Swiss SL wins 55% of the time")
  *
  * If the model probability diverges significantly from observed reality,
  * the probability is regressed toward the observed rate.
  *
  * @param {object} calibratedProbs - output of calibrateProbabilities()
  * @param {object} accuracyCache - from getAccuracyCache()
- * @param {object} options - { odds (decimal odds per market), scriptPrimary }
+ * @param {object} options - { odds, scriptPrimary, leagueId, tournamentName }
  * @returns {object} adjusted probabilities
  */
 export function calibrateFromHistory(calibratedProbs, accuracyCache, options = {}) {
@@ -50,6 +73,8 @@ export function calibrateFromHistory(calibratedProbs, accuracyCache, options = {
   const adjusted = { ...calibratedProbs };
   const odds = options.odds || {};
   const scriptPrimary = options.scriptPrimary || null;
+  const leagueId = options.leagueId || null;
+  const tournamentName = options.tournamentName || null;
 
   const debugLog = [];
 
@@ -99,25 +124,50 @@ export function calibrateFromHistory(calibratedProbs, accuracyCache, options = {
       oddsBandRegression = Math.min(MAX_REGRESSION, 0.25 * Math.min(1, oddsBandData.samples / 80));
     }
 
-    // ── Step 3: Blend targets ──────────────────────────────────────────────
+    // ── Step 3: League-market calibration ────────────────────────────────────
+    // Use league-specific win rates for probability regression.
+    // If the engine has lost 60% of its Swiss Super League Under 3.5 picks,
+    // that knowledge should directly reduce the Under 3.5 probability.
+    // Previously, league-market data was only used for scoring (6% weight),
+    // not for probability adjustment.
+    let leagueTarget = null;
+    let leagueRegression = 0;
+    const leagueEntry = getLeagueMarketWinRate(leagueId, tournamentName, marketKey, accuracyCache);
+    if (leagueEntry && leagueEntry.samples >= LEAGUE_MIN_SAMPLES) {
+      leagueTarget = leagueEntry.winRate;
+      leagueRegression = Math.min(MAX_REGRESSION, 0.20 * Math.min(1, leagueEntry.samples / 60));
+    }
+
+    // ── Step 4: Blend targets ──────────────────────────────────────────────
     let finalTarget = null;
     let finalRegression = 0;
 
-    if (marketTarget != null && oddsBandTarget != null) {
-      // Weighted blend: odds-band is more specific, give it more weight
+    if (marketTarget != null && oddsBandTarget != null && leagueTarget != null) {
+      // Three-way blend: market (30%) + odds-band (40%) + league-market (30%)
+      finalTarget = (0.30 * marketTarget) + (0.40 * oddsBandTarget) + (0.30 * leagueTarget);
+      finalRegression = (0.30 * marketRegression) + (0.40 * oddsBandRegression) + (0.30 * leagueRegression);
+    } else if (marketTarget != null && oddsBandTarget != null) {
+      // Two-way blend: market (40%) + odds-band (60%)
       finalTarget = (MARKET_WEIGHT * marketTarget) + (ODDS_BAND_WEIGHT * oddsBandTarget);
       finalRegression = (MARKET_WEIGHT * marketRegression) + (ODDS_BAND_WEIGHT * oddsBandRegression);
+    } else if (marketTarget != null && leagueTarget != null) {
+      // Market + league blend
+      finalTarget = (0.50 * marketTarget) + (0.50 * leagueTarget);
+      finalRegression = (0.50 * marketRegression) + (0.50 * leagueRegression);
     } else if (oddsBandTarget != null) {
       finalTarget = oddsBandTarget;
       finalRegression = oddsBandRegression;
     } else if (marketTarget != null) {
       finalTarget = marketTarget;
       finalRegression = marketRegression;
+    } else if (leagueTarget != null) {
+      finalTarget = leagueTarget;
+      finalRegression = leagueRegression;
     }
 
     if (finalTarget == null || finalRegression <= 0) continue;
 
-    // ── Step 4: Apply regression toward reality ────────────────────────────
+    // ── Step 5: Apply regression toward reality ────────────────────────────
     // Only adjust if the model is significantly different from reality
     const divergence = modelProb - finalTarget;
     const absDivergence = Math.abs(divergence);
@@ -136,7 +186,8 @@ export function calibrateFromHistory(calibratedProbs, accuracyCache, options = {
     adjusted[probKey] = parseFloat(clamp(cappedAdjustment, 0.01, 0.99).toFixed(4));
 
     if (absDivergence > 0.10) {
-      debugLog.push(`${probKey}: ${(modelProb*100).toFixed(1)}% → ${(adjusted[probKey]*100).toFixed(1)}% (observed: ${(finalTarget*100).toFixed(1)}%, regression: ${(finalRegression*100).toFixed(0)}%)`);
+      const source = leagueTarget != null ? 'league+' : '';
+      debugLog.push(`${probKey}: ${(modelProb*100).toFixed(1)}% → ${(adjusted[probKey]*100).toFixed(1)}% (${source}observed: ${(finalTarget*100).toFixed(1)}%, regression: ${(finalRegression*100).toFixed(0)}%)`);
     }
   }
 

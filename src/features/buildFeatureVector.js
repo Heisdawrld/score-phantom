@@ -29,6 +29,7 @@ import { computeContextFeatures } from './computeContextFeatures.js';
 import { computeVolatilityFeatures } from './computeVolatilityFeatures.js';
 import { computeMarketFeatures } from './computeMarketFeatures.js';
 import { computeBsdIntelligenceFeatures } from './computeBsdIntelligenceFeatures.js';
+import { computeLeagueContext } from './computeLeagueContext.js';
 import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
 async function getMatches(fixtureId, type) {
@@ -244,6 +245,12 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     playerStats,
   });
 
+  // League-specific context: replaces hardcoded global averages with real league stats
+  const leagueContext = computeLeagueContext(standings, homeProfile, awayProfile);
+  if (leagueContext._source !== 'global_defaults') {
+    console.log(`[LeagueContext] ${fixtureContext?.tournament_name || 'unknown'}: avgGPG=${leagueContext.leagueAvgGoalsPerGame} BTTS=${(leagueContext.leagueBttsRate*100).toFixed(0)}% O2.5=${(leagueContext.leagueOver25Rate*100).toFixed(0)}% O3.5=${(leagueContext.leagueOver35Rate*100).toFixed(0)}% source=${leagueContext._source}`);
+  }
+
   const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
   const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
 
@@ -322,6 +329,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     awayProfileFeatures,
     lineupFeatures,
     bsdIntelligenceFeatures,
+    leagueContext,
     injuryFeatures,
     bsdLineupFeatures,
     enrichmentCompleteness: completeness,

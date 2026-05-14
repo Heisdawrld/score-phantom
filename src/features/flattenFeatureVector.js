@@ -24,6 +24,7 @@ function flattenFeatureVector(fv) {
   const metadataInsights = fv.metadataInsights || {};
   const bsdHomeFormStats = fv.bsdHomeFormStats || {};
   const bsdAwayFormStats = fv.bsdAwayFormStats || {};
+  const lc = fv.leagueContext || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -263,6 +264,17 @@ function flattenFeatureVector(fv) {
     refereeYellowCards: yellowCards,
     refereeRedCards: redCards,
     refereeStrictness: deepStrictness != null ? deepStrictness : clamp(((yellowCards ?? 4) / 6) + ((redCards ?? 0.2) * 0.7), 0, 1),
+
+       // ── League-specific context (replaces hardcoded global averages) ────────
+    leagueAvgGoalsPerTeam:  safeNum(lc.leagueAvgGoalsPerTeam, 1.35),
+    leagueAvgGoalsPerGame:  safeNum(lc.leagueAvgGoalsPerGame, 2.70),
+    leagueBttsRate:         safeNum(lc.leagueBttsRate, 0.46),
+    leagueCleanSheetRate:   safeNum(lc.leagueCleanSheetRate, 0.28),
+    leagueOver25Rate:       safeNum(lc.leagueOver25Rate, 0.50),
+    leagueOver35Rate:       safeNum(lc.leagueOver35Rate, 0.30),
+    leagueScoreSuccessRate: safeNum(lc.leagueScoreSuccessRate, 0.70),
+    leagueContextSource:    lc._source || 'global_defaults',
+    h2hOver35Rate:          safeNum(h2h.over_3_5_rate, null),
   };
 }
 

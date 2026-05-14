@@ -30,9 +30,12 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
   const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds);
 
   // L2: Historical accuracy calibration (regress toward observed reality)
+  // Now includes leagueId and tournamentName for league-market probability regression
   const historyCalibratedProbs = calibrateFromHistory(calibratedProbs, accuracyCache, {
     odds: features.advancedOdds || features.marketOdds || {},
     scriptPrimary: script?.primary || null,
+    leagueId: features.leagueId || null,
+    tournamentName: features.tournamentName || null,
   });
 
   return { xg, rawProbs, baseProbs, calibratedProbs: historyCalibratedProbs, scoreMatrix, shiftMap, maxShift, maxShiftMarket };

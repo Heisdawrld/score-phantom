@@ -1,10 +1,13 @@
-import { clamp } from '../utils/math.js';
+import { clamp, safeNum } from '../utils/math.js';
 
-const LEAGUE_AVG_GOALS_SCORED   = 1.25;
-const LEAGUE_AVG_GOALS_CONCEDED = 1.25;
-const LEAGUE_BTTS_RATE          = 0.46;
-const LEAGUE_CLEAN_SHEET_RATE   = 0.28;
-const LEAGUE_SCORE_SUCCESS_RATE = 0.70;
+// Global defaults — used ONLY as fallback when no league-specific data is available.
+// These were previously hardcoded constants, causing miscalibration for high/low
+// scoring leagues. Now the actual values come from fv.leagueAvgGoalsPerTeam etc.
+const GLOBAL_AVG_GOALS_SCORED   = 1.25;
+const GLOBAL_AVG_GOALS_CONCEDED = 1.25;
+const GLOBAL_BTTS_RATE          = 0.46;
+const GLOBAL_CLEAN_SHEET_RATE   = 0.28;
+const GLOBAL_SCORE_SUCCESS_RATE = 0.70;
 
 function boostContrib(value, baseline, scale, maxEffect) {
   if (value == null || baseline === 0) return 0;
@@ -65,10 +68,17 @@ export function computeFormDerivedBoosts(fv) {
   const homeQScale = qualityScale(dataCompletenessScore, homeMatchesAvailable);
   const awayQScale = qualityScale(dataCompletenessScore, awayMatchesAvailable);
 
-  const homeGoalsScoredBoost = boostContrib(homeAvgScored, LEAGUE_AVG_GOALS_SCORED, 0.35, 0.12);
+  // Use league-specific baselines from feature vector instead of hardcoded constants
+  const LAG_SCORED = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_AVG_GOALS_SCORED);
+  const LAG_CONCEDED = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_AVG_GOALS_CONCEDED);
+  const L_BTTS = safeNum(fv.leagueBttsRate, GLOBAL_BTTS_RATE);
+  const L_CS = safeNum(fv.leagueCleanSheetRate, GLOBAL_CLEAN_SHEET_RATE);
+  const L_SCORE_OK = safeNum(fv.leagueScoreSuccessRate, GLOBAL_SCORE_SUCCESS_RATE);
+
+  const homeGoalsScoredBoost = boostContrib(homeAvgScored, LAG_SCORED, 0.35, 0.12);
   const homeScoreSuccessRate = homeFailedToScoreRate != null ? 1 - homeFailedToScoreRate : null;
-  const homeConsistencyBoost = boostContrib(homeScoreSuccessRate, LEAGUE_SCORE_SUCCESS_RATE, 0.28, 0.08);
-  const homeBttsSignal = boostContrib(homeProfileBttsRate ?? homeBttsRate, LEAGUE_BTTS_RATE, 0.22, 0.07);
+  const homeConsistencyBoost = boostContrib(homeScoreSuccessRate, L_SCORE_OK, 0.28, 0.08);
+  const homeBttsSignal = boostContrib(homeProfileBttsRate ?? homeBttsRate, L_BTTS, 0.22, 0.07);
   const homeLuckDiff = homeAvgXgFor != null && homeAvgScored != null ? homeAvgScored - homeAvgXgFor : 0;
   const homeLuckRegression = boostContrib(homeLuckDiff, 1.0, -0.40, 0.10);
 
@@ -77,10 +87,10 @@ export function computeFormDerivedBoosts(fv) {
     homeAttackBoost = clamp(homeGoalsScoredBoost + homeConsistencyBoost + homeBttsSignal + homeLuckRegression, -0.20, 0.20) * homeQScale;
   }
 
-  const awayGoalsScoredBoost = boostContrib(awayAvgScored, LEAGUE_AVG_GOALS_SCORED, 0.35, 0.12);
+  const awayGoalsScoredBoost = boostContrib(awayAvgScored, LAG_SCORED, 0.35, 0.12);
   const awayScoreSuccessRate = awayFailedToScoreRate != null ? 1 - awayFailedToScoreRate : null;
-  const awayConsistencyBoost = boostContrib(awayScoreSuccessRate, LEAGUE_SCORE_SUCCESS_RATE, 0.28, 0.08);
-  const awayBttsSignal = boostContrib(awayProfileBttsRate ?? awayBttsRate, LEAGUE_BTTS_RATE, 0.22, 0.07);
+  const awayConsistencyBoost = boostContrib(awayScoreSuccessRate, L_SCORE_OK, 0.28, 0.08);
+  const awayBttsSignal = boostContrib(awayProfileBttsRate ?? awayBttsRate, L_BTTS, 0.22, 0.07);
   const awayLuckDiff = awayAvgXgFor != null && awayAvgScored != null ? awayAvgScored - awayAvgXgFor : 0;
   const awayLuckRegression = boostContrib(awayLuckDiff, 1.0, -0.40, 0.10);
 
@@ -91,15 +101,15 @@ export function computeFormDerivedBoosts(fv) {
 
   let homeDefLeaky = 0;
   if (homeQScale > 0) {
-    const homeLeakyRaw = boostContrib(homeAvgConceded, LEAGUE_AVG_GOALS_CONCEDED, 0.30, 0.10);
-    const homeCsSignal = boostContrib(homeProfileCleanSheetRate, LEAGUE_CLEAN_SHEET_RATE, -0.25, 0.07);
+    const homeLeakyRaw = boostContrib(homeAvgConceded, LAG_CONCEDED, 0.30, 0.10);
+    const homeCsSignal = boostContrib(homeProfileCleanSheetRate, L_CS, -0.25, 0.07);
     homeDefLeaky = clamp(homeLeakyRaw + homeCsSignal, -0.15, 0.15) * homeQScale;
   }
 
   let awayDefLeaky = 0;
   if (awayQScale > 0) {
-    const awayLeakyRaw = boostContrib(awayAvgConceded, LEAGUE_AVG_GOALS_CONCEDED, 0.30, 0.10);
-    const awayCsSignal = boostContrib(awayProfileCleanSheetRate, LEAGUE_CLEAN_SHEET_RATE, -0.25, 0.07);
+    const awayLeakyRaw = boostContrib(awayAvgConceded, LAG_CONCEDED, 0.30, 0.10);
+    const awayCsSignal = boostContrib(awayProfileCleanSheetRate, L_CS, -0.25, 0.07);
     awayDefLeaky = clamp(awayLeakyRaw + awayCsSignal, -0.15, 0.15) * awayQScale;
   }
 

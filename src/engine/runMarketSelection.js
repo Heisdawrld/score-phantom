@@ -79,6 +79,7 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
     scriptPrimary: script?.primary,
     primaryScript: script?.primary,
     accuracyCache,
+    featureVector: features, // pass features so comfort pick guard can access leagueOver35Rate
   });
 
   // ── Stage 3e: Rank survivors ───────────────────────────────────────────────

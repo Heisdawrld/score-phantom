@@ -45,6 +45,8 @@ function isUnder35ComfortPick(candidate, options) {
   const tactical = safeNum(candidate.tacticalFitScore, 0);
   const score = safeNum(candidate.finalScore, 0);
   const script = String(options.scriptPrimary || options.primaryScript || '').toLowerCase();
+  const leagueOver35Rate = safeNum(options.leagueOver35Rate, 0.30);
+  const h2hOver35Rate = safeNum(options.h2hOver35Rate, null);
 
   // Under 3.5 is naturally probable in football, so it needs extra confirmation.
   // Do not let it headline high-event/open/balanced scripts unless it is truly strong.
@@ -54,6 +56,17 @@ function isUnder35ComfortPick(candidate, options) {
   // If the tactical fit is only default-level and the score is not strong, it is likely just a safe-looking filler.
   if (tactical <= 0.42 && score < 0.56 && prob < 0.73) return true;
 
+  // NEW: League context guard — in high-scoring leagues (O3.5 > 35%),
+  // Under 3.5 needs an even higher probability to be credible.
+  // If the league Over 3.5 rate is above 35%, the natural Under 3.5 win rate
+  // is below 65%, so we need stronger evidence to pick it.
+  if (leagueOver35Rate > 0.35 && prob < 0.76) return true;
+  if (leagueOver35Rate > 0.40 && prob < 0.80) return true;
+
+  // NEW: H2H guard — if H2H shows frequent Over 3.5 games, be skeptical
+  if (h2hOver35Rate != null && h2hOver35Rate > 0.35 && prob < 0.76) return true;
+  if (h2hOver35Rate != null && h2hOver35Rate > 0.40 && prob < 0.80) return true;
+
   return false;
 }
 
@@ -62,6 +75,7 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
   const minEdge     = options.minEdge     ?? -0.08;
   const minTactical = options.minTactical ?? 0.12;
   const accuracyCache = options.accuracyCache || null;
+  const featureVector = options.featureVector || {};
   const pruned  = [];
   const removed = [];
 
@@ -89,7 +103,11 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     }
 
     if (prob < marketFloor) { removed.push(c.marketKey + '(prob=' + (prob*100).toFixed(1) + '%<floor=' + (marketFloor*100).toFixed(0) + '%)'); continue; }
-    if (isUnder35ComfortPick(c, options)) { removed.push(c.marketKey + '(comfort_pick_guard prob=' + (prob*100).toFixed(1) + '%, tactical=' + tactical.toFixed(2) + ', score=' + score.toFixed(2) + ')'); continue; }
+    if (isUnder35ComfortPick(c, {
+      ...options,
+      leagueOver35Rate: featureVector.leagueOver35Rate,
+      h2hOver35Rate: featureVector.h2hOver35Rate,
+    })) { removed.push(c.marketKey + '(comfort_pick_guard prob=' + (prob*100).toFixed(1) + '%, tactical=' + tactical.toFixed(2) + ', score=' + score.toFixed(2) + ', leagueO35=' + ((featureVector.leagueOver35Rate||0.30)*100).toFixed(0) + '%)'); continue; }
     if (edge < minEdge) { removed.push(c.marketKey + '(edge=' + (edge*100).toFixed(1) + 'pp)'); continue; }
     if (tactical < minTactical) { removed.push(c.marketKey + '(tactical=' + tactical.toFixed(3) + ')'); continue; }
     if (score <= 0) { removed.push(c.marketKey + '(score=' + score.toFixed(3) + ')'); continue; }
