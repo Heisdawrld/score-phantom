@@ -186,7 +186,7 @@ function resolveEdgeLabel(pick, phantomScore) {
   // Fallback: phantomScore-based
   const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
   const risk = resolveRiskLevel(pick, phantomScore);
-  if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
+  if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'GAMBLE EDGE';
   if (ps >= 0.65) return 'MODERATE EDGE';
   if (ps >= 0.55) return 'LEAN';
   return 'NO EDGE';

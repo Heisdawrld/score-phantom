@@ -90,7 +90,7 @@ export function computeEdgeLabel(pick, riskLevel) {
 
   if (prob >= 0.74) {
     // Both SAFE and MODERATE at this probability = strong edge, just differ in consistency
-    return riskLevel === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
+    return riskLevel === 'SAFE' ? 'STRONG EDGE' : 'GAMBLE EDGE';
   }
   if (prob >= 0.65) return 'MODERATE EDGE';
   if (prob >= 0.55) return 'LEAN';

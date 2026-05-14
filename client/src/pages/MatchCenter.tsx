@@ -74,6 +74,13 @@ export default function MatchCenter() {
       },
       enabled: !!fixtureId,
     });
+  // Single prediction fetch for MatchCenter — passed to PredictionTab to avoid double API calls.
+  const { data: predictionData } = useQuery({
+      queryKey: ["/api/predict", fixtureId],
+      queryFn: () => fetchApi("/predict/" + fixtureId),
+      enabled: !!fixtureId && !!isPremium,
+      staleTime: 5 * 60 * 1000,
+    });
   const d = data as any;
   const fix = d?.fixture || {};
   const statusUpper = String(fix.match_status || "").toUpperCase();
@@ -199,7 +206,7 @@ export default function MatchCenter() {
                           </div>
                         </div>
                       )}
-                      <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} />
+                      <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} predictionData={predictionData} />
                     </>
                   )}
                   {tab === "Stats" && <StatsTab d={d} />}

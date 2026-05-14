@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getOddsForPick } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
@@ -25,13 +25,18 @@ function riskColor(r: string) {
   return 'text-blue-400'; // MODERATE
 }
 
-export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
-  const { data, isLoading, error } = useQuery({
+export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, predictionData }: any) {
+  // Accept pre-fetched prediction data via prop to avoid double API calls.
+  // When MatchCenter or a parent already has the data, pass it as predictionData.
+  // Otherwise, fetch it ourselves (standalone usage).
+  const shouldFetch = !!fixtureId && !!isPremium && !predictionData;
+  const { data: fetchedData, isLoading, error } = useQuery({
     queryKey: ["/api/predict", fixtureId],
     queryFn: () => fetchApi("/predict/" + fixtureId),
-    enabled: !!fixtureId && !!isPremium,
+    enabled: shouldFetch,
     staleTime: 5 * 60 * 1000,
   });
+  const data = predictionData || fetchedData;
 
   if (!isPremium) return (
     <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
@@ -117,21 +122,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
   const homeNm = matchData?.fixture?.home_team_name || (data as any)?.fixture?.homeTeam || "";
-  const pickLo = (rec.pick || "").toLowerCase();
-  const ouRaw = oddsData?.over_under || {};
-  const odds = !oddsData ? null
-    : pickLo.includes("both teams to score") ? oddsData.btts_yes
-    : pickLo.includes("not to score") ? oddsData.btts_no
-    : pickLo === "draw" ? oddsData.draw
-    : pickLo.includes("over 3.5") ? ouRaw.over_3_5
-    : pickLo.includes("over 2.5") ? ouRaw.over_2_5
-    : pickLo.includes("over 1.5") ? ouRaw.over_1_5
-    : pickLo.includes("under 3.5") ? ouRaw.under_3_5
-    : pickLo.includes("under 2.5") ? ouRaw.under_2_5
-    : pickLo.includes("under 1.5") ? ouRaw.under_1_5
-    : pickLo.includes("win") && homeNm && pickLo.includes(homeNm.split(" ")[0].toLowerCase()) ? oddsData.home
-    : pickLo.includes("win") ? oddsData.away
-    : null;
+  // UNIFIED odds resolution — uses shared getOddsForPick() so both views
+  // always resolve the same odds for the same pick.
+  const oddsPick = getOddsForPick(oddsData, rec.pick || "", rec.market || "");
+  const odds = oddsPick?.value ?? null;
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
   const edgePct = impliedPct != null ? (displayConfidence - impliedPct) : null;
   const hasValue = edgePct != null && edgePct > 2;
@@ -150,17 +144,16 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
   
   // Verdict is derived from advisor_status (FIRE/GAMBLE/AVOID from engine)
-  // BUG FIX: Removed dead-code branches for 'WATCH' and 'PLAYABLE' (engine never emits those)
-  // FIRE = strong recommendation → "STRONG"
-  // GAMBLE = playable but risky → "PLAYABLE"
+  // FIRE = strong recommendation → "PICK THIS"
+  // GAMBLE = risky but possible → "GAMBLE"
   // AVOID = skip → "AVOID"
-  const verdictLabel = advisorStatus === 'FIRE' ? 'STRONG'
-    : advisorStatus === 'GAMBLE' ? 'PLAYABLE'
+  const verdictLabel = advisorStatus === 'FIRE' ? 'PICK THIS'
+    : advisorStatus === 'GAMBLE' ? 'GAMBLE'
     : 'AVOID';
 
   const verdictColor =
-    verdictLabel === "STRONG" ? "text-primary" :
-    verdictLabel === "PLAYABLE" ? "text-blue-400" :
+    verdictLabel === "PICK THIS" ? "text-primary" :
+    verdictLabel === "GAMBLE" ? "text-amber-400" :
     "text-red-400";
     
   // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.

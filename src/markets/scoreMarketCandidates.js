@@ -170,8 +170,28 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     }
 
     const prob = safeNum(candidate.modelProbability, 0);
+    // Market-baseline-aware advisor gate:
+    // FIRE ("Pick This") now requires edgeAboveBaseline >= 0.08 in addition to
+    // raw probability and predictability. This prevents high-baseline markets like
+    // Under 3.5 (70% natural win rate) from earning FIRE at only 72% model prob
+    // (2pp above baseline = barely above noise). A genuine "Pick This" should show
+    // meaningful signal ABOVE what the market naturally provides.
+    const MARKET_BASELINE = {
+      home_win: 0.45, away_win: 0.30, draw: 0.25,
+      btts_yes: 0.50, btts_no: 0.50,
+      over_25: 0.50, under_25: 0.50, over_35: 0.30, under_35: 0.70,
+      over_15: 0.75, under_15: 0.25,
+      double_chance_home: 0.65, double_chance_away: 0.55,
+      dnb_home: 0.45, dnb_away: 0.35,
+      home_over_05: 0.80, away_over_05: 0.75,
+      home_over_15: 0.55, away_over_15: 0.45,
+      home_over_25: 0.35, away_over_25: 0.25,
+    };
+    const baseline = MARKET_BASELINE[candidate.marketKey] || 0.50;
+    const edgeAboveBaseline = prob - baseline;
+
     let advisorStatus = 'GAMBLE';
-    if (prob >= 0.72 && predScore >= 0.55 && leagueSignal.status !== 'restricted') advisorStatus = 'FIRE';
+    if (prob >= 0.72 && predScore >= 0.55 && leagueSignal.status !== 'restricted' && edgeAboveBaseline >= 0.08) advisorStatus = 'FIRE';
     else if (prob >= 0.60 && predScore >= 0.40) advisorStatus = 'GAMBLE';
     else advisorStatus = 'AVOID';
 
