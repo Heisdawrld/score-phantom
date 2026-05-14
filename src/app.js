@@ -116,9 +116,9 @@ app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
       const r = await db.execute(`
         SELECT
           COUNT(*) AS total,
-          SUM(CASE WHEN advisor_status = 'FIRE' THEN 1 ELSE 0 END) AS fire,
-          SUM(CASE WHEN advisor_status = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
-          SUM(CASE WHEN advisor_status = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
+          SUM(CASE WHEN confidence_model = 'FIRE' THEN 1 ELSE 0 END) AS fire,
+          SUM(CASE WHEN confidence_model = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
+          SUM(CASE WHEN confidence_model = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
           SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
         FROM predictions_v2
       `);

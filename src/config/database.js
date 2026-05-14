@@ -182,7 +182,7 @@ async function runSchema() {
       best_pick_edge REAL,
       best_pick_score REAL,
       confidence_model TEXT,
-      confidence_value REAL,
+      confidence_value TEXT,
       confidence_volatility TEXT,
       explanation_json TEXT,
       explanation_text TEXT,
@@ -357,6 +357,7 @@ async function runSchema() {
   await addColumnIfNotExists("historical_matches", "away_xg", "REAL");
   await addColumnIfNotExists("historical_matches", "momentum", "TEXT");
   await addColumnIfNotExists("historical_matches", "shotmap", "TEXT");
+  await addColumnIfNotExists("historical_matches", "meta", "TEXT");
 
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
