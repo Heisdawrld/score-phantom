@@ -135,22 +135,25 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
-  const riskLabel = (rec.riskLevel || (phantomScore >= 68 ? "SAFE" : phantomScore >= 58 ? "MODERATE" : "AGGRESSIVE")).toUpperCase();
+  // Use engine-computed riskLevel directly — no local fallback recomputation
+  // BUG FIX: Previously used phantomScore-based fallback that contradicted engine logic
+  const riskLabel = (rec.riskLevel || "AGGRESSIVE").toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
-  const edgeLabel = rec.edgeLabel || (phantomScore >= 68 ? "STRONG EDGE" : phantomScore >= 58 ? "MODERATE EDGE" : "LEAN");
+  const edgeLabel = rec.edgeLabel || "LEAN";
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
   
-  // Use the engine's advisor status directly for the verdict, falling back to tier logic only if missing
-  const verdictLabel = rec.advisor_status === 'AVOID' ? 'AVOID' 
-    : rec.advisor_status === 'WATCH' ? 'WATCH'
-    : rec.advisor_status === 'PLAYABLE' ? 'PLAYABLE'
-    : rec.advisor_status === 'FIRE' ? 'STRONG'
-    : tier.label;
+  // Verdict is derived from advisor_status (FIRE/GAMBLE/AVOID from engine)
+  // BUG FIX: Removed dead-code branches for 'WATCH' and 'PLAYABLE' (engine never emits those)
+  // FIRE = strong recommendation → "STRONG"
+  // GAMBLE = playable but risky → "PLAYABLE"
+  // AVOID = skip → "AVOID"
+  const verdictLabel = advisorStatus === 'FIRE' ? 'STRONG'
+    : advisorStatus === 'GAMBLE' ? 'PLAYABLE'
+    : 'AVOID';
 
   const verdictColor =
     verdictLabel === "STRONG" ? "text-primary" :
     verdictLabel === "PLAYABLE" ? "text-blue-400" :
-    verdictLabel === "WATCH" ? "text-amber-400" :
     "text-red-400";
     
   const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";

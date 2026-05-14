@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
 import {
   X, Sparkles, Target, Activity, ShieldAlert, TrendingUp, Zap,
-  CheckCircle2, AlertTriangle, Lock, Crown, ExternalLink, MessageSquare,
+  CheckCircle2, AlertTriangle, AlertCircle, Lock, Crown, ExternalLink, MessageSquare,
   BarChart2, Star
 } from "lucide-react";
 import { cn, fuzzyTeamMatch, sortMatchesByDateDesc } from "@/lib/utils";
@@ -67,10 +67,14 @@ function ConfBadge({ level }: { level: string }) {
 function EdgeBadge({ label }: { label?: string }) {
   if (!label) return null;
   const map: Record<string, string> = {
+    "STRONG EDGE": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
     "STRONG EDGE (SAFE)": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    "PLAYABLE EDGE": "bg-primary/20 text-primary border-primary/30",
     "STRONG EDGE (AGGRESSIVE)": "bg-primary/20 text-primary border-primary/30",
+    "MODERATE EDGE": "bg-blue-500/20 text-blue-400 border-blue-500/30",
     LEAN: "bg-orange-500/20 text-orange-400 border-orange-500/30",
     "NO EDGE": "bg-white/5 text-muted-foreground border-white/10",
+    "MODEL-ONLY": "bg-purple-500/20 text-purple-400 border-purple-500/30",
   };
   return (
     <span className={cn("text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full", map[label] ?? "bg-white/5 text-muted-foreground border-white/10")}>
@@ -569,6 +573,12 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   <RiskBadge level={rec.riskLevel} />
                                 </div>
                               </div>
+                              {rec.dataQualityNote && (
+                                <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                  <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <p className="text-[10px] text-amber-400 font-medium">{rec.dataQualityNote}</p>
+                                </div>
+                              )}
                               <div className="flex items-end justify-between gap-4 mb-5">
                                 <div>
                                   <p className="text-xs text-muted-foreground mb-1">{formatMarket(rec.market)}</p>

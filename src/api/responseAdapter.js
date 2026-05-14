@@ -117,7 +117,21 @@ function collectBsdInsightReasons(fv = {}) {
   return [...new Set(reasons)].slice(0, 6);
 }
 
-function mapModelConfidence(probability, dataCompletenessScore) {
+/**
+ * Map model confidence from probability + data quality.
+ *
+ * v2: Accepts engine's confidence.model as primary input.
+ * The engine's buildConfidenceProfile() uses market-baseline-aware thresholds
+ * which are more accurate than raw probability thresholds. We only fall back
+ * to probability-based mapping when the engine didn't compute a confidence.
+ */
+function mapModelConfidence(probability, dataCompletenessScore, engineConfidenceModel = null) {
+  // Use engine's confidence if available — it's market-baseline-aware
+  if (engineConfidenceModel) {
+    const m = String(engineConfidenceModel).toUpperCase();
+    if (['HIGH', 'MEDIUM', 'LEAN', 'LOW'].includes(m)) return m;
+  }
+  // Fallback: probability-based (legacy path)
   const p = safeNum(probability, 0);
   const dataQuality = safeNum(dataCompletenessScore, 0.5);
   const penalisedP = dataQuality < 0.35 ? p * 0.88 : dataQuality < 0.55 ? p * 0.94 : p;
@@ -134,15 +148,42 @@ function mapTacticalFit(tacticalFitScore) {
   return "WEAK";
 }
 
+/**
+ * Resolve risk level — prefers engine-computed value, falls back to phantomScore.
+ *
+ * BUG FIX: The engine's computeRiskLevel() considers market type (STABLE/VOLATILE),
+ * chaos score, script, and uses modelProbability. The old responseAdapter version
+ * only used phantomScore with flat thresholds, causing SAFE → MODERATE mislabeling.
+ *
+ * Now: engine value is the source of truth. Fallback only when engine didn't compute.
+ */
 function resolveRiskLevel(pick, phantomScore) {
+  // Engine-computed riskLevel is the single source of truth
+  if (pick?.riskLevel && ['SAFE', 'MODERATE', 'AGGRESSIVE'].includes(String(pick.riskLevel).toUpperCase())) {
+    return String(pick.riskLevel).toUpperCase();
+  }
+  // Fallback: phantomScore-based (only when engine didn't provide risk level)
   const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
   if (ps >= 0.72) return 'SAFE';
   if (ps >= 0.60) return 'MODERATE';
   return 'AGGRESSIVE';
 }
 
+/**
+ * Resolve edge label — prefers engine-computed value, falls back to phantomScore.
+ *
+ * BUG FIX: The engine's computeEdgeLabel() uses modelProbability with threshold 0.74
+ * for STRONG EDGE. The old responseAdapter used phantomScore with threshold 0.72,
+ * causing edge labels to not match the actual risk level.
+ */
 function resolveEdgeLabel(pick, phantomScore) {
+  // Engine-computed edgeLabel is the single source of truth
+  if (pick?.edgeLabel && typeof pick.edgeLabel === 'string' && pick.edgeLabel.trim()) {
+    return pick.edgeLabel;
+  }
+  // Model-only picks get a special label
   if (pick?.modelOnly || pick?.isModelOnly) return 'MODEL-ONLY';
+  // Fallback: phantomScore-based
   const ps = phantomScore != null ? phantomScore : safeNum(pick?.modelProbability, 0);
   const risk = resolveRiskLevel(pick, phantomScore);
   if (ps >= 0.72) return risk === 'SAFE' ? 'STRONG EDGE' : 'PLAYABLE EDGE';
@@ -152,28 +193,35 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
- * Keep this conservative: a high raw model probability is not enough to show PICK THIS.
+ * Resolve advisor status — prefers engine-computed value, validates conservatively.
+ *
+ * BUG FIX: Previously the responseAdapter recomputed advisor_status from scratch
+ * using phantomScore + riskLevel + edgeScore, which could downgrade a valid FIRE
+ * to GAMBLE (e.g., when edge < 0.02 but the engine determined FIRE based on
+ * probability + predictability + league signal).
+ *
+ * Now: engine value is the starting point. We only override to AVOID if the
+ * engine's FIRE/GAMBLE contradicts the risk level (AGGRESSIVE risk = never FIRE).
  */
-function computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+function resolveAdvisorStatus(engineStatus, riskLevel, phantomScore, edgeScore, dataCompletenessScore = 0.5) {
+  const s = String(engineStatus || '').toUpperCase();
+  const risk = String(riskLevel || '').toUpperCase();
   const ps = safeNum(phantomScore, 0);
   const edge = safeNum(edgeScore, 0);
   const dataQ = safeNum(dataCompletenessScore, 0.5);
-  const risk = String(riskLevel || '').toUpperCase();
 
-  if (ps >= 0.68 && risk !== 'AGGRESSIVE' && dataQ >= 0.35 && edge >= 0.02) return 'FIRE';
-  if (ps >= 0.55) return 'GAMBLE';
-  return 'AVOID';
-}
-
-function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
-  const computed = computeAdvisorStatus(phantomScore, riskLevel, edgeScore, dataCompletenessScore);
-  const s = String(status || '').toUpperCase();
-
-  // Never allow stale/legacy FIRE to override the conservative score/risk gate.
-  if (computed !== 'FIRE') return computed;
+  // Valid FIRE/GAMBLE/AVOID from engine
+  if (s === 'FIRE') {
+    // Safety gate: AGGRESSIVE risk + thin data → never show "Pick This"
+    if (risk === 'AGGRESSIVE' && dataQ < 0.40) return 'GAMBLE';
+    // Safety gate: no edge at all → downgrade to GAMBLE
+    if (edge < 0.01 && ps < 0.65) return 'GAMBLE';
+    return 'FIRE';
+  }
   if (s === 'AVOID') return 'AVOID';
-  return 'FIRE';
+  // GAMBLE or any other value
+  if (ps < 0.50) return 'AVOID';
+  return 'GAMBLE';
 }
 
 function mapValueRating(edgeScore, modelOnly = false) {
@@ -201,6 +249,7 @@ const PICK_LABEL_MAP = {
   over_15:              ()     => "Over 1.5 Goals",
   over_25:              ()     => "Over 2.5 Goals",
   over_35:              ()     => "Over 3.5 Goals",
+  under_15:             ()     => "Under 1.5 Goals",
   under_25:             ()     => "Under 2.5 Goals",
   under_35:             ()     => "Under 3.5 Goals",
   btts_yes:             ()     => "Both Teams to Score",
@@ -258,7 +307,7 @@ function mapMarketName(marketKey) {
   const key = (marketKey || "").toLowerCase();
   if (key === "over_under" || key === "goals_ou") return "Over/Under";
   if (key === "over_15" || key === "over_25" || key === "over_35") return "Over/Under";
-  if (key === "under_25" || key === "under_35") return "Over/Under";
+  if (key === "under_15" || key === "under_25" || key === "under_35") return "Over/Under";
   if (key === "btts" || key === "btts_yes" || key === "btts_no" || key === "both_teams_to_score") return "Both Teams to Score";
   if (key === "1x2" || key === "match_winner" || key === "home_win" || key === "away_win" || key === "draw") return "Match Result";
   if (key === "double_chance" || key === "double_chance_home" || key === "double_chance_away") return "Double Chance";
@@ -283,27 +332,41 @@ function capProbabilityPct(marketKey, rawPct) {
   return rawPct;
 }
 
-function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
+function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engineConfidenceModel = null) {
   if (!pick) return null;
   const isModelOnly = !!(pick.modelOnly || pick.isModelOnly);
   const probability = safeNum(pick.modelProbability, 0);
   const edgeScore = isModelOnly ? 0 : (pick.edge != null ? safeNum(pick.edge, 0) : safeNum(pick.finalScore, 0));
   const tacticalFitScore = safeNum(pick.tacticalFitScore, 0);
   const rawProbPct = parseFloat((probability * 100).toFixed(1));
-  const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+  const modelConf = mapModelConfidence(probability, dataCompletenessScore, engineConfidenceModel);
   const compositeRaw = safeNum(pick.finalScore, probability);
   const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
   const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
-  const phantomScorePct = parseFloat((phantomScoreRaw * 100).toFixed(1));
+  const phantomScorePct = capProbabilityPct(pick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
+
+  // Use engine-computed values as source of truth (not recomputed)
   const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
   const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
-  const advisorStatus = normalizeAdvisorStatus(pick.advisor_status, phantomScoreRaw, riskLvl, edgeScore, dataCompletenessScore);
+  const advisorStatus = resolveAdvisorStatus(pick.advisor_status, riskLvl, phantomScoreRaw, edgeScore, dataCompletenessScore);
+
+  // isSafeBet: use engine-computed value when available, else derive consistently
+  // Engine: prob >= 0.72 && volatility === 'low'
+  const isSafeBet = !isModelOnly && pick.isSafeBet != null
+    ? pick.isSafeBet
+    : (!isModelOnly && probability >= 0.72 && riskLvl === 'SAFE');
+
+  // isValueBet: use engine-computed value when available, else derive consistently
+  // Engine: impl > 0 && edge >= 0.08
+  const isValueBet = !isModelOnly && pick.isValueBet != null
+    ? pick.isValueBet
+    : (!isModelOnly && edgeScore >= 0.08);
 
   return {
     market: mapMarketName(pick.marketKey),
     pick: formatPickLabel(pick.marketKey, pick.selection, homeTeam, awayTeam),
     probability,
-    probability_pct: rawProbPct,
+    probability_pct: capProbabilityPct(pick.marketKey, rawProbPct),
     phantom_score_pct: phantomScorePct,
     score: compositeScore,
     edgeScore,
@@ -317,8 +380,8 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore) {
     no_edge: !!(pick.edge != null && pick.edge <= 0),
     modelOnly: isModelOnly,
     isModelOnly,
-    isSafeBet: !isModelOnly && phantomScorePct >= 72 && riskLvl === 'SAFE',
-    isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
+    isSafeBet,
+    isValueBet,
     isSharpValue: !isModelOnly && (pick.isSharpValue || false),
   };
 }
@@ -402,6 +465,9 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     humanReasonCodes.push("⚠️ Limited historical data — predictions carry higher uncertainty");
   }
 
+  // Get engine's confidence profile (market-baseline-aware)
+  const engineConfidence = engineResult?.confidence || null;
+
   let recommendation;
   if (bestPick && !noSafePick) {
     const isModelOnly = !!(bestPick.modelOnly || bestPick.isModelOnly);
@@ -409,14 +475,26 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const edgeScore = isModelOnly ? 0 : (bestPick.edge != null ? safeNum(bestPick.edge, 0) : safeNum(bestPick.finalScore, 0));
     const tacticalFitScore = safeNum(bestPick.tacticalFitScore, 0);
     const rawRecPct = parseFloat((probability * 100).toFixed(1));
-    const modelConf = mapModelConfidence(probability, dataCompletenessScore);
+    const modelConf = mapModelConfidence(probability, dataCompletenessScore, engineConfidence?.model);
     const compositeRaw = safeNum(bestPick.finalScore, probability);
     const compositeScore = parseFloat((compositeRaw * 100).toFixed(1));
     const phantomScoreRaw = (probability * 0.55) + (compositeRaw * 0.45);
     const phantomScorePct = capProbabilityPct(bestPick.marketKey, parseFloat((phantomScoreRaw * 100).toFixed(1)));
+
+    // Use engine-computed values as source of truth
     const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
     const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
-    const advisorStatus = normalizeAdvisorStatus(bestPick.advisor_status, phantomScoreRaw, riskLvl2, edgeScore, dataCompletenessScore);
+    const advisorStatus = resolveAdvisorStatus(bestPick.advisor_status, riskLvl2, phantomScoreRaw, edgeScore, dataCompletenessScore);
+
+    // isSafeBet: use engine value when available, else derive consistently
+    const isSafeBet = !isModelOnly && bestPick.isSafeBet != null
+      ? bestPick.isSafeBet
+      : (!isModelOnly && probability >= 0.72 && riskLvl2 === 'SAFE');
+
+    // isValueBet: use engine value when available, else derive consistently
+    const isValueBet = !isModelOnly && bestPick.isValueBet != null
+      ? bestPick.isValueBet
+      : (!isModelOnly && edgeScore >= 0.08);
 
     const reasons = isModelOnly
       ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
@@ -440,9 +518,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       no_edge: false,
       modelOnly: isModelOnly,
       isModelOnly,
-      isSafeBet: !isModelOnly && advisorStatus === 'FIRE' && phantomScorePct >= 68 && riskLvl2 !== 'AGGRESSIVE',
-      isValueBet: !isModelOnly && edgeScore >= 0.05 && phantomScorePct >= 60,
+      isSafeBet,
+      isValueBet,
       isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
+      dataQualityNote: engineConfidence?.dataQualityNote || null,
     };
   } else {
     recommendation = {
@@ -463,10 +542,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   }
 
   const backup_picks = (backupPicks || []).slice(0, 5)
-    .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore))
+    .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
   const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10)
-    .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore))
+    .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({
     score: cs.score || `${cs.home}-${cs.away}`,
@@ -492,6 +571,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       tier: enrichmentTier,
       homeFormMatches: featureVector.homeMatchesAvailable ?? null,
       awayFormMatches: featureVector.awayMatchesAvailable ?? null,
+      dataQualityNote: engineConfidence?.dataQualityNote || null,
+      restrictMarkets: engineConfidence?.restrictMarkets || false,
     },
   };
 }

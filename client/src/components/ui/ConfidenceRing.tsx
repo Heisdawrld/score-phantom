@@ -12,14 +12,19 @@ interface ConfidenceRingProps {
 
 const TIER_COLORS: Record<string, string> = {
   ELITE: "#10e774",
-  STRONG: "#10e774",
+  PLAYABLE: "#10e774",
   GOOD: "#3b82f6",
   LEAN: "#f59e0b",
 };
 
+/**
+ * Aligned with ConfidenceBadge thresholds.
+ * Previously used 75/60/50 which contradicted ConfidenceBadge's 68/55/50.
+ * Now both use 68/55/50 for consistency.
+ */
 function getTier(value: number): string {
-  if (value >= 75) return "ELITE";
-  if (value >= 60) return "STRONG";
+  if (value >= 68) return "ELITE";
+  if (value >= 55) return "PLAYABLE";
   if (value >= 50) return "GOOD";
   return "LEAN";
 }
