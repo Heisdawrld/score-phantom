@@ -363,6 +363,77 @@ async function runSchema() {
   await addColumnIfNotExists("prediction_outcomes", "prediction_source", "TEXT DEFAULT 'live'");
   await addColumnIfNotExists("prediction_outcomes", "is_retroactive", "INTEGER DEFAULT 0");
 
+  // ── One-time migration: fix existing prediction_outcomes data ──────────────
+  // This runs once to reclassify incorrectly-voided outcomes and tag data sources.
+  // Uses a sentinel flag to avoid re-running on every startup.
+  try {
+    const migrationCheck = await db.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'`);
+    if ((migrationCheck.rows || []).length === 0) {
+      await db.execute(`CREATE TABLE _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+    }
+
+    const voidFix = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['fix_false_voids_v1'] });
+    if ((voidFix.rows || []).length === 0) {
+      console.log('[Migration] Running fix_false_voids_v1 — reclassifying incorrectly voided outcomes...');
+
+      // Step 1: Re-evaluate void outcomes with scores using fixed evaluatePrediction
+      const { evaluatePrediction } = await import('../services/resultChecker.js');
+      const { computeProfitUnits } = await import('../storage/profitUnits.js');
+      const voids = await db.execute(`
+        SELECT id, fixture_id, predicted_market, predicted_selection,
+               home_team, away_team, home_score, away_score, best_pick_odds, stake_units
+        FROM prediction_outcomes
+        WHERE outcome = 'void' AND home_score IS NOT NULL AND away_score IS NOT NULL
+      `);
+      let reclassified = 0;
+      for (const row of (voids.rows || [])) {
+        const newOutcome = evaluatePrediction(
+          row.predicted_market, row.predicted_selection,
+          Number(row.home_score), Number(row.away_score),
+          row.home_team, row.away_team
+        );
+        if (newOutcome !== 'void') {
+          const profitUnits = computeProfitUnits(newOutcome, row.best_pick_odds, row.stake_units || 1);
+          await db.execute({
+            sql: `UPDATE prediction_outcomes SET outcome = ?, result_status = ?, profit_units = ?, evaluated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            args: [newOutcome, newOutcome, profitUnits, row.id]
+          });
+          reclassified++;
+        }
+      }
+      console.log(`[Migration] Reclassified ${reclassified} false voids to win/loss`);
+
+      // Step 2: Tag outcomes without pre-match picks as 'backtest'
+      const tagResult = await db.execute(`
+        UPDATE prediction_outcomes
+        SET prediction_source = 'backtest', is_retroactive = 1
+        WHERE prediction_source IS NULL
+          AND fixture_id NOT IN (
+            SELECT DISTINCT pp.fixture_id
+            FROM prediction_picks pp
+            WHERE pp.prediction_source = 'pre_match'
+              AND pp.kickoff_at IS NOT NULL
+              AND pp.generated_at < pp.kickoff_at
+          )
+      `);
+      console.log(`[Migration] Tagged ${tagResult.rowsAffected} outcomes as 'backtest'`);
+
+      // Step 3: Tag remaining NULL as 'live'
+      const tagResult2 = await db.execute(`UPDATE prediction_outcomes SET prediction_source = 'live' WHERE prediction_source IS NULL`);
+      console.log(`[Migration] Tagged ${tagResult2.rowsAffected} outcomes as 'live'`);
+
+      // Step 4: Clean ghost voids (no scores)
+      const ghostResult = await db.execute(`DELETE FROM prediction_outcomes WHERE outcome = 'void' AND home_score IS NULL`);
+      console.log(`[Migration] Deleted ${ghostResult.rowsAffected} ghost voids`);
+
+      await db.execute({ sql: `INSERT INTO _migrations (name) VALUES (?)`, args: ['fix_false_voids_v1'] });
+      console.log('[Migration] fix_false_voids_v1 completed');
+    }
+  } catch (migrationErr) {
+    console.error('[Migration] fix_false_voids_v1 error:', migrationErr.message);
+    // Don't crash — the app can still run
+  }
+
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
