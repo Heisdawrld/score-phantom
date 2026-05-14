@@ -366,6 +366,8 @@ async function runSchema() {
   // ── One-time migration: fix existing prediction_outcomes data ──────────────
   // This runs once to reclassify incorrectly-voided outcomes and tag data sources.
   // Uses a sentinel flag to avoid re-running on every startup.
+  // NOTE: evaluatePrediction is inlined here to avoid circular dependency
+  // (resultChecker.js imports database.js)
   try {
     const migrationCheck = await db.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'`);
     if ((migrationCheck.rows || []).length === 0) {
@@ -376,9 +378,66 @@ async function runSchema() {
     if ((voidFix.rows || []).length === 0) {
       console.log('[Migration] Running fix_false_voids_v1 — reclassifying incorrectly voided outcomes...');
 
-      // Step 1: Re-evaluate void outcomes with scores using fixed evaluatePrediction
-      const { evaluatePrediction } = await import('../services/resultChecker.js');
-      const { computeProfitUnits } = await import('../storage/profitUnits.js');
+      // Inlined evaluatePrediction to avoid circular import with resultChecker.js
+      function evalPred(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
+        if (homeScore == null || awayScore == null) return 'void';
+        const total = homeScore + awayScore;
+        const sel = (selection || '').toLowerCase().trim();
+        const mkt = (market || '').toLowerCase().trim();
+        const homeName = (homeTeamName || '').toLowerCase().trim();
+        const awayName = (awayTeamName || '').toLowerCase().trim();
+        const isHomePick = homeName && sel.includes(homeName);
+        const isAwayPick = awayName && sel.includes(awayName);
+        if (mkt.includes('over') || mkt.includes('under')) {
+          const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return total > parseFloat(om[1]) ? 'win' : 'loss';
+          const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return total < parseFloat(um[1]) ? 'win' : 'loss';
+          const mO = mkt.match(/over[_\s]?(\d)(\d)?/); if (mO) { const t = mO[2]?parseFloat(mO[1]+'.'+mO[2]):parseFloat(mO[1]); return total > t ? 'win' : 'loss'; }
+          const mU = mkt.match(/under[_\s]?(\d)(\d)?/); if (mU) { const t = mU[2]?parseFloat(mU[1]+'.'+mU[2]):parseFloat(mU[1]); return total < t ? 'win' : 'loss'; }
+        }
+        if (mkt.includes('btts') || mkt.includes('both teams')) {
+          const btts = homeScore > 0 && awayScore > 0;
+          if (mkt.includes('no') || sel.includes('no') || sel.includes('not to score')) return btts ? 'loss' : 'win';
+          return btts ? 'win' : 'loss';
+        }
+        if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result') || mkt === 'home_win' || mkt === 'away_win' || mkt === 'draw') {
+          if (mkt === 'home_win' || sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
+          if (mkt === 'away_win' || sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
+          if (mkt === 'draw' || sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
+          if (homeScore > awayScore) return (sel==='1'||sel.includes('home')||isHomePick)?'win':'loss';
+          if (awayScore > homeScore) return (sel==='2'||sel.includes('away')||isAwayPick)?'win':'loss';
+          return (sel==='x'||sel==='draw')?'win':'loss';
+        }
+        if (mkt.includes('double chance') || mkt.includes('double_chance')) {
+          if (mkt.includes('home') || sel.includes('1x') || sel.includes('home or draw')) return homeScore >= awayScore ? 'win' : 'loss';
+          if (mkt.includes('away') || sel.includes('x2') || sel.includes('draw or away')) return awayScore >= homeScore ? 'win' : 'loss';
+          if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
+          if (isHomePick || sel.includes('home') || sel === '1') return homeScore >= awayScore ? 'win' : 'loss';
+          if (isAwayPick || sel.includes('away') || sel === '2') return awayScore >= homeScore ? 'win' : 'loss';
+          return homeScore >= awayScore ? 'win' : 'loss';
+        }
+        if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
+          if (mkt.includes('home') || sel.includes('home') || sel === '1' || isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+          if (mkt.includes('away') || sel.includes('away') || sel === '2' || isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+          if (isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+          if (isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+          return 'void';
+        }
+        if (mkt.includes('home team goals') || mkt.startsWith('home_over') || mkt.startsWith('home_under')) {
+          const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return homeScore > parseFloat(om[1]) ? 'win' : 'loss';
+          const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return homeScore < parseFloat(um[1]) ? 'win' : 'loss';
+          const mO = mkt.match(/over[_\s]?(\d)(\d)?/); if (mO) { const t = mO[2]?parseFloat(mO[1]+'.'+mO[2]):parseFloat(mO[1]); return homeScore > t ? 'win' : 'loss'; }
+          const mU = mkt.match(/under[_\s]?(\d)(\d)?/); if (mU) { const t = mU[2]?parseFloat(mU[1]+'.'+mU[2]):parseFloat(mU[1]); return homeScore < t ? 'win' : 'loss'; }
+        }
+        if (mkt.includes('away team goals') || mkt.startsWith('away_over') || mkt.startsWith('away_under')) {
+          const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return awayScore > parseFloat(om[1]) ? 'win' : 'loss';
+          const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return awayScore < parseFloat(um[1]) ? 'win' : 'loss';
+          const mO = mkt.match(/over[_\s]?(\d)(\d)?/); if (mO) { const t = mO[2]?parseFloat(mO[1]+'.'+mO[2]):parseFloat(mO[1]); return awayScore > t ? 'win' : 'loss'; }
+          const mU = mkt.match(/under[_\s]?(\d)(\d)?/); if (mU) { const t = mU[2]?parseFloat(mU[1]+'.'+mU[2]):parseFloat(mU[1]); return awayScore < t ? 'win' : 'loss'; }
+        }
+        return 'void';
+      }
+
+      // Step 1: Re-evaluate void outcomes with scores
       const voids = await db.execute(`
         SELECT id, fixture_id, predicted_market, predicted_selection,
                home_team, away_team, home_score, away_score, best_pick_odds, stake_units
@@ -387,13 +446,14 @@ async function runSchema() {
       `);
       let reclassified = 0;
       for (const row of (voids.rows || [])) {
-        const newOutcome = evaluatePrediction(
+        const newOutcome = evalPred(
           row.predicted_market, row.predicted_selection,
           Number(row.home_score), Number(row.away_score),
           row.home_team, row.away_team
         );
         if (newOutcome !== 'void') {
-          const profitUnits = computeProfitUnits(newOutcome, row.best_pick_odds, row.stake_units || 1);
+          const odds = Number(row.best_pick_odds) || 0;
+          const profitUnits = newOutcome === 'win' ? (odds > 1 ? odds - 1 : 0) : -1;
           await db.execute({
             sql: `UPDATE prediction_outcomes SET outcome = ?, result_status = ?, profit_units = ?, evaluated_at = CURRENT_TIMESTAMP WHERE id = ?`,
             args: [newOutcome, newOutcome, profitUnits, row.id]
