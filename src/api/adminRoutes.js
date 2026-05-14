@@ -411,13 +411,9 @@ router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) =>
 router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
   try {
     const tables = ["predictions_v2","historical_matches","fixture_odds","fixtures","teams","tournaments"];
-    const caches = ["sportmonks_cache"];
     let cleared = [];
     for (const t of tables) {
       try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) { console.warn("Skip " + t + ":", e.message); }
-    }
-    for (const t of caches) {
-      try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) {}
     }
     console.log("[Admin] Full reset complete. Tables cleared:", cleared.join(", "));
     return res.json({ success: true, message: "DB reset complete. Cleared: " + cleared.join(", ") + ". Users and payments preserved.", cleared });

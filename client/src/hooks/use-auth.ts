@@ -115,10 +115,7 @@ export function useConfirmPayment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (reference: string) => {
-      return fetchApi("/auth/payment/confirm", {
-        method: "POST",
-        body: JSON.stringify({ reference }),
-      });
+      return fetchApi(`/auth/payment/check?reference=${reference}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -130,7 +127,7 @@ export function useVerifyPayment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (reference: string) => {
-      return fetchApi(`/auth/payment/verify?reference=${reference}`);
+      return fetchApi(`/auth/payment/check?reference=${reference}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });

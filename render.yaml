@@ -42,3 +42,13 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: APISPORTS_KEY
+        sync: false
+      - key: APISPORTS_BASKETBALL_KEY
+        sync: false
+      - key: BALLDONTLIE_API_KEY
+        sync: false
+      - key: THE_ODDS_API_KEY
+        sync: false

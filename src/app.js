@@ -63,7 +63,6 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.use("/api", routes);
 app.use("/api/basketball", basketballRoutes);
@@ -322,73 +321,6 @@ async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
 
 // Expose autoEnrich so adminRoutes can call it via dynamic import
 export { autoEnrich };
-
-async function backfillMissingCountries() {
-  try {
-    const result = await db.execute(`
-      SELECT id, tournament_id, tournament_name, category_name
-      FROM fixtures
-      WHERE category_name IS NULL OR TRIM(category_name) = '' OR LOWER(category_name) = 'other'
-      LIMIT 5000
-    `);
-
-    const rows = result.rows || [];
-    if (!rows.length) {
-      console.log("No missing fixture countries to backfill.");
-      return;
-    }
-
-    const fixturesJsonPath = path.join(__dirname, "..", "fixtures.json");
-    if (!fs.existsSync(fixturesJsonPath)) {
-      console.warn("fixtures.json not found. Skipping country backfill.");
-      return;
-    }
-
-    const raw = fs.readFileSync(fixturesJsonPath, "utf8");
-    const parsed = JSON.parse(raw);
-
-    const byMatchId = new Map();
-    const byTournament = new Map();
-
-    for (const item of parsed) {
-      const matchId = String(item.match_id || "");
-      const tournamentId = String(item.tournament_id || "");
-      const category = String(item.category_name || "").trim();
-
-      if (matchId && category) byMatchId.set(matchId, category);
-      if (tournamentId && category && !byTournament.has(tournamentId)) {
-        byTournament.set(tournamentId, category);
-      }
-    }
-
-    let patched = 0;
-
-    for (const row of rows) {
-      const category =
-        byMatchId.get(String(row.id)) ||
-        byTournament.get(String(row.tournament_id)) ||
-        "";
-
-      if (!category) continue;
-
-      await db.execute({
-        sql: `UPDATE fixtures SET category_name = ? WHERE id = ?`,
-        args: [category, row.id],
-      });
-
-      await db.execute({
-        sql: `UPDATE tournaments SET category = ? WHERE id = ? AND (category IS NULL OR TRIM(category) = '' OR LOWER(category) = 'other')`,
-        args: [category, row.tournament_id],
-      });
-
-      patched++;
-    }
-
-    console.log(`Backfilled fixture countries: ${patched}`);
-  } catch (err) {
-    console.error("Country backfill failed:", err.message);
-  }
-}
 
 app.use(errorHandler);
 

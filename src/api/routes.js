@@ -1739,6 +1739,25 @@ router.get("/teams", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /predicted-lineup/:fixtureId — predicted lineups from enrichment data ─
+router.get("/predicted-lineup/:fixtureId", requireAuth, async (req, res) => {
+  try {
+    const bundle = await ensureFixtureData(req.params.fixtureId);
+    if (!bundle) {
+      return res.status(404).json({ error: "Fixture not found" });
+    }
+    const { meta } = bundle;
+    const lineups = meta?.lineups || null;
+    if (!lineups) {
+      return res.json({ lineups: null, beta: true });
+    }
+    return res.json({ lineups, beta: true });
+  } catch (err) {
+    console.error("[PredictedLineup]", err.message);
+    return res.status(500).json({ error: "Failed to fetch predicted lineup" });
+  }
+});
+
 // Interactive Simulator API
 router.post("/simulator/run", requireAuth, async (req, res) => {
   const { home_team_id, away_team_id, home_team_name, away_team_name, modifiers } = req.body;
