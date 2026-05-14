@@ -7,26 +7,29 @@ interface ConfidenceRingProps {
   className?: string;
   label?: string; // e.g. "CONFIDENCE" or "MODEL PROB"
   showLabel?: boolean;
-  tier?: string; // "ELITE" | "STRONG" | "GOOD" | "LEAN"
+  tier?: string; // "HIGH" | "MEDIUM" | "LEAN" | "LOW"
 }
 
+// UNIFIED tier colors — matches ConfidenceBadge and engine's buildConfidenceProfile.
+// HIGH = green (strong signal), MEDIUM = blue (moderate signal),
+// LEAN = amber (weak signal), LOW = gray (no signal)
 const TIER_COLORS: Record<string, string> = {
-  ELITE: "#10e774",
-  PLAYABLE: "#10e774",
-  GOOD: "#3b82f6",
+  HIGH: "#10e774",
+  MEDIUM: "#3b82f6",
   LEAN: "#f59e0b",
+  LOW: "#6b7280",
 };
 
 /**
- * Aligned with ConfidenceBadge thresholds.
- * Previously used 75/60/50 which contradicted ConfidenceBadge's 68/55/50.
- * Now both use 68/55/50 for consistency.
+ * Unified with ConfidenceBadge tiers.
+ * Uses engine's HIGH/MEDIUM/LEAN/LOW classification.
+ * Thresholds: HIGH >= 68%, MEDIUM >= 55%, LEAN >= 44%, LOW < 44%
  */
 function getTier(value: number): string {
-  if (value >= 68) return "ELITE";
-  if (value >= 55) return "PLAYABLE";
-  if (value >= 50) return "GOOD";
-  return "LEAN";
+  if (value >= 68) return "HIGH";
+  if (value >= 55) return "MEDIUM";
+  if (value >= 44) return "LEAN";
+  return "LOW";
 }
 
 export function ConfidenceRing({
@@ -39,7 +42,7 @@ export function ConfidenceRing({
   tier,
 }: ConfidenceRingProps) {
   const resolvedTier = tier || getTier(value);
-  const color = TIER_COLORS[resolvedTier] || "#f59e0b";
+  const color = TIER_COLORS[resolvedTier] || "#6b7280";
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(value, 100) / 100;

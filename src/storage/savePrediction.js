@@ -1,6 +1,6 @@
 import db from '../config/database.js';
 
-const MODEL_VERSION = '2.9.0'; // Keep in sync with CURRENT_ENGINE_VERSION in predictionCache.js
+const MODEL_VERSION = '3.0.0'; // Keep in sync with CURRENT_ENGINE_VERSION in predictionCache.js
 let predictionsTableReady = false;
 
 async function getTableColumns(tableName) {

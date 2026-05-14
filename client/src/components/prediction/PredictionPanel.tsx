@@ -50,12 +50,14 @@ function getFormResult(
 }
 
 // ─── Badge Components ─────────────────────────────────────────────────────────
+// UNIFIED confidence badge — uses engine's HIGH/MEDIUM/LEAN/LOW everywhere.
+// Matches ConfidenceBadge.tsx and ConfidenceRing.tsx tiers exactly.
 function ConfBadge({ level }: { level: string }) {
   const map: Record<string, string> = {
-    HIGH: "bg-primary/20 text-primary border-primary/30",
-    MEDIUM: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    LEAN: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    LOW: "bg-white/10 text-muted-foreground border-white/10",
+    HIGH: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    MEDIUM: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    LEAN: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    LOW: "bg-white/5 text-muted-foreground border-white/10",
   };
   return (
     <span className={cn("text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full", map[level] ?? map.LOW)}>
@@ -67,14 +69,12 @@ function ConfBadge({ level }: { level: string }) {
 function EdgeBadge({ label }: { label?: string }) {
   if (!label) return null;
   const map: Record<string, string> = {
-    "STRONG EDGE": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    "STRONG EDGE (SAFE)": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    "PLAYABLE EDGE": "bg-primary/20 text-primary border-primary/30",
-    "STRONG EDGE (AGGRESSIVE)": "bg-primary/20 text-primary border-primary/30",
-    "MODERATE EDGE": "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    LEAN: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    "STRONG EDGE": "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    "PLAYABLE EDGE": "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    "MODERATE EDGE": "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    LEAN: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     "NO EDGE": "bg-white/5 text-muted-foreground border-white/10",
-    "MODEL-ONLY": "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    "MODEL-ONLY": "bg-purple-500/15 text-purple-400 border-purple-500/30",
   };
   return (
     <span className={cn("text-[10px] font-bold tracking-widest uppercase border px-2 py-0.5 rounded-full", map[label] ?? "bg-white/5 text-muted-foreground border-white/10")}>
@@ -83,19 +83,19 @@ function EdgeBadge({ label }: { label?: string }) {
   );
 }
 
+// UNIFIED risk badge — matches PredictionTab's RISK_LABELS exactly.
+// Engine only emits SAFE / MODERATE / AGGRESSIVE. No VOLATILE.
 function RiskBadge({ level }: { level?: string }) {
   if (!level) return null;
   const labels: Record<string, string> = {
     SAFE: 'Stable',
     MODERATE: 'Calculated',
     AGGRESSIVE: 'High Variance',
-    VOLATILE: 'High Variance',
   };
   const colors: Record<string, string> = {
     SAFE: 'text-emerald-400',
     MODERATE: 'text-blue-400',
     AGGRESSIVE: 'text-amber-400',
-    VOLATILE: 'text-amber-400',
   };
   const display = labels[level] ?? level;
   const color = colors[level] ?? 'text-muted-foreground';
@@ -510,13 +510,13 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           <p className="text-white font-black text-xl mb-2">{isLimitHit ? "🔒 Out of Predictions" : "🔒 Premium Required"}</p>
                           <p className="text-white/60 text-sm leading-relaxed max-w-[240px] mx-auto">
                             {isLimitHit
-                              ? "You've used your 15 free predictions today. Come back tomorrow or upgrade for unlimited access."
+                              ? "You've used your daily free predictions. Come back tomorrow or upgrade for unlimited access."
                               : "Unlock unlimited predictions, ACCA builder, Top Picks, League Favorites, and full match analysis."}
                           </p>
                         </div>
                         <div className="space-y-2 w-full max-w-[260px]">
                           <button onClick={goToPaywall} className="w-full bg-primary text-black font-black py-3.5 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.3)]">
-                            Upgrade to Premium — ₦3,000/mo
+                            Upgrade to Premium
                           </button>
                           {isLimitHit && <p className="text-white/30 text-xs">Resets at midnight Lagos time</p>}
                         </div>
@@ -652,7 +652,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                           ) : (
                             <BlurredLockOverlay
                               message="Our model found a second high-value angle for this match. Available to premium members only."
-                              ctaText="Unlock — ₦3,000/mo"
+                              ctaText="Unlock Premium"
                               onUpgrade={goToPaywall}
                             />
                           )
@@ -841,7 +841,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               </p>
                             </div>
                             <button className="flex items-center gap-2 bg-primary text-black font-black px-5 py-3 rounded-2xl text-sm active:scale-95 transition-transform shadow-[0_4px_20px_rgba(16,231,116,0.25)]">
-                              <Crown className="w-4 h-4" /> Upgrade — ₦3,000/mo
+                              <Crown className="w-4 h-4" /> Upgrade to Premium
                             </button>
                           </div>
                         )}

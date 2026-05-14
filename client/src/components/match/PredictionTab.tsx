@@ -10,17 +10,19 @@ import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBa
 import { TeamLogo } from "@/components/TeamLogo";
 import { SpiralWatermark } from "@/pages/MatchCenter";
 
+// UNIFIED risk labels — matches PredictionPanel's RiskBadge exactly.
+// Engine only emits SAFE / MODERATE / AGGRESSIVE. No VOLATILE.
+// Display: Stable (green) / Calculated (blue) / High Variance (amber)
 const RISK_LABELS: Record<string, string> = {
   SAFE: 'Stable',
   MODERATE: 'Calculated',
   AGGRESSIVE: 'High Variance',
-  VOLATILE: 'High Variance',
 };
 function riskColor(r: string) {
   const l = (r || '').toUpperCase();
   if (l === 'SAFE') return 'text-primary';
-  if (l === 'AGGRESSIVE' || l === 'VOLATILE') return 'text-amber-400';
-  return 'text-blue-400';
+  if (l === 'AGGRESSIVE') return 'text-amber-400';
+  return 'text-blue-400'; // MODERATE
 }
 
 export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: any) {
@@ -106,8 +108,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
   }
 
   const rec = (data as any)?.predictions?.recommendation || {};
-  const phantomScore = rec.phantom_score_pct ?? rec.probability_pct ?? Math.round((rec.probability || 0) * 100);
-  const tier = getConfidenceTier(phantomScore);
+  // UNIFIED: Always use probability_pct (model probability) as the primary confidence display.
+  // phantom_score_pct blends with composite score and creates confusion when shown alongside.
+  // Both views now show the same number consistently.
+  const displayConfidence = rec.probability_pct ?? Math.round((rec.probability || 0) * 100);
+  const tier = getConfidenceTier(displayConfidence);
   const backups = (data as any)?.predictions?.backup_picks || [];
   const reasonCodes: string[] = rec.reasons || rec.reasonCodes || rec.reason_codes || [];
   const oddsData = (data as any)?.odds ?? null;
@@ -128,16 +133,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     : pickLo.includes("win") ? oddsData.away
     : null;
   const impliedPct = odds ? Math.round((1 / Number(odds)) * 100) : rec.impliedProb != null ? Math.round(rec.impliedProb * 100) : null;
-  const edgePct = impliedPct != null ? (phantomScore - impliedPct) : null;
+  const edgePct = impliedPct != null ? (displayConfidence - impliedPct) : null;
   const hasValue = edgePct != null && edgePct > 2;
   const isSharpValue = rec.isSharpValue === true;
   const betLink = oddsData?.betLinkSportybet || null;
   const gameScript = (data as any)?.gameScript;
   const scriptLabel = gameScript?.label || null;
   const scriptVol = gameScript?.volatility || null;
-  // Use engine-computed riskLevel directly — no local fallback recomputation
-  // BUG FIX: Previously used phantomScore-based fallback that contradicted engine logic
-  const riskLabel = (rec.riskLevel || "AGGRESSIVE").toUpperCase();
+  // Use engine-computed riskLevel directly — engine is the source of truth.
+  // BUG FIX: Previously defaulted to AGGRESSIVE when missing, which showed misleading
+  // "HIGH RISK" on no-edge picks. Now defaults to MODERATE (neutral) when engine
+  // doesn't provide a risk level (which only happens on fallback/no-edge picks).
+  const riskLabel = (rec.riskLevel || 'MODERATE').toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
@@ -156,7 +163,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
     verdictLabel === "PLAYABLE" ? "text-blue-400" :
     "text-red-400";
     
-  const riskPill = riskLabel === "SAFE" ? "LOW RISK" : riskLabel === "MODERATE" ? "MEDIUM RISK" : "HIGH RISK";
+  // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.
+  // Uses descriptive labels instead of LOW/MEDIUM/HIGH RISK for consistency.
+  const riskPill = RISK_LABELS[riskLabel] || riskLabel;
 
   const homeManager = (data as any)?.features?.homeManager || null;
   const awayManager = (data as any)?.features?.awayManager || null;
@@ -208,7 +217,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 if (navigator.share) {
                    navigator.share({
                       title: "ScorePhantom Edge",
-                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${phantomScore}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
+                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${displayConfidence}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
                    }).catch(()=>{});
                 }
              }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
@@ -279,7 +288,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                     stroke="url(#confGradTab)"
                     strokeWidth="4.5"
                     strokeLinecap="round"
-                    strokeDasharray={`${(phantomScore / 100) * 188.5} 188.5`}
+                    strokeDasharray={`${(displayConfidence / 100) * 188.5} 188.5`}
                   />
                   <defs>
                     <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -290,10 +299,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
                 </svg>
                 {/* Center text */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-black text-white leading-none">{phantomScore}%</span>
+                  <span className="text-xl font-black text-white leading-none">{displayConfidence}%</span>
                 </div>
               </div>
-              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">PHANTOM SCORE</span>
+              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">MODEL PROB.</span>
             </div>
           </motion.div>
 
@@ -323,28 +332,33 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           ) : null}
 
           {/* ── PHANTOM DECISION STACK ── */}
-          {scriptLabel && (
+          {/* BUG FIX: Match outcome probabilities now ALWAYS shown, not gated on scriptLabel */}
+          {(scriptLabel || matchResult) && (
             <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-white/30">→</span>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
-                {scriptVol && (
-                  <span className={cn(
-                    "text-[9px] font-bold px-2 py-0.5 rounded-full",
-                    scriptVol === "HIGH" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                    scriptVol === "LOW" ? "bg-primary/10 text-primary border border-primary/20" :
-                    "bg-white/[0.04] text-white/30 border border-white/[0.06]"
-                  )}>
-                    {scriptVol}
-                  </span>
-                )}
-              </div>
-              {/* Match result probabilities */}
+              {scriptLabel && (
+                <>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-white/30">→</span>
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
+                    {scriptVol && (
+                      <span className={cn(
+                        "text-[9px] font-bold px-2 py-0.5 rounded-full",
+                        scriptVol === "HIGH" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                        scriptVol === "LOW" ? "bg-primary/10 text-primary border border-primary/20" :
+                        "bg-white/[0.04] text-white/30 border border-white/[0.06]"
+                      )}>
+                        {scriptVol}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+              {/* Match result probabilities — ALWAYS visible */}
               {matchResult && (
-                <div className="flex gap-3 mt-3">
+                <div className={cn("flex gap-3", scriptLabel ? "mt-3" : "")}>
                   <div className="text-center">
                     <p className="text-sm font-black text-primary tabular-nums">{matchResult.home}%</p>
                     <p className="text-[8px] text-white/25 uppercase">Home</p>
@@ -574,7 +588,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData }: 
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>
           <div className="flex flex-col gap-2">
             {backups.slice(0, 3).map((p: any, i: number) => {
-              const bpConf = p.phantom_score_pct ?? p.probability_pct ?? Math.round((p.probability || 0) * 100);
+              const bpConf = p.probability_pct ?? Math.round((p.probability || 0) * 100);
               const tier = getConfidenceTier(bpConf);
               return (
                 <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">

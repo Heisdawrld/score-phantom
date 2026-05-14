@@ -39,10 +39,13 @@ function applyVenueAnchoring(homeXg, awayXg, fv) {
 function applyScriptAdjustments(homeXg, awayXg, script, fv) {
   const LEAGUE_AVG = safeNum(fv.leagueAvgGoalsPerTeam, GLOBAL_LEAGUE_AVG);
   const p = script.primary||"";
-  if (p==="open_end_to_end") { homeXg += 0.25; awayXg += 0.25; }
-  else if (p==="tight_low_event") { homeXg-=0.15; awayXg-=0.15; }
-  else if (p==="dominant_home_pressure") { homeXg+=0.05; awayXg-=0.04; }
-  else if (p==="dominant_away_pressure") { awayXg+=0.05; homeXg-=0.04; }
+  // PROPORTIONAL adjustments — scale with base xG level instead of fixed additive values.
+  // A 12% boost on a 1.5 xG team = +0.18, but on a 2.5 xG team = +0.30.
+  // This is more accurate than flat +0.25 which over-boosts low-xG and under-boosts high-xG.
+  if (p==="open_end_to_end") { homeXg *= 1.12; awayXg *= 1.12; }
+  else if (p==="tight_low_event") { homeXg *= 0.90; awayXg *= 0.90; }
+  else if (p==="dominant_home_pressure") { homeXg *= 1.04; awayXg *= 0.96; }
+  else if (p==="dominant_away_pressure") { awayXg *= 1.04; homeXg *= 0.96; }
   else if (p==="chaotic_unreliable") { homeXg=homeXg*0.9+LEAGUE_AVG*HOME_ADV*0.1; awayXg=awayXg*0.9+LEAGUE_AVG*0.1; }
 
   if (fv.homePredictedStrength && fv.homePredictedStrength < 1.0) {
@@ -375,18 +378,32 @@ function applyBsdContextAdjustments(homeXg, awayXg, fv) {
 }
 
 /**
- * xG capping — raised from 4.5 to 5.5 total.
+ * xG capping — LEAGUE-DEPENDENT caps.
  *
- * Previously capped at 4.5, which prevented the model from expressing
- * high-scoring expectations (e.g., Swiss SL shootouts, Eredivisie matches).
- * A 4.5 cap means the model can never predict more than ~65% Over 3.5,
- * which systematically biased UNDER predictions for high-scoring leagues.
+ * v3: Caps now scale with league goal rate. High-scoring leagues (Swiss SL, Eredivisie)
+ * routinely produce 4-6 goal games, so a flat 5.5 total cap still biased UNDER.
  *
- * New cap of 5.5 allows the model to express "this could be a shootout"
- * while still preventing extreme values from noisy data.
+ * League O3.5 rate > 35% (attacking): per-team cap 3.5, total cap 7.0
+ * League O3.5 rate 25-35% (typical):  per-team cap 3.0, total cap 6.0
+ * League O3.5 rate < 25% (defensive): per-team cap 2.5, total cap 5.0
+ *
+ * This ensures the model can express high-scoring expectations in attacking leagues
+ * while remaining conservative in low-scoring ones.
  */
-function capXg(homeXg, awayXg, baseHome, baseAway) {
-  const cap = (h,a) => { h=clamp(h,0.2,2.8); a=clamp(a,0.2,2.8); const t=h+a; if(t>5.5){const s=5.5/t;h*=s;a*=s;} if(t<0.8){const s=0.8/t;h*=s;} if(t<0.8){const s=0.8/t;a*=s;} return {h,a}; };
+function capXg(homeXg, awayXg, baseHome, baseAway, fv) {
+  const leagueOver35 = safeNum(fv?.leagueOver35Rate, 0.30);
+  let perTeamCap, totalCap;
+  if (leagueOver35 > 0.35) { perTeamCap = 3.5; totalCap = 7.0; }      // High-scoring leagues
+  else if (leagueOver35 >= 0.25) { perTeamCap = 3.0; totalCap = 6.0; } // Typical leagues
+  else { perTeamCap = 2.5; totalCap = 5.0; }                            // Low-scoring leagues
+
+  const cap = (h,a) => {
+    h=clamp(h,0.2,perTeamCap); a=clamp(a,0.2,perTeamCap);
+    const t=h+a;
+    if(t>totalCap){const s=totalCap/t;h*=s;a*=s;}
+    if(t<0.8){const s=0.8/t;h*=s;a*=s;}
+    return {h,a};
+  };
   const {h:fh,a:fa}=cap(homeXg,awayXg), {h:bh,a:ba}=cap(baseHome,baseAway);
   return { homeExpectedGoals:parseFloat(fh.toFixed(3)), awayExpectedGoals:parseFloat(fa.toFixed(3)), totalExpectedGoals:parseFloat((fh+fa).toFixed(3)), baseHomeXg:parseFloat(bh.toFixed(3)), baseAwayXg:parseFloat(ba.toFixed(3)) };
 }
@@ -405,5 +422,5 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyBsdIntelligenceAdjustments(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyDeepBsdSignals(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdContextAdjustments(homeXg, awayXg, fv));
-  return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg);
+  return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg, fv);
 }

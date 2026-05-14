@@ -121,13 +121,18 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    const modelScore = 0.26 * modelConfidenceScore;
-    const marketEdgeScore = 0.17 * edgeScore;
-    const tacticalFitComponent = 0.14 * tacticalFitScore;
-    const predictabilityScore = 0.14 * predScore;
+    // v3 REBALANCED WEIGHTS — league calibration doubled from 6% → 12%.
+    // Previously, league context (6%) was drowned by model confidence (26%),
+    // causing the engine to ignore league-specific patterns (e.g., Swiss SL high O3.5).
+    // Now: model 22%, league 12%, edge 16%, tactical 13%, predictability 13%,
+    //       data 10%, historical 9%, form 5% = 100%
+    const modelScore = 0.22 * modelConfidenceScore;
+    const marketEdgeScore = 0.16 * edgeScore;
+    const tacticalFitComponent = 0.13 * tacticalFitScore;
+    const predictabilityScore = 0.13 * predScore;
     const dataSupportComponent = 0.10 * dataSupportScore;
-    const historicalAccuracyComponent = 0.08 * historicalAccuracyScore;
-    const leagueCalibrationComponent = 0.06 * leagueMarketScore;
+    const historicalAccuracyComponent = 0.09 * historicalAccuracyScore;
+    const leagueCalibrationComponent = 0.12 * leagueMarketScore;
     const formMomentumComponent = 0.05 * formMomentumScore;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;

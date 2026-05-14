@@ -30,7 +30,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.9.0'; // Bumped: historical calibration layer + dynamic market floors + time-weighted accuracy
+const CURRENT_ENGINE_VERSION = '3.0.0'; // v3: League-dependent xG caps, proportional script adjustments, rebalanced market weights
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 

@@ -6,11 +6,15 @@ interface ConfidenceBadgeProps {
   size?: "sm" | "md";
 }
 
+// UNIFIED confidence tiers — matches engine's buildConfidenceProfile output.
+// Engine uses: HIGH / MEDIUM / LEAN / LOW (market-baseline-aware).
+// These are now the single source of truth for all UI components.
+// Thresholds aligned with engine: HIGH >= 62%+edge, MEDIUM >= 52%+edge, LEAN >= 44%+edge, LOW < that
 const TIERS = [
-  { min: 68, label: "ELITE",    cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-  { min: 55, label: "PLAYABLE", cls: "bg-amber-500/10 text-amber-400 border-amber-500/25" },
-  { min: 50, label: "GOOD",     cls: "bg-blue-500/10 text-blue-400 border-blue-500/25" },
-  { min: 0,  label: "LEAN",     cls: "bg-amber-500/10 text-amber-400 border-amber-500/25" },
+  { min: 68, label: "HIGH",   cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  { min: 55, label: "MEDIUM", cls: "bg-blue-500/10 text-blue-400 border-blue-500/25" },
+  { min: 44, label: "LEAN",   cls: "bg-amber-500/10 text-amber-400 border-amber-500/25" },
+  { min: 0,  label: "LOW",    cls: "bg-white/5 text-muted-foreground border-white/10" },
 ];
 
 export function getConfidenceTier(value: number) {
