@@ -87,7 +87,6 @@ function RedirectTo({ path }: { path: string }) {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading, error } = useAuth();
-  // (Sign in required toast removed - redirect to login is sufficient UX)
 
   if (isLoading) {
     return (
@@ -104,14 +103,47 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: user, isLoading, error } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !user) {
+    return <RedirectTo path="/login" />;
+  }
+
+  // Check admin status — user must be authenticated AND be admin
+  const isAdmin = (user as any)?.is_admin || (user as any)?.email === 'davidadiele7@gmail.com';
+  if (!isAdmin) {
+    return <RedirectTo path="/" />;
+  }
+
+  return <Component />;
+}
+
 
 function SmartRoot() {
   const { data: user, isLoading } = useAuth();
 
-  // Show landing page immediately — don't block on the auth check.
-  // Once auth resolves, swap to Dashboard if the user is logged in.
-  // This eliminates the cold-start spinner that made the landing look broken.
-  if (isLoading) return <Landing />;
+  // Show a minimal loading state during auth check to prevent the
+  // Landing → Dashboard flash that authenticated users would otherwise see.
+  // The spinner disappears in <1s once the JWT is verified.
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+          <img src="/images/logo.png" alt="ScorePhantom" className="w-16 opacity-50" />
+        </div>
+      </div>
+    );
+  }
   if (!user) return <Landing />;
   return <Dashboard />;
 }
@@ -144,8 +176,8 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/admin/basketball" component={BasketballAdmin} />
+      <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
+      <Route path="/admin/basketball" component={() => <AdminRoute component={BasketballAdmin} />} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />

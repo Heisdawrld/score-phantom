@@ -92,7 +92,7 @@ export default function TopPicksToday() {
   const { user, isSubscribed, isLoading: authLoading } = useAccess();
   const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("all");
-  const handleOpenPanel = (id: string) => setLocation(`/match/${id}`);
+  const handleOpenPanel = (id: string) => setLocation(`/matches/${id}`);
   const handleClosePanel = () => {};
 
   const { data, isLoading } = useQuery({

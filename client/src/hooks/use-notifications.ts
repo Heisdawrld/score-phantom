@@ -63,9 +63,15 @@ export function useNotifications() {
 
   const markRead = useCallback(async (id?: number) => {
     try {
-      if (id) { await fetchApi('/notifications/' + id + '/read', { method: 'POST' }); setNotifications(p => p.map(n => n.id === id ? {...n, read: 1} : n)); }
-      else { await fetchApi('/notifications/read', { method: 'POST' }); setNotifications(p => p.map(n => ({...n, read: 1}))); }
-      setUnreadCount(0);
+      if (id) {
+        await fetchApi('/notifications/' + id + '/read', { method: 'POST' });
+        setNotifications(p => p.map(n => n.id === id ? {...n, read: 1} : n));
+        setUnreadCount(c => Math.max(0, c - 1));
+      } else {
+        await fetchApi('/notifications/read', { method: 'POST' });
+        setNotifications(p => p.map(n => ({...n, read: 1})));
+        setUnreadCount(0);
+      }
     } catch(_) {}
   }, []);
 

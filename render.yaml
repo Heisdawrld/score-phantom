@@ -10,7 +10,9 @@ services:
         value: production
       - key: PORT
         value: 3000
-      - key: DATABASE_URL
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
         sync: false
       - key: JWT_SECRET
         sync: false

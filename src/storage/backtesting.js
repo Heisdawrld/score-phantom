@@ -49,6 +49,7 @@ export async function initBacktestingTable() {
       ['stake_units',    `ALTER TABLE prediction_outcomes ADD COLUMN stake_units REAL DEFAULT 1`],
       ['profit_units',   `ALTER TABLE prediction_outcomes ADD COLUMN profit_units REAL`],
       ['result_status',  `ALTER TABLE prediction_outcomes ADD COLUMN result_status TEXT`],
+      ['is_sharp_value', `ALTER TABLE prediction_outcomes ADD COLUMN is_sharp_value INTEGER DEFAULT 0`],
     ];
     for (const [col, sql] of migrations) {
       if (!cols.includes(col)) {

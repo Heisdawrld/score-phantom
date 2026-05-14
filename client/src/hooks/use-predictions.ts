@@ -3,7 +3,7 @@ import { fetchApi } from "@/lib/api";
 
 export function usePrediction(fixtureId: string | null, onError?: (code: string) => void) {
   return useQuery({
-    queryKey: ["/api/predict", fixtureId],
+    queryKey: ["/api/predict-explain", fixtureId],
     queryFn: async () => {
       try {
         return await fetchApi(`/predict/${fixtureId}/explain`);

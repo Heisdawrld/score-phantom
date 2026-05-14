@@ -32,6 +32,37 @@ import { generateSimulationTimeline } from "../engine/generateSimulationTimeline
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
+
+// ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
+const CHAT_RATE_LIMIT = 20;       // max messages per user per hour
+const CHAT_RATE_WINDOW = 3600000; // 1 hour in ms
+const chatRateMap = new Map();     // userId -> [timestamps]
+
+function checkChatRateLimit(userId) {
+  const now = Date.now();
+  let timestamps = chatRateMap.get(userId);
+  if (!timestamps) {
+    timestamps = [];
+    chatRateMap.set(userId, timestamps);
+  }
+  // Prune entries older than 1 hour
+  const cutoff = now - CHAT_RATE_WINDOW;
+  while (timestamps.length && timestamps[0] < cutoff) timestamps.shift();
+  if (timestamps.length >= CHAT_RATE_LIMIT) {
+    return { allowed: false, retryAfterMs: timestamps[0] + CHAT_RATE_WINDOW - now };
+  }
+  timestamps.push(now);
+  return { allowed: true };
+}
+
+// Periodic cleanup of stale rate-limit entries every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - CHAT_RATE_WINDOW;
+  for (const [userId, timestamps] of chatRateMap) {
+    while (timestamps.length && timestamps[0] < cutoff) timestamps.shift();
+    if (!timestamps.length) chatRateMap.delete(userId);
+  }
+}, 600000);
 // Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -238,21 +269,35 @@ async function getTodayCount(userId) {
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
+    // Atomic check-and-increment: only increment if under the limit.
+    // First, ensure the row exists
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
-            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 0)
+            ON CONFLICT (user_id, date_str) DO NOTHING`,
       args: [userId, today],
     });
+    // Now atomically increment ONLY if currently under the limit
     const result = await db.execute({
+      sql: `UPDATE trial_daily_counts
+            SET prediction_count = prediction_count + 1
+            WHERE user_id = ? AND date_str = ? AND prediction_count < ?
+            RETURNING prediction_count`,
+      args: [userId, today, limit],
+    });
+    // If RETURNING gave us a row, the increment succeeded and user is under limit
+    if (result.rows && result.rows.length > 0) {
+      return { allowed: true, today };
+    }
+    // Either already at limit, or some other issue — check current count
+    const checkResult = await db.execute({
       sql: `SELECT prediction_count FROM trial_daily_counts WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
     });
-    const newCount = result.rows[0].prediction_count;
-    if (newCount > limit) {
-      // Revert the increment since they hit the limit
-      await decrementDailyCount(userId, today);
+    const currentCount = Number(checkResult.rows?.[0]?.prediction_count || 0);
+    if (currentCount >= limit) {
       return { allowed: false, today };
     }
+    // Shouldn't normally reach here, but allow if count is somehow still under
     return { allowed: true, today };
   } catch (err) {
     console.error("Error in incrementAndCheckDailyCount:", err);
@@ -362,7 +407,11 @@ router.post("/admin/clear-odds-cache", requireAdmin, async (req, res) => { res.j
 // ─── GET /live — live matches (auth required) ────────────────────────────────
 router.get("/live", requireAuth, async (req, res) => {
   try {
-    const liveRes = await db.execute({ sql: "SELECT id, home_team_name, away_team_name, tournament_name, match_date, home_score, away_score, match_status, live_minute FROM fixtures WHERE match_status IN (\"LIVE\",\"HT\") ORDER BY match_date ASC", args: [] }); const matches = liveRes.rows || [];
+    const liveRes = await db.execute({
+      sql: "SELECT id, home_team_name, away_team_name, tournament_name, match_date, home_score, away_score, match_status, live_minute FROM fixtures WHERE match_status IN ('LIVE','HT') ORDER BY match_date ASC",
+      args: []
+    });
+    const matches = liveRes.rows || [];
     res.json({
       total: matches.length,
       matches,
@@ -370,7 +419,10 @@ router.get("/live", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("[Live]", err.message);
-    res.status(500).json({ error: "Failed to fetch live matches", detail: process.env.NODE_ENV === 'production' ? undefined : err.message });
+    res.status(500).json({
+      error: "Failed to fetch live matches",
+      detail: process.env.NODE_ENV === 'production' ? undefined : err.message,
+    });
   }
 });
 
@@ -423,11 +475,11 @@ router.get("/payments/history", requireAuth, async (req, res) => {
 // ─── GET /fixtures — auth required ──────────────────────────────────────────
 router.get("/fixtures", requireAuth, async (req, res) => {
   try {
-    const { date, tournament, enriched, limit = 2000, offset = 0 } = req.query;
+    const { date, tournament, enriched, limit = 200, offset = 0 } = req.query;
 
     let query = `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name,
          f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
-         f.enriched, f.created_at, f.meta, f.enrichment_status, f.data_quality,
+         f.enriched, f.created_at, f.enrichment_status, f.data_quality,
          f.country_flag, f.home_team_logo, f.away_team_logo,
          f.odds_home, f.odds_draw, f.odds_away,
          f.home_score, f.away_score, f.match_status, f.live_minute,
@@ -442,6 +494,17 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     if (date) {
       query += ` AND f.match_date LIKE ?`;
       args.push(`${date}%`);
+    } else {
+      // Default: only show fixtures from yesterday through next 7 days to avoid
+      // loading hundreds of old fixtures that kill response time on slow connections
+      const lagosNow = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      const yesterday = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      d.setDate(d.getDate() + 8); // yesterday + 8 = 7 days from now
+      const weekAhead = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      query += ` AND f.match_date >= ? AND f.match_date < ?`;
+      args.push(`${yesterday}`, `${weekAhead}`);
     }
 
     if (tournament) {
@@ -494,6 +557,8 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       enrichedDeepCount = Number(deepResult.rows[0]?.count || 0);
     }
 
+    // Cache fixtures for 60s client-side — reduces redundant full-list loads
+    res.set('Cache-Control', 'private, max-age=60');
     res.json({
       total: fixtures.length,
       enrichedDeepCount,
@@ -664,6 +729,18 @@ router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) =
       return res.status(403).json({
         error: "AI Chat requires a premium subscription",
         code: "subscription_required",
+        access: buildAccessPayload(req.access),
+      });
+    }
+
+    // Per-user rate limit: max 20 messages per hour
+    const rateCheck = checkChatRateLimit(req.user.id);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({
+        error: "Chat rate limit exceeded",
+        code: "rate_limit_exceeded",
+        message: "You've sent too many messages. Please wait a moment and try again.",
+        retryAfterMs: Math.ceil(rateCheck.retryAfterMs / 1000),
         access: buildAccessPayload(req.access),
       });
     }
@@ -941,73 +1018,11 @@ router.get("/usage", requireAuth, async (req, res) => {
   }
 });
 
-// ─── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
-// Admin-only: verifies that stats pipeline works end-to-end for a fixture.
-// SECURITY FIX: Changed from requireAuth to requireAdmin to prevent API quota abuse
-router.get("/debug/enrich/:fixtureId", requireAdmin, async (req, res) => {
-  // Admin middleware already attached req.user from adminRoutes pattern
-  // Extract fixtureId the same way other routes do
-  try {
-    const { fixtureId } = req.params;
-
-    // Fetch fixture row
-    const row = await db.execute({
-      sql: `SELECT * FROM fixtures WHERE id = ? LIMIT 1`,
-      args: [fixtureId],
-    });
-    const fixture = row.rows?.[0];
-    if (!fixture) return res.status(404).json({ error: "Fixture not found" });
-
-    // Dynamically import enrichment service
-    const { fetchAndStoreEnrichment } = await import("../enrichment/enrichmentService.js");
-    const { storeEnrichment } = await import("../enrichment/enrichOne.js");
-
-    console.log(`[debug/enrich] Running fresh enrichment for fixture ${fixtureId}`);
-    const data = await fetchAndStoreEnrichment(fixture);
-    await storeEnrichment(fixtureId, data, true);
-
-    const hp = data.homeProfile || {};
-    const ap = data.awayProfile || {};
-
-    res.json({
-      fixtureId,
-      home: fixture.home_team_name,
-      away: fixture.away_team_name,
-      homeProfile: {
-        matchesAnalyzed: hp.matchesAnalyzed,
-        avgGoalsScored: hp.avgGoalsScored,
-        avgGoalsConceded: hp.avgGoalsConceded,
-        bttsRate: hp.bttsRate,
-        cleanSheetRate: hp.cleanSheetRate,
-        failedToScoreRate: hp.failedToScoreRate,
-        over25Rate: hp.over25Rate,
-        winRate: hp.winRate,
-        homeWinRate: hp.homeWinRate,
-        awayWinRate: hp.awayWinRate,
-        dataLayer: 'form-derived',
-      },
-      awayProfile: {
-        matchesAnalyzed: ap.matchesAnalyzed,
-        avgGoalsScored: ap.avgGoalsScored,
-        avgGoalsConceded: ap.avgGoalsConceded,
-        bttsRate: ap.bttsRate,
-        cleanSheetRate: ap.cleanSheetRate,
-        failedToScoreRate: ap.failedToScoreRate,
-        over25Rate: ap.over25Rate,
-        winRate: ap.winRate,
-        homeWinRate: ap.homeWinRate,
-        awayWinRate: ap.awayWinRate,
-        dataLayer: 'form-derived',
-      },
-      completeness: data.completeness,
-      homeFormCount: data.homeForm?.length,
-      awayFormCount: data.awayForm?.length,
-    });
-  } catch (err) {
-    console.error("[debug/enrich]", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+// ─── GET /debug/enrich/:fixtureId — MOVED to adminRoutes.js under /api/admin/
+// SECURITY FIX: This route was previously under /api/ with only a local requireAdmin
+// check, which bypassed the requireAdminSecret guard. It has been moved to
+// adminRoutes.js where it inherits the full admin auth chain.
+// If you need this route, use GET /api/admin/debug/enrich/:fixtureId instead.
 
 // ─── GET /track-record — Show app-wide prediction accuracy stats ────────────
 // Premium feature: visible to free users too (drives conversions)

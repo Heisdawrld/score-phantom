@@ -69,6 +69,12 @@ export const UserSchema = z.object({
   access_status: z.string().optional(),
   email_verified: z.union([z.boolean(), z.number()]).optional(),
   own_referral_code: z.string().nullable().optional(),
+  // Access flags from computeAccessStatus
+  trial_active: z.boolean().optional(),
+  subscription_active: z.boolean().optional(),
+  has_full_access: z.boolean().optional(),
+  is_admin: z.boolean().optional(),
+  league_favorites: z.string().nullable().optional(),
 });
 
 export type User = z.infer<typeof UserSchema>;

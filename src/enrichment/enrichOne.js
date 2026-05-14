@@ -73,10 +73,8 @@ function normalizeMatch(match) {
 export async function storeEnrichment(fixtureId, data, markEnriched = true) {
   await ensureHistoricalMetaColumn();
 
-  await db.execute({
-    sql: `DELETE FROM historical_matches WHERE fixture_id = ?`,
-    args: [fixtureId],
-  });
+  // Collect all INSERT statements for batch execution
+  const insertStatements = [];
 
   const sections = [
     { key: 'h2h', type: 'h2h' },
@@ -93,7 +91,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
       const normalized = normalizeMatch(match);
       const { home, away } = parseScore(normalized.score);
 
-      await db.execute({
+      insertStatements.push({
         sql: `
           INSERT INTO historical_matches (
             fixture_id, type, date,
@@ -117,6 +115,13 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
       });
     }
   }
+
+  // Execute DELETE + all INSERTs atomically using db.batch()
+  const batchStatements = [
+    { sql: `DELETE FROM historical_matches WHERE fixture_id = ?`, args: [fixtureId] },
+    ...insertStatements,
+  ];
+  await db.batch(batchStatements);
 
   if (data?.odds) {
     await db.execute({

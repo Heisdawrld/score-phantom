@@ -3,6 +3,7 @@
 
 import db from '../config/database.js';
 import { fetchFixturesByDate } from './bsd.js';
+import { computeProfitUnits } from '../storage/profitUnits.js';
 
 export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
@@ -120,23 +121,11 @@ export async function checkResults(dateStr) {
 
     const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     
-    // Calculate profit units based on implied probability vs model probability
-    let profitUnits = 0;
-    if (outcome === 'win') {
-      // For a win, profit = (implied_odds * probability) - 1
-      // Since we don't have actual odds, we'll use a simplified approach:
-      // If implied probability is lower than model probability, it's good value
-      const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
-      const modelProb = parseFloat(fix.best_pick_probability || 0);
-      
-      // Simple profit calculation: difference between probabilities * 10 (arbitrary scale)
-      if (impliedProb > 0 && modelProb > 0) {
-        profitUnits = Math.max(0, (impliedProb - modelProb) * 10);
-      }
-    } else if (outcome === 'loss') {
-      // Loss = -1 unit stake
-      profitUnits = -1;
-    }
+    // Calculate profit units using the shared computeProfitUnits function
+    // Derive decimal odds from implied probability: odds = 1 / impliedProb
+    const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
+    const decimalOdds = impliedProb > 0 ? (1 / impliedProb) : null;
+    const profitUnits = computeProfitUnits(outcome, decimalOdds, 1);
     
     // Determine if this is a sharp value pick (high edge)
     const edge = parseFloat(fix.best_pick_edge || 0);

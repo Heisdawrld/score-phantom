@@ -21,6 +21,8 @@ function normTeam(value = '') {
     .trim();
 }
 
+let basketballTablesReady = false;
+
 function gameDay(value) {
   if (!value) return '';
   const d = new Date(value);
@@ -130,6 +132,7 @@ async function ensureBasketballSchemaShape() {
 }
 
 export async function initBasketballTables() {
+  if (basketballTablesReady) return;
   await ensureBasketballSchemaShape();
 
   await db.execute(`CREATE TABLE IF NOT EXISTS basketball_games (
@@ -214,6 +217,7 @@ export async function initBasketballTables() {
   await addColumnIfMissing('basketball_games', 'league_country', 'TEXT');
   await addColumnIfMissing('basketball_games', 'league_logo', 'TEXT');
   await addColumnIfMissing('basketball_games', 'country_flag', 'TEXT');
+  basketballTablesReady = true;
 }
 
 export async function upsertBasketballGame(game) {

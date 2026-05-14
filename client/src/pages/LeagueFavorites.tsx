@@ -20,16 +20,18 @@ const POPULAR_LEAGUES = [
 export default function LeagueFavorites() {
   const [, setLocation] = useLocation();
   const { user, isSubscribed, isLoading: authLoading } = useAccess();
-  useEffect(() => { if (!authLoading && !isSubscribed) setLocation("/paywall"); }, [authLoading, isSubscribed]);
-  if (authLoading || !isSubscribed) return <div className="min-h-screen bg-background" />;
+  // ALL hooks must be called before any early returns to comply with React Rules of Hooks
   const { toast } = useToast();
   const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => { if (!authLoading && !isSubscribed) setLocation("/paywall"); }, [authLoading, isSubscribed]);
 
   // Fetch current favorites
   const { data: currentFavs, isLoading } = useQuery({
     queryKey: ["league-favorites"],
     queryFn: () => fetchApi("/league-favorites"),
+    enabled: !authLoading && !!isSubscribed,
   });
 
   useEffect(() => {
@@ -71,6 +73,17 @@ export default function LeagueFavorites() {
   const filteredLeagues = POPULAR_LEAGUES.filter((league) =>
     league.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (authLoading || !isSubscribed) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

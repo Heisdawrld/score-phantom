@@ -21,6 +21,7 @@ import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js
 import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
+import { refreshAccuracyCache } from "./storage/accuracyCache.js";
 import { runMaintenanceJobs } from "./scripts/maintenance.js";
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
@@ -176,12 +177,7 @@ app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
 });
 
-// Serve standalone admin page
-  app.get("/admin.html", (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "admin.html"));
-  });
-
-  // SPA fallback — serve index.html for all non-API routes
+// SPA fallback — serve index.html for all non-API routes
   app.get("*", (req, res) => {
     // Stop the server from trying to serve index.html as a fallback for missing Vite chunks or API calls.
     // This prevents the "Strict MIME type checking" crash when users load an old tab after a new deployment.
@@ -189,7 +185,7 @@ app.get('/api/version', (req, res) => {
       return res.status(404).json({ error: "Not found" });
     }
     
-    // Try React frontend first, then legacy index.html
+    // Serve React SPA entry point
   const reactIndex = path.join(clientDistPath, "index.html");
   if (fs.existsSync(reactIndex)) {
     // No-cache so browser always gets the latest index.html after a deploy
@@ -197,10 +193,6 @@ app.get('/api/version', (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     return res.sendFile(reactIndex);
-  }
-  const legacyIndex = path.join(__dirname, "..", "index.html");
-  if (fs.existsSync(legacyIndex)) {
-    return res.sendFile(legacyIndex);
   }
   res.status(404).send("Not found");
 });

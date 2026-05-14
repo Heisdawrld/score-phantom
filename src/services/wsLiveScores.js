@@ -9,6 +9,17 @@ const sseClients = new Set();
 let pollTimer = null;
 let isConnected = false;
 
+// Periodic heartbeat to detect and clean up dead SSE connections
+setInterval(() => {
+  for (const client of sseClients) {
+    try {
+      client.write(':heartbeat\n\n');
+    } catch (_) {
+      sseClients.delete(client);
+    }
+  }
+}, 30000);
+
 export function addSseClient(res) {
   if (sseClients.size >= 250) {
     res.write(`event: error\ndata: {"error":"Max connections reached"}\n\n`);

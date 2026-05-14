@@ -54,12 +54,13 @@ export async function requestPushPermission(): Promise<string | null> {
 }
 
 export function onForegroundMessage(cb: (payload: any) => void): () => void {
+  let unsub: (() => void) | null = null;
   getMessagingLazy().then(async m => {
     if (!m) return;
     const { onMessage } = await import("firebase/messaging");
-    onMessage(m, cb);
+    unsub = onMessage(m, cb);
   });
-  return () => {};
+  return () => { if (unsub) unsub(); };
 }
 
 // Enable persistence across browser sessions

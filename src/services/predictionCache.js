@@ -359,18 +359,12 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
   const noSafePick = !bp || engineResult?.noSafePick ? 1 : 0;
 
   try {
-    // Write prediction_json blob
-    await db.execute({
-      sql: `UPDATE predictions_v2 SET prediction_json = ? WHERE fixture_id = ?`,
-      args: [
-        JSON.stringify({ prediction, engineResult, engineVersion: CURRENT_ENGINE_VERSION }),
-        String(fixtureId),
-      ],
-    });
-
-    // Write flat columns used by ACCA builder
+    // Single atomic UPDATE — prediction_json + flat columns in one statement
+    // to prevent concurrent reads seeing partially-updated data
+    const now = new Date().toISOString();
     await db.execute({
       sql: `UPDATE predictions_v2 SET
+        prediction_json       = ?,
         best_pick_market      = ?,
         best_pick_selection   = ?,
         best_pick_probability = ?,
@@ -382,9 +376,11 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         pick_id               = ?,
         home_team             = ?,
         away_team             = ?,
+        model_version         = ?,
         updated_at            = ?
       WHERE fixture_id = ?`,
       args: [
+        JSON.stringify({ prediction, engineResult, engineVersion: CURRENT_ENGINE_VERSION }),
         noSafePick ? null : (bp?.marketKey || null),
         noSafePick ? null : (bp?.selection || null),
         noSafePick ? null : (bp?.modelProbability ?? null),
@@ -396,7 +392,8 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         engineResult?.pickId ?? null,
         engineResult?.homeTeam || rec.fixture?.homeTeam || null,
         engineResult?.awayTeam || rec.fixture?.awayTeam || null,
-        new Date().toISOString(),
+        CURRENT_ENGINE_VERSION,
+        now,
         String(fixtureId),
       ],
     });

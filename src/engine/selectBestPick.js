@@ -152,10 +152,13 @@ export function selectBestPick(rankedCandidates, scriptOutput, featureVector, op
       const prob = pick.modelProbability !== undefined ? pick.modelProbability : pick.probability;
       if (polyProb && prob !== undefined && Math.abs(prob - polyProb) > 0.12) {
          pick.isSharpValue = true;
-         if (pick.finalScore !== undefined) pick.finalScore += 0.5;
-         else if (pick.score !== undefined) pick.score += 0.5;
+         // Proportional boost: 8% of current score, capped at 0.08 max bonus
+         // This is much safer than the old +0.5 which could double scores
+         const boost = Math.min(0.08, (pick.finalScore ?? pick.score ?? 0) * 0.08);
+         if (pick.finalScore !== undefined) pick.finalScore += boost;
+         else if (pick.score !== undefined) pick.score += boost;
          
-         console.log(`[selectBestPick] SHARP VALUE DETECTED: ${pick.market} ${pick.selection}. Model: ${prob.toFixed(2)}, Poly: ${polyProb.toFixed(2)}`);
+         console.log(`[selectBestPick] SHARP VALUE DETECTED: ${pick.market} ${pick.selection}. Model: ${prob.toFixed(2)}, Poly: ${polyProb.toFixed(2)}, boost: +${boost.toFixed(4)}`);
       }
     });
 

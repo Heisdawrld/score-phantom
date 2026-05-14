@@ -13,6 +13,14 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
   const mutation = useMutation({
     mutationFn: (body: any) => fetchApi("/predict/" + fixtureId + "/chat", { method: "POST", body: JSON.stringify(body) }),
   });
+
+  // Reset chat when fixture changes to prevent stale messages
+  useEffect(() => {
+    setMsgs([
+      { role: "assistant", content: "I have analysed this match. Ask me about form, tactics, value bets, or anything you want to know." }
+    ]);
+  }, [fixtureId]);
+
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [msgs]);

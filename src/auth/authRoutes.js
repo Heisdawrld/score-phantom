@@ -876,14 +876,9 @@ router.post("/login", authLimiter, async (req, res) => {
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const storedHash = user.password_hash || user.password;
     if (!storedHash) {
-      // The user exists in the database (likely from a CSV import), but has no password set.
-      // Let's set their password right now so they can log in seamlessly!
-      const hashedPassword = await bcrypt.hash(String(password || ""), 10);
-      await db.execute({
-        sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
-        args: [hashedPassword, user.id]
-      });
-      // The password is now set and implicitly verified since they just "created" it
+      // User has no password set (e.g. created via Firebase Google sign-in or admin).
+      // They must sign in using their original method (Google/Firebase) — not set a password here.
+      return res.status(400).json({ error: "This account was created with a social login. Please sign in with Google, or use the forgot password link to set a password.", code: "no_password_set" });
     } else {
       // Normal login check
       const ok = await bcrypt.compare(String(password || ""), String(storedHash));

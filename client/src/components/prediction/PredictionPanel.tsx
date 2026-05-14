@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePrediction } from "@/hooks/use-predictions";
@@ -264,6 +264,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const [activeTab, setActiveTab] = useState<Tab>("prediction");
 
   const hasAccess = user?.has_access === true || user?.access_status === "active" || user?.access_status === "trial" || (user as any)?.subscription_active || (user as any)?.is_admin || (user as any)?.trial_active;
+  const isPremium = (user as any)?.subscription_active === true || (user as any)?.is_admin === true;
   const blockReason: "expired" | "limit" | "free" | null = limitReached ? "limit" : !hasAccess ? "free" : null;
   const { data, isLoading, error } = usePrediction(blockReason ? null : fixtureId, onError);
 
@@ -276,20 +277,20 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   }, [data, queryClient]);
 
   // Lock body scroll when panel is open to prevent scroll jumping
+  const scrollYRef = useRef(0);
   useEffect(() => {
     if (fixtureId) {
-      const scrollY = window.scrollY;
+      scrollYRef.current = window.scrollY;
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
-      document.body.style.top = -scrollY + 'px';
+      document.body.style.top = -scrollYRef.current + 'px';
       document.body.style.width = '100%';
       return () => {
         document.body.style.overflow = '';
         document.body.style.position = '';
-        const top = parseInt(document.body.style.top || '0', 10);
         document.body.style.top = '';
         document.body.style.width = '';
-        window.scrollTo(0, -top);
+        window.scrollTo(0, scrollYRef.current);
       };
     }
   }, [fixtureId]);

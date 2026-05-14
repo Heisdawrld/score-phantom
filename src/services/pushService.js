@@ -42,7 +42,8 @@ export async function broadcastPush({ title, body, data = {}, url = '/' }) {
 
 export async function sendToUsers({ userIds, title, body, data = {}, url = '/' }) {
   const app = getApp(); if (!app) return { sent: 0, failed: 0 };
-  if (!userIds || !userIds.length) return broadcastPush({ title, body, data, url });
+  // Empty array = send to nobody, NOT broadcast to all users
+  if (!userIds || !userIds.length) return { sent: 0, failed: 0, total: 0 };
   const ph = userIds.map(() => '?').join(',');
   const r = await db.execute({ sql: 'SELECT DISTINCT token FROM push_tokens WHERE user_id IN (' + ph + ') LIMIT 500', args: userIds });
   const tokens = (r.rows || []).map(x => x.token).filter(Boolean);

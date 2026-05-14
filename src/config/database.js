@@ -238,13 +238,50 @@ async function runSchema() {
     )`,
     // Basketball tables are owned by src/basketball/storage/basketballDb.js.
     // Do not create legacy basketball tables here; that can block the current engine schema on Turso.
+    `CREATE TABLE IF NOT EXISTS prediction_outcomes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fixture_id TEXT NOT NULL UNIQUE,
+      predicted_market TEXT,
+      predicted_selection TEXT,
+      predicted_probability REAL,
+      model_probability REAL,
+      implied_probability REAL,
+      bookmaker_odds REAL,
+      edge REAL,
+      outcome TEXT,
+      profit_units REAL,
+      home_score INTEGER,
+      away_score INTEGER,
+      match_status TEXT,
+      advisor_status TEXT,
+      kickoff_at TEXT,
+      resolved_at TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      sport_key TEXT DEFAULT 'football',
+      home_team TEXT,
+      away_team TEXT,
+      match_date TEXT,
+      tournament TEXT,
+      model_confidence TEXT,
+      full_score TEXT,
+      evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      is_sharp_value INTEGER DEFAULT 0,
+      pick_id INTEGER,
+      best_pick_odds REAL,
+      stake_units REAL DEFAULT 1,
+      result_status TEXT
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_match_subs_fixture ON match_subscriptions(fixture_id)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_season ON backtest_results(season, league_id)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`
+    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_picks_material ON prediction_picks(fixture_id, prediction_source, material_signature)`,
+    `CREATE INDEX IF NOT EXISTS idx_prediction_outcomes_date ON prediction_outcomes(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_po_fixture ON prediction_outcomes(fixture_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_po_market ON prediction_outcomes(predicted_market)`,
+    `CREATE INDEX IF NOT EXISTS idx_po_outcome ON prediction_outcomes(outcome)`
   ];
 
   for (const sql of statements) {
@@ -258,19 +295,22 @@ async function runSchema() {
   // Auto-migrations for older tables using SQLite PRAGMA table_info
   async function addColumnIfNotExists(tableName, columnName, columnDef) {
     try {
-      await db.execute(`SELECT ${columnName} FROM ${tableName} LIMIT 0`);
-      const exists = true;
+      const info = await db.execute(`PRAGMA table_info(${tableName})`);
+      const exists = (info.rows || []).some(
+        r => String(r.name).toLowerCase() === columnName.toLowerCase()
+      );
       if (!exists) {
         await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
         console.log(`✅ Added column ${columnName} to ${tableName}`);
       }
     } catch (e) {
       const message = String(e?.message || '');
-      if (message.includes('no such column')) {
-        await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
-        console.log(`✅ Added column ${columnName} to ${tableName}`);
+      // If the error is "duplicate column name", the column already exists — that's fine
+      if (message.includes('duplicate column') || message.includes('already exists')) {
+        console.log(`Column ${columnName} already exists in ${tableName} (caught in addColumn)`);
+      } else {
+        console.warn(`addColumnIfNotExists failed for ${tableName}.${columnName}:`, message);
       }
-      // Ignore if table doesn't exist yet
     }
   }
 

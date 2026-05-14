@@ -44,7 +44,8 @@ export function useLogin() {
       setAuthToken(data.token);
       // Merge has_access/access_status into the user object for consistency
       const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
+      const parsed = UserSchema.parse(user); // Validate through schema for type safety
+      queryClient.setQueryData(["/api/auth/me"], parsed);
       setLocation("/");
     },
   });
@@ -66,7 +67,8 @@ export function useSignup() {
       setAuthToken(data.token);
       localStorage.removeItem("sp_referral_code");
       const user = { ...data.user, has_access: data.has_access, access_status: data.access_status };
-      queryClient.setQueryData(["/api/auth/me"], user);
+      const parsed = UserSchema.parse(user);
+      queryClient.setQueryData(["/api/auth/me"], parsed);
       setLocation("/");
     }
   });

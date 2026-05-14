@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useAuth, useInitPayment } from "@/hooks/use-auth";
-import { Check, Crown, Zap, Shield, Loader2, ArrowLeft, Sparkles, TrendingUp, Bot, Target, ChevronRight, Lock } from "lucide-react";
+import { Check, Crown, Zap, Shield, Loader2, ArrowLeft, Sparkles, TrendingUp, Bot, Target, ChevronRight, Lock, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const FEATURES = [

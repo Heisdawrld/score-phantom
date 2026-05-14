@@ -16,14 +16,14 @@ export async function initMarketTrackingTable() {
   try {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS market_tracking (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         fixture_id TEXT NOT NULL,
         market_key TEXT NOT NULL,
         market_type TEXT NOT NULL,
         selection TEXT NOT NULL,
         timestamp BIGINT NOT NULL,
         engine_version TEXT DEFAULT 'v2',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT (datetime('now'))
       )
     `);
 
@@ -170,6 +170,7 @@ export async function cleanupOldTracking() {
   }
 }
 
-// Run cleanup on module load
+// Run cleanup on module load and every 6 hours to prevent unbounded growth
 cleanupOldTracking().catch(() => {});
+setInterval(() => { cleanupOldTracking().catch(() => {}); }, 6 * 60 * 60 * 1000);
 

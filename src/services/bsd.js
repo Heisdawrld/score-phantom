@@ -37,6 +37,16 @@ function cacheSet(key, data) {
   _cache.set(key, { data, ts: Date.now() });
 }
 
+// Periodic cleanup: prune expired entries every 5 minutes to prevent unbounded memory growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of _cache) {
+    if (now - entry.ts > CACHE_TTL_MS) {
+      _cache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 function cleanPath(path = '') {
   return path.startsWith('/') ? path : `/${path}`;
 }
