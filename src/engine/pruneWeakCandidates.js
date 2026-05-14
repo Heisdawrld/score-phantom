@@ -1,4 +1,5 @@
 import { safeNum } from '../utils/math.js';
+import { getDynamicMarketFloor } from '../storage/accuracyCache.js';
 
 /**
  * pruneWeakCandidates — removes candidates that don't meet minimum quality bars.
@@ -17,6 +18,9 @@ import { safeNum } from '../utils/math.js';
  *   - BTTS Yes:       0.68  → real win rate 44.0% 🔴 (was losing at low prob)
  *   - Double Chance:  0.72  → real win rate 42.9% 🔴 (worst market, high bar)
  *   - DNB:            0.65  → protective floor
+ *
+ * v2: Uses dynamic floors from accuracy cache when sufficient data exists.
+ * Falls back to hardcoded defaults when cache has no data for a market.
  */
 const MARKET_MIN_PROB = {
   btts_yes:           0.68,
@@ -57,6 +61,7 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
   const minProb     = options.minProb     ?? 0.60;
   const minEdge     = options.minEdge     ?? -0.08;
   const minTactical = options.minTactical ?? 0.12;
+  const accuracyCache = options.accuracyCache || null;
   const pruned  = [];
   const removed = [];
 
@@ -65,7 +70,15 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     const edge     = safeNum(c.edge, 0);
     const tactical = safeNum(c.tacticalFitScore, 0);
     const score    = safeNum(c.finalScore, 0);
-    const marketFloor = MARKET_MIN_PROB[c.marketKey] ?? minProb;
+    const marketFloor = (function() {
+      // Try dynamic floor from accuracy cache first
+      if (accuracyCache) {
+        const dynamic = getDynamicMarketFloor(c.marketKey, accuracyCache);
+        if (dynamic != null) return dynamic.floor;
+      }
+      // Fall back to hardcoded defaults
+      return MARKET_MIN_PROB[c.marketKey] ?? minProb;
+    })();
 
     // "Too Good To Be True" Anomaly Filter (The Value Trap)
     // If the engine thinks a pick has a massive edge (>35%), it means the bookmaker strongly disagrees.

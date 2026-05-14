@@ -121,13 +121,13 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    const modelScore = 0.30 * modelConfidenceScore;
-    const marketEdgeScore = 0.20 * edgeScore;
-    const tacticalFitComponent = 0.15 * tacticalFitScore;
-    const predictabilityScore = 0.15 * predScore;
+    const modelScore = 0.26 * modelConfidenceScore;
+    const marketEdgeScore = 0.17 * edgeScore;
+    const tacticalFitComponent = 0.14 * tacticalFitScore;
+    const predictabilityScore = 0.14 * predScore;
     const dataSupportComponent = 0.10 * dataSupportScore;
-    const historicalAccuracyComponent = 0.05 * historicalAccuracyScore;
-    const leagueCalibrationComponent = 0.05 * leagueMarketScore;
+    const historicalAccuracyComponent = 0.08 * historicalAccuracyScore;
+    const leagueCalibrationComponent = 0.06 * leagueMarketScore;
     const formMomentumComponent = 0.05 * formMomentumScore;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;

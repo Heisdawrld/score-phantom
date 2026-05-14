@@ -30,7 +30,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '2.8.9'; // Bumped: audited whole market ranking + headline eligibility
+const CURRENT_ENGINE_VERSION = '2.9.0'; // Bumped: historical calibration layer + dynamic market floors + time-weighted accuracy
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 

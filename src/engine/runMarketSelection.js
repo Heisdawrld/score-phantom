@@ -78,6 +78,7 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
   const pruned = pruneWeakCandidates(scored, {
     scriptPrimary: script?.primary,
     primaryScript: script?.primary,
+    accuracyCache,
   });
 
   // ── Stage 3e: Rank survivors ───────────────────────────────────────────────
