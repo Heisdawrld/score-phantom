@@ -1,5 +1,5 @@
 // RuFlo-powered fixes for Score Phantom
-// File: src/services/resultChecker.js - Updated to fix profit units and sharp value detection
+// File: src/services/resultChecker.js - Unified with wsLiveScores & backtesting odds source
 
 import db from '../config/database.js';
 import { fetchFixturesByDate } from './bsd.js';
@@ -103,6 +103,35 @@ export async function checkResults(dateStr) {
   const existingMap = {};
   for (const r of existing.rows || []) existingMap[String(r.fixture_id)] = r.outcome;
   const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0, updated: 0 };
+
+  // Pre-fetch all prediction_picks for these fixtures in one query (avoids N+1 lookups)
+  const fixtureIds = fixtures.map(f => String(f.id));
+  const picksMap = {};
+  if (fixtureIds.length > 0) {
+    try {
+      const placeholders = fixtureIds.map(() => '?').join(',');
+      const picksRes = await db.execute({
+        sql: `SELECT id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence
+              FROM prediction_picks
+              WHERE fixture_id IN (${placeholders})
+                AND prediction_source = 'pre_match'
+                AND kickoff_at IS NOT NULL
+                AND generated_at < kickoff_at
+              ORDER BY generated_at DESC`,
+        args: fixtureIds,
+      });
+      for (const p of picksRes.rows || []) {
+        // Keep only the first (latest) pick per fixture
+        if (!picksMap[String(p.fixture_id)]) {
+          picksMap[String(p.fixture_id)] = p;
+        }
+      }
+      console.log('[ResultChecker] Found', Object.keys(picksMap).length, 'pre-match picks for odds lookup');
+    } catch (pickErr) {
+      console.warn('[ResultChecker] Could not fetch prediction_picks, falling back to implied_probability:', pickErr.message);
+    }
+  }
+
   for (const fix of fixtures) {
     const fid = String(fix.id);
     const prev = existingMap[fid];
@@ -121,20 +150,72 @@ export async function checkResults(dateStr) {
 
     const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
     
-    // Calculate profit units using the shared computeProfitUnits function
-    // Derive decimal odds from implied probability: odds = 1 / impliedProb
-    const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
-    const decimalOdds = impliedProb > 0 ? (1 / impliedProb) : null;
-    const profitUnits = computeProfitUnits(outcome, decimalOdds, 1);
+    // ── Unified odds source: read bookmaker_odds from prediction_picks ────────
+    // This matches how wsLiveScores.js and backtesting.js calculate profit_units.
+    // Falls back to deriving from implied_probability if no pick found.
+    const pick = picksMap[fid] || null;
+    const bookmakerOdds = pick?.bookmaker_odds != null
+      ? parseFloat(pick.bookmaker_odds)
+      : (() => {
+          const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
+          return impliedProb > 0 ? (1 / impliedProb) : null;
+        })();
+    const profitUnits = computeProfitUnits(outcome, bookmakerOdds, 1);
+    const pickId = pick?.id != null ? Number(pick.id) : null;
+    const market = pick?.market_key || fix.best_pick_market;
+    const selection = pick?.selection || fix.best_pick_selection;
+    const probability = pick?.model_probability ?? parseFloat(fix.best_pick_probability || 0);
+    const modelConfidence = pick?.model_confidence || fix.confidence_model || '';
     
     // Determine if this is a sharp value pick (high edge)
     const edge = parseFloat(fix.best_pick_edge || 0);
     const isSharpValue = edge > 0.15; // Edge > 15% is considered sharp value
     
     try {
+      // ── Unified INSERT: same 22 columns as wsLiveScores.js and backtesting.js ──
       await db.execute({ 
-        sql: 'INSERT INTO prediction_outcomes (fixture_id,home_team,away_team,match_date,tournament,predicted_market,predicted_selection,predicted_probability,model_confidence,home_score,away_score,full_score,outcome,evaluated_at,created_at,profit_units,is_sharp_value) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?) ON CONFLICT (fixture_id) DO UPDATE SET home_score=EXCLUDED.home_score, away_score=EXCLUDED.away_score, full_score=EXCLUDED.full_score, outcome=EXCLUDED.outcome, evaluated_at=CURRENT_TIMESTAMP, profit_units=EXCLUDED.profit_units, is_sharp_value=EXCLUDED.is_sharp_value', 
-        args: [fid, fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name, fix.best_pick_market, fix.best_pick_selection, parseFloat(fix.best_pick_probability || 0), fix.confidence_model || '', score.home, score.away, score.home + '-' + score.away, outcome, profitUnits, isSharpValue ? 1 : 0] 
+        sql: `INSERT INTO prediction_outcomes (
+          fixture_id, sport_key, home_team, away_team, match_date, tournament,
+          pick_id, predicted_market, predicted_selection, predicted_probability,
+          best_pick_odds, stake_units, profit_units,
+          model_confidence,
+          home_score, away_score, full_score,
+          outcome, result_status, is_sharp_value,
+          evaluated_at, created_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?,
+          ?, ?, ?,
+          ?, ?, ?,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (fixture_id) DO UPDATE SET
+          sport_key = EXCLUDED.sport_key,
+          pick_id = EXCLUDED.pick_id,
+          predicted_market = EXCLUDED.predicted_market,
+          predicted_selection = EXCLUDED.predicted_selection,
+          predicted_probability = EXCLUDED.predicted_probability,
+          best_pick_odds = EXCLUDED.best_pick_odds,
+          stake_units = EXCLUDED.stake_units,
+          profit_units = EXCLUDED.profit_units,
+          model_confidence = EXCLUDED.model_confidence,
+          home_score = EXCLUDED.home_score,
+          away_score = EXCLUDED.away_score,
+          full_score = EXCLUDED.full_score,
+          outcome = EXCLUDED.outcome,
+          result_status = EXCLUDED.result_status,
+          is_sharp_value = EXCLUDED.is_sharp_value,
+          evaluated_at = CURRENT_TIMESTAMP`, 
+        args: [
+          fid, 'football', fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name,
+          pickId, market, selection, parseFloat(probability || 0),
+          bookmakerOdds != null ? parseFloat(bookmakerOdds) : null, 1, profitUnits,
+          modelConfidence || null,
+          score.home, score.away, score.home + '-' + score.away,
+          outcome, outcome, isSharpValue ? 1 : 0,
+        ] 
       });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;

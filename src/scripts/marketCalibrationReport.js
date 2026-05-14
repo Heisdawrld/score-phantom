@@ -38,11 +38,11 @@ async function main() {
 
   const overall = await queryBuckets(`
     SELECT
-      COUNT(*)::int AS total_picks,
-      SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END)::int AS wins,
+      CAST(COUNT(*) AS INTEGER) AS total_picks,
+      CAST(SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) AS INTEGER) AS wins,
       ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
-      ROUND(AVG(po.best_pick_odds)::numeric, 3) AS avg_odds,
-      ROUND(SUM(po.profit_units)::numeric, 3) AS total_profit_units,
+      ROUND(AVG(po.best_pick_odds), 3) AS avg_odds,
+      ROUND(SUM(po.profit_units), 3) AS total_profit_units,
       ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
     ${baseWhere}
   `, []);
@@ -50,10 +50,10 @@ async function main() {
   const byMarket = await queryBuckets(`
     SELECT
       po.predicted_market AS market,
-      COUNT(*)::int AS total_picks,
+      CAST(COUNT(*) AS INTEGER) AS total_picks,
       ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
-      ROUND(AVG(po.best_pick_odds)::numeric, 3) AS avg_odds,
-      ROUND(SUM(po.profit_units)::numeric, 3) AS total_profit_units,
+      ROUND(AVG(po.best_pick_odds), 3) AS avg_odds,
+      ROUND(SUM(po.profit_units), 3) AS total_profit_units,
       ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
     ${baseWhere}
     GROUP BY po.predicted_market
@@ -63,10 +63,10 @@ async function main() {
   const byLeague = await queryBuckets(`
     SELECT
       po.tournament AS league,
-      COUNT(*)::int AS total_picks,
+      CAST(COUNT(*) AS INTEGER) AS total_picks,
       ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
-      ROUND(AVG(po.best_pick_odds)::numeric, 3) AS avg_odds,
-      ROUND(SUM(po.profit_units)::numeric, 3) AS total_profit_units,
+      ROUND(AVG(po.best_pick_odds), 3) AS avg_odds,
+      ROUND(SUM(po.profit_units), 3) AS total_profit_units,
       ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
     ${baseWhere}
     GROUP BY po.tournament
@@ -77,10 +77,10 @@ async function main() {
   const byConfidence = await queryBuckets(`
     SELECT
       COALESCE(NULLIF(po.model_confidence,''), 'unknown') AS confidence_band,
-      COUNT(*)::int AS total_picks,
+      CAST(COUNT(*) AS INTEGER) AS total_picks,
       ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
-      ROUND(AVG(po.best_pick_odds)::numeric, 3) AS avg_odds,
-      ROUND(SUM(po.profit_units)::numeric, 3) AS total_profit_units,
+      ROUND(AVG(po.best_pick_odds), 3) AS avg_odds,
+      ROUND(SUM(po.profit_units), 3) AS total_profit_units,
       ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
     ${baseWhere}
     GROUP BY COALESCE(NULLIF(po.model_confidence,''), 'unknown')

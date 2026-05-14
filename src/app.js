@@ -23,6 +23,7 @@ import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
 import { refreshAccuracyCache } from "./storage/accuracyCache.js";
 import { runMaintenanceJobs } from "./scripts/maintenance.js";
+import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
@@ -174,6 +175,11 @@ if (fs.existsSync(clientDistPath)) {
 const BUILD_VERSION = process.env.BUILD_VERSION || new Date().toISOString();
 app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, ts: Date.now() });
+});
+
+// Health monitoring endpoint — shows cron job status
+app.get('/api/cron-health', requireAdminSecret, (req, res) => {
+  res.json(getJobHealthSummary());
 });
 
 // Serve standalone admin page (engine room)
@@ -346,29 +352,42 @@ app.listen(PORT, async () => {
   // This ensures all fixtures for the week get enriched on startup
   console.log('[AutoEnrich] Starting full startup enrichment pass...');
   const { autoBuildPredictions } = await import('./services/predictionRunner.js');
+  const startupEnrichStart = Date.now();
   autoEnrich({ limit: 200 })
-    .then(() => {
+    .then((result) => {
+      recordJobRun('startup_enrichment', { success: true, durationMs: Date.now() - startupEnrichStart, meta: { enriched: result?.enriched, failed: result?.failed } });
       console.log('[PredRunner] Enrichment done — pre-generating predictions...');
       return autoBuildPredictions({ limit: 100 });
     })
-    .catch((err) => console.error('[AutoEnrich/PredRunner] startup error:', err.message));
+    .catch((err) => {
+      recordJobRun('startup_enrichment', { success: false, durationMs: Date.now() - startupEnrichStart, error: err.message });
+      console.error('[AutoEnrich/PredRunner] startup error:', err.message);
+    });
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
   setTimeout(async () => {
+    const backfillStart = Date.now();
     try {
       const { autoBuildPredictions } = await import("./services/predictionRunner.js");
       await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
       const { backfillResults } = await import("./services/resultChecker.js");
       const res = await backfillResults(30);
+      recordJobRun('startup_backfill', { success: true, durationMs: Date.now() - backfillStart, meta: { days: 30, results: res.length } });
       console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
-    } catch (err) { console.error("[ResultChecker] Startup backfill failed:", err.message); }
+    } catch (err) {
+      recordJobRun('startup_backfill', { success: false, durationMs: Date.now() - backfillStart, error: err.message });
+      console.error("[ResultChecker] Startup backfill failed:", err.message);
+    }
   }, 30000);
 
   // Continuous enrichment pipeline: Every 15 minutes, aggressively prefetch data
   setInterval(async () => {
+    const cronStart = Date.now();
     try {
-      await autoEnrich({ limit: 200 });
-      await autoBuildPredictions({ limit: 200 });
+      const enrichResult = await autoEnrich({ limit: 200 });
+      const predResult = await autoBuildPredictions({ limit: 200 });
+      recordJobRun('15min_enrich_predict', { success: true, durationMs: Date.now() - cronStart, meta: { enriched: enrichResult?.enriched, predictions: predResult?.built } });
     } catch (err) {
+      recordJobRun('15min_enrich_predict', { success: false, durationMs: Date.now() - cronStart, error: err.message });
       console.error("[AutoEnrich/PredRunner] scheduled error:", err.message);
     }
   }, 15 * 60 * 1000); // every 15 minutes
