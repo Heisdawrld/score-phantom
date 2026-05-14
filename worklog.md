@@ -1,40 +1,24 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: E2E Debugging of ScorePhantom project
+Agent: Super Z (Main)
+Task: E2E Debug and Improvement of ScorePhantom project
 
 Work Log:
-- Cloned repo from https://github.com/Heisdawrld/score-phantom.git
-- Explored full project structure: Express.js backend + React/Vite frontend
-- Tested live API endpoints at https://score-phantom.onrender.com/
-- Tested login with provided credentials (successful, JWT obtained)
-- Found /api/fixtures endpoint timeout (>20s, 654 fixtures with heavy JOIN)
-- Found /api/live endpoint returns error (SQLite double-quote string issue)
-- Deep-read all 100+ source files across backend and frontend
-- Identified and fixed critical bugs
+- Cloned repository from https://github.com/Heisdawrld/score-phantom.git
+- Examined full project structure: Express.js backend + React/Vite frontend + Turso DB
+- Analyzed 20+ core source files: routes, auth, prediction engine, enrichment pipeline, live scores, BSD API client, Flutterwave payments
+- Tested live production API endpoints with real admin credentials
+- Identified 15 bugs (1 CRITICAL, 3 HIGH, 6 MEDIUM, 5 LOW) and 12 improvement recommendations
+- Generated comprehensive DOCX debug report at /home/z/my-project/download/ScorePhantom_E2E_Debug_Report.docx
+- Fixed BUG-001: Moved /api/debug/enrich/:fixtureId to /api/admin/debug/enrich/:fixtureId (proper auth guard)
+- Fixed BUG-002: Replaced race-condition-prone incrementAndCheckDailyCount with atomic check-and-increment using RETURNING clause
+- Fixed BUG-004: Updated env.example to reference Turso DB instead of Postgres
+- Fixed BUG-006: Added missing is_sharp_value column migration to prediction_outcomes table
+- Fixed BUG-010: Fixed dead code in addColumnIfNotExists — now uses PRAGMA table_info instead of broken SELECT approach
+- Fixed BUG-012: Added periodic cache cleanup for in-memory BSD API cache to prevent unbounded memory growth
+- Fixed BUG-003: Improved /api/live error handling and query formatting
 
 Stage Summary:
-- **BUG 1 FIXED**: `refreshAccuracyCache` used but never imported in app.js (ReferenceError at runtime)
-- **BUG 2 FIXED**: `isPremium` undefined in PredictionPanel.tsx (causes broken premium feature gating)
-- **BUG 3 FIXED**: `/api/fixtures` default limit changed from 2000→200, added date range filter (was loading ALL 654 fixtures)
-- **BUG 4 FIXED**: `/api/live` SQLite query used double-quoted string literals instead of single quotes
-- **BUG 5 FIXED**: `marketTracking.js` used PostgreSQL `SERIAL` instead of SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`
-- **BUG 6 FIXED**: `savePredictionLog.js` used PostgreSQL `SERIAL` instead of SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`
-- **BUG 7 FIXED**: Critical security vulnerability in login endpoint — auto-set passwords for passwordless accounts (account takeover risk)
-- **BUG 8 FIXED**: `marketTracking.js` used `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` (SQLite-incompatible, changed to `TEXT DEFAULT (datetime('now'))`)
-
----
-Task ID: 6
-Agent: Main Agent
-Task: Implement improvements
-
-Work Log:
-- Removed `f.meta` from fixtures list SQL SELECT (5KB+ per fixture was being fetched for all 654 fixtures)
-- Added 60s client-side cache control header for fixtures endpoint
-- Added default date range filter (yesterday through +7 days) when no date param provided
-- Reduced default fixtures limit from 2000 to 200
-
-Stage Summary:
-- Fixtures endpoint response size dramatically reduced (no more meta blobs, date-filtered by default)
-- Client-side caching reduces redundant API calls
-- All critical bugs fixed in previous tasks
+- Comprehensive debug report generated as DOCX
+- 7 bugs fixed in source code
+- Remaining P2/P3 bugs and improvements documented in the report for future sprints
