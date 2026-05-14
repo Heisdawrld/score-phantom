@@ -300,7 +300,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const stakeUnits = 1;
   const profitUnits = computeProfitUnits(resultStatus, odds, stakeUnits);
 
-  await db.execute({ 
+  await db.execute({
     sql: `
       INSERT INTO prediction_outcomes (
         fixture_id, sport_key, home_team, away_team, match_date, tournament,
@@ -308,7 +308,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
         best_pick_odds, stake_units, profit_units,
         model_confidence,
         home_score, away_score, full_score,
-        outcome, result_status,
+        outcome, result_status, prediction_source,
         evaluated_at, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
@@ -316,7 +316,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
         ?, ?, ?,
         ?,
         ?, ?, ?,
-        ?, ?,
+        ?, ?, 'ws_live',
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
       ON CONFLICT (fixture_id) DO UPDATE SET
@@ -334,8 +334,9 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
         full_score = EXCLUDED.full_score,
         outcome = EXCLUDED.outcome,
         result_status = EXCLUDED.result_status,
+        prediction_source = EXCLUDED.prediction_source,
         evaluated_at = CURRENT_TIMESTAMP
-    `, 
+    `,
     args: [
       fixtureId,
       'football',
@@ -356,7 +357,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
       homeScore + '-' + awayScore,
       outcome,
       resultStatus,
-    ] 
+    ]
   });
   console.log('[WS] Auto-result: ' + f.home_team_name + ' vs ' + f.away_team_name + ' -> ' + outcome + ' (' + homeScore + '-' + awayScore + ')');
   // Send push notification for win/loss result

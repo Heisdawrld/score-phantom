@@ -14,35 +14,119 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
   const awayName = (awayTeamName || '').toLowerCase().trim();
   const isHomePick = homeName && sel.includes(homeName);
   const isAwayPick = awayName && sel.includes(awayName);
+
+  // ── Over/Under total goals markets ──────────────────────────────────────────
+  // Handles: over_15, over_25, over_35, under_25, under_35, Over/Under, etc.
   if (mkt.includes('over') || mkt.includes('under')) {
-    const om = sel.match(/over\s+(\d+\.?\d*)/i); if (om) return total > parseFloat(om[1]) ? 'win' : 'loss';
-    const um = sel.match(/under\s+(\d+\.?\d*)/i); if (um) return total < parseFloat(um[1]) ? 'win' : 'loss';
+    // Extract threshold from selection first (e.g. "Over 2.5 Goals" → 2.5)
+    const om = sel.match(/over\s+(\d+\.?\d*)/i);
+    const um = sel.match(/under\s+(\d+\.?\d*)/i);
+    // Also try extracting from market key (e.g. "under_25" → 2.5)
+    const mktOver  = mkt.match(/over[_\s]?(\d)(\d)?/);
+    const mktUnder = mkt.match(/under[_\s]?(\d)(\d)?/);
+
+    if (om) return total > parseFloat(om[1]) ? 'win' : 'loss';
+    if (um) return total < parseFloat(um[1]) ? 'win' : 'loss';
+    if (mktOver) {
+      const threshold = mktOver[2] ? parseFloat(mktOver[1] + '.' + mktOver[2]) : parseFloat(mktOver[1]);
+      return total > threshold ? 'win' : 'loss';
+    }
+    if (mktUnder) {
+      const threshold = mktUnder[2] ? parseFloat(mktUnder[1] + '.' + mktUnder[2]) : parseFloat(mktUnder[1]);
+      return total < threshold ? 'win' : 'loss';
+    }
   }
-  if (mkt.includes('both teams') || mkt === 'btts') {
+
+  // ── BTTS (Both Teams To Score) ──────────────────────────────────────────────
+  // Handles: btts, btts_yes, btts_no, "Both Teams to Score"
+  if (mkt.includes('btts') || mkt.includes('both teams')) {
     const btts = homeScore > 0 && awayScore > 0;
-    if (sel.includes('not to score') || sel === 'no') return btts ? 'loss' : 'win';
+    if (mkt.includes('no') || sel.includes('no') || sel.includes('not to score')) return btts ? 'loss' : 'win';
     return btts ? 'win' : 'loss';
   }
-  if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result')) {
-    if (sel === '1' || sel.includes('home win') || isHomePick) return homeScore > awayScore ? 'win' : 'loss';
-    if (sel === '2' || sel.includes('away win') || isAwayPick) return awayScore > homeScore ? 'win' : 'loss';
-    if (sel === 'x' || sel === 'draw') return homeScore === awayScore ? 'win' : 'loss';
+
+  // ── 1X2 / Match Result ─────────────────────────────────────────────────────
+  // Handles: 1x2, match result, result, home_win, away_win, draw
+  if (mkt.includes('1x2') || mkt.includes('match result') || mkt.includes('result') ||
+      mkt === 'home_win' || mkt === 'away_win' || mkt === 'draw') {
+    if (mkt === 'home_win' || sel === '1' || sel.includes('home win') || isHomePick)
+      return homeScore > awayScore ? 'win' : 'loss';
+    if (mkt === 'away_win' || sel === '2' || sel.includes('away win') || isAwayPick)
+      return awayScore > homeScore ? 'win' : 'loss';
+    if (mkt === 'draw' || sel === 'x' || sel === 'draw')
+      return homeScore === awayScore ? 'win' : 'loss';
+    // Fallback for generic "result" market: infer from selection
+    if (homeScore > awayScore) return (sel === '1' || sel.includes('home') || isHomePick) ? 'win' : 'loss';
+    if (awayScore > homeScore) return (sel === '2' || sel.includes('away') || isAwayPick) ? 'win' : 'loss';
+    return (sel === 'x' || sel === 'draw') ? 'win' : 'loss';
   }
-  if (mkt.includes('double chance')) {
-    if (sel.includes('12') || sel.includes('home or away')) return homeScore !== awayScore ? 'win' : 'loss';
-    if (sel.includes('1x') || sel.includes('home or draw') || sel.includes('home') || sel.includes('1') || isHomePick) return homeScore >= awayScore ? 'win' : 'loss';
-    if (sel.includes('x2') || sel.includes('draw or away') || sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore >= homeScore ? 'win' : 'loss';
+
+  // ── Double Chance ───────────────────────────────────────────────────────────
+  // Handles: double chance, double_chance_home, double_chance_away
+  if (mkt.includes('double chance') || mkt.includes('double_chance')) {
+    if (mkt.includes('home') || sel.includes('1x') || sel.includes('home or draw'))
+      return homeScore >= awayScore ? 'win' : 'loss';
+    if (mkt.includes('away') || sel.includes('x2') || sel.includes('draw or away'))
+      return awayScore >= homeScore ? 'win' : 'loss';
+    if (sel.includes('12') || sel.includes('home or away'))
+      return homeScore !== awayScore ? 'win' : 'loss';
+    // Generic double chance: infer from selection
+    if (isHomePick || sel.includes('home') || sel === '1') return homeScore >= awayScore ? 'win' : 'loss';
+    if (isAwayPick || sel.includes('away') || sel === '2') return awayScore >= homeScore ? 'win' : 'loss';
     return homeScore >= awayScore ? 'win' : 'loss';
   }
+
+  // ── Draw No Bet ─────────────────────────────────────────────────────────────
+  // Handles: dnb, dnb_home, dnb_away, draw no bet
   if (mkt.includes('draw no bet') || mkt.includes('dnb')) {
-    if (sel.includes('home') || sel.includes('1') || isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
-    if (sel.includes('away') || sel.includes('2') || isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    if (mkt.includes('home') || sel.includes('home') || sel === '1' || isHomePick)
+      return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    if (mkt.includes('away') || sel.includes('away') || sel === '2' || isAwayPick)
+      return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    // Generic DNB: infer
+    if (isHomePick) return homeScore > awayScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    if (isAwayPick) return awayScore > homeScore ? 'win' : (homeScore === awayScore ? 'void' : 'loss');
+    return 'void';
   }
-  if (mkt.includes('home team goals') || mkt.includes('away team goals')) {
-    const goals = mkt.includes('home') ? homeScore : awayScore;
-    const om2 = sel.match(/over\s+(\d+\.?\d*)/i); if (om2) return goals > parseFloat(om2[1]) ? 'win' : 'loss';
-    const um2 = sel.match(/under\s+(\d+\.?\d*)/i); if (um2) return goals < parseFloat(um2[1]) ? 'win' : 'loss';
+
+  // ── Home/Away Team Goals (over/under for one team) ──────────────────────────
+  // Handles: home_over_15, home_over_25, away_over_15, away_over_25,
+  //          home_under_15, away_under_15, "Home Team Goals", "Away Team Goals"
+  if (mkt.includes('home team goals') || mkt.startsWith('home_over') || mkt.startsWith('home_under')) {
+    const om2 = sel.match(/over\s+(\d+\.?\d*)/i);
+    const um2 = sel.match(/under\s+(\d+\.?\d*)/i);
+    const mktO = mkt.match(/over[_\s]?(\d)(\d)?/);
+    const mktU = mkt.match(/under[_\s]?(\d)(\d)?/);
+    if (om2) return homeScore > parseFloat(om2[1]) ? 'win' : 'loss';
+    if (um2) return homeScore < parseFloat(um2[1]) ? 'win' : 'loss';
+    if (mktO) { const t = mktO[2] ? parseFloat(mktO[1]+'.'+mktO[2]) : parseFloat(mktO[1]); return homeScore > t ? 'win' : 'loss'; }
+    if (mktU) { const t = mktU[2] ? parseFloat(mktU[1]+'.'+mktU[2]) : parseFloat(mktU[1]); return homeScore < t ? 'win' : 'loss'; }
   }
+  if (mkt.includes('away team goals') || mkt.startsWith('away_over') || mkt.startsWith('away_under')) {
+    const om3 = sel.match(/over\s+(\d+\.?\d*)/i);
+    const um3 = sel.match(/under\s+(\d+\.?\d*)/i);
+    const mktO = mkt.match(/over[_\s]?(\d)(\d)?/);
+    const mktU = mkt.match(/under[_\s]?(\d)(\d)?/);
+    if (om3) return awayScore > parseFloat(om3[1]) ? 'win' : 'loss';
+    if (um3) return awayScore < parseFloat(um3[1]) ? 'win' : 'loss';
+    if (mktO) { const t = mktO[2] ? parseFloat(mktO[1]+'.'+mktO[2]) : parseFloat(mktO[1]); return awayScore > t ? 'win' : 'loss'; }
+    if (mktU) { const t = mktU[2] ? parseFloat(mktU[1]+'.'+mktU[2]) : parseFloat(mktU[1]); return awayScore < t ? 'win' : 'loss'; }
+  }
+
+  // ── Asian Handicap (future-proofing) ────────────────────────────────────────
+  if (mkt.includes('handicap') || mkt.includes('ahc')) {
+    const hm = sel.match(/([+-]?\d+\.?\d*)/);
+    if (hm) {
+      const line = parseFloat(hm[1]);
+      const isHome = sel.includes('home') || sel === '1' || isHomePick;
+      const diff = isHome ? (homeScore - awayScore) : (awayScore - homeScore);
+      const adjusted = diff + (isHome ? -line : line);
+      if (adjusted > 0.25) return 'win';
+      if (adjusted < -0.25) return 'loss';
+      return 'void'; // half-win/void on exact line
+    }
+  }
+
   return 'void';
 }
 
@@ -84,14 +168,22 @@ export async function checkResults(dateStr) {
     }
   }
   console.log('[ResultChecker] Score map: ' + Object.keys(scoreMap).length + ' by ID, ' + Object.keys(nameMap).length + ' by name');
+  // Track which fixtures were auto-built (retroactive predictions) so we can flag them
+  const retroactiveFixtureIds = new Set();
+
   // Auto-build predictions for finished fixtures that were never clicked
+  // NOTE: These are RETROACTIVE predictions — the engine didn't predict these before the match.
+  // They should NOT be counted in the user-facing track record.
   try {
     const unpredicted = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name FROM fixtures f LEFT JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.fixture_id IS NULL', args: ['%' + date + '%'] });
     const toBuild = (unpredicted.rows || []).filter(f => scoreMap[String(f.id)]);
     if (toBuild.length > 0) {
-      console.log('[ResultChecker] Auto-building', toBuild.length, 'predictions for finished fixtures...');
+      console.log('[ResultChecker] Auto-building', toBuild.length, 'RETROACTIVE predictions for finished fixtures...');
       const { getOrBuildPrediction } = await import('./predictionCache.js');
-      await Promise.allSettled(toBuild.slice(0, 30).map(f => getOrBuildPrediction(String(f.id)).catch(() => null)));
+      await Promise.allSettled(toBuild.slice(0, 30).map(f => {
+        retroactiveFixtureIds.add(String(f.id));
+        return getOrBuildPrediction(String(f.id)).catch(() => null);
+      }));
     }
   } catch(buildErr) { console.warn('[ResultChecker] Auto-build warning:', buildErr.message); }
 
@@ -171,8 +263,10 @@ export async function checkResults(dateStr) {
     const edge = parseFloat(fix.best_pick_edge || 0);
     const isSharpValue = edge > 0.15; // Edge > 15% is considered sharp value
     
+    const isRetroactive = retroactiveFixtureIds.has(fid) ? 1 : 0;
+
     try {
-      // ── Unified INSERT: same 22 columns as wsLiveScores.js and backtesting.js ──
+      // ── Unified INSERT: same columns as wsLiveScores.js and backtesting.js + source tracking ──
       await db.execute({ 
         sql: `INSERT INTO prediction_outcomes (
           fixture_id, sport_key, home_team, away_team, match_date, tournament,
@@ -181,6 +275,7 @@ export async function checkResults(dateStr) {
           model_confidence,
           home_score, away_score, full_score,
           outcome, result_status, is_sharp_value,
+          prediction_source, is_retroactive,
           evaluated_at, created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
@@ -189,6 +284,7 @@ export async function checkResults(dateStr) {
           ?,
           ?, ?, ?,
           ?, ?, ?,
+          ?, ?,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
         ON CONFLICT (fixture_id) DO UPDATE SET
@@ -207,6 +303,8 @@ export async function checkResults(dateStr) {
           outcome = EXCLUDED.outcome,
           result_status = EXCLUDED.result_status,
           is_sharp_value = EXCLUDED.is_sharp_value,
+          prediction_source = EXCLUDED.prediction_source,
+          is_retroactive = EXCLUDED.is_retroactive,
           evaluated_at = CURRENT_TIMESTAMP`, 
         args: [
           fid, 'football', fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name,
@@ -215,6 +313,7 @@ export async function checkResults(dateStr) {
           modelConfidence || null,
           score.home, score.away, score.home + '-' + score.away,
           outcome, outcome, isSharpValue ? 1 : 0,
+          'live', isRetroactive,
         ] 
       });
       if (prev === 'void') outcomes.updated++;

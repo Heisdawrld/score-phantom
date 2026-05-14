@@ -563,6 +563,105 @@ router.post("/clean-ghost-voids", adminLimiter, requireAdmin, async (req, res) =
   }
 });
 
+// ── POST /reevaluate-voids — re-evaluate void outcomes that have scores using fixed evaluatePrediction
+// This fixes the bug where home_win, away_win, btts_yes, btts_no markets were incorrectly evaluated as void
+router.post("/reevaluate-voids", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { evaluatePrediction } = await import('../services/resultChecker.js');
+    const { computeProfitUnits } = await import('../storage/profitUnits.js');
+
+    // Find all void outcomes that have scores (these were likely mis-evaluated)
+    const voids = await db.execute(`
+      SELECT id, fixture_id, predicted_market, predicted_selection,
+             home_team, away_team, home_score, away_score,
+             best_pick_odds, stake_units
+      FROM prediction_outcomes
+      WHERE outcome = 'void' AND home_score IS NOT NULL AND away_score IS NOT NULL
+    `);
+
+    let reclassified = 0;
+    let stillVoid = 0;
+    const details = [];
+
+    for (const row of voids.rows || []) {
+      const newOutcome = evaluatePrediction(
+        row.predicted_market, row.predicted_selection,
+        Number(row.home_score), Number(row.away_score),
+        row.home_team, row.away_team
+      );
+
+      if (newOutcome !== 'void') {
+        const profitUnits = computeProfitUnits(newOutcome, row.best_pick_odds, row.stake_units || 1);
+        await db.execute({
+          sql: `UPDATE prediction_outcomes
+                SET outcome = ?, result_status = ?, profit_units = ?, evaluated_at = CURRENT_TIMESTAMP
+                WHERE id = ?`,
+          args: [newOutcome, newOutcome, profitUnits, row.id]
+        });
+        reclassified++;
+        details.push({
+          fixture_id: row.fixture_id,
+          market: row.predicted_market,
+          selection: row.predicted_selection,
+          score: `${row.home_score}-${row.away_score}`,
+          old_outcome: 'void',
+          new_outcome: newOutcome
+        });
+      } else {
+        stillVoid++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      totalVoidsWithScores: (voids.rows || []).length,
+      reclassified,
+      stillVoid,
+      details: details.slice(0, 50), // Limit details in response
+      message: `Reclassified ${reclassified} void outcomes to win/loss. ${stillVoid} remain as genuine voids (DNB draws, etc).`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /tag-backtest-outcomes — tag existing prediction_outcomes rows that came from backtesting
+// Existing rows with prediction_source NULL need to be tagged based on whether they have
+// a corresponding entry in prediction_picks with generated_at < kickoff_at (real) or not (backtest)
+router.post("/tag-backtest-outcomes", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    // Tag outcomes that have no corresponding pre-match prediction_pick as 'backtest'
+    const result = await db.execute(`
+      UPDATE prediction_outcomes
+      SET prediction_source = 'backtest', is_retroactive = 1
+      WHERE prediction_source IS NULL
+        AND fixture_id NOT IN (
+          SELECT DISTINCT pp.fixture_id
+          FROM prediction_picks pp
+          WHERE pp.prediction_source = 'pre_match'
+            AND pp.kickoff_at IS NOT NULL
+            AND pp.generated_at < pp.kickoff_at
+        )
+    `);
+
+    // Tag remaining NULL rows as 'live' (they have pre-match picks)
+    const result2 = await db.execute(`
+      UPDATE prediction_outcomes
+      SET prediction_source = 'live'
+      WHERE prediction_source IS NULL
+    `);
+
+    return res.json({
+      success: true,
+      taggedAsBacktest: result.rowsAffected,
+      taggedAsLive: result2.rowsAffected,
+      message: `Tagged ${result.rowsAffected} outcomes as 'backtest' and ${result2.rowsAffected} as 'live'.`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /engine-stats — Admin dashboard metrics for prediction engine
 router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
   try {

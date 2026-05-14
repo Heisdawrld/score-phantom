@@ -119,11 +119,11 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
         (fixture_id, sport_key, home_team, away_team, match_date, tournament,
          pick_id, predicted_market, predicted_selection, predicted_probability,
          best_pick_odds, stake_units, profit_units,
-         model_confidence, home_score, away_score, full_score, outcome, result_status, evaluated_at, created_at)
+         model_confidence, home_score, away_score, full_score, outcome, result_status, prediction_source, evaluated_at, created_at)
         VALUES (?,?,?,?,?,?,
                 ?,?,?,?,?,?,
                 ?,?,
-                ?,?,?,?, ?, ?, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                ?,?,?,?, ?, ?, 'backtest', CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT (fixture_id) DO UPDATE SET
           sport_key = EXCLUDED.sport_key,
           pick_id = EXCLUDED.pick_id,
@@ -139,6 +139,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
           full_score = EXCLUDED.full_score,
           outcome = EXCLUDED.outcome,
           result_status = EXCLUDED.result_status,
+          prediction_source = EXCLUDED.prediction_source,
           evaluated_at = CURRENT_TIMESTAMP`,
       args: [
         fid,
@@ -174,6 +175,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
  */
 export async function getAccuracyStats() {
   try {
+    const sourceFilter = `(prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
     const [overall, byMarket, byConfidence, recent] = await Promise.all([
       db.execute(`
         SELECT
@@ -181,14 +183,14 @@ export async function getAccuracyStats() {
           SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
           SUM(CASE WHEN outcome IN ('wrong','loss') THEN 1 ELSE 0 END) as wrong,
           ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*) - SUM(CASE WHEN outcome='void' THEN 1 ELSE 0 END), 0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome NOT IN ('void')
+        FROM prediction_outcomes WHERE outcome NOT IN ('void') AND ${sourceFilter}
       `),
       db.execute(`
         SELECT predicted_market,
           COUNT(*) as total,
           SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
           ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome NOT IN ('void')
+        FROM prediction_outcomes WHERE outcome NOT IN ('void') AND ${sourceFilter}
         GROUP BY predicted_market ORDER BY total DESC
       `),
       db.execute(`
@@ -196,13 +198,14 @@ export async function getAccuracyStats() {
           COUNT(*) as total,
           SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
           ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
-        FROM prediction_outcomes WHERE outcome NOT IN ('void')
+        FROM prediction_outcomes WHERE outcome NOT IN ('void') AND ${sourceFilter}
         GROUP BY model_confidence ORDER BY win_rate DESC
       `),
       db.execute(`
         SELECT fixture_id, home_team, away_team, predicted_market,
           predicted_selection, full_score, outcome, evaluated_at
-        FROM prediction_outcomes ORDER BY evaluated_at DESC LIMIT 20
+        FROM prediction_outcomes WHERE ${sourceFilter}
+        ORDER BY evaluated_at DESC LIMIT 20
       `),
     ]);
     return {

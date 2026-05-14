@@ -1016,6 +1016,7 @@ router.get("/usage", requireAuth, async (req, res) => {
 // ─── GET /track-record — Show app-wide prediction accuracy stats ────────────
 // Premium feature: visible to free users too (drives conversions)
 // Shows win rates by market type, historical accuracy, and performance trends
+// ONLY includes live predictions (not backtest or retroactive)
 router.get("/track-record", requireAuth, async (req, res) => {
   try {
     const days = parseInt(req.query.days || 30, 10);
@@ -1023,7 +1024,10 @@ router.get("/track-record", requireAuth, async (req, res) => {
     startDate.setDate(startDate.getDate() - days);
     const startISO = startDate.toISOString().slice(0, 10);
 
-    // Query backtesting outcomes (must exist in schema)
+    // Source filter: exclude backtest and retroactive predictions
+    const sourceFilter = `AND (prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
+
+    // Query live prediction outcomes only
     const outcomes = await db.execute({
       sql: `SELECT 
               predicted_market,
@@ -1033,6 +1037,7 @@ router.get("/track-record", requireAuth, async (req, res) => {
               SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voids
             FROM prediction_outcomes
             WHERE DATE(created_at) >= ? AND (outcome IN ('win', 'loss', 'correct', 'wrong', 'pending') OR (outcome = 'void' AND home_score IS NOT NULL))
+            ${sourceFilter}
             GROUP BY predicted_market
             ORDER BY total_picks DESC`,
       args: [startISO],
@@ -1096,6 +1101,7 @@ router.get("/track-record", requireAuth, async (req, res) => {
 
 // ─── GET /prediction-results — Show user's recent prediction outcomes ───────
 // Visible to all users: track which picks hit and which didn't
+// ONLY includes live predictions (not backtest or retroactive)
 router.get("/prediction-results", requireAuth, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || 20, 10);
@@ -1104,6 +1110,8 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
     startDate.setDate(startDate.getDate() - days);
     const startISO = startDate.toISOString().slice(0, 10);
 
+    const sourceFilter = `AND (prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
+
     const results = await db.execute({
       sql: `SELECT 
               fixture_id, home_team, away_team, match_date,
@@ -1111,6 +1119,7 @@ router.get("/prediction-results", requireAuth, async (req, res) => {
               predicted_probability, created_at
             FROM prediction_outcomes
             WHERE DATE(created_at) >= ? AND (outcome IN ('win', 'loss', 'correct', 'wrong', 'pending') OR (outcome = 'void' AND home_score IS NOT NULL))
+            ${sourceFilter}
             ORDER BY created_at DESC
             LIMIT ?`,
       args: [startISO, limit],

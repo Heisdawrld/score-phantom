@@ -359,6 +359,10 @@ async function runSchema() {
   await addColumnIfNotExists("historical_matches", "shotmap", "TEXT");
   await addColumnIfNotExists("historical_matches", "meta", "TEXT");
 
+  // Prediction Outcomes — add source column to distinguish backtest vs live
+  await addColumnIfNotExists("prediction_outcomes", "prediction_source", "TEXT DEFAULT 'live'");
+  await addColumnIfNotExists("prediction_outcomes", "is_retroactive", "INTEGER DEFAULT 0");
+
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 

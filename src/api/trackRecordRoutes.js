@@ -4,8 +4,9 @@ import db from '../config/database.js';
 const router = express.Router();
 
 // ─── GET /api/track-record/stats ─────────────────────────────────────────────
-// Primary source: prediction_outcomes (live results from resultChecker)
-// Secondary source: backtest_results (historical BSD backtesting)
+// ONLY shows live prediction outcomes (what the engine actually predicted in real-time).
+// Backtest data is kept separate — it's for engine calibration, not user display.
+// Retroactive predictions (auto-built after match ended) are excluded from user-facing stats.
 router.get("/stats", async (req, res) => {
   try {
     const requestedSport = String(req.query.sport || 'football').toLowerCase();
@@ -14,34 +15,42 @@ router.get("/stats", async (req, res) => {
       ? `(sport_key = 'football' OR sport_key IS NULL)`
       : `sport_key = 'basketball'`;
 
-    // 1. Live prediction outcomes (primary — always available after a few days)
+    // Source filter: exclude backtest and retroactive predictions from user-facing stats
+    // prediction_source: 'live' = real-time prediction, 'backtest' = historical simulation, 'ws_live' = live score resolution
+    // is_retroactive: 1 = prediction was built AFTER the match ended (not a real prediction)
+    const sourceFilter = `(prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
+
+    // 1. Live prediction outcomes only (what the engine actually predicted before the match)
     const liveOverall = await db.execute(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
         SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost,
         SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided
       FROM prediction_outcomes
-      WHERE outcome IN ('win','correct','loss','wrong')
+      WHERE outcome IN ('win','correct','loss','wrong','void')
         AND ${liveSportFilter}
+        AND ${sourceFilter}
     `);
 
     const liveByMarket = await db.execute(`
-      SELECT 
+      SELECT
         predicted_market as market,
         COUNT(*) as total,
-        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
+        SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND predicted_market IS NOT NULL
         AND ${liveSportFilter}
+        AND ${sourceFilter}
       GROUP BY predicted_market
       ORDER BY total DESC
       LIMIT 12
     `);
 
     const liveByConfidence = await db.execute(`
-      SELECT 
+      SELECT
         model_confidence as confidence,
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
@@ -49,52 +58,25 @@ router.get("/stats", async (req, res) => {
       WHERE outcome IN ('win','correct','loss','wrong')
         AND model_confidence IS NOT NULL
         AND ${liveSportFilter}
+        AND ${sourceFilter}
       GROUP BY model_confidence
       ORDER BY total DESC
     `);
 
-    // 2. Historical backtest results (populated by runBacktest.js script)
-    let backtestOverall = { rows: [{ total: 0, won: 0 }] };
-    let backtestByMarket = { rows: [] };
-    if (sportKey === 'football') {
-      try {
-        backtestOverall = await db.execute(`
-          SELECT COUNT(*) as total, SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
-          FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
-        `);
-        backtestByMarket = await db.execute(`
-          SELECT top_prediction as market, COUNT(*) as total,
-            SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
-          FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
-          GROUP BY top_prediction ORDER BY total DESC LIMIT 12
-        `);
-      } catch (_) {}
-    }
-
-    // Merge live + backtest totals
     const liveRow = liveOverall.rows[0] || {};
-    const btRow = backtestOverall.rows[0] || {};
-    const totalMatches = Number(liveRow.total || 0) + Number(btRow.total || 0);
-    const totalWon = Number(liveRow.won || 0) + Number(btRow.won || 0);
-    const overallHitRate = totalMatches > 0 ? totalWon / totalMatches : 0;
+    const totalMatches = Number(liveRow.total || 0);
+    const totalWon = Number(liveRow.won || 0);
+    const totalLost = Number(liveRow.lost || 0);
+    const settled = totalWon + totalLost;
+    const overallHitRate = settled > 0 ? totalWon / settled : 0;
 
-    // Merge by-market stats
-    const marketMap = new Map();
-    for (const r of liveByMarket.rows || []) {
-      marketMap.set(r.market, { market: r.market, total: Number(r.total), won: Number(r.won) });
-    }
-    for (const r of backtestByMarket.rows || []) {
-      const existing = marketMap.get(r.market);
-      if (existing) {
-        existing.total += Number(r.total);
-        existing.won += Number(r.won);
-      } else {
-        marketMap.set(r.market, { market: r.market, total: Number(r.total), won: Number(r.won) });
-      }
-    }
-    const byMarket = Array.from(marketMap.values())
-      .map(m => ({ ...m, hitRate: m.total > 0 ? m.won / m.total : 0 }))
-      .sort((a, b) => b.total - a.total);
+    const byMarket = (liveByMarket.rows || []).map(m => ({
+      market: m.market,
+      total: Number(m.total),
+      won: Number(m.won),
+      lost: Number(m.lost),
+      hitRate: Number(m.total) > 0 ? Number(m.won) / Number(m.total) : 0,
+    }));
 
     const byConfidence = (liveByConfidence.rows || []).map(r => ({
       confidence: r.confidence,
@@ -105,7 +87,7 @@ router.get("/stats", async (req, res) => {
 
     // Monthly breakdown (last 3 months from live outcomes)
     const monthlyRes = await db.execute(`
-      SELECT 
+      SELECT
         strftime('%Y-%m', evaluated_at) as month,
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
@@ -113,6 +95,7 @@ router.get("/stats", async (req, res) => {
       WHERE outcome IN ('win','correct','loss','wrong')
         AND evaluated_at >= datetime('now', '-90 days')
         AND ${liveSportFilter}
+        AND ${sourceFilter}
       GROUP BY month
       ORDER BY month DESC
       LIMIT 6
@@ -125,11 +108,25 @@ router.get("/stats", async (req, res) => {
       hitRate: Number(r.total) > 0 ? Number(r.won) / Number(r.total) : 0,
     }));
 
+    // Backtest stats (kept separate — for engine calibration, not user display)
+    let backtestTotal = 0;
+    let backtestWon = 0;
+    if (sportKey === 'football') {
+      try {
+        const btRes = await db.execute(`
+          SELECT COUNT(*) as total, SUM(CASE WHEN actual_result = 'WON' THEN 1 ELSE 0 END) as won
+          FROM backtest_results WHERE actual_result IN ('WON', 'LOST')
+        `);
+        backtestTotal = Number(btRes.rows?.[0]?.total || 0);
+        backtestWon = Number(btRes.rows?.[0]?.won || 0);
+      } catch (_) {}
+    }
+
     res.json({
       sport: sportKey,
-      overall: { total: totalMatches, won: totalWon, hitRate: overallHitRate },
-      live: { total: Number(liveRow.total || 0), won: Number(liveRow.won || 0) },
-      historical: { total: Number(btRow.total || 0), won: Number(btRow.won || 0) },
+      overall: { total: settled, won: totalWon, lost: totalLost, voided: Number(liveRow.voided || 0), hitRate: overallHitRate },
+      live: { total: totalMatches, won: totalWon },
+      backtest: { total: backtestTotal, won: backtestWon, note: 'Historical simulation data — not shown to users' },
       byMarket,
       byConfidence,
       monthly,
@@ -150,10 +147,12 @@ router.get("/recent", async (req, res) => {
     const liveSportClause = sportKey === 'football'
       ? `(sport_key = 'football' OR sport_key IS NULL)`
       : `sport_key = 'basketball'`;
+    const sourceFilter = `(prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
 
     let results = [];
 
     if (source === 'backtest') {
+      // Admin/debug only: show backtest_results separately
       if (sportKey !== 'football') {
         return res.json({ results: [], total: 0, source, sport: sportKey });
       }
@@ -168,7 +167,7 @@ router.get("/recent", async (req, res) => {
       });
       results = (btRes.rows || []).map(r => ({ ...r, _source: 'backtest' }));
     } else {
-      // Default: live prediction_outcomes — this is what users see first
+      // Default: live prediction_outcomes only — no backtest padding
       const liveRes = await db.execute({
         sql: `SELECT fixture_id,
                 home_team, away_team, match_date, tournament,
@@ -178,9 +177,11 @@ router.get("/recent", async (req, res) => {
                 model_confidence,
                 home_score as home_goals, away_score as away_goals,
                 full_score, outcome as actual_result,
+                prediction_source,
                 evaluated_at as created_at
               FROM prediction_outcomes
               WHERE ${liveSportClause}
+                AND ${sourceFilter}
               ORDER BY evaluated_at DESC
               LIMIT ?`,
         args: [limit]
@@ -190,24 +191,8 @@ router.get("/recent", async (req, res) => {
         actual_result: r.actual_result === 'win' || r.actual_result === 'correct' ? 'WON'
                      : r.actual_result === 'loss' || r.actual_result === 'wrong' ? 'LOST'
                      : 'VOID',
-        _source: 'live'
+        _source: r.prediction_source || 'live'
       }));
-
-      // If not enough live results, pad with backtest
-      if (sportKey === 'football' && results.length < 10) {
-        try {
-          const btPad = await db.execute({
-            sql: `SELECT fixture_id, match_date, home_team, away_team,
-                    top_prediction, confidence_score, actual_result,
-                    home_goals, away_goals, created_at
-                  FROM backtest_results
-                  ORDER BY created_at DESC LIMIT ?`,
-            args: [limit - results.length]
-          });
-          const btPadMapped = (btPad.rows || []).map(r => ({ ...r, _source: 'backtest' }));
-          results = [...results, ...btPadMapped];
-        } catch (_) {}
-      }
     }
 
     res.json({ results, total: results.length, source, sport: sportKey });

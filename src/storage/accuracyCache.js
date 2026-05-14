@@ -74,20 +74,24 @@ const TIME_DECAY_SQL = `
   END
 `;
 
+// Source filter: only use live predictions for accuracy calculations (not backtest/retroactive)
+const SOURCE_FILTER = `(po.prediction_source IN ('live', 'ws_live') OR po.prediction_source IS NULL) AND (po.is_retroactive = 0 OR po.is_retroactive IS NULL)`;
+
 async function buildAccuracyMaps() {
   console.log('[AccuracyCache] Building v2 accuracy maps (time-weighted + odds-band + script-market)...');
 
   // ── 1. Per-market (time-weighted) ──────────────────────────────────────────
   const perMarket = await db.execute(`
     SELECT
-      predicted_market,
+      po.predicted_market,
       COUNT(*) AS total,
-      SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) AS wins,
+      SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
       SUM(${TIME_DECAY_SQL}) AS weighted_total,
-      SUM(CASE WHEN outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
-    FROM prediction_outcomes
-    WHERE outcome IN ('win','loss')
-    GROUP BY predicted_market
+      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+    FROM prediction_outcomes po
+    WHERE po.outcome IN ('win','loss')
+      AND ${SOURCE_FILTER}
+    GROUP BY po.predicted_market
   `);
 
   // ── 2. Per-market+script (time-weighted) ───────────────────────────────────
@@ -105,6 +109,7 @@ async function buildAccuracyMaps() {
       JOIN predictions_v2 p ON p.fixture_id = po.fixture_id
       WHERE po.outcome IN ('win','loss')
         AND p.script_primary IS NOT NULL
+        AND ${SOURCE_FILTER}
       GROUP BY po.predicted_market, p.script_primary
     `);
   } catch (e) {
@@ -127,6 +132,7 @@ async function buildAccuracyMaps() {
       JOIN fixtures f ON f.id = po.fixture_id
       WHERE po.outcome IN ('win','loss')
         AND po.predicted_market IS NOT NULL
+        AND ${SOURCE_FILTER}
       GROUP BY COALESCE(f.tournament_id, f.tournament_name), f.tournament_name, po.predicted_market
     `);
   } catch (e) {
@@ -136,14 +142,15 @@ async function buildAccuracyMaps() {
   // ── 4. Per-confidence band ─────────────────────────────────────────────────
   const perConfidence = await db.execute(`
     SELECT
-      model_confidence,
+      po.model_confidence,
       COUNT(*) AS total,
-      SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) AS wins,
+      SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
       SUM(${TIME_DECAY_SQL}) AS weighted_total,
-      SUM(CASE WHEN outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
-    FROM prediction_outcomes
-    WHERE outcome IN ('win','loss')
-    GROUP BY model_confidence
+      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+    FROM prediction_outcomes po
+    WHERE po.outcome IN ('win','loss')
+      AND ${SOURCE_FILTER}
+    GROUP BY po.model_confidence
   `);
 
   // ── 5. Per-odds-band (NEW — crucial for probability calibration) ───────────
@@ -151,23 +158,24 @@ async function buildAccuracyMaps() {
   try {
     perOddsBand = await db.execute(`
       SELECT
-        predicted_market,
+        po.predicted_market,
         CASE
-          WHEN best_pick_odds < 1.50 THEN 'sub150'
-          WHEN best_pick_odds < 1.70 THEN 'r150_170'
-          WHEN best_pick_odds < 2.00 THEN 'r170_200'
-          WHEN best_pick_odds < 3.00 THEN 'r200_300'
+          WHEN po.best_pick_odds < 1.50 THEN 'sub150'
+          WHEN po.best_pick_odds < 1.70 THEN 'r150_170'
+          WHEN po.best_pick_odds < 2.00 THEN 'r170_200'
+          WHEN po.best_pick_odds < 3.00 THEN 'r200_300'
           ELSE 'r300plus'
         END AS odds_band,
         COUNT(*) AS total,
-        SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
         SUM(${TIME_DECAY_SQL}) AS weighted_total,
-        SUM(CASE WHEN outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
-      FROM prediction_outcomes
-      WHERE outcome IN ('win','loss')
-        AND best_pick_odds IS NOT NULL
-        AND best_pick_odds > 0
-      GROUP BY predicted_market, odds_band
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+      FROM prediction_outcomes po
+      WHERE po.outcome IN ('win','loss')
+        AND po.best_pick_odds IS NOT NULL
+        AND po.best_pick_odds > 0
+        AND ${SOURCE_FILTER}
+      GROUP BY po.predicted_market, odds_band
     `);
   } catch (e) {
     console.warn('[AccuracyCache] odds-band query failed:', e.message);
