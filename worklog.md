@@ -130,3 +130,27 @@ Stage Summary:
 - All deleted files from original cleanup verified as unused — no references found in codebase
 - Frontend build verified passing after all changes
 - Live site confirmed healthy
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Make engine 10/10 — unify odds, consolidate enrich, add health monitoring
+
+Work Log:
+- Investigated full odds flow: bzzoiro API → fixture_odds → prediction_picks.bookmaker_odds → profit_units
+- Found resultChecker.js was deriving odds from implied_probability (1/impliedProb) while wsLiveScores.js and backtesting.js correctly read bookmaker_odds from prediction_picks
+- Rewrote resultChecker.js to use the same odds source (prediction_picks.bookmaker_odds) with fallback to derived odds
+- Unified the prediction_outcomes INSERT across all 3 writers to use the same 22-column format
+- Added batch prediction_picks lookup to avoid N+1 queries
+- Consolidated autoEnrich: enrichmentRunner.js now re-exports from app.js (single source of truth)
+- Fixed marketCalibrationReport.js for Turso/SQLite (removed Postgres ::int, ::numeric casts)
+- Created healthMonitor.js for cron job tracking with consecutive failure alerts
+- Added /api/cron-health endpoint (admin only)
+- Added health tracking to startup enrichment, startup backfill, and 15-min cron
+
+Stage Summary:
+- Commit b75f65b pushed to main
+- Engine now has unified odds source across all writers
+- All 3 writers use same 22-column INSERT for prediction_outcomes
+- Health monitoring gives visibility into cron job failures
+- marketCalibrationReport.js works on Turso
