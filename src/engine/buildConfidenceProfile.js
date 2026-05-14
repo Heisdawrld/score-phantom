@@ -16,6 +16,7 @@ import { safeNum } from '../utils/math.js';
 
 // Market baseline probabilities — what % of matches this market would win
 // if you just picked it blindly for every match
+// MUST stay in sync with scoreMarketCandidates.js MARKET_BASELINE
 const MARKET_BASELINE = {
   home_win:           0.45,
   away_win:           0.30,
@@ -26,7 +27,7 @@ const MARKET_BASELINE = {
   under_25:           0.50,
   over_35:            0.30,
   under_35:           0.70,  // ← THE KEY: Under 3.5 naturally wins 70% of the time
-  over_15:            0.75,
+  over_15:            0.75,  // ← Over 1.5 naturally wins 75% of the time
   under_15:           0.25,
   double_chance_home: 0.65,
   double_chance_away: 0.55,
@@ -219,5 +220,5 @@ export function buildConfidenceProfile(bestPick, featureVector) {
     console.log(`[confidence] ${marketKey}: prob=${(modelProbability*100).toFixed(1)}% baseline=${(baseline*100).toFixed(0)}% edgeAboveBaseline=${(edgeAboveBaseline*100).toFixed(1)}pp leagueAdj=${(leagueBaselineAdjustment*100).toFixed(1)}pp h2hAdj=${(h2hAdjustment*100).toFixed(1)}pp → ${model}`);
   }
 
-  return { model, value, volatility, dataQualityNote, restrictMarkets: !!restrictMarkets };
+  return { model, value, volatility, dataQualityNote, restrictMarkets: !!restrictMarkets, edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)), marketBaseline: parseFloat(baseline.toFixed(4)) };
 }

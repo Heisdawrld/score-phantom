@@ -15,30 +15,44 @@ async function sleep(ms) {
 }
 
 // Minimal mock vector builder for historical matches
-// In a real scenario, this would use point-in-time data
+//
+// ⚠️ LOOK-AHEAD BIAS WARNING:
+// This builder uses POST-MATCH data (actual goals, actual xG) as if it were
+// available pre-match. This inflates backtest accuracy because the model
+// gets to "see the future". The results are NOT representative of live
+// prediction accuracy.
+//
+// To get realistic backtest results, you need POINT-IN-TIME data:
+// - Pre-match expected lineups
+// - Season-level stats going into the match (not including the match itself)
+// - Pre-match odds
+//
+// For now, this provides a directional sense of model quality but should
+// NOT be quoted as actual accuracy.
 function buildHistoricalVector(match) {
-  // Try to use actual post-match xG if available, otherwise fallback
-  const homeXg = match.actual_home_xg || match.home_xg || 1.5;
-  const awayXg = match.actual_away_xg || match.away_xg || 1.2;
+  // Use season-average stats as a proxy for pre-match data
+  // This is still somewhat biased but much less than using actual match results
+  const homeXg = match.season_home_xg_avg || match.pre_match_home_xg || 1.3;
+  const awayXg = match.season_away_xg_avg || match.pre_match_away_xg || 1.1;
   
   return {
     homeAttackRating: homeXg,
-    homeDefenseRating: awayXg,
+    homeDefenseRating: awayXg, // Use opponent's attack as defense proxy
     awayAttackRating: awayXg,
     awayDefenseRating: homeXg,
-    homeAvgScored: match.home_goals || 1,
-    homeAvgConceded: match.away_goals || 1,
-    awayAvgScored: match.away_goals || 1,
-    awayAvgConceded: match.home_goals || 1,
+    homeAvgScored: match.season_home_goals_avg || 1.3,
+    homeAvgConceded: match.season_home_conceded_avg || 1.1,
+    awayAvgScored: match.season_away_goals_avg || 1.2,
+    awayAvgConceded: match.season_away_conceded_avg || 1.2,
     homeMotivationScore: 0.5,
     awayMotivationScore: 0.5,
     matchChaosScore: 0.5,
-    dataCompletenessScore: 0.8,
+    dataCompletenessScore: 0.6, // Reduced from 0.8 to reflect limited pre-match data
     upsetRiskScore: 0.5,
-    homeHomeGoalsFor: match.home_goals || 1,
-    homeHomeGoalsAgainst: match.away_goals || 1,
-    awayAwayGoalsFor: match.away_goals || 1,
-    awayAwayGoalsAgainst: match.home_goals || 1,
+    homeHomeGoalsFor: match.season_home_goals_avg || 1.3,
+    homeHomeGoalsAgainst: match.season_home_conceded_avg || 1.1,
+    awayAwayGoalsFor: match.season_away_goals_avg || 1.2,
+    awayAwayGoalsAgainst: match.season_away_conceded_avg || 1.2,
     homeAvgXgFor: homeXg,
     homeAvgXgAgainst: awayXg,
     awayAvgXgFor: awayXg,
@@ -154,10 +168,12 @@ async function runBacktestForSeason(leagueId, seasonId) {
   }
 
   const totalProcessed = successCount + failCount;
-  console.log(`\n✅ Season ${seasonId} Complete.`);
+  console.log(`\n⚠️  Season ${seasonId} Complete (LOOK-AHEAD BIAS WARNING).`);
+  console.log(`These results use post-match data as pre-match input.`);
+  console.log(`Actual live accuracy will be lower. Do NOT quote these as real accuracy.`);
   console.log(`Processed: ${totalProcessed}`);
   if (totalProcessed > 0) {
-    console.log(`Hit Rate: ${((successCount / totalProcessed) * 100).toFixed(1)}%`);
+    console.log(`Hit Rate: ${((successCount / totalProcessed) * 100).toFixed(1)}% (inflated by look-ahead bias)`);
   }
 }
 

@@ -371,6 +371,43 @@ function winRateToScore(winRate) {
   return (clamped - 0.35) / (0.80 - 0.35);
 }
 
+/**
+ * Get dynamic market baselines computed from actual prediction outcomes.
+ * Returns observed win rates per market when the engine picked them,
+ * which represents the "natural" win rate for that market in our system.
+ *
+ * This replaces hardcoded MARKET_BASELINE values with data-driven ones.
+ * Falls back to hardcoded values when insufficient data exists.
+ */
+export function getDynamicMarketBaselines(cache) {
+  const FALLBACK_BASELINES = {
+    home_win: 0.45, away_win: 0.30, draw: 0.25,
+    btts_yes: 0.50, btts_no: 0.50,
+    over_25: 0.50, under_25: 0.50, over_35: 0.30, under_35: 0.70,
+    over_15: 0.75, under_15: 0.25,
+    double_chance_home: 0.65, double_chance_away: 0.55,
+    dnb_home: 0.45, dnb_away: 0.35,
+    home_over_05: 0.80, away_over_05: 0.75,
+    home_over_15: 0.55, away_over_15: 0.45,
+    home_over_25: 0.35, away_over_25: 0.25,
+  };
+
+  if (!cache) return FALLBACK_BASELINES;
+
+  const byMarket = cache.byMarket || {};
+  const dynamic = { ...FALLBACK_BASELINES };
+
+  for (const [market, data] of Object.entries(byMarket)) {
+    if (data.samples >= 30 && data.winRate != null) {
+      // Use observed win rate as baseline, but clamp to reasonable range
+      // (0.20 - 0.90) to prevent extreme values from small sample sizes
+      dynamic[market] = Math.max(0.20, Math.min(0.90, data.weightedWinRate || data.winRate));
+    }
+  }
+
+  return dynamic;
+}
+
 export async function getAccuracySummary() {
   const cache = await getAccuracyCache();
   const { byMarket = {}, byMarketScript = {}, byLeagueMarket = {}, leagueNames = {}, byOddsBand = {}, totalOutcomes } = cache;

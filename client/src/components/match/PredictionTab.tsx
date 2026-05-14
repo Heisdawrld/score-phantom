@@ -142,6 +142,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
+  const advisorReason = rec.advisor_reason || null;
+  const edgeAboveBaseline = rec.edgeAboveBaseline != null ? rec.edgeAboveBaseline : null;
+  const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
+  const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
   
   // Verdict is derived from advisor_status (FIRE/GAMBLE/AVOID from engine)
   // FIRE = strong recommendation → "PICK THIS"
@@ -245,12 +249,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             )}
           </motion.div>
 
-          {/* Verdict label */}
-          <div className="flex items-center gap-2 mb-1">
+          {/* Verdict label + baseline context */}
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
             <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
               {verdictLabel}
             </span>
+            {hasThinBaselineEdge && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/40 flex items-center gap-1">
+                <AlertCircle className="w-2.5 h-2.5" />
+                Baseline {Math.round((marketBaseline || 0) * 100)}% — edge +{Math.round((edgeAboveBaseline || 0) * 100)}pp
+              </span>
+            )}
           </div>
 
           {/* OUR BEST BET */}

@@ -1834,7 +1834,10 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
       market: m.marketKey,
       probability: m.modelProbability,
-      advisor_status: m.advisorStatus || 'GAMBLE'
+      advisor_status: m.advisor_status || m.advisorStatus || 'GAMBLE',
+      advisor_reason: m.advisor_reason || null,
+      edgeAboveBaseline: m.edgeAboveBaseline != null ? parseFloat(m.edgeAboveBaseline.toFixed(4)) : null,
+      marketBaseline: m.marketBaseline != null ? parseFloat(m.marketBaseline.toFixed(4)) : null,
     }));
 
     res.json({
