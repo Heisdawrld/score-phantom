@@ -108,3 +108,25 @@ Stage Summary:
 - Project structure is now clean and professional
 - Build verified passing before push
 - Pushed commit 138f879 to origin/main
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix SQL parameter mismatch in resultChecker.js and do full debug scan
+
+Work Log:
+- Diagnosed SQL parameter mismatch: INSERT had 17 columns but VALUES had 16 params (15 ? + CURRENT_TIMESTAMP) while args only had 15 items
+- Root cause: evaluated_at column had a ? placeholder but no corresponding arg value was passed
+- Fix: Changed evaluated_at from ? to CURRENT_TIMESTAMP (same as created_at), making 15 ? match 15 args
+- Confirmed this was a pre-existing bug (not caused by our cleanup) — same SQL existed before our changes
+- Ran full debug scan of codebase, found and fixed multiple additional issues
+
+Stage Summary:
+- Fixed resultChecker.js SQL mismatch (commit 594e2e1)
+- Fixed engine-stats query using wrong column (advisor_status -> confidence_model) (commit acf1243)
+- Fixed confidence_value type (REAL -> TEXT) in predictions_v2 schema (commit acf1243)
+- Added missing meta column migration for historical_matches (commit acf1243)
+- Removed duplicate /admin/run-enrichment route (now handled by adminRoutes.js with rate limiting) (commit acf1243)
+- Deleted dead code: dbShim.js, migrate_users.js, matchStatsStore.js (commit acf1243)
+- All deleted files from original cleanup verified as unused — no references found in codebase
+- Frontend build verified passing after all changes
+- Live site confirmed healthy
