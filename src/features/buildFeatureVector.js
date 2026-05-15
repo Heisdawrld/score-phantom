@@ -201,7 +201,13 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const splitFeatures = computeSplitFeatures(homeFormFeatures, awayFormFeatures);
   const h2hFeatures = computeH2HFeatures(h2hRaw, homeTeamName, awayTeamName);
   const teamStrength = computeTeamStrength(homeFormFeatures, awayFormFeatures, tableContext, standings);
-  const contextFeatures = computeContextFeatures(tableContext, standings);
+  // Get fixture date from multiple sources — needed for rest day / fatigue / season stage computation
+  const fixtureDate = meta?.eventContext?.fixture_date || meta?.fixture_date || meta?.matchDate || null;
+  const contextFeatures = computeContextFeatures(tableContext, standings, {
+    homeFormRaw,
+    awayFormRaw,
+    fixtureDate,
+  });
   const volatilityFeatures = computeVolatilityFeatures(homeFormFeatures, awayFormFeatures, h2hFeatures, splitFeatures);
   const marketFeatures = computeMarketFeatures(odds);
 
@@ -299,12 +305,64 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   let impliedHomeProb = null;
   let impliedAwayProb = null;
   let impliedOver25 = null;
+  let impliedOver15 = null;
+  let impliedBttsYes = null;
+
+  // Primary: from the fixture odds parameter
   if (odds) {
     const margin = odds.home && odds.draw && odds.away
       ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
     if (odds.home) impliedHomeProb = parseFloat(((1 / odds.home) / margin).toFixed(4));
     if (odds.away) impliedAwayProb = parseFloat(((1 / odds.away) / margin).toFixed(4));
     if (odds.over_2_5) impliedOver25 = parseFloat((1 / odds.over_2_5).toFixed(4));
+    if (odds.over_1_5) impliedOver15 = parseFloat((1 / odds.over_1_5).toFixed(4));
+    if (odds.btts_yes) impliedBttsYes = parseFloat((1 / odds.btts_yes).toFixed(4));
+  }
+
+  // Fallback: from enrichment advancedOdds (BSD fetchEventOdds)
+  // This is CRITICAL — the fixture odds parameter often lacks 1X2 data,
+  // but the enrichment pipeline fetches full odds via fetchEventOdds.
+  if (advancedOdds) {
+    const ao = advancedOdds.odds || advancedOdds;
+    if (impliedHomeProb == null || impliedAwayProb == null) {
+      const h = safeNum(ao.home_win || ao.home, null);
+      const d = safeNum(ao.draw, null);
+      const a = safeNum(ao.away_win || ao.away, null);
+      if (h && d && a) {
+        const margin = 1/h + 1/d + 1/a;
+        if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
+        if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+      }
+    }
+    if (impliedOver25 == null) {
+      const o25 = safeNum(ao.over_25 || ao.over_25_goals, null);
+      if (o25) impliedOver25 = parseFloat((1/o25).toFixed(4));
+    }
+    if (impliedOver15 == null) {
+      const o15 = safeNum(ao.over_15 || ao.over_15_goals, null);
+      if (o15) impliedOver15 = parseFloat((1/o15).toFixed(4));
+    }
+    if (impliedBttsYes == null) {
+      const btts = safeNum(ao.btts_yes, null);
+      if (btts) impliedBttsYes = parseFloat((1/btts).toFixed(4));
+    }
+  }
+
+  // Fallback: from basicOdds (extractOddsFromEvent)
+  if ((impliedHomeProb == null || impliedAwayProb == null) && bestOdds) {
+    const bo = bestOdds.odds || bestOdds;
+    const h = safeNum(bo.home || bo.home_win, null);
+    const d = safeNum(bo.draw, null);
+    const a = safeNum(bo.away || bo.away_win, null);
+    if (h && d && a) {
+      const margin = 1/h + 1/d + 1/a;
+      if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
+      if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+    }
+  }
+
+  if (impliedHomeProb != null || impliedOver25 != null) {
+    console.log(`[odds] Implied probs: home=${impliedHomeProb != null ? (impliedHomeProb*100).toFixed(1)+'%' : 'N/A'} away=${impliedAwayProb != null ? (impliedAwayProb*100).toFixed(1)+'%' : 'N/A'} O2.5=${impliedOver25 != null ? (impliedOver25*100).toFixed(1)+'%' : 'N/A'} O1.5=${impliedOver15 != null ? (impliedOver15*100).toFixed(1)+'%' : 'N/A'} BTTS=${impliedBttsYes != null ? (impliedBttsYes*100).toFixed(1)+'%' : 'N/A'}`);
   }
 
   return {
@@ -336,6 +394,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     impliedHomeProb,
     impliedAwayProb,
     impliedOver25,
+    impliedOver15,
+    impliedBttsYes,
+    fixtureDate,
     actualHomeXg,
     actualAwayXg,
     xgPerMinute,

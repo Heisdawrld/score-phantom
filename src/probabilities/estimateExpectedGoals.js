@@ -378,6 +378,111 @@ function applyBsdContextAdjustments(homeXg, awayXg, fv) {
 }
 
 /**
+ * L12: Squad Management Adjustments — rotation, fatigue, rest days, cup distraction.
+ *
+ * This layer accounts for factors that the Poisson xG model fundamentally can't see:
+ * - Squad rotation: Bayern won the league → rotate 7 starters → much weaker team
+ * - Fatigue: 3 games in 7 days → legs are heavy → lower xG
+ * - Rest differential: Away team had 2 rest days vs home team's 5 → away is tired
+ * - Cup distraction: UCL semi next week → rest key players in league today
+ * - Already secure: Title won, UCL spot locked → low motivation → rotation
+ *
+ * These factors reduce xG for the affected team proportionally.
+ * They don't INCREASE xG for the opponent — the opponent's xG stays as-is.
+ */
+function applySquadManagementAdjustments(homeXg, awayXg, fv) {
+  let h = homeXg;
+  let a = awayXg;
+  const notes = [];
+
+  // ── Rotation Risk ─────────────────────────────────────────────────────
+  // High rotation risk = team will likely field weakened squad
+  // Scale: 0.60 risk → ~12% xG reduction, 0.35 risk → ~7% reduction
+  const homeRotationDampener = 1 - clamp(safeNum(fv.rotationRiskHome, 0) * 0.20, 0, 0.18);
+  const awayRotationDampener = 1 - clamp(safeNum(fv.rotationRiskAway, 0) * 0.20, 0, 0.18);
+
+  if (fv.rotationRiskHome > 0.1) {
+    h *= homeRotationDampener;
+    notes.push(`Home rotation risk(${fv.rotationRiskHome}, dampener=${homeRotationDampener.toFixed(3)})`);
+  }
+  if (fv.rotationRiskAway > 0.1) {
+    a *= awayRotationDampener;
+    notes.push(`Away rotation risk(${fv.rotationRiskAway}, dampener=${awayRotationDampener.toFixed(3)})`);
+  }
+
+  // ── Already Secure (Title Won / UCL Spot Locked) ──────────────────────
+  // Even stronger than rotation risk — team has literally nothing to play for
+  if (fv.homeAlreadySecure) {
+    h *= 0.82; // 18% xG reduction — team will definitely rotate and play relaxed
+    notes.push('Home already secure(-18% xG)');
+  }
+  if (fv.awayAlreadySecure) {
+    a *= 0.82;
+    notes.push('Away already secure(-18% xG)');
+  }
+
+  // ── Fatigue ───────────────────────────────────────────────────────────
+  // Teams that played 3+ games in the last 7 days are fatigued
+  if (fv.homeFatigue > 0.05) {
+    h *= (1 - fv.homeFatigue);
+    notes.push(`Home fatigue(${(fv.homeFatigue*100).toFixed(0)}% dampener)`);
+  }
+  if (fv.awayFatigue > 0.05) {
+    a *= (1 - fv.awayFatigue);
+    notes.push(`Away fatigue(${(fv.awayFatigue*100).toFixed(0)}% dampener)`);
+  }
+
+  // ── Rest Day Differential ─────────────────────────────────────────────
+  // If away team had significantly less rest than home team, dampen away xG
+  // restDiffDays > 0 means home had MORE rest (away is more tired)
+  // restDiffDays < 0 means away had MORE rest (home is more tired)
+  const restDiff = safeNum(fv.restDiffDays, 0);
+  if (Math.abs(restDiff) >= 2) {
+    if (restDiff >= 3) {
+      // Away team had 3+ fewer rest days — significant fatigue advantage for home
+      a *= 0.95;
+      notes.push(`Away rest deficit(${restDiff}d, -5% xG)`);
+    } else if (restDiff >= 2) {
+      a *= 0.97;
+      notes.push(`Away rest deficit(${restDiff}d, -3% xG)`);
+    }
+    if (restDiff <= -3) {
+      h *= 0.95;
+      notes.push(`Home rest deficit(${Math.abs(restDiff)}d, -5% xG)`);
+    } else if (restDiff <= -2) {
+      h *= 0.97;
+      notes.push(`Home rest deficit(${Math.abs(restDiff)}d, -3% xG)`);
+    }
+  }
+
+  // ── Cup Distraction ───────────────────────────────────────────────────
+  // Teams involved in cup competitions may rotate for league matches
+  if (fv.cupDistractionHome > 0.1) {
+    h *= (1 - fv.cupDistractionHome * 0.15); // max ~4% reduction
+    notes.push(`Home cup distraction(${fv.cupDistractionHome}, -${(fv.cupDistractionHome*15).toFixed(1)}% xG)`);
+  }
+  if (fv.cupDistractionAway > 0.1) {
+    a *= (1 - fv.cupDistractionAway * 0.15);
+    notes.push(`Away cup distraction(${fv.cupDistractionAway}, -${(fv.cupDistractionAway*15).toFixed(1)}% xG)`);
+  }
+
+  // ── Season Stage Adjustments ──────────────────────────────────────────
+  // Late season has different dynamics — more goals (teams play open),
+  // more rotation (secure teams), more upset risk (motivated underdogs)
+  const stage = fv.seasonStage || 'mid';
+  if (stage === 'early') {
+    // Early season: less predictable, slight regression toward average
+    h *= 0.98;
+    a *= 0.98;
+    notes.push('Early season uncertainty(-2% total)');
+  }
+  // 'run_in' is handled by rotation/motivation factors above, not a blanket adjustment
+
+  if (notes.length > 0) console.log(`[xG] Squad management adjustments: ${notes.join(', ')}`);
+  return { homeXg: h, awayXg: a };
+}
+
+/**
  * xG capping — LEAGUE-DEPENDENT caps.
  *
  * v3: Caps now scale with league goal rate. High-scoring leagues (Swiss SL, Eredivisie)
@@ -422,5 +527,6 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyBsdIntelligenceAdjustments(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyDeepBsdSignals(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdContextAdjustments(homeXg, awayXg, fv));
+  ({ homeXg, awayXg } = applySquadManagementAdjustments(homeXg, awayXg, fv));  // NEW: rotation/fatigue/rest/cup
   return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg, fv);
 }

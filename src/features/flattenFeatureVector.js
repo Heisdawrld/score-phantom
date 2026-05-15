@@ -158,6 +158,17 @@ function flattenFeatureVector(fv) {
     awayMotivationScore: safeNum(cf.awayMotivationScore, 0.5),
     rotationRiskHome: safeNum(cf.rotationRiskHome, 0),
     rotationRiskAway: safeNum(cf.rotationRiskAway, 0),
+    cupDistractionHome: safeNum(cf.cupDistractionHome, 0),
+    cupDistractionAway: safeNum(cf.cupDistractionAway, 0),
+    restDiffDays: safeNum(cf.restDiffDays, 0),
+    seasonStage: cf.seasonStage || 'mid',
+    seasonProgress: safeNum(cf.seasonProgress, 0.5),
+    homeAlreadySecure: cf.homeAlreadySecure === true,
+    awayAlreadySecure: cf.awayAlreadySecure === true,
+    homeFatigue: safeNum(cf.homeFatigue, 0),
+    awayFatigue: safeNum(cf.awayFatigue, 0),
+    homeDaysSinceLastMatch: cf.homeDaysSinceLastMatch != null ? safeNum(cf.homeDaysSinceLastMatch, null) : null,
+    awayDaysSinceLastMatch: cf.awayDaysSinceLastMatch != null ? safeNum(cf.awayDaysSinceLastMatch, null) : null,
     homePosition: safeNum(tc.home_position, 10),
     awayPosition: safeNum(tc.away_position, 10),
     pointsGap: safeNum(tc.points_gap, 0),
@@ -275,6 +286,14 @@ function flattenFeatureVector(fv) {
     leagueScoreSuccessRate: safeNum(lc.leagueScoreSuccessRate, 0.70),
     leagueContextSource:    lc._source || 'global_defaults',
     h2hOver35Rate:          safeNum(h2h.over_3_5_rate, null),
+
+    // ── Implied odds from bookmaker (CRITICAL — previously missing) ──────
+    impliedHomeProb:       safeNum(fv.impliedHomeProb, null),
+    impliedAwayProb:       safeNum(fv.impliedAwayProb, null),
+    impliedOver25:         safeNum(fv.impliedOver25, null),
+    impliedOver15:         safeNum(fv.impliedOver15, null),
+    impliedBttsYes:        safeNum(fv.impliedBttsYes, null),
+    fixtureDate:           fv.fixtureDate || null,
   };
 }
 

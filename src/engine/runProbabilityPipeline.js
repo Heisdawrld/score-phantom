@@ -10,8 +10,9 @@ import { computeLayer2Shifts } from "../markets/computeLayer2Override.js";
  * Estimates xG, refines script post-xG, builds Poisson score matrix,
  * derives raw + calibrated market probabilities, computes L2 shifts.
  *
- * v2: Adds calibrateFromHistory() as a final reality-adjustment pass
- * using observed win rates from prediction_outcomes.
+ * v2: Passes implied bookmaker odds to calibrateProbabilities for 1X2/O/U/BTTS
+ * blending. This is the fix for the "all predictions are under_35" bug —
+ * the model was producing 16% homeWin when bookmaker said 55%.
  *
  * Mutates script in-place (post-xG refinement) — intentional.
  */
@@ -26,8 +27,17 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
   const baseProbs = deriveMarketProbabilities(baseScoreMatrix);
   const { shiftMap, maxShift, maxShiftMarket } = computeLayer2Shifts(rawProbs, baseProbs);
 
-  // L1: Script + Polymarket calibration
-  const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds);
+  // Extract implied bookmaker odds from features for calibration
+  const impliedOdds = {
+    impliedHomeProb: features.impliedHomeProb || null,
+    impliedAwayProb: features.impliedAwayProb || null,
+    impliedOver25: features.impliedOver25 || null,
+    impliedOver15: features.impliedOver15 || null,
+    impliedBttsYes: features.impliedBttsYes || null,
+  };
+
+  // L1: Bookmaker + Polymarket + Script calibration
+  const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds, impliedOdds);
 
   // L2: Historical accuracy calibration (regress toward observed reality)
   // Now includes leagueId and tournamentName for league-market probability regression

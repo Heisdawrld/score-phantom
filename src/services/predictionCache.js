@@ -30,7 +30,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '3.2.1'; // v3.2.1: Stronger calibrateFromHistory regression, safer dynamic floors
+const CURRENT_ENGINE_VERSION = '3.3.0'; // v3.3.0: Bookmaker odds blending, rotation/fatigue/rest/cup/season-stage, implied odds fix
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -156,6 +156,12 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
       points: Number(r.points || 0),
     };
   });
+
+  // Ensure fixture date is available for rest day / fatigue / season stage computation
+  if (fixture.match_date) {
+    meta.matchDate = fixture.match_date;
+    meta.fixture_date = fixture.match_date;
+  }
 
   return meta;
 }
