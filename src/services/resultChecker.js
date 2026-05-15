@@ -190,11 +190,11 @@ export async function checkResults(dateStr) {
   const predRes = await db.execute({ sql: 'SELECT f.id, f.home_team_name, f.away_team_name, f.match_date, f.tournament_name, p.best_pick_market, p.best_pick_selection, p.best_pick_probability, p.confidence_model, p.best_pick_implied_probability, p.best_pick_edge FROM fixtures f JOIN predictions_v2 p ON p.fixture_id = f.id WHERE f.match_date LIKE ? AND p.best_pick_selection IS NOT NULL', args: ['%' + date + '%'] });
   const fixtures = predRes.rows || [];
   console.log('[ResultChecker] Found', fixtures.length, 'predictions to check for', date);
-  if (!fixtures.length) return { checked: 0, date, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0 } };
+  if (!fixtures.length) return { checked: 0, date, outcomes: { wins: 0, losses: 0, voids: 0, skipped: 0, alreadyResolved: 0 } };
   const existing = await db.execute({ sql: 'SELECT fixture_id, outcome FROM prediction_outcomes WHERE match_date LIKE ?', args: ['%' + date + '%'] });
   const existingMap = {};
   for (const r of existing.rows || []) existingMap[String(r.fixture_id)] = r.outcome;
-  const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0, updated: 0 };
+  const outcomes = { wins: 0, losses: 0, voids: 0, skipped: 0, alreadyResolved: 0, updated: 0 };
 
   // Pre-fetch all prediction_picks for these fixtures in one query (avoids N+1 lookups)
   const fixtureIds = fixtures.map(f => String(f.id));
@@ -227,7 +227,7 @@ export async function checkResults(dateStr) {
   for (const fix of fixtures) {
     const fid = String(fix.id);
     const prev = existingMap[fid];
-    if (prev === 'win' || prev === 'loss') { outcomes.skipped++; continue; }
+    if (prev === 'win' || prev === 'loss') { outcomes.alreadyResolved++; continue; }
     const hk = (fix.home_team_name || '').toLowerCase().trim();
     const ak = (fix.away_team_name || '').toLowerCase().trim();
     const score = scoreMap[fid] || nameMap[hk + ':' + ak] || nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] || null;

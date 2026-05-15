@@ -271,10 +271,11 @@ async function incrementAndCheckDailyCount(userId, limit) {
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
     // Atomic check-and-increment: only increment if under the limit.
     // First, ensure the row exists
+    // Include 'date' column for legacy tables where 'date' is NOT NULL
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 0)
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 0)
             ON CONFLICT (user_id, date_str) DO NOTHING`,
-      args: [userId, today],
+      args: [userId, today, today],
     });
     // Now atomically increment ONLY if currently under the limit
     const result = await db.execute({
@@ -307,10 +308,11 @@ async function incrementAndCheckDailyCount(userId, limit) {
 
 async function incrementDailyCount(userId, today) {
   try {
+    // Include 'date' column for legacy tables where 'date' is NOT NULL
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+      sql: `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 1)
             ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
-      args: [userId, today],
+      args: [userId, today, today],
     });
   } catch (err) {
     console.error("Error in incrementDailyCount:", err);
