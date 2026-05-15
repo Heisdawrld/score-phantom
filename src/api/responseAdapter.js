@@ -581,20 +581,27 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       advisor_reason: bestPick.advisor_reason || null,
       edgeAboveBaseline: bestPick.edgeAboveBaseline != null ? parseFloat(bestPick.edgeAboveBaseline.toFixed(4)) : null,
       marketBaseline: bestPick.marketBaseline != null ? parseFloat(bestPick.marketBaseline.toFixed(4)) : null,
-      no_edge: false,
+      // BUG FIX: If advisor_status resolves to AVOID in the "normal" branch,
+      // we must set no_edge and isAvoidedPick so the frontend knows to hide
+      // "Our Best Bet" and "Other Good Options". Without this, cached data
+      // or edge cases where noSafePick was not set by the engine would show
+      // AVOID badge + "Our Best Bet: Over 2.5 Goals" — contradictory.
+      no_edge: advisorStatus === 'AVOID' ? true : false,
+      isAvoidedPick: advisorStatus === 'AVOID' ? true : (bestPick.isAvoidedPick || false),
+      avoidReason: advisorStatus === 'AVOID' ? (bestPick.avoidReason || 'Insufficient edge or value to justify a recommendation') : null,
       modelOnly: isModelOnly,
       isModelOnly,
-      isSafeBet,
-      isValueBet,
-      isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
+      isSafeBet: advisorStatus === 'AVOID' ? false : isSafeBet,
+      isValueBet: advisorStatus === 'AVOID' ? false : isValueBet,
+      isSharpValue: advisorStatus === 'AVOID' ? false : (!isModelOnly && (bestPick.isSharpValue || false)),
       dataQualityNote: engineConfidence?.dataQualityNote || null,
       // ── v4: Intelligent Analyst new fields ─────────────────────────────
       valueTier: bestValueTier,
       valueTierLabel: bestPick.valueTierLabel || null,
       ev: bestEV != null ? parseFloat(bestEV.toFixed(4)) : null,
       odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
-      isAccaEligible: bestPick.isAccaEligible || false,
-      riskReward: bestPick.riskReward || null,
+      isAccaEligible: advisorStatus === 'AVOID' ? false : (bestPick.isAccaEligible || false),
+      riskReward: advisorStatus === 'AVOID' ? null : (bestPick.riskReward || null),
       analystSummary: reasonChain?.analystSummary || null,
     };
   } else {
@@ -663,10 +670,16 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     }
   }
 
-  const backup_picks = (backupPicks || []).slice(0, 5)
+  // BUG FIX: When the main recommendation is AVOID, do NOT send backup_picks
+  // or all_candidates. Showing "Other Good Options" or "Secret Angle" alongside
+  // an AVOID verdict is contradictory — it tells the user to avoid the match
+  // while still offering alternative bets. The frontend also gates these sections,
+  // but we suppress at the API level to prevent any client from showing them.
+  const isAvoidResponse = recommendation?.advisor_status === 'AVOID' || recommendation?.no_edge === true || recommendation?.isAvoidedPick === true;
+  const backup_picks = isAvoidResponse ? [] : (backupPicks || []).slice(0, 5)
     .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
-  const all_candidates = (allCandidates || rankedMarkets || []).slice(0, 10)
+  const all_candidates = isAvoidResponse ? [] : (allCandidates || rankedMarkets || []).slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({

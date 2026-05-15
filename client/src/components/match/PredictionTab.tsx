@@ -145,7 +145,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const advisorReason = rec.advisor_reason || null;
   const isAvoidedPick = rec.isAvoidedPick === true;
   const avoidReason = rec.avoidReason || null;
-  const isNoPick = rec.no_edge === true || isAvoidedPick;
+  // BUG FIX: Also check advisor_status === 'AVOID' as a safety fallback.
+  // This prevents cached/old API data that lacks isAvoidedPick/no_edge flags
+  // from showing "Our Best Bet" alongside an AVOID badge — the exact
+  // contradictory UI users were seeing on screenshots.
+  const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'AVOID';
   const edgeAboveBaseline = rec.edgeAboveBaseline != null ? rec.edgeAboveBaseline : null;
   const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
   const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
@@ -726,7 +730,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
       </motion.div>
 
       {/* ── OTHER GOOD OPTIONS ── */}
-      {backups.length > 0 && (
+      {/* BUG FIX: Don't show "Other Good Options" when AVOID — it's contradictory */}
+      {/* to say "avoid this match" while offering alternative bets. */}
+      {backups.length > 0 && !isNoPick && (
         <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>
           <div className="flex flex-col gap-2">

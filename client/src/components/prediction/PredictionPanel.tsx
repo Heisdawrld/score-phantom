@@ -299,8 +299,11 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   // The "secret angle" is the first high-quality backup pick
   // BUG FIX: Don't use AVOID-badge picks as the "secret angle" — showing a
   // "Premium Secret Angle" with an AVOID badge is contradictory.
-  const secretPick = backups.find((b: any) => b.probability_pct >= 60 && b.advisor_status !== 'AVOID') ??
-    backups.find((b: any) => b.advisor_status !== 'AVOID') ?? null;
+  // Also: Don't show any secret angle when the main pick is AVOID —
+  // saying "avoid" while offering "good options" is contradictory.
+  const isMainAvoid = rec?.no_edge === true || rec?.isAvoidedPick === true || rec?.advisor_status === 'AVOID';
+  const secretPick = isMainAvoid ? null : (backups.find((b: any) => b.probability_pct >= 60 && b.advisor_status !== 'AVOID') ??
+    backups.find((b: any) => b.advisor_status !== 'AVOID') ?? null);
 
   const goToPaywall = () => { onClose(); setLocation("/paywall"); };
 
