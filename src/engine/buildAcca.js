@@ -311,11 +311,34 @@ export async function buildAcca(rows, mode = 'safe') {
       ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase())
     );
     if (replacement) {
-      // Remove the old fixture from tracking
-      const oldFixtureId = selected[selected.length - 1].fixture_id;
+      // BUG FIX: Properly update ALL tracking maps when replacing the last selected pick.
+      // Old code only updated usedFixtures, leaving usedLeagues, scriptCounts,
+      // underCount, and moderateUsed stale — violating diversity constraints.
+      const oldPick = selected[selected.length - 1];
+      const oldFixtureId = oldPick.fixture_id;
+      const oldTournament = oldPick.tournament_name || '';
+      const oldScriptCat = oldPick.scriptCat || 'default';
+
+      // Decrement old pick's tracking
       usedFixtures.delete(oldFixtureId);
-      selected[selected.length - 1] = replacement;
+      const oldLeagueCount = usedLeagues.get(oldTournament) || 0;
+      if (oldLeagueCount > 1) usedLeagues.set(oldTournament, oldLeagueCount - 1);
+      else usedLeagues.delete(oldTournament);
+      scriptCounts[oldScriptCat] = Math.max(0, (scriptCounts[oldScriptCat] || 0) - 1);
+      if (UNDER_MARKETS.has((oldPick.best_pick_market || '').toLowerCase())) underCount--;
+      if (oldPick.riskLevel === 'MODERATE') moderateUsed--;
+
+      // Increment replacement's tracking
+      const newTournament = replacement.tournament_name || '';
+      const newLeagueCount = usedLeagues.get(newTournament) || 0;
+      const newScriptCat = replacement.scriptCat || 'default';
+      usedLeagues.set(newTournament, newLeagueCount + 1);
+      scriptCounts[newScriptCat] = (scriptCounts[newScriptCat] || 0) + 1;
+      if (UNDER_MARKETS.has((replacement.best_pick_market || '').toLowerCase())) underCount++;
+      if (replacement.riskLevel === 'MODERATE') moderateUsed++;
       usedFixtures.add(replacement.fixture_id);
+
+      selected[selected.length - 1] = replacement;
     }
   }
 

@@ -31,8 +31,19 @@ function requireAdmin(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL)
       return res.status(403).json({ error: "Forbidden" });
-    req.user = decoded;
-    next();
+    // BUG FIX: Verify admin exists in DB and token not revoked (matches routes.js fix).
+    // Without this, a revoked admin JWT retains access until expiry.
+    db.execute({ sql: "SELECT id, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] })
+      .then(result => {
+        const dbUser = result.rows?.[0];
+        if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
+        if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
+          return res.status(401).json({ error: "Token revoked" });
+        }
+        req.user = decoded;
+        next();
+      })
+      .catch(() => res.status(401).json({ error: "Unauthorized" }));
   } catch {
     return res.status(401).json({ error: "Unauthorized" });
   }

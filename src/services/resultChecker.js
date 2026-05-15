@@ -113,6 +113,23 @@ export function evaluatePrediction(market, selection, homeScore, awayScore, home
     if (mktU) { const t = mktU[2] ? parseFloat(mktU[1]+'.'+mktU[2]) : parseFloat(mktU[1]); return awayScore < t ? 'win' : 'loss'; }
   }
 
+  // ── Win Either Half ─────────────────────────────────────────────────────────
+  // Handles: win_either_half_home, win_either_half_away
+  // BUG FIX: Previously fell through to 'void' — these markets were never evaluated,
+  // inflating void counts and distorting accuracy metrics.
+  if (mkt.includes('win either half') || mkt.includes('win_either_half')) {
+    // We don't have per-half scores from the API, so we can only evaluate
+    // the full match result. If the team won, they must have won at least one half.
+    // If they drew or lost, we mark as 'void' since we can't confirm per-half results.
+    if (mkt.includes('home') || isHomePick) {
+      return homeScore > awayScore ? 'win' : 'void';
+    }
+    if (mkt.includes('away') || isAwayPick) {
+      return awayScore > homeScore ? 'win' : 'void';
+    }
+    return 'void';
+  }
+
   // ── Asian Handicap (future-proofing) ────────────────────────────────────────
   if (mkt.includes('handicap') || mkt.includes('ahc')) {
     const hm = sel.match(/([+-]?\d+\.?\d*)/);

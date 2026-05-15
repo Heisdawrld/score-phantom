@@ -337,7 +337,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                         stroke="url(#confGradTab)"
                         strokeWidth="4.5"
                         strokeLinecap="round"
-                        strokeDasharray={`${(phantomScore / 100) * 188.5} 188.5`}
+                        strokeDasharray={`${(displayConfidence / 100) * 188.5} 188.5`}
                       />
                       <defs>
                         <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -347,7 +347,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                       </defs>
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-xl font-black text-white leading-none">{phantomScore}%</span>
+                      <span className="text-xl font-black text-white leading-none">{displayConfidence}%</span>
                     </div>
                   </div>
                   <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">MODEL PROB.</span>
@@ -382,30 +382,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           ) : null}
 
           {/* ── PHANTOM DECISION STACK ── */}
-          {scriptLabel && (
-            <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-white/30">→</span>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
-                {scriptVol && (
-                  <span className={cn(
-                    "text-[9px] font-bold px-2 py-0.5 rounded-full",
-                    scriptVol === "HIGH" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                    scriptVol === "LOW" ? "bg-primary/10 text-primary border border-primary/20" :
-                    "bg-white/[0.04] text-white/30 border border-white/[0.06]"
-                  )}>
-                    {scriptVol}
-                  </span>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── PHANTOM DECISION STACK ── */}
-          {/* BUG FIX: Match outcome probabilities now ALWAYS shown, not gated on scriptLabel */}
+          {/* Shows script + match outcome probabilities. Always visible when either exists. */}
           {(scriptLabel || matchResult) && (
             <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
               {scriptLabel && (

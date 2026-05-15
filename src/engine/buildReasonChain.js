@@ -209,10 +209,14 @@ function buildMarketAnalysisStep(marketKey, prob, odds, implied, edge, ev) {
  */
 function buildRecommendationStep(bestPick, narrative, ev) {
   const prob = safeNum(bestPick.modelProbability, 0);
-  const odds = safeNum(bestPick.bookmakerOdds, 0);
+  // BUG FIX: Don't display "0.00 odds" for model-only picks.
+  // Old code: safeNum(bestPick.bookmakerOdds, 0) → showed "at 0.00 odds" when null.
+  const odds = bestPick.bookmakerOdds != null && bestPick.bookmakerOdds > 0
+    ? safeNum(bestPick.bookmakerOdds, 0) : null;
   const marketKey = bestPick.marketKey || '';
   const tier = bestPick.valueTier || 'MARGINAL';
   const marketLabel = marketKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const oddsLabel = odds ? `at ${odds.toFixed(2)} odds` : 'no bookmaker odds available';
 
   // Determine recommendation type
   if (tier === 'JUNK' || tier === 'NEGATIVE_EV') {
@@ -224,26 +228,26 @@ function buildRecommendationStep(bestPick, narrative, ev) {
   }
 
   if (tier === 'VALUE') {
-    return `${marketLabel} — VALUE pick. Good risk/reward at ${odds.toFixed(2)} odds.`;
+    return `${marketLabel} — VALUE pick. Good risk/reward ${oddsLabel}.`;
   }
 
   if (tier === 'ACCUMULATOR') {
-    return `${marketLabel} — ACCUMULATOR pick. Solid at ${odds.toFixed(2)} for ACCAs.`;
+    return `${marketLabel} — ACCUMULATOR pick. Solid ${oddsLabel} for ACCAs.`;
   }
 
   if (tier === 'SHARP') {
-    return `${marketLabel} — SHARP pick. Model disagrees with market at ${odds.toFixed(2)}.`;
+    return `${marketLabel} — SHARP pick. Model disagrees with market ${oddsLabel}.`;
   }
 
   if (ev != null && ev > 0.03) {
-    return `${marketLabel} — positive EV at ${odds.toFixed(2)} odds. Worth consideration.`;
+    return `${marketLabel} — positive EV ${oddsLabel}. Worth consideration.`;
   }
 
   if (prob >= 0.60) {
-    return `${marketLabel} — moderate confidence at ${odds.toFixed(2)} odds.`;
+    return `${marketLabel} — moderate confidence ${oddsLabel}.`;
   }
 
-  return `${marketLabel} — marginal pick at ${odds.toFixed(2)} odds. Proceed with caution.`;
+  return `${marketLabel} — marginal pick ${oddsLabel}. Proceed with caution.`;
 }
 
 /**

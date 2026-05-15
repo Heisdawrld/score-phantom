@@ -17,7 +17,13 @@ function phantomScoreOf(candidate) {
 
 function isPricedCandidate(candidate) {
   if (!candidate) return false;
-  if (!isHeadlineEligibleMarket(candidate.marketKey)) return false;
+  // BUG FIX: Removed isHeadlineEligibleMarket check here. That check belongs in
+  // isHeadlineQualityCandidate, not here. The old code excluded DNB, Double Chance,
+  // Over 3.5, Under 1.5, etc. from the "priced" pool entirely, even though these
+  // markets have real bookmaker odds and positive EV. This caused false abstentions
+  // or incorrect "model only" labels on picks that actually have odds.
+  // Now: if a candidate has bookmaker odds > 1 or a valid implied probability,
+  // it IS a priced candidate — regardless of whether it's "headline eligible".
   const bookmakerOdds = safeNum(candidate.bookmakerOdds, 0);
   if (bookmakerOdds > 1.0) return true;
   const impliedProbability = safeNum(candidate.impliedProbability, 0);

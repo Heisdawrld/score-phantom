@@ -21,9 +21,12 @@ const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").th
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function ordinal(n: number) {
+  // BUG FIX: Handle 11th/12th/13th correctly.
+  // Old logic used (v-20)%10 which gave "11st", "12nd", "13rd".
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  // 11th, 12th, 13th are exceptions — they all take "th"
+  return n + (v >= 11 && v <= 13 ? s[0] : s[v % 10] || s[0]);
 }
 
 export function SpiralWatermark() {
@@ -85,7 +88,9 @@ export default function MatchCenter() {
   const fix = d?.fixture || {};
   const statusUpper = String(fix.match_status || "").toUpperCase();
   const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(statusUpper);
-  const isFT = ["FT", "AET", "PEN_FT", "PEN", "PENS"].includes(statusUpper) || String(fix.match_status || "") === "Pen";
+  // BUG FIX: PEN (penalty shootout) is LIVE, not FT. Only FT/AET/PEN_FT are finished.
+  // Old code had PEN in both isLive and isFT arrays, causing contradictory UI.
+  const isFT = ["FT", "AET", "PEN_FT", "PENS"].includes(statusUpper) || (statusUpper === "PEN" && String(fix.match_status || "") === "Pen");
   const matchTime = fix.match_date
       ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "";

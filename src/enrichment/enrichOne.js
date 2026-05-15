@@ -14,7 +14,10 @@ function parseScore(scoreStr) {
   const parts = scoreStr.split('-');
   const home = parseInt(parts[0], 10);
   const away = parseInt(parts[1], 10);
-  if (isNaN(home) || isNaN(away)) return { home, away };
+  // BUG FIX: Return null instead of NaN when parsing fails.
+  // NaN propagates into DB integer columns and corrupts data,
+  // and causes all numeric comparisons with NaN to return false.
+  if (isNaN(home) || isNaN(away)) return { home: isNaN(home) ? null : home, away: isNaN(away) ? null : away };
   return { home, away };
 }
 

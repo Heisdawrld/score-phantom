@@ -342,9 +342,16 @@ async function requireAdmin(req, res, next) {
       return res.status(403).json({ error: "Forbidden" });
     }
     
-    // Explicit Database Lock: Verify token creator is still in DB and not deleted/revoked
-    const result = await db.execute({ sql: "SELECT id, status FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] });
-    if (!result.rows?.[0]) return res.status(403).json({ error: "Admin revoked" });
+    // Explicit Database Lock: Verify token creator is still in DB, not deleted, AND token not revoked
+    const result = await db.execute({ sql: "SELECT id, status, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] });
+    const dbUser = result.rows?.[0];
+    if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
+    
+    // BUG FIX: Check token_version to ensure token wasn't revoked (e.g. password change).
+    // Without this, a revoked JWT retains admin access until it expires.
+    if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
+      return res.status(401).json({ error: "Token revoked" });
+    }
     
     req.user = decoded;
     next();
@@ -519,7 +526,12 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       const edge = parseFloat(f.best_pick_edge || 0);
       const vol = (f.confidence_volatility || '').toLowerCase();
       const score = parseFloat(f.best_pick_score || 0);
-      const dataQ = parseFloat(f.data_quality || 0.5);
+      // BUG FIX: data_quality is stored as TEXT ('excellent','good','moderate','poor'),
+      // not a number. parseFloat('excellent') = NaN → always fell through to 0.5 default.
+      // Now properly map text quality tiers to numeric scores.
+      const dqRaw = (f.data_quality || '').toLowerCase().trim();
+      const DATA_QUALITY_MAP = { excellent: 0.9, good: 0.7, moderate: 0.5, poor: 0.25, deep: 0.85, basic: 0.6, limited: 0.4, none: 0.2, no_data: 0.1 };
+      const dataQ = DATA_QUALITY_MAP[dqRaw] ?? (dqRaw && !isNaN(parseFloat(dqRaw)) ? parseFloat(dqRaw) : 0.5);
 
       // ── Extract v4 fields from prediction_json ──────────────────────────
       // Syncs fixture list badges with the EV-aware engine output

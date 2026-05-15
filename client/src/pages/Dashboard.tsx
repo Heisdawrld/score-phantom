@@ -158,7 +158,11 @@ export default function Dashboard() {
       );
     }
     if (activeGroupTab === "live") {
-      filtered = filtered.filter((f: any) => ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN', 'inprogress', '1st_half', 'halftime', '2nd_half'].includes(f.match_status?.toUpperCase() || f.match_status || ''));
+      // BUG FIX: Normalize all API status values to uppercase for comparison.
+      // The old code uppercased the match_status but the comparison array had mixed case
+      // ('inprogress', '1st_half', etc.) which never matched after toUpperCase().
+      const LIVE_STATUSES_UPPER = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN', 'INPROGRESS', '1ST_HALF', 'HALFTIME', '2ND_HALF'];
+      filtered = filtered.filter((f: any) => LIVE_STATUSES_UPPER.includes((f.match_status || '').toUpperCase()));
     } else if (activeGroupTab === "favorites") {
       try {
         const favs = JSON.parse((user as any)?.league_favorites || "[]");

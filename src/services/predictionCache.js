@@ -368,24 +368,33 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
     // Single atomic UPDATE — prediction_json + flat columns in one statement
     // to prevent concurrent reads seeing partially-updated data
     const now = new Date().toISOString();
+    // BUG FIX: Use INSERT ... ON CONFLICT DO UPDATE (upsert) instead of UPDATE-only.
+    // The old UPDATE-only approach silently failed for first-time predictions
+    // because no row existed yet, causing the cache to never be populated.
     await db.execute({
-      sql: `UPDATE predictions_v2 SET
-        prediction_json       = ?,
-        best_pick_market      = ?,
-        best_pick_selection   = ?,
-        best_pick_probability = ?,
-        best_pick_score       = ?,
-        confidence_model      = ?,
-        confidence_volatility = ?,
-        script_primary        = ?,
-        no_safe_pick          = ?,
-        pick_id               = ?,
-        home_team             = ?,
-        away_team             = ?,
-        model_version         = ?,
-        updated_at            = ?
-      WHERE fixture_id = ?`,
+      sql: `INSERT INTO predictions_v2 (
+          fixture_id, prediction_json,
+          best_pick_market, best_pick_selection, best_pick_probability, best_pick_score,
+          confidence_model, confidence_volatility, script_primary,
+          no_safe_pick, pick_id, home_team, away_team, model_version, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (fixture_id) DO UPDATE SET
+          prediction_json       = EXCLUDED.prediction_json,
+          best_pick_market      = EXCLUDED.best_pick_market,
+          best_pick_selection   = EXCLUDED.best_pick_selection,
+          best_pick_probability = EXCLUDED.best_pick_probability,
+          best_pick_score       = EXCLUDED.best_pick_score,
+          confidence_model      = EXCLUDED.confidence_model,
+          confidence_volatility = EXCLUDED.confidence_volatility,
+          script_primary        = EXCLUDED.script_primary,
+          no_safe_pick          = EXCLUDED.no_safe_pick,
+          pick_id               = EXCLUDED.pick_id,
+          home_team             = EXCLUDED.home_team,
+          away_team             = EXCLUDED.away_team,
+          model_version         = EXCLUDED.model_version,
+          updated_at            = EXCLUDED.updated_at`,
       args: [
+        String(fixtureId),
         JSON.stringify({ prediction, engineResult, engineVersion: CURRENT_ENGINE_VERSION }),
         noSafePick ? null : (bp?.marketKey || null),
         noSafePick ? null : (bp?.selection || null),
@@ -400,7 +409,6 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
         engineResult?.awayTeam || rec.fixture?.awayTeam || null,
         CURRENT_ENGINE_VERSION,
         now,
-        String(fixtureId),
       ],
     });
   } catch (err) {

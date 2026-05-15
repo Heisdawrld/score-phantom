@@ -129,7 +129,11 @@ function annotatePick(pick, features, script) {
  * @returns {{ bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied }}
  */
 export function selectBestPick(rankedCandidates, scriptOutput, featureVector, options = {}) {
-  const ranked = rankedCandidates ? [...rankedCandidates] : [];
+  // BUG FIX: Deep-clone candidates before mutating to prevent shared object
+  // mutation from leaking into the caller's data. The old shallow copy
+  // [...rankedCandidates] kept the same object references, so mutations to
+  // pick.isSharpValue and pick.finalScore corrupted the original data.
+  const ranked = rankedCandidates ? rankedCandidates.map(p => ({ ...p })) : [];
   const fv     = featureVector   || {};
   const script = scriptOutput    || {};
 

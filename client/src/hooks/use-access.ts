@@ -22,11 +22,12 @@ export function useAccess() {
     || (user as any)?.trial_active === true)
     && !isSubscribed; // if they're subscribed, they're not trial
 
-  const isExpired = !isPremium && (
-    user?.access_status === "expired"
-    || (!!user && !isPremium)
-  );
+  // BUG FIX: Only mark as expired when the server explicitly says "expired".
+  // Old logic: !isPremium && (!!user && !isPremium) → any non-premium user was "expired",
+  // including brand-new users who haven't been assigned an access status yet.
+  const isExpired = user?.access_status === "expired"
+    || ((user as any)?.subscription_status === "expired");
 
   return { ...auth, isPremium, isSubscribed, isTrial, isExpired, user };
 }
-
+
