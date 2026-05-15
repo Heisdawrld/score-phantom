@@ -598,22 +598,69 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       analystSummary: reasonChain?.analystSummary || null,
     };
   } else {
-    recommendation = {
-      market: "No Edge",
-      pick: "No Clear Edge",
-      probability: 0,
-      probability_pct: 0,
-      phantom_score_pct: 0,
-      score: 0,
-      edgeScore: 0,
-      modelConfidence: "LOW",
-      tacticalFit: "WEAK",
-      valueRating: "WEAK",
-      reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
-      advisor_status: "AVOID",
-      no_edge: true,
-      analystSummary: engineResult?.reasonChain?.analystSummary || noSafePickReason || null,
-    };
+    // ── No safe pick path (including AVOID-badge smart abstention) ─────────
+    // When the engine says AVOID, we still provide the avoided pick data
+    // so the UI can show "what we found and why we're avoiding it" instead of
+    // a generic "No Edge" card.
+    const avoidedPick = bestPick || null;
+    const isAvoidedPick = avoidedPick?.isAvoidedPick === true;
+    const avoidReason = avoidedPick?.avoidReason || noSafePickReason || null;
+
+    if (isAvoidedPick && avoidedPick) {
+      // AVOID-badge abstention — show what was found but flag as avoided
+      const isModelOnly = !!(avoidedPick.modelOnly || avoidedPick.isModelOnly);
+      const probability = safeNum(avoidedPick.modelProbability, 0);
+      const bestOdds = safeNum(avoidedPick.bookmakerOdds, 0);
+      const bestEV = avoidedPick.ev != null ? avoidedPick.ev : (bestOdds > 1.0 ? (probability * bestOdds) - 1 : null);
+      const bestValueTier = avoidedPick.valueTier || null;
+
+      recommendation = {
+        market: mapMarketName(avoidedPick.marketKey),
+        pick: formatPickLabel(avoidedPick.marketKey, avoidedPick.selection, homeTeam, awayTeam),
+        probability,
+        probability_pct: capProbabilityPct(avoidedPick.marketKey, parseFloat((probability * 100).toFixed(1))),
+        phantom_score_pct: 0,
+        score: parseFloat((safeNum(avoidedPick.finalScore, probability) * 100).toFixed(1)),
+        edgeScore: 0,
+        modelConfidence: mapModelConfidence(probability, dataCompletenessScore, engineConfidence?.model),
+        tacticalFit: "WEAK",
+        valueRating: "WEAK",
+        riskLevel: resolveRiskLevel(avoidedPick, probability),
+        edgeLabel: "NO EDGE",
+        reasons: [avoidReason || "Model does not recommend betting on this match", ...humanReasonCodes.slice(0, 3)],
+        advisor_status: "AVOID",
+        advisor_reason: avoidReason || null,
+        no_edge: true,
+        isAvoidedPick: true,
+        avoidReason: avoidReason || null,
+        // Still pass through the avoided pick details for transparency
+        valueTier: bestValueTier,
+        valueTierLabel: avoidedPick.valueTierLabel || null,
+        ev: bestEV != null ? parseFloat(bestEV.toFixed(4)) : null,
+        odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
+        isAccaEligible: false,
+        riskReward: null,
+        analystSummary: engineResult?.reasonChain?.analystSummary || avoidReason || null,
+      };
+    } else {
+      // Classic no-safe-pick — engine abstained before even finding a candidate
+      recommendation = {
+        market: "No Edge",
+        pick: "No Clear Edge",
+        probability: 0,
+        probability_pct: 0,
+        phantom_score_pct: 0,
+        score: 0,
+        edgeScore: 0,
+        modelConfidence: "LOW",
+        tacticalFit: "WEAK",
+        valueRating: "WEAK",
+        reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
+        advisor_status: "AVOID",
+        no_edge: true,
+        analystSummary: engineResult?.reasonChain?.analystSummary || noSafePickReason || null,
+      };
+    }
   }
 
   const backup_picks = (backupPicks || []).slice(0, 5)

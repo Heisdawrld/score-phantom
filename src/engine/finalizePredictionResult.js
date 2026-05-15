@@ -97,6 +97,25 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     }
     bestPick.advisor_status = syncedAdvisorStatus;
 
+    // ── Phase 4A.1: AVOID sync — when badge is AVOID, treat as smart abstention ──
+    // The engine still provides the pick data for transparency (showing what we found
+    // and why we're avoiding it), but flags it so the UI doesn't display "Our Best Bet".
+    // This prevents the AVOID + "Our Best Bet" + VALUE tier contradiction.
+    if (syncedAdvisorStatus === 'AVOID') {
+      const avoidReasons = [];
+      if (isRestricted) avoidReasons.push('Restricted league — limited data reliability');
+      if (valueTier.tier === 'JUNK') avoidReasons.push(`Junk odds at ${odds.toFixed(2)} — no value regardless of probability`);
+      if (valueTier.tier === 'NEGATIVE_EV') avoidReasons.push(`Negative EV (${(ev * 100).toFixed(1)}%) — not profitable long-term`);
+      if (dataQ < 0.20) avoidReasons.push('Very low data quality — prediction unreliable');
+      else if (dataQ < 0.40) avoidReasons.push('Below-average data quality — confidence reduced');
+      if (prob < 0.50) avoidReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
+
+      bestPick.isAvoidedPick = true;
+      bestPick.avoidReason = avoidReasons.length > 0
+        ? avoidReasons.join('. ')
+        : `Model does not recommend this pick — insufficient edge or value`;
+    }
+
     // ── Phase 4B: Accumulator-Eligible Flag ───────────────────────────────
     // Separate "good for singles" from "good for accumulators"
     // ACCA-eligible: solid probability (≥58%), odds in useful range (1.30-1.65),
@@ -141,6 +160,18 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     injuriesUsed: features.homeMissingXgImpact > 0 || features.awayMissingXgImpact > 0,
   };
 
+  // ── AVOID-badge sync: if bestPick has AVOID badge, upgrade to smart abstention ──
+  // This ensures the adapter and UI treat AVOID picks as "no safe pick" rather than
+  // showing "Our Best Bet" with an AVOID badge — a confusing contradiction.
+  const isAvoidedPick = bestPick?.isAvoidedPick === true;
+  const finalNoSafePick = noSafePick || isAvoidedPick;
+  const finalNoSafePickReason = noSafePickReason
+    || (isAvoidedPick ? bestPick.avoidReason : null)
+    || null;
+  const finalAbstainCode = abstainCode
+    || (isAvoidedPick ? 'AVOID_BADGE_NO_PICK' : null)
+    || null;
+
   const result = {
     fixtureId,
     homeTeam: homeTeamName,
@@ -151,9 +182,9 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     calibratedProbs,
     bestPick,
     backupPicks,
-    noSafePick,
-    noSafePickReason: noSafePickReason || null,
-    abstainCode: abstainCode || null,
+    noSafePick: finalNoSafePick,
+    noSafePickReason: finalNoSafePickReason,
+    abstainCode: finalAbstainCode,
     layer2Override: { triggered: layer2Override, applied: layer2OverrideApplied, shiftMarket: maxShiftMarket, shiftPp: parseFloat(((maxShift||0)*100).toFixed(1)), dataComplete: features.dataCompletenessScore ?? null },
     confidence,
     reasonCodes,

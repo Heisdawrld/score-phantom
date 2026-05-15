@@ -143,6 +143,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const edgeLabel = rec.edgeLabel || "LEAN";
   const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
   const advisorReason = rec.advisor_reason || null;
+  const isAvoidedPick = rec.isAvoidedPick === true;
+  const avoidReason = rec.avoidReason || null;
+  const isNoPick = rec.no_edge === true || isAvoidedPick;
   const edgeAboveBaseline = rec.edgeAboveBaseline != null ? rec.edgeAboveBaseline : null;
   const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
   const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
@@ -217,18 +220,20 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
         transition={{ type: "spring", stiffness: 260, damping: 24 }}
         className="relative rounded-2xl overflow-hidden"
       >
-        {/* Cinematic green glow backdrop */}
+        {/* Cinematic glow backdrop — green for picks, red/muted for AVOID */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className={cn("absolute inset-0 bg-gradient-to-br to-transparent", isNoPick ? "from-red-500/8 via-red-500/3" : "from-primary/15 via-primary/5")} />
           {/* Diagonal light streaks */}
+          {!isNoPick && (
           <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
             background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
           }} />
-          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
-          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          )}
+          {!isNoPick && <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />}
+          {!isNoPick && <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />}
         </div>
 
-        <div className="relative z-10 p-5 border border-primary/15 rounded-2xl backdrop-blur-sm deco-corners deco-glow-top">
+        <div className={cn("relative z-10 p-5 rounded-2xl backdrop-blur-sm deco-corners", isNoPick ? "border border-red-500/15" : "border border-primary/15 deco-glow-top")}>
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}
@@ -258,32 +263,43 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             transition={{ delay: 0.15 }}
             className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
-            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
-              {riskPill}
-            </span>
-            {rec.isSafeBet && (
+            {/* BUG FIX: Don't show contradictory badges when AVOID */}
+            {/* Only show risk pill and tier badges for non-AVOID picks */}
+            {!isNoPick && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
+                {riskPill}
+              </span>
+            )}
+            {rec.isSafeBet && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
                 CONTROL
               </span>
             )}
-            {rec.isValueBet && !isSharpValue && (
+            {rec.isValueBet && !isSharpValue && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> VALUE
               </span>
             )}
-            {isSharpValue && (
+            {isSharpValue && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
                 <TrendingUp className="w-3 h-3" /> SHARP VALUE
               </span>
             )}
-            {/* ── v4: Value Tier Badge ──────────────────────────────────── */}
-            {tierConfig && valueTier !== 'JUNK' && valueTier !== 'NEGATIVE_EV' && valueTier !== 'UNPRICED' && (
+            {/* BUG FIX: Don't show VALUE/STRONG/SHARP tier when AVOID — it's contradictory */}
+            {/* Only show tier badges for non-AVOID picks, or JUNK/NEGATIVE_EV for AVOID */}
+            {tierConfig && !isNoPick && valueTier !== 'JUNK' && valueTier !== 'NEGATIVE_EV' && valueTier !== 'UNPRICED' && (
+              <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide", tierConfig.bg, tierConfig.color, tierConfig.border)}>
+                {tierConfig.label}
+              </span>
+            )}
+            {/* For AVOID picks, show JUNK/NEGATIVE_EV tier since it explains WHY */}
+            {tierConfig && isNoPick && (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') && (
               <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide", tierConfig.bg, tierConfig.color, tierConfig.border)}>
                 {tierConfig.label}
               </span>
             )}
             {/* ── v4: ACCA-Eligible Tag ─────────────────────────────────── */}
-            {isAccaEligible && (
+            {isAccaEligible && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
                 ACCA
               </span>
@@ -304,76 +320,108 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             )}
           </div>
 
-          {/* OUR BEST BET */}
-          <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">Our Best Bet</p>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
-            className="flex items-center justify-between gap-4 mb-1">
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="text-2xl font-black text-white uppercase leading-tight">
-                {rec.pick || "No clear pick"}
-              </p>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90">
-                {rec.pick || "No clear pick"}
-                <ChevronRight className="w-3.5 h-3.5 text-white/40" />
-              </div>
-            </div>
-            
-            {/* Large circular confidence gauge */}
-            <div className="shrink-0 flex flex-col items-center">
-              <div className="relative w-[80px] h-[80px]">
-                {/* Background ring */}
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
-                  <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
-                  <circle
-                    cx="36" cy="36" r="30" fill="none"
-                    stroke="url(#confGradTab)"
-                    strokeWidth="4.5"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(displayConfidence / 100) * 188.5} 188.5`}
-                  />
-                  <defs>
-                    <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#10e774" />
-                      <stop offset="100%" stopColor="#0bc95f" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                {/* Center text */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-black text-white leading-none">{displayConfidence}%</span>
+          {/* OUR BEST BET — or AVOIDED PICK notice */}
+          {isNoPick ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
+              className="mt-4 mb-2">
+              {/* AVOID notice card — no "best bet" phrasing */}
+              <div className="p-4 rounded-xl bg-red-500/[0.06] border border-red-500/15">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">No Recommended Pick</p>
                 </div>
+                {isAvoidedPick && rec.pick && rec.pick !== "No Clear Edge" ? (
+                  <>
+                    <p className="text-xs text-white/50 leading-relaxed mb-2">
+                      The model found <span className="text-white/70 font-semibold">{rec.pick}</span> but does not recommend betting on it.
+                    </p>
+                    <p className="text-[11px] text-red-400/80 leading-snug">
+                      {avoidReason || "Insufficient edge or value to justify a recommendation."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-white/50 leading-relaxed">
+                    {avoidReason || rec.reasons?.[0] || "The model found no market with a strong enough edge for this fixture."}
+                  </p>
+                )}
               </div>
-              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">MODEL PROB.</span>
-            </div>
-          </motion.div>
+            </motion.div>
+          ) : (
+            <>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">Our Best Bet</p>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
+                className="flex items-center justify-between gap-4 mb-1">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p className="text-2xl font-black text-white uppercase leading-tight">
+                    {rec.pick || "No clear pick"}
+                  </p>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90">
+                    {rec.pick || "No clear pick"}
+                    <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+                  </div>
+                </div>
+                
+                {/* Large circular confidence gauge */}
+                <div className="shrink-0 flex flex-col items-center">
+                  <div className="relative w-[80px] h-[80px]">
+                    {/* Background ring */}
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+                      <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
+                      <circle
+                        cx="36" cy="36" r="30" fill="none"
+                        stroke="url(#confGradTab)"
+                        strokeWidth="4.5"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(displayConfidence / 100) * 188.5} 188.5`}
+                      />
+                      <defs>
+                        <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#10e774" />
+                          <stop offset="100%" stopColor="#0bc95f" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    {/* Center text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-xl font-black text-white leading-none">{displayConfidence}%</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">MODEL PROB.</span>
+                </div>
+              </motion.div>
 
-          {/* Edge vs bookmakers */}
-          {isSharpValue ? (
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex items-center gap-2 mt-2 mb-3">
-              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
-                SHARP MONEY ALERT
-              </span>
-              <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
-            </motion.div>
-          ) : hasValue && edgePct != null ? (
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex items-center gap-2 mt-2 mb-3">
-              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
-                ACTIONABLE EDGE
-              </span>
-              <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
-            </motion.div>
-          ) : null}
+              {/* Edge vs bookmakers — only for non-AVOID picks */}
+              {isSharpValue ? (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="flex items-center gap-2 mt-2 mb-3">
+                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
+                    SHARP MONEY ALERT
+                  </span>
+                  <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
+                </motion.div>
+              ) : hasValue && edgePct != null ? (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="flex items-center gap-2 mt-2 mb-3">
+                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
+                    ACTIONABLE EDGE
+                  </span>
+                  <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
+                </motion.div>
+              ) : null}
+            </>
+          )}
 
           {/* ── PHANTOM DECISION STACK ── */}
           {/* BUG FIX: Match outcome probabilities now ALWAYS shown, not gated on scriptLabel */}
@@ -534,8 +582,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </div>
           )}
 
-          {/* ── v4: EV & RISK/REWARD STRIP ── */}
-          {(ev != null || engineOdds != null) && (
+          {/* ── v4: EV & RISK/REWARD STRIP ── (only for non-AVOID picks) */}
+          {!isNoPick && (ev != null || engineOdds != null) && (
             <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar">
               {ev != null && (
                 <div className={cn(
@@ -590,8 +638,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </div>
           )}
 
-          {/* ── ODDS DISPLAY ── */}
-          {oddsData && (odds || oddsData?.home) && (
+          {/* ── ODDS DISPLAY ── (only for non-AVOID picks — no bet button for avoided matches) */}
+          {!isNoPick && oddsData && (odds || oddsData?.home) && (
             <div className="mt-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">SportyBet Odds</p>
               {odds && (
