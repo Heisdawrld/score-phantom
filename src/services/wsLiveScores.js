@@ -371,25 +371,60 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
 }
 let activeLiveMatchIds = new Set();
 
+// ── Drop verification dedup ──────────────────────────────────────────────
+// Matches at halftime bounce in/out of the live feed, causing repeated
+// "dropped from feed" detections. Without dedup, the same match triggers
+// fetchEventDetail() every 60s during halftime — wasting API calls.
+// recentlyVerifiedDrops: Map<fixtureId, { ts, status }>
+const recentlyVerifiedDrops = new Map();
+const VERIFIED_DROP_TTL_MS = 5 * 60 * 1000; // 5 min cooldown — skip re-verify
+const confirmedFinishedIds = new Set();     // permanently skip once confirmed FT
+
+// ── Detail fetch throttling ─────────────────────────────────────────────
+// fetchEventDetail() is expensive (1 API call per match). The batch data
+// from fetchExpandedLiveMatches() already has scores and status, so we
+// only need full details for: (a) kickoff-window pre-match detection,
+// (b) periodic stats refresh, or (c) status changes.
+let pollCycleCount = 0;
+const DETAIL_FETCH_EVERY_N_POLLS = 3; // Full detail every 3rd poll (~3 min)
+const lastKnownStatus = new Map();     // fid → last status for change detection
+
 async function pollLiveScores() {
   try {
     const matches = await fetchExpandedLiveMatches();
     const currentLiveIds = new Set();
+    pollCycleCount++;
+    const shouldFetchDetails = pollCycleCount % DETAIL_FETCH_EVERY_N_POLLS === 0;
 
     if (matches && matches.length > 0) {
       if (!isConnected) isConnected = true;
       for (const m of matches) {
         const fid = String(m.id || '');
         if (!fid) continue;
+
+        // Determine if we need the full detail fetch
+        const needsDetail = m._fromKickoffWindow || shouldFetchDetails;
+        const prevStatus = lastKnownStatus.get(fid);
+        const batchStatus = normalizeLiveStatus(m.status, m.period, m.home_score, m.away_score, m.current_minute);
+        if (prevStatus && prevStatus !== batchStatus) {
+          // Status changed — fetch details to get accurate data
+          // (e.g., LIVE→HT needs incidents/momentum update)
+        }
+        const statusChanged = prevStatus && prevStatus !== batchStatus;
+
         let fullLiveEvent = null;
-        try {
-          fullLiveEvent = await fetchEventDetail(fid, true);
-        } catch (_) {}
+        if (needsDetail || statusChanged) {
+          try {
+            fullLiveEvent = await fetchEventDetail(fid, true);
+          } catch (_) {}
+        }
+
         if (m._fromKickoffWindow && isPreMatchEvent(fullLiveEvent)) continue;
         const homeScore = fullLiveEvent?.home_score ?? m.home_score ?? 0;
         const awayScore = fullLiveEvent?.away_score ?? m.away_score ?? 0;
         const minute = fullLiveEvent?.current_minute || m.current_minute || null;
         const status = normalizeLiveStatus(fullLiveEvent?.status || m.status, fullLiveEvent?.period || m.period, homeScore, awayScore, minute);
+        lastKnownStatus.set(fid, status);
         currentLiveIds.add(fid);
         await handleScoreUpdate({
           fixture_id: fid,
@@ -405,14 +440,29 @@ async function pollLiveScores() {
     }
 
     // Check for matches that dropped out of the live feed
+    const now = Date.now();
     for (const oldFid of activeLiveMatchIds) {
       if (!currentLiveIds.has(oldFid)) {
+        // Permanently skip matches already confirmed finished
+        if (confirmedFinishedIds.has(oldFid)) continue;
+
+        // Skip if verified recently (halftime bounce protection)
+        const lastVerified = recentlyVerifiedDrops.get(oldFid);
+        if (lastVerified && (now - lastVerified.ts) < VERIFIED_DROP_TTL_MS) {
+          // Already checked this match within the cooldown window
+          continue;
+        }
+
         // Match disappeared from live feed! It probably finished.
         console.log(`[Live] Match ${oldFid} dropped from live feed. Fetching final status...`);
         try {
           const finalEvent = await fetchEventDetail(oldFid, true);
+          // Record this verification (regardless of outcome) to prevent re-check
+          recentlyVerifiedDrops.set(oldFid, { ts: now, status: finalEvent?.status || 'unknown' });
+
           if (finalEvent && (finalEvent.status === 'finished' || finalEvent.status === 'FT')) {
             console.log(`[Live] Match ${oldFid} confirmed finished! Score: ${finalEvent.home_score}-${finalEvent.away_score}`);
+            confirmedFinishedIds.add(oldFid); // Never re-verify this match
             await handleScoreUpdate({
               fixture_id: oldFid,
               home_score: finalEvent.home_score ?? 0,
@@ -424,12 +474,33 @@ async function pollLiveScores() {
               final_event: finalEvent // Pass the full event for memory storage
             }).catch(() => {});
           } else if (finalEvent && finalEvent.status) {
-             // Maybe postponed or cancelled?
-             await db.execute({ sql: 'UPDATE fixtures SET match_status = ? WHERE id = ?', args: [finalEvent.status, oldFid] });
+             // Maybe postponed, cancelled, or halftime?
+             const s = String(finalEvent.status).toLowerCase();
+             if (s === 'halftime' || s === 'ht' || s === 'half_time') {
+               // Halftime — match will likely reappear, don't re-verify for 5 min
+               console.log(`[Live] Match ${oldFid} at halftime — skipping re-verification for 5 min`);
+             } else {
+               // Postponed, cancelled, etc. — update status
+               await db.execute({ sql: 'UPDATE fixtures SET match_status = ? WHERE id = ?', args: [finalEvent.status, oldFid] });
+               confirmedFinishedIds.add(oldFid); // Terminal status, no need to re-check
+             }
           }
         } catch(e) {
           console.warn(`[Live] Failed to verify dropped match ${oldFid}:`, e.message);
         }
+      }
+    }
+
+    // Garbage-collect stale entries from caches
+    if (recentlyVerifiedDrops.size > 50) {
+      for (const [fid, entry] of recentlyVerifiedDrops) {
+        if ((now - entry.ts) > VERIFIED_DROP_TTL_MS) recentlyVerifiedDrops.delete(fid);
+      }
+    }
+    // Clean up lastKnownStatus for matches no longer in the live set
+    if (lastKnownStatus.size > 100) {
+      for (const fid of lastKnownStatus.keys()) {
+        if (!currentLiveIds.has(fid) && confirmedFinishedIds.has(fid)) lastKnownStatus.delete(fid);
       }
     }
     
