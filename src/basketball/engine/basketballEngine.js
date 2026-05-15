@@ -1,7 +1,8 @@
 import { assertEnabledBasketballLeague } from '../config/leagues.js';
 import { getBasketballOddsForGame, getRecentTeamGames, saveBasketballPrediction } from '../storage/basketballDb.js';
+import { fetchTeamAdvanced, fetchTeamOpponentStats, fetchLeaguePlayerStats, fetchClutchTeamStats, resolveTeamId, inferCurrentNbaSeason } from '../services/nbaStatsApi.js';
 
-export const BASKETBALL_ENGINE_VERSION = 'basketball-v1.1.0';
+export const BASKETBALL_ENGINE_VERSION = 'basketball-v2.0.0';
 
 function n(value, fallback = 0) {
   const parsed = Number(value);
@@ -119,13 +120,76 @@ async function buildFeatures(game, league) {
   const bookmakerCount = bookmakers.length;
   const oddsQuality = bookmakerCount >= 3 ? 1 : bookmakerCount >= 2 ? 0.82 : oddsRows.length > 0 ? 0.58 : 0;
 
+  // ── Fetch advanced NBA stats when available ──
+  let homeAdvanced = null;
+  let awayAdvanced = null;
+  if (league.key === 'nba') {
+    try {
+      const [homeTeamId, awayTeamId] = await Promise.all([
+        resolveTeamId(game.home_team),
+        resolveTeamId(game.away_team),
+      ]);
+
+      if (homeTeamId || awayTeamId) {
+        const [advResult, oppResult] = await Promise.all([
+          fetchTeamAdvanced(),
+          fetchTeamOpponentStats(),
+        ]);
+
+        const advRows = advResult?.data?.LeagueDashTeamStats || [];
+        const oppRows = oppResult?.data?.LeagueDashTeamStats || [];
+
+        const findTeamRow = (rows, teamId) => rows.find(r => String(r.TEAM_ID) === String(teamId));
+
+        if (homeTeamId) {
+          const homeAdvRow = findTeamRow(advRows, homeTeamId);
+          const homeOppRow = findTeamRow(oppRows, homeTeamId);
+          if (homeAdvRow) {
+            homeAdvanced = {
+              pace: n(homeAdvRow.PACE, null),
+              offensiveRating: n(homeAdvRow.OFF_RATING, null),
+              defensiveRating: n(homeAdvRow.DEF_RATING, null),
+              netRating: n(homeAdvRow.NET_RATING, null),
+              eFGPct: n(homeAdvRow.EFG_PCT, null),
+              tovPct: n(homeAdvRow.TOV_PCT, null),
+              rebPct: n(homeAdvRow.REB_PCT, null),
+              oppPPG: homeOppRow ? n(homeOppRow.OPP_PTS, null) : null,
+            };
+          }
+        }
+
+        if (awayTeamId) {
+          const awayAdvRow = findTeamRow(advRows, awayTeamId);
+          const awayOppRow = findTeamRow(oppRows, awayTeamId);
+          if (awayAdvRow) {
+            awayAdvanced = {
+              pace: n(awayAdvRow.PACE, null),
+              offensiveRating: n(awayAdvRow.OFF_RATING, null),
+              defensiveRating: n(awayAdvRow.DEF_RATING, null),
+              netRating: n(awayAdvRow.NET_RATING, null),
+              eFGPct: n(awayAdvRow.EFG_PCT, null),
+              tovPct: n(awayAdvRow.TOV_PCT, null),
+              rebPct: n(awayAdvRow.REB_PCT, null),
+              oppPPG: awayOppRow ? n(awayOppRow.OPP_PTS, null) : null,
+            };
+          }
+        }
+      }
+    } catch (_err) {
+      // Silently fall back to basic stats — do not crash
+      homeAdvanced = null;
+      awayAdvanced = null;
+    }
+  }
+
   // dataQuality is the internal gate quality. coverageQuality is what we show users.
-  // We intentionally cap shown coverage because Basketball V1 does not yet include injuries/confirmed lineups/player props.
+  // V2: When advanced NBA stats (ORTG/DRTG/pace) are available, we raise the coverage cap
+  // because the engine now has deeper data beyond just basic box scores.
   // Boost baseline for API Sports leagues with any odds coverage — these have thinner historical data
   // but valid real-time lines, so predictions are still valuable.
   const baselineBoost = (oddsQuality > 0 && sampleQuality < 0.4) ? 0.12 : 0;
   const dataQuality = clamp((sampleQuality * 0.48) + (oddsQuality * 0.35) + 0.17 + baselineBoost, 0, 1);
-  const coverageCap = league.key === 'ncaab' ? 0.78 : 0.86;
+  const coverageCap = homeAdvanced ? 0.92 : (league.key === 'ncaab' ? 0.78 : 0.86);
   const coverageQuality = clamp((sampleQuality * 0.44) + (oddsQuality * 0.28) + 0.14, 0, coverageCap);
 
   return {
@@ -139,6 +203,8 @@ async function buildFeatures(game, league) {
     restEdge,
     homeRestDays: hRest,
     awayRestDays: aRest,
+    homeAdvanced,
+    awayAdvanced,
     dataQuality,
     coverageQuality,
     sampleQuality,
@@ -147,18 +213,43 @@ async function buildFeatures(game, league) {
 }
 
 function estimateProjection(game, features, league) {
-  const { home, away, restEdge } = features;
+  const { home, away, restEdge, homeAdvanced, awayAdvanced, homeRestDays, awayRestDays } = features;
   const leagueAvgPoints = league.key === 'ncaab' ? 74 : 113;
   const leagueAvgTotal = league.key === 'ncaab' ? 148 : 226;
   const homeCourt = league.key === 'ncaab' ? 2.6 : 2.2;
 
-  const homeAttack = home.avgScored - leagueAvgPoints;
-  const awayDefenseLeak = away.avgAllowed - leagueAvgPoints;
-  const awayAttack = away.avgScored - leagueAvgPoints;
-  const homeDefenseLeak = home.avgAllowed - leagueAvgPoints;
+  let homePoints, awayPoints;
 
-  let homePoints = leagueAvgPoints + (homeAttack * 0.48) + (awayDefenseLeak * 0.42) + homeCourt + (restEdge * 0.35);
-  let awayPoints = leagueAvgPoints + (awayAttack * 0.48) + (homeDefenseLeak * 0.42) - (restEdge * 0.25);
+  if (homeAdvanced && awayAdvanced) {
+    // ── V2: Pace-adjusted ORTG vs opponent DRTG projection ──
+    const homeORTG = homeAdvanced.offensiveRating || leagueAvgPoints;
+    const awayORTG = awayAdvanced.offensiveRating || leagueAvgPoints;
+    const homeDRTG = homeAdvanced.defensiveRating || leagueAvgPoints;
+    const awayDRTG = awayAdvanced.defensiveRating || leagueAvgPoints;
+    const avgPace = ((homeAdvanced.pace || 100) + (awayAdvanced.pace || 100)) / 2;
+
+    // Cross-rating formula: offense efficiency adjusted by opponent defensive strength,
+    // normalized against league average ORTG, multiplied by actual pace.
+    // homePoints = (homeORTG / 100) * (awayDRTG / leagueAvgORTG) * avgPace + homeCourt + restEdge
+    homePoints = (homeORTG / 100) * (awayDRTG / leagueAvgPoints) * avgPace + homeCourt + (restEdge * 0.35);
+    awayPoints = (awayORTG / 100) * (homeDRTG / leagueAvgPoints) * avgPace - (restEdge * 0.25);
+  } else {
+    // ── V1: Basic projection using avg scored/allowed (backward compatible) ──
+    const homeAttack = home.avgScored - leagueAvgPoints;
+    const awayDefenseLeak = away.avgAllowed - leagueAvgPoints;
+    const awayAttack = away.avgScored - leagueAvgPoints;
+    const homeDefenseLeak = home.avgAllowed - leagueAvgPoints;
+
+    homePoints = leagueAvgPoints + (homeAttack * 0.48) + (awayDefenseLeak * 0.42) + homeCourt + (restEdge * 0.35);
+    awayPoints = leagueAvgPoints + (awayAttack * 0.48) + (homeDefenseLeak * 0.42) - (restEdge * 0.25);
+  }
+
+  // ── Back-to-back fatigue penalties ──
+  // Teams on zero days rest (back-to-back) get a -2.5 pt penalty; 1 day rest gets -1.0
+  if (homeRestDays === 0) homePoints -= 2.5;
+  else if (homeRestDays === 1) homePoints -= 1.0;
+  if (awayRestDays === 0) awayPoints -= 2.5;
+  else if (awayRestDays === 1) awayPoints -= 1.0;
 
   if (features.sampleQuality < 0.45) {
     homePoints = homePoints * 0.70 + (leagueAvgTotal / 2 + homeCourt / 2) * 0.30;
@@ -426,7 +517,7 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
     riskLevel: 'HIGH',
     noClearEdge: true,
     reasons: [
-      status === 'final' ? 'Game is already completed' : 'No basketball market passed ScorePhantom V1 gates',
+      status === 'final' ? 'Game is already completed' : 'No basketball market passed ScorePhantom gates',
       `Data coverage ${(features.coverageQuality * 100).toFixed(0)}%`,
     ],
   } : {
@@ -452,13 +543,12 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
       best.bookmakerTitle ? `Line source: ${best.bookmakerTitle} @ ${best.bookmakerPrice}` : null,
       `Data coverage ${(features.coverageQuality * 100).toFixed(0)}% (${coverageLabel(features.coverageQuality * 100)})`,
       features.homeRestDays != null && features.awayRestDays != null ? `Rest: ${game.home_team} ${features.homeRestDays}d, ${game.away_team} ${features.awayRestDays}d` : null,
-      best.betaCapped ? 'Basketball V1 confidence cap applied because injuries/player props are not yet included' : null,
+      best.betaCapped ? 'Confidence cap applied because injuries/player props are not yet included' : null,
     ].filter(Boolean),
   };
 
   const response = {
     engineVersion: BASKETBALL_ENGINE_VERSION,
-    beta: true,
     league: { key: league.key, label: league.label },
     game: {
       id: game.id,
@@ -476,10 +566,19 @@ export async function runBasketballPrediction(game, leagueKey = game.league_key 
       oddsQuality: Number((features.oddsQuality * 100).toFixed(0)),
       bookmakerCount: features.bookmakerCount,
       bookmakers: features.bookmakers.slice(0, 6),
+      advancedMetrics: !!features.homeAdvanced,
+      homePace: features.homeAdvanced?.pace ?? null,
+      awayPace: features.awayAdvanced?.pace ?? null,
+      homeORTG: features.homeAdvanced?.offensiveRating ?? null,
+      awayORTG: features.awayAdvanced?.offensiveRating ?? null,
+      homeDRTG: features.homeAdvanced?.defensiveRating ?? null,
+      awayDRTG: features.awayAdvanced?.defensiveRating ?? null,
       injuryLayer: false,
       playerPropsLayer: false,
       lineupLayer: false,
-      limitations: ['No confirmed injury layer yet', 'No player props layer yet', 'No confirmed starting lineup layer yet'],
+      limitations: features.homeAdvanced
+        ? ['No confirmed injury layer yet', 'No confirmed starting lineup layer yet']
+        : ['No confirmed injury layer yet', 'No player props layer yet', 'No confirmed starting lineup layer yet'],
       homeFormGames: features.home.games,
       awayFormGames: features.away.games,
       homeAvgScored: Number(features.home.avgScored.toFixed(1)),

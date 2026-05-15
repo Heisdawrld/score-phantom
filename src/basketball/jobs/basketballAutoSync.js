@@ -3,6 +3,8 @@ import { syncBasketballV1, runBasketballPredictions } from './basketballSync.js'
 let started = false;
 let externalSyncRunning = false;
 let predictionRunRunning = false;
+let lastExternalSyncTs = null;
+let lastPredictionRunTs = null;
 
 function boolEnv(name, fallback = true) {
   const value = process.env[name];
@@ -29,6 +31,7 @@ async function runExternalBasketballSync(reason = 'scheduled') {
       daysAhead: 7,
     });
     console.log('[BasketballAutoSync] External sync complete:', JSON.stringify(result));
+    lastExternalSyncTs = new Date().toISOString();
     return result;
   } catch (err) {
     console.error('[BasketballAutoSync] External sync failed:', err.message);
@@ -50,6 +53,7 @@ async function runCachedBasketballPredictions(reason = 'scheduled') {
     const limit = intEnv('BASKETBALL_AUTO_PREDICTION_LIMIT', 80);
     const result = await runBasketballPredictions({ limit });
     console.log(`[BasketballAutoSync] Prediction run complete: ${result.total || 0} games scanned`);
+    lastPredictionRunTs = new Date().toISOString();
     return result;
   } catch (err) {
     console.error('[BasketballAutoSync] Prediction run failed:', err.message);
@@ -103,6 +107,17 @@ export function startBasketballAutoSync() {
     } catch (err) {
       console.warn('[BasketballAutoSync] Historical backfill failed:', err.message);
     }
+
+    // ESPN sync — free scores/schedules for all basketball leagues (NBA, WNBA, NCAAM, NCAAW)
+    try {
+      console.log('[BasketballAutoSync] Syncing ESPN scoreboards (NBA, WNBA, NCAAM, NCAAW)...');
+      const { syncEspnScoreboards } = await import('./basketballSync.js');
+      const espnResult = await syncEspnScoreboards({ daysAhead: 3 });
+      console.log('[BasketballAutoSync] ESPN sync complete:', JSON.stringify(espnResult));
+    } catch (err) {
+      console.warn('[BasketballAutoSync] ESPN sync failed:', err.message);
+    }
+
     await runExternalBasketballSync('startup');
     await runCachedBasketballPredictions('startup');
   }, startupDelayMs);
@@ -122,4 +137,12 @@ export const basketballAutoSyncStatus = () => ({
   externalSyncRunning,
   predictionRunRunning,
   enabled: boolEnv('BASKETBALL_AUTO_SYNC', true),
+  lastExternalSync: lastExternalSyncTs,
+  lastPredictionRun: lastPredictionRunTs,
+  dataSources: {
+    espn: true,
+    apiSports: !!(process.env.APISPORTS_BASKETBALL_KEY || process.env.API_SPORTS_BASKETBALL_KEY || process.env.APISPORTS_KEY),
+    ballDontLie: true,
+    oddsApi: !!(process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY),
+  },
 });
