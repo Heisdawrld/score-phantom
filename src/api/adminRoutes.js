@@ -1,0 +1,1216 @@
+import express from "express";
+import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
+import { createReferralCommission } from "../auth/authRoutes.js";
+import rateLimit from "express-rate-limit";
+
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { error: "Too many admin requests." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+import db from "../config/database.js";
+import jwt from "jsonwebtoken";
+import { computeAccessStatus } from "../auth/authRoutes.js";
+
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET not set in adminRoutes.js');
+  process.exit(1);
+}
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+if (!ADMIN_EMAIL) console.warn('[Admin] ADMIN_EMAIL not set');
+const PLAN_DURATION_DAYS = 30;
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization || "";
+  try {
+    const token = auth.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL)
+      return res.status(403).json({ error: "Forbidden" });
+    // BUG FIX: Verify admin exists in DB and token not revoked (matches routes.js fix).
+    // Without this, a revoked admin JWT retains access until expiry.
+    db.execute({ sql: "SELECT id, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] })
+      .then(result => {
+        const dbUser = result.rows?.[0];
+        if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
+        if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
+          return res.status(401).json({ error: "Token revoked" });
+        }
+        req.user = decoded;
+        next();
+      })
+      .catch(() => res.status(401).json({ error: "Unauthorized" }));
+  } catch {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+}
+
+// ── GET /stats — user counts, revenue, payments today ────────────────────────
+router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = now.toISOString().slice(0, 10);
+
+    const [totalResult, usersResult, paymentsToday, verifiedPayments, pendingResult] = await Promise.all([
+      db.execute(`SELECT COUNT(*) as count FROM users`),
+      db.execute(`SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at FROM users`),
+      db.execute({
+        sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'verified' AND CAST(paid_at AS TEXT) LIKE ?`,
+        args: [`${todayStart}%`],
+      }),
+      db.execute(`SELECT DISTINCT user_id, amount FROM payments WHERE status = 'verified'`),
+      db.execute(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending_verification'`),
+    ]);
+
+    const users = usersResult.rows || [];
+    const verifiedUserIds = new Set((verifiedPayments.rows || []).map(p => p.user_id));
+    const rawTotalRevenue = (verifiedPayments.rows || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    
+    let activeCount = 0;
+    let trialCount = 0;
+    let expiredCount = 0;
+    let manualPremiumCount = 0;
+
+    for (const user of users) {
+      const access = computeAccessStatus(user);
+      if (access.subscription_active) {
+        activeCount++;
+        if (!verifiedUserIds.has(user.id)) {
+          manualPremiumCount++;
+        }
+      } else if (access.trial_active) {
+        trialCount++;
+      } else {
+        expiredCount++;
+      }
+    }
+
+    const totalUsers   = Number(totalResult.rows[0].count || 0);
+    const totalRev     = rawTotalRevenue + (manualPremiumCount * 3000);
+    const todayPay     = Number(paymentsToday.rows[0].count || 0);
+    const todayRev     = Number(paymentsToday.rows[0].total || 0);
+
+    return res.json({
+      // Nested structure (used by Admin panel)
+      users: {
+        total: totalUsers,
+        active: activeCount,
+        trial: trialCount,
+        expired: expiredCount,
+      },
+      revenue: {
+        currency: 'NGN',
+        total: totalRev,
+        total_payments: (verifiedPayments.rows || []).length,
+        pending_verification: Number(pendingResult.rows[0].count || 0),
+      },
+      today: {
+        payments: todayPay,
+        revenue: todayRev,
+      },
+      // Flat structure (used by Admin.tsx React component)
+      total_users:   totalUsers,
+      premium_users: activeCount,
+      trial_users:   trialCount,
+      expired_users: expiredCount,
+      revenue_total: totalRev,
+      revenue_today: todayRev,
+      payments_today: todayPay,
+    });
+  } catch (err) {
+    console.error("Admin Stats Error:", err);
+    return res.status(500).json({ error: "Failed to load stats" });
+  }
+});
+
+// ── GET /users — paginated users with access status ──────────────────────────
+router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
+    const search = (req.query.search || "").trim().toLowerCase();
+    const offset = (page - 1) * limit;
+
+    let countSql = `SELECT COUNT(*) as count FROM users`;
+    let querySql = `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified, own_referral_code, referred_by_code FROM users`;
+    const args = [];
+
+    if (search) {
+      const whereClause = ` WHERE LOWER(email) LIKE ?`;
+      countSql += whereClause;
+      querySql += whereClause;
+      args.push(`%${search}%`);
+    }
+
+    querySql += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
+
+    const countResult = await db.execute({ sql: countSql, args: [...args] });
+    const total = Number(countResult.rows[0].count || 0);
+
+    const usersResult = await db.execute({ sql: querySql, args: [...args, limit, offset] });
+
+    const users = (usersResult.rows || []).map((u) => {
+      const access = computeAccessStatus(u);
+      return {
+        ...u,
+        email_verified: u.email_verified === 1 || u.email_verified === true,
+        access_status: access.status,
+        has_access: access.has_full_access,
+        trial_active: access.trial_active,
+        subscription_active: access.subscription_active,
+      };
+    });
+
+    return res.json({
+      users,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error("Admin Users Error:", err);
+    return res.status(500).json({ error: "Failed to load users" });
+  }
+});
+
+// ── GET /payments — paginated payments with user email ───────────────────────
+router.get("/payments", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
+    const offset = (page - 1) * limit;
+
+    const countResult = await db.execute(`SELECT COUNT(*) as count FROM payments`);
+    const total = Number(countResult.rows[0].count || 0);
+
+    const result = await db.execute({
+      sql: `
+        SELECT p.id, p.user_id, p.reference, p.amount, p.status, p.channel, p.paid_at, p.created_at,
+               u.email as user_email, u.referred_by_code,
+               pc.commission_amount, pc.status as commission_status
+        FROM payments p
+        LEFT JOIN users u ON u.id = p.user_id
+        LEFT JOIN partner_commissions pc ON pc.payment_id = p.id
+        ORDER BY p.created_at DESC
+        LIMIT ? OFFSET ?
+      `,
+      args: [limit, offset],
+    });
+
+    return res.json({
+      payments: result.rows || [],
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error("Admin Payments Error:", err);
+    return res.status(500).json({ error: "Failed to load payments" });
+  }
+});
+
+// ── POST /users/:id/grant — grant 30-day premium ────────────────────────────
+router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const days = parseInt(req.body?.days || PLAN_DURATION_DAYS, 10);
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email, status FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + days);
+    const expiryISO = expiry.toISOString();
+    const subscriptionCode = `SUB_${user.id}_${Date.now()}`;
+
+    const ref = `MANUAL_GRANT_${userId}_${Date.now()}`;
+    await db.execute({
+      sql: `UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ?, subscription_code = ? WHERE id = ?`,
+      args: [expiryISO, expiryISO, subscriptionCode, userId],
+    });
+
+    // Create a verified payment record so this shows in revenue stats
+    await db.execute({
+      sql: `INSERT INTO payments (user_id, reference, amount, amount_currency, status, channel, paid_at) VALUES (?, ?, 3000, 'NGN', 'verified', 'manual_grant', ?) ON CONFLICT DO NOTHING`,
+      args: [userId, ref, new Date().toISOString()],
+    });
+    // Create partner commission if this user was referred (treats manual grant as ₦3000 payment)
+    try {
+      const pmtRow = await db.execute({ sql: "SELECT id FROM payments WHERE reference = ? LIMIT 1", args: [ref] });
+      await createReferralCommission(Number(userId), 3000, pmtRow.rows?.[0]?.id || null, ref);
+    } catch(ce) { console.error("[Grant] Commission error:", ce.message); }
+
+    return res.json({
+      success: true,
+      user_id: userId,
+      email: user.email,
+      status: "premium",
+      premium_expires_at: expiryISO,
+      days,
+    });
+  } catch (err) {
+    console.error("Admin Grant Error:", err);
+    return res.status(500).json({ error: "Failed to grant premium" });
+  }
+});
+
+// ── POST /users/:id/verify-email — manually verify a user's email ─────────────
+router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
+    const user = result.rows?.[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Reset trial to now so it starts fresh from verification (not signup)
+    const TRIAL_DAYS = 3;
+    const freshTrialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    await db.execute({
+      sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
+      args: [freshTrialEnd, userId],
+    });
+    console.log('[Admin] Manually verified email for user', userId, user.email, '— trial reset to', freshTrialEnd);
+    return res.json({ success: true, message: `Email verified for ${user.email}`, trial_ends_at: freshTrialEnd });
+  } catch (err) {
+    console.error('[Admin/verify-email]', err);
+    return res.status(500).json({ error: 'Failed to verify email' });
+  }
+});
+
+// ── POST /users/:id/revoke — revoke premium ─────────────────────────────────
+router.post("/users/:id/revoke", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    await db.execute({
+      sql: `UPDATE users SET status = 'expired', premium_expires_at = NULL, subscription_expires_at = NULL, subscription_code = NULL WHERE id = ?`,
+      args: [userId],
+    });
+
+    return res.json({
+      success: true,
+      user_id: userId,
+      email: user.email,
+      status: "expired",
+    });
+  } catch (err) {
+    console.error("Admin Revoke Error:", err);
+    return res.status(500).json({ error: "Failed to revoke premium" });
+  }
+});
+
+// ── DELETE /users/:id — delete a user and their data ─────────────────────────
+router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Delete related data first
+    await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM partner_commissions WHERE referred_user_id = ? OR referrer_user_id = ?", args: [userId, userId] });
+    await db.execute({ sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] });
+    await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [userId] });
+
+    return res.json({
+      success: true,
+      user_id: userId,
+      email: user.email,
+      message: `User ${user.email} has been deleted`,
+    });
+  } catch (err) {
+    console.error("Admin Delete User Error:", err);
+    return res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+// ── POST /run-enrichment — trigger enrichment for today's pending fixtures ────
+router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.body?.limit || req.query?.limit || "50", 10);
+    const dateFilter = req.body?.date || req.query?.date || null;
+
+    console.log(`[Admin] Manual enrichment triggered. Limit: ${limit}, Date: ${dateFilter || "today+"}`);
+
+    // Direct import to avoid circular dependency with app.js
+    const { autoEnrich } = await import("../services/enrichmentRunner.js");
+    // Run in background — return immediately so request doesn't timeout
+    const resultPromise = autoEnrich({ limit, dateFilter });
+
+    // Wait up to 10s for a quick result count, then return accepted
+    const timeoutPromise = new Promise((r) => setTimeout(() => r(null), 10000));
+    const quickResult = await Promise.race([resultPromise, timeoutPromise]);
+
+    if (quickResult) {
+      return res.json({ success: true, ...quickResult, message: "Enrichment complete" });
+    }
+    return res.json({ success: true, message: "Enrichment running in background", limit });
+  } catch (err) {
+    console.error("[Admin] run-enrichment error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /run-predictions — pre-generate predictions for all enriched fixtures ─
+router.post("/run-predictions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const limit = Number(req.body?.limit) || 100;
+    console.log(`[Admin] Manual prediction pre-generation triggered. Limit: ${limit}`);
+    const { autoBuildPredictions } = await import("../services/predictionRunner.js");
+    // Run in background, respond immediately
+    autoBuildPredictions({ limit }).catch(err =>
+      console.error("[Admin] run-predictions error:", err.message)
+    );
+    return res.json({ success: true, message: `Pre-generating predictions for up to ${limit} fixtures in background. Check server logs.` });
+  } catch (err) {
+    console.error("[Admin] run-predictions error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Backtesting routes ──────────────────────────────────────────────────────
+router.get("/backtest/stats", adminLimiter, requireAdmin, async (req, res) => {
+  const stats = await getAccuracyStats();
+  return res.json(stats);
+});
+
+router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
+  const { fixtureId, homeScore, awayScore } = req.body || {};
+  if (fixtureId && homeScore !== undefined && awayScore !== undefined) {
+    const pred = await db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id=? LIMIT 1', args:[String(fixtureId)] });
+    if (!pred.rows[0]) return res.json({ error: 'No prediction for that fixture' });
+    const outcome = await saveOutcome(fixtureId, pred.rows[0], homeScore, awayScore);
+    return res.json({ outcome, fixtureId, score: homeScore + '-' + awayScore });
+  }
+  const pending = await runBacktestForFinishedFixtures();
+  return res.json({ pending: pending.length, fixtures: pending.map(f => ({ id: f.fixture_id, home: f.home_team, away: f.away_team, market: f.best_pick_market, selection: f.best_pick_selection })) });
+});
+
+// ── POST /clear-odds-cache — wipe fixture odds so they re-fetch on next seed ────
+router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    await db.execute("DELETE FROM fixture_odds");
+    console.log('[Admin] Fixture odds cache cleared');
+    return res.json({ success: true, message: "Fixture odds cleared — will re-populate on next seed from BSD" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /full-reset -- clear fixtures/enrichment/predictions, keep users/payments
+router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const tables = ["predictions_v2","historical_matches","fixture_odds","fixtures","teams","tournaments"];
+    let cleared = [];
+    for (const t of tables) {
+      try { await db.execute("DELETE FROM " + t); cleared.push(t); } catch(e) { console.warn("Skip " + t + ":", e.message); }
+    }
+    console.log("[Admin] Full reset complete. Tables cleared:", cleared.join(", "));
+    return res.json({ success: true, message: "DB reset complete. Cleared: " + cleared.join(", ") + ". Users and payments preserved.", cleared });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /clear-prediction-cache — wipe predictions so engine re-runs ─────────
+router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    await db.execute("DELETE FROM predictions_v2");
+    console.log('[Admin] Prediction cache cleared');
+    return res.json({ success: true, message: "Prediction cache cleared — engine will re-run fresh predictions" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /reseed — re-seed today's fixtures from BSD ──────────────────────────────────
+router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const date = req.body?.date || new Date().toISOString().slice(0, 10);
+    const { seedFixtures } = await import("../services/fixtureSeeder.js");
+    // Run in background — NEVER use clearFirst:true, it wipes predictions
+    // Instead: seed only the days that are missing fixtures (safe incremental)
+    const reseedSafe = async () => {
+      const missingDays = [];
+      for (let i = 0; i <= 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+        const r = await db.execute({ sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?", args: [`${dateStr}%`] });
+        const count = Number(r.rows[0]?.count || 0);
+        missingDays.push({ i, dateStr, count });
+      }
+      console.log(`[Admin/reseed] Day counts: ${missingDays.map(d => `${d.dateStr}:${d.count}`).join(', ')}`);
+      // Force-seed all 7 days (clear only future fixtures, keep predictions)
+      const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+      await db.execute({ sql: "DELETE FROM fixtures WHERE match_date >= ?", args: [`${today}T00:00:00`] });
+      const result = await seedFixtures({ days: 7, startOffset: 0, clearFirst: false });
+      console.log("[Admin] Safe reseed complete:", result);
+      return result;
+    };
+    reseedSafe().catch(e => console.error("[Admin] Reseed error:", e.message));
+    return res.json({ success: true, message: `Reseeding fixtures for ${date} in background...` });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /fixture-stats — count fixtures, enriched, with odds ─────────────────
+router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const [total, enriched, withOdds, predictions, fixtureOdds] = await Promise.all([
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ?", args: [`${today}%`] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND enriched = 1", args: [`${today}%`] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND odds_home IS NOT NULL", args: [`${today}%`] }),
+      db.execute("SELECT COUNT(*) as c FROM predictions_v2"),
+      db.execute("SELECT COUNT(*) as c FROM fixture_odds"),
+    ]);
+    return res.json({
+      today,
+      dataProvider: 'BSD (Bzzoiro Sports Data)',
+      fixtures: { total: Number(total.rows[0].c), enriched: Number(enriched.rows[0].c), withOdds: Number(withOdds.rows[0].c) },
+      cache: { predictions: Number(predictions.rows[0].c), fixtureOdds: Number(fixtureOdds.rows[0].c) },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /verify-payment/:ref — manually verify a pending payment ─────────────
+router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const ref = req.params.ref;
+    const payResult = await db.execute({ sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1", args: [ref] });
+    const payment = payResult.rows?.[0];
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 30);
+    const expiryISO = expiry.toISOString();
+    await db.execute({ sql: "UPDATE payments SET status = 'verified', paid_at = ? WHERE reference = ?", args: [new Date().toISOString(), ref] });
+    await db.execute({ sql: "UPDATE users SET status = 'premium', premium_expires_at = ?, subscription_expires_at = ? WHERE id = ?", args: [expiryISO, expiryISO, payment.user_id] });
+    const amount = payment.amount != null ? Number(payment.amount) : 3000;
+    try { await createReferralCommission(Number(payment.user_id), amount, payment.id||null, ref); } catch(ce) { console.error("[VerifyPmt] Commission error:", ce.message); }
+    return res.json({ success: true, message: "Payment verified successfully" });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /push-broadcast — send manual push notification to all users
+router.post("/push-broadcast", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { title, message, url } = req.body;
+    if (!title || !message) return res.status(400).json({ error: "Title and message are required" });
+
+    const { broadcastPush } = await import("../services/pushService.js");
+    const result = await broadcastPush({ title, body: message, url: url || "/" });
+    
+    return res.json({ success: true, sentCount: result.sent });
+  } catch (err) {
+    console.error("[Admin Push] Failed:", err);
+    res.status(500).json({ error: "Failed to broadcast push notifications" });
+  }
+});
+
+// ── GET /system-health — check all integrations ───────────────────────────────
+router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const checks = {};
+    // DB
+    try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
+    // BSD API
+    try {
+      const bsdKey = process.env.BSD_API_KEY || "";
+      if (!bsdKey) { checks.bsd_api = "no_key"; } else {
+        const r = await fetch(`https://sports.bzzoiro.com/api/v2/leagues/?limit=1`, {
+          headers: { Authorization: `Token ${bsdKey}` }
+        });
+        checks.bsd_api = r.ok ? "ok" : ("error:" + r.status);
+      }
+    } catch(e) { checks.bsd_api = "fetch_error"; }
+    // Email
+    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    // Groq
+    checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
+    // Flutterwave
+    checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
+
+    const allOk = Object.values(checks).every(v => v === 'ok' || v.includes('configured'));
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /clean-ghost-voids — remove void prediction_outcomes that have no scores
+router.post("/clean-ghost-voids", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.execute("DELETE FROM prediction_outcomes WHERE outcome = 'void' AND home_score IS NULL");
+    return res.json({ success: true, deleted: r.rowsAffected });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /reevaluate-voids — re-evaluate void outcomes that have scores using fixed evaluatePrediction
+// This fixes the bug where home_win, away_win, btts_yes, btts_no markets were incorrectly evaluated as void
+router.post("/reevaluate-voids", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { evaluatePrediction } = await import('../services/resultChecker.js');
+    const { computeProfitUnits } = await import('../storage/profitUnits.js');
+
+    // Find all void outcomes that have scores (these were likely mis-evaluated)
+    const voids = await db.execute(`
+      SELECT id, fixture_id, predicted_market, predicted_selection,
+             home_team, away_team, home_score, away_score,
+             best_pick_odds, stake_units
+      FROM prediction_outcomes
+      WHERE outcome = 'void' AND home_score IS NOT NULL AND away_score IS NOT NULL
+    `);
+
+    let reclassified = 0;
+    let stillVoid = 0;
+    const details = [];
+
+    for (const row of voids.rows || []) {
+      const newOutcome = evaluatePrediction(
+        row.predicted_market, row.predicted_selection,
+        Number(row.home_score), Number(row.away_score),
+        row.home_team, row.away_team
+      );
+
+      if (newOutcome !== 'void') {
+        const profitUnits = computeProfitUnits(newOutcome, row.best_pick_odds, row.stake_units || 1);
+        await db.execute({
+          sql: `UPDATE prediction_outcomes
+                SET outcome = ?, result_status = ?, profit_units = ?, evaluated_at = CURRENT_TIMESTAMP
+                WHERE id = ?`,
+          args: [newOutcome, newOutcome, profitUnits, row.id]
+        });
+        reclassified++;
+        details.push({
+          fixture_id: row.fixture_id,
+          market: row.predicted_market,
+          selection: row.predicted_selection,
+          score: `${row.home_score}-${row.away_score}`,
+          old_outcome: 'void',
+          new_outcome: newOutcome
+        });
+      } else {
+        stillVoid++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      totalVoidsWithScores: (voids.rows || []).length,
+      reclassified,
+      stillVoid,
+      details: details.slice(0, 50), // Limit details in response
+      message: `Reclassified ${reclassified} void outcomes to win/loss. ${stillVoid} remain as genuine voids (DNB draws, etc).`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /tag-backtest-outcomes — tag existing prediction_outcomes rows that came from backtesting
+// Existing rows with prediction_source NULL need to be tagged based on whether they have
+// a corresponding entry in prediction_picks with generated_at < kickoff_at (real) or not (backtest)
+router.post("/tag-backtest-outcomes", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    // Tag outcomes that have no corresponding pre-match prediction_pick as 'backtest'
+    const result = await db.execute(`
+      UPDATE prediction_outcomes
+      SET prediction_source = 'backtest', is_retroactive = 1
+      WHERE prediction_source IS NULL
+        AND fixture_id NOT IN (
+          SELECT DISTINCT pp.fixture_id
+          FROM prediction_picks pp
+          WHERE pp.prediction_source = 'pre_match'
+            AND pp.kickoff_at IS NOT NULL
+            AND pp.generated_at < pp.kickoff_at
+        )
+    `);
+
+    // Tag remaining NULL rows as 'live' (they have pre-match picks)
+    const result2 = await db.execute(`
+      UPDATE prediction_outcomes
+      SET prediction_source = 'live'
+      WHERE prediction_source IS NULL
+    `);
+
+    return res.json({
+      success: true,
+      taggedAsBacktest: result.rowsAffected,
+      taggedAsLive: result2.rowsAffected,
+      message: `Tagged ${result.rowsAffected} outcomes as 'backtest' and ${result2.rowsAffected} as 'live'.`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /engine-stats — Admin dashboard metrics for prediction engine
+router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const stats = await db.execute(`
+      SELECT
+        COUNT(*) as total_predictions,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses,
+        SUM(CASE WHEN outcome = 'void' AND home_score IS NOT NULL THEN 1 ELSE 0 END) as true_voids,
+        SUM(CASE WHEN outcome = 'void' AND home_score IS NULL THEN 1 ELSE 0 END) as ghost_voids
+      FROM prediction_outcomes
+      WHERE DATE(created_at) >= DATE('now', '-30 days')
+    `);
+    
+    const markets = await db.execute(`
+      SELECT predicted_market as market,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) as losses
+      FROM prediction_outcomes
+      WHERE DATE(created_at) >= DATE('now', '-30 days') AND outcome IN ('win', 'loss', 'correct', 'wrong')
+      GROUP BY predicted_market
+      ORDER BY total DESC
+    `);
+    
+    const calibration = await db.execute(`
+      SELECT 
+        CAST(predicted_probability * 10 AS INTEGER) * 10 as bucket_min,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) as wins
+      FROM prediction_outcomes
+      WHERE outcome IN ('win', 'loss', 'correct', 'wrong') AND predicted_probability > 0
+      GROUP BY bucket_min
+      ORDER BY bucket_min DESC
+    `);
+    
+    return res.json({ 
+      overview: stats.rows?.[0] || {},
+      markets: markets.rows || [],
+      calibration: calibration.rows || []
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// FAST: Get all BSD leagues
+router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { fetchLeagues } = await import('../services/bsd.js');
+    const leagues = await fetchLeagues();
+    return res.json({ count: leagues.length, provider: 'BSD', leagues });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+// BSD health check — replaces the old slug audit
+router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { fetchLeagues, fetchFixturesByDate } = await import('../services/bsd.js');
+    const leagues = await fetchLeagues();
+    const today = new Date().toISOString().slice(0, 10);
+    const todayEvents = await fetchFixturesByDate(today);
+    return res.json({
+      provider: 'BSD (Bzzoiro Sports Data)',
+      status: leagues.length > 0 ? 'OK' : 'ERROR',
+      leaguesAvailable: leagues.length,
+      todayEvents: todayEvents.length,
+      sampleLeagues: leagues.slice(0, 10).map(l => ({ id: l.id, name: l.name, country: l.country })),
+      sampleEvents: todayEvents.slice(0, 5).map(e => ({ id: e.id, home: e.home_team, away: e.away_team, league: e.league?.name })),
+    });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+// Debug odds for a specific fixture (reads from fixture_odds table, seeded by BSD)
+router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const f = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[fixtureId] });
+    const fixture = f.rows?.[0];
+    if (!fixture) return res.json({ error: 'fixture not found' });
+
+    const o = await db.execute({ sql: 'SELECT * FROM fixture_odds WHERE fixture_id=? LIMIT 1', args:[fixtureId] });
+    const odds = o.rows?.[0] || null;
+
+    return res.json({
+      provider: 'BSD',
+      fixture: { id: fixture.id, home: fixture.home_team_name, away: fixture.away_team_name, tournament: fixture.tournament_name, country: fixture.category_name },
+      odds: odds || 'No odds available for this fixture',
+      logoUrls: {
+        home: fixture.home_team_logo || 'none',
+        away: fixture.away_team_logo || 'none',
+      },
+    });
+  } catch(err) { return res.status(500).json({ error: err.message }); }
+});
+
+
+// (duplicate verify-email route removed — first definition at line ~249 is used)
+
+// POST /api/admin/check-results — manually run result checker for a date
+router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { date, backfill_days } = req.body;
+    const { checkResults, backfillResults } = await import('../services/resultChecker.js');
+    if (backfill_days && parseInt(backfill_days, 10) > 0) {
+      const results = await backfillResults(parseInt(backfill_days, 10));
+      return res.json({ success: true, mode: 'backfill', results });
+    }
+    const result = await checkResults(date || null);
+    return res.json({ success: true, mode: 'single', result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/rebuild-track-record — build missing predictions then evaluate all past results
+router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const days = parseInt(req.body?.days || 30, 10);
+    console.log("[Admin] rebuild-track-record started, days=", days);
+    // Step 1: Build predictions for past enriched fixtures
+    const { autoBuildPredictions } = await import("../services/predictionRunner.js");
+    const built = await autoBuildPredictions({ limit: 200 });
+    console.log("[Admin] Predictions built:", built);
+    // Step 2: Evaluate results for each day
+    const { backfillResults } = await import("../services/resultChecker.js");
+    const results = await backfillResults(days);
+    const totals = results.reduce((acc, r) => ({ wins: acc.wins+(r.outcomes?.wins||0), losses: acc.losses+(r.outcomes?.losses||0), voids: acc.voids+(r.outcomes?.voids||0), updated: acc.updated+(r.outcomes?.updated||0) }), { wins:0, losses:0, voids:0, updated:0 });
+    return res.json({ success: true, predictions_built: built, days_checked: results.length, totals, results });
+  } catch(err) {
+    console.error("[Admin] rebuild-track-record error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/diagnose-results — diagnostic endpoint to check score sources
+router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const date = req.query.date || new Date(Date.now()-86400000).toLocaleString("en-CA",{timeZone:"Africa/Lagos"}).split(",")[0].trim();
+    const bsdKey = process.env.BSD_API_KEY || "";
+    const hmRes = await db.execute({sql:"SELECT COUNT(*) cnt,MIN(date) earliest,MAX(date) latest FROM historical_matches WHERE home_goals IS NOT NULL AND date LIKE ?",args:["%"+date+"%"]});
+    const hmSample = await db.execute({sql:"SELECT home_team,away_team,home_goals,away_goals,date FROM historical_matches WHERE home_goals IS NOT NULL ORDER BY date DESC LIMIT 5",args:[]});
+    const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
+    let apiRaw=null,apiError=null;
+    try {
+        const r = await fetch(`https://sports.bzzoiro.com/api/v2/events/?date_from=${date}&date_to=${date}&limit=5`, {
+          headers: { Authorization: `Token ${bsdKey}` }
+        });
+        if (r.ok) {
+          const data = await r.json();
+          apiRaw={success:r.ok, fixtureCount:(data.results||data.events||[]).length, sample:(data.results||data.events||[]).slice(0,2)}; 
+        } else {
+          apiRaw={success:false, status:r.status};
+        }
+      } catch(e){apiError=e.message;}
+
+    return res.json({date,historicalMatchesForDate:hmRes.rows[0],historicalSample:hmSample.rows,predictionOutcomes:poRes.rows,bsdFixtures:{raw:apiRaw,error:apiError}});
+  } catch(err){ return res.status(500).json({error:err.message}); }
+});
+
+// ── POST /users/:id/referral-code — generate or set referral code for a user ─
+router.post("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const customCode = (req.body?.code || "").trim();
+
+    const userResult = await db.execute({
+      sql: "SELECT id, email, own_referral_code FROM users WHERE id = ? LIMIT 1",
+      args: [userId],
+    });
+    const user = userResult.rows?.[0];
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Determine the code to use
+    let code;
+    if (customCode) {
+      // Validate custom code: 3-20 chars, alphanumeric + underscore + hyphen
+      if (!/^[A-Za-z0-9_-]{3,20}$/.test(customCode)) {
+        return res.status(400).json({ error: "Code must be 3-20 characters, letters/numbers/underscore/hyphen only." });
+      }
+      code = customCode.toUpperCase();
+    } else {
+      // Auto-generate: use email prefix + random suffix
+      const prefix = String(user.email).split("@")[0].replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase();
+      const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      code = `${prefix}_${suffix}`;
+    }
+
+    // Check uniqueness
+    const existing = await db.execute({
+      sql: "SELECT id FROM users WHERE own_referral_code = ? AND id != ? LIMIT 1",
+      args: [code, userId],
+    });
+    if ((existing.rows || []).length > 0) {
+      return res.status(409).json({ error: `Code "${code}" is already taken. Try a different one.` });
+    }
+
+    await db.execute({
+      sql: "UPDATE users SET own_referral_code = ? WHERE id = ?",
+      args: [code, userId],
+    });
+
+    console.log(`[Admin] Referral code "${code}" assigned to user ${userId} (${user.email})`);
+    return res.json({
+      success: true,
+      user_id: Number(userId),
+      email: user.email,
+      referral_code: code,
+      referral_link: `${process.env.APP_URL || 'https://score-phantom.onrender.com'}/?ref=${code}`,
+    });
+  } catch (err) {
+    console.error("[Admin/referral-code]", err);
+    return res.status(500).json({ error: "Failed to generate referral code" });
+  }
+});
+
+// ── DELETE /users/:id/referral-code — remove referral code from a user ───────
+router.delete("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    await db.execute({
+      sql: "UPDATE users SET own_referral_code = NULL WHERE id = ?",
+      args: [userId],
+    });
+    return res.json({ success: true, message: "Referral code removed" });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to remove referral code" });
+  }
+});
+
+// ── Partner / Referral endpoints ─────────────────────────────────────────────
+
+// ── Partner / Referral endpoints ─────────────────────────────────────────────
+
+// POST /api/admin/partners — create standalone partner (no user account needed)
+router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, code, status, notes } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+    if (!code?.trim()) return res.status(400).json({ error: "Referral code required" });
+    const cleanCode = String(code).trim().toUpperCase();
+    if (!/^[A-Za-z0-9_-]{2,20}$/.test(cleanCode)) return res.status(400).json({ error: "Code: 2-20 chars, letters/numbers/underscore/hyphen only" });
+    const cnt = await db.execute("SELECT COUNT(*) as c FROM partners");
+    if (Number(cnt.rows?.[0]?.c || 0) >= 5) return res.status(400).json({ error: "Maximum 5 partners allowed" });
+    const dup = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? LIMIT 1", args: [cleanCode] });
+    if ((dup.rows||[]).length > 0) return res.status(409).json({ error: "Code already taken: " + cleanCode });
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/[/]$/,"");
+    const r = await db.execute({ sql: "INSERT INTO partners (name, email, referral_code, commission_rate, status, notes) VALUES (?, ?, ?, 0.25, ?, ?)", args: [name.trim(), email?.trim()||null, cleanCode, status||"active", notes?.trim()||null] });
+    const pid = r.lastInsertRowid || null;
+    console.log("[Partners] Created: " + name + " code=" + cleanCode);
+    return res.json({ success: true, partner_id: pid, referral_link: appOrigin + "/?ref=" + cleanCode });
+  } catch (err) { console.error("[Admin/create-partner]", err); return res.status(500).json({ error: err.message }); }
+});
+// GET /api/admin/partners — list all partners with full metrics
+router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/[/]$/,"");
+    const result = await db.execute(
+      "SELECT pt.id as partner_id, pt.name, pt.email, pt.referral_code, pt.commission_rate, pt.status, pt.notes, pt.created_at, pt.last_payout_at," +
+      " (SELECT COUNT(*) FROM partner_referrals WHERE partner_id = pt.id) as total_referred_signups," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND status = 'trial' AND datetime(trial_ends_at) > datetime('now')) as total_referred_trials," +
+      " (SELECT COUNT(*) FROM users WHERE partner_id = pt.id AND (status = 'premium' OR (subscription_expires_at IS NOT NULL AND datetime(subscription_expires_at) > datetime('now')))) as total_referred_premium," +
+      " COUNT(DISTINCT CASE WHEN pc.status IN ('pending','paid','settled') THEN pc.referred_user_id END) as total_referred_paid," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END),0) as pending_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
+      " FROM partners pt" +
+      " LEFT JOIN partner_commissions pc ON pc.partner_id = pt.id" +
+      " GROUP BY pt.id ORDER BY pt.created_at DESC"
+    );
+    const partners = (result.rows||[]).map(p => ({ ...p, referral_link: appOrigin + "/?ref=" + p.referral_code }));
+    return res.json({ partners });
+  } catch (err) { console.error("[Admin/partners]", err); return res.status(500).json({ error: err.message }); }
+});
+// GET /api/admin/standard-commissions — list all standard user referrals with pending payouts
+router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.execute(
+      "SELECT u.id as user_id, u.email, u.own_referral_code, " +
+      " COUNT(DISTINCT pc.referred_user_id) as total_referred_paid," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.gross_amount ELSE 0 END),0) as total_revenue," +
+      " COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) as total_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status = 'pending' THEN pc.commission_amount ELSE 0 END),0) as pending_commission," +
+      " COALESCE(SUM(CASE WHEN pc.status IN ('paid','settled') THEN pc.commission_amount ELSE 0 END),0) as settled_commission" +
+      " FROM users u" +
+      " INNER JOIN partner_commissions pc ON pc.referrer_user_id = u.id AND pc.partner_id IS NULL" +
+      " GROUP BY u.id HAVING COALESCE(SUM(CASE WHEN pc.status != 'reversed' THEN pc.commission_amount ELSE 0 END),0) > 0 ORDER BY pending_commission DESC"
+    );
+    return res.json({ commissions: result.rows || [] });
+  } catch (err) { console.error("[Admin/standard-commissions]", err); return res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/standard-commissions/:id/ledger — list specific standard user ledger entries
+router.get("/standard-commissions/:id/ledger", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const result = await db.execute({
+      sql: "SELECT pc.*, u.email as referred_email FROM partner_commissions pc LEFT JOIN users u ON u.id = pc.referred_user_id WHERE pc.referrer_user_id = ? AND pc.partner_id IS NULL ORDER BY pc.created_at DESC",
+      args: [userId]
+    });
+    return res.json({ ledger: result.rows || [] });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/admin/standard-commissions/:id/settle — mark all pending standard commissions as paid
+router.post("/standard-commissions/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const notes = req.body?.notes || 'Manual settlement by Admin';
+    const now = new Date().toISOString();
+    const result = await db.execute({
+      sql: "UPDATE partner_commissions SET status = 'settled', settled_at = ?, notes = ? WHERE referrer_user_id = ? AND partner_id IS NULL AND status = 'pending'",
+      args: [now, notes, userId]
+    });
+    return res.json({ success: true, settled_count: result.affected_row_count || 0 });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /api/admin/partners/:id — update partner details
+router.patch("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, code, notes, commissionRate } = req.body || {};
+    const updates = [];
+    const args = [];
+    if (name?.trim()) { updates.push("name = ?"); args.push(name.trim()); }
+    if (email !== undefined) { updates.push("email = ?"); args.push(email?.trim()||null); }
+    if (code?.trim()) {
+      const c = String(code).trim().toUpperCase();
+      const dup = await db.execute({ sql: "SELECT id FROM partners WHERE referral_code = ? AND id != ? LIMIT 1", args: [c, req.params.id] });
+      if ((dup.rows||[]).length > 0) return res.status(409).json({ error: "Code taken: " + c });
+      updates.push("referral_code = ?"); args.push(c);
+    }
+    if (notes !== undefined) { updates.push("notes = ?"); args.push(notes?.trim()||null); }
+    if (commissionRate !== undefined) { updates.push("commission_rate = ?"); args.push(parseFloat(commissionRate)); }
+    if (!updates.length) return res.status(400).json({ error: "Nothing to update" });
+    args.push(req.params.id);
+    await db.execute({ sql: "UPDATE partners SET " + updates.join(", ") + " WHERE id = ?", args });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// POST /api/admin/partners/:id/status — change partner status
+router.post("/partners/:id/status", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    if (!["active","paused","suspended"].includes(status)) return res.status(400).json({ error: "status must be active, paused, or suspended" });
+    await db.execute({ sql: "UPDATE partners SET status = ? WHERE id = ?", args: [status, req.params.id] });
+    return res.json({ success: true, status });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// DELETE /api/admin/partners/:id
+router.delete("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    await db.execute({ sql: "DELETE FROM partners WHERE id = ?", args: [req.params.id] });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// GET /api/admin/partners/:id/commissions — full ledger
+router.get("/partners/:id/commissions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: "SELECT pc.id, pc.referred_user_id, pc.payment_id, pc.payment_reference, pc.gross_amount, pc.commission_rate, pc.commission_amount, pc.status, pc.created_at, pc.paid_at, pc.settled_at, pc.notes," +
+           " ru.email as referred_email, ru.created_at as referred_signup_date," +
+           " p.paid_at as payment_date, p.status as payment_status, p.reference as payment_ref" +
+           " FROM partner_commissions pc" +
+           " LEFT JOIN users ru ON ru.id = pc.referred_user_id" +
+           " LEFT JOIN payments p ON p.id = pc.payment_id" +
+           " WHERE pc.partner_id = ?" +
+           " ORDER BY pc.created_at DESC",
+      args: [req.params.id],
+    });
+    return res.json({ commissions: result.rows || [] });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// POST /api/admin/partners/:id/settle — mark ALL pending as paid
+router.post("/partners/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'paid', paid_at = ?, settled_at = ? WHERE partner_id = ? AND status = 'pending'", args: [now, now, req.params.id] });
+    await db.execute({ sql: "UPDATE partners SET last_payout_at = ? WHERE id = ?", args: [now, req.params.id] });
+    return res.json({ success: true, paid_count: r.rowsAffected || 0, paid_at: now });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// POST /api/admin/partners/:id/settle-selected — mark selected pending as paid
+router.post("/partners/:id/settle-selected", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
+    const now = new Date().toISOString();
+    let paid = 0;
+    for (const cid of ids) {
+      const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'paid', paid_at = ?, settled_at = ? WHERE id = ? AND partner_id = ? AND status = 'pending'", args: [now, now, cid, req.params.id] });
+      paid += r.rowsAffected || 0;
+    }
+    if (paid > 0) await db.execute({ sql: "UPDATE partners SET last_payout_at = ? WHERE id = ?", args: [now, req.params.id] });
+    return res.json({ success: true, paid_count: paid, paid_at: now });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+// POST /api/admin/commissions/:commId/reverse — reverse a commission entry
+router.post("/commissions/:commId/reverse", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'reversed', notes = ? WHERE id = ? AND status != 'reversed'", args: [notes||null, req.params.commId] });
+    if (!r.rowsAffected) return res.status(404).json({ error: "Commission not found or already reversed" });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
+});
+
+
+// Clear prediction outcomes (reset track record)
+router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { before } = req.body;
+    if (before) {
+      await db.execute({ sql: 'DELETE FROM prediction_outcomes WHERE DATE(created_at) < ?', args: [before] });
+    } else {
+      await db.execute({ sql: 'DELETE FROM prediction_outcomes', args: [] });
+    }
+    const r = await db.execute({ sql: 'SELECT COUNT(*) as c FROM prediction_outcomes', args: [] });
+    res.json({ ok: true, remaining: Number(r.rows[0].c) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+// ── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
+// MOVED from /api/debug/enrich/:fixtureId to /api/admin/ namespace for proper auth.
+// Now inherits requireAdminSecret guard from app.js route registration.
+router.get("/debug/enrich/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { fixtureId } = req.params;
+
+    // Fetch fixture row
+    const row = await db.execute({
+      sql: `SELECT * FROM fixtures WHERE id = ? LIMIT 1`,
+      args: [fixtureId],
+    });
+    const fixture = row.rows?.[0];
+    if (!fixture) return res.status(404).json({ error: "Fixture not found" });
+
+    // Dynamically import enrichment service
+    const { fetchAndStoreEnrichment } = await import("../enrichment/enrichmentService.js");
+    const { storeEnrichment } = await import("../enrichment/enrichOne.js");
+
+    console.log(`[debug/enrich] Running fresh enrichment for fixture ${fixtureId}`);
+    const data = await fetchAndStoreEnrichment(fixture);
+    await storeEnrichment(fixtureId, data, true);
+
+    const hp = data.homeProfile || {};
+    const ap = data.awayProfile || {};
+
+    res.json({
+      fixtureId,
+      home: fixture.home_team_name,
+      away: fixture.away_team_name,
+      homeProfile: {
+        matchesAnalyzed: hp.matchesAnalyzed,
+        avgGoalsScored: hp.avgGoalsScored,
+        avgGoalsConceded: hp.avgGoalsConceded,
+        bttsRate: hp.bttsRate,
+        cleanSheetRate: hp.cleanSheetRate,
+        failedToScoreRate: hp.failedToScoreRate,
+        over25Rate: hp.over25Rate,
+        winRate: hp.winRate,
+        homeWinRate: hp.homeWinRate,
+        awayWinRate: hp.awayWinRate,
+        dataLayer: 'form-derived',
+      },
+      awayProfile: {
+        matchesAnalyzed: ap.matchesAnalyzed,
+        avgGoalsScored: ap.avgGoalsScored,
+        avgGoalsConceded: ap.avgGoalsConceded,
+        bttsRate: ap.bttsRate,
+        cleanSheetRate: ap.cleanSheetRate,
+        failedToScoreRate: ap.failedToScoreRate,
+        over25Rate: ap.over25Rate,
+        winRate: ap.winRate,
+        homeWinRate: ap.homeWinRate,
+        awayWinRate: ap.awayWinRate,
+        dataLayer: 'form-derived',
+      },
+      completeness: data.completeness,
+      homeFormCount: data.homeForm?.length,
+      awayFormCount: data.awayForm?.length,
+    });
+  } catch (err) {
+    console.error("[debug/enrich]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /basketball-fixtures — list basketball fixtures for admin ──────────────
+router.get("/basketball-fixtures", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await db.execute({
+      sql: `SELECT id, league, home_team, away_team, match_date, status, home_score, away_score
+            FROM basketball_fixtures
+            WHERE match_date >= ?
+            ORDER BY match_date ASC, league ASC
+            LIMIT 50`,
+      args: [today],
+    });
+    return res.json({ games: result.rows || [], count: (result.rows || []).length });
+  } catch (err) {
+    // If table doesn't exist, return empty
+    return res.json({ games: [], count: 0, error: 'Basketball fixtures table not available' });
+  }
+});
+
+// ── POST /sync-basketball — manually trigger basketball ESPN sync ────────────
+router.post("/sync-basketball", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    console.log('[Admin] Manual basketball sync triggered');
+    // Try to import the basketball auto-sync module
+    let syncResult;
+    try {
+      const { syncESPN } = await import('../basketball/espnBasketballApi.js');
+      const leagues = ['nba', 'wnba'];
+      const results = [];
+      for (const league of leagues) {
+        for (let dayOffset = 0; dayOffset <= 3; dayOffset++) {
+          const d = new Date();
+          d.setDate(d.getDate() + dayOffset);
+          const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+          try {
+            const games = await syncESPN(league, dateStr);
+            results.push({ league, date: dateStr, found: games?.length || 0 });
+          } catch (e) {
+            results.push({ league, date: dateStr, error: e.message });
+          }
+        }
+      }
+      syncResult = { results };
+    } catch (importErr) {
+      syncResult = { message: 'Basketball sync module not available', error: importErr.message };
+    }
+    return res.json({ success: true, message: 'Basketball sync triggered', ...syncResult });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

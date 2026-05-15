@@ -1,0 +1,14 @@
+node_modules/
+client/node_modules/
+client/dist/
+.env
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+user_emails_export.csv
+.claude/
+.claude-flow/
+.swarm/
+.zed/
+.mcp.json

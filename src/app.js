@@ -1,0 +1,514 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import routes from "./api/routes.js";
+import adminRoutes from "./api/adminRoutes.js";
+import trackRecordRoutes from "./api/trackRecordRoutes.js";
+import basketballRoutes from "./basketball/routes/basketballRoutes.js";
+import { initBasketballTables } from "./basketball/storage/basketballDb.js";
+import { startBasketballAutoSync } from "./basketball/jobs/basketballAutoSync.js";
+import { initBacktestingTable } from "./storage/backtesting.js";
+import authRoutes, { initUsersTable } from "./auth/authRoutes.js";
+import { initPredictionsTable } from "./storage/savePrediction.js";
+import db from "./config/database.js";
+import errorHandler from "./middlewares/errorHandler.js";
+import { requireAdminSecret, requireAdminAccess } from "./middlewares/adminGuard.js";
+import { seedFixtures } from './services/fixtureSeeder.js';
+import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
+import { getBudgetStatus } from './services/requestBudget.js';
+import { scheduleDaily7amDigest } from './services/dailyDigest.js';
+import { checkResults } from "./services/resultChecker.js";
+import { refreshAccuracyCache } from "./storage/accuracyCache.js";
+import { runMaintenanceJobs } from "./scripts/maintenance.js";
+import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
+// Team logos are now served via BSD URL template — no API calls or caching needed
+// e.g. https://sports.bzzoiro.com/img/team/{api_id}/
+
+dotenv.config();
+
+// ── Startup checks ────────────────────────────────────────────────────────────
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("❌ FATAL: TURSO_DATABASE_URL environment variable is required.");
+  process.exit(1);
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+
+// Trust proxy for Render deployment to fix express-rate-limit IP detection
+app.set('trust proxy', 1);
+
+const PORT = process.env.PORT || 3000;
+
+// CORS - allow APP_URL and onrender.com
+const APP_ORIGIN = (process.env.APP_URL || '').trim();
+const allowedOrigins = [
+  APP_ORIGIN,
+  'https://score-phantom.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (origin.endsWith('.onrender.com')) return callback(null, true);
+    return callback(new Error('CORS blocked'), false);
+  },
+  credentials: true,
+}));
+app.use(express.json());
+
+app.use("/api", routes);
+app.use("/api/basketball", basketballRoutes);
+app.use("/api/auth", authRoutes);
+
+// Accurate BSD v2 health check for the React admin panel. This route is registered
+// before adminRoutes so it overrides the older v1 health check inside adminRoutes.js.
+app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
+  try {
+    const checks = {};
+    try { await db.execute("SELECT 1"); checks.database = 'ok'; } catch { checks.database = 'error'; }
+    try {
+      const bsdKey = process.env.BSD_API_KEY || "";
+      if (!bsdKey) {
+        checks.bsd_api = "no_key";
+      } else {
+        const { fetchLeagues } = await import('./services/bsd.js');
+        const leagues = await fetchLeagues();
+        checks.bsd_api = leagues.length > 0 ? "ok" : "error:no_leagues";
+        checks.bsd_leagues = leagues.length;
+      }
+    } catch (e) {
+      checks.bsd_api = "fetch_error";
+      checks.bsd_error = e.message;
+    }
+    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
+    checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
+    checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
+    checks.basketball = (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'odds_configured' : 'odds_missing';
+    const allOk = Object.values(checks).every(v => typeof v !== 'string' || v === 'ok' || v.includes('configured'));
+    return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2 + Basketball Beta' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Rich admin engine report. Registered before adminRoutes to guarantee a stable
+// control-room payload even if older adminRoutes.js has a simpler engine-stats route.
+app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
+  try {
+    const { getAccuracySummary } = await import('./storage/accuracyCache.js');
+    const summary = await getAccuracySummary();
+    const topMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 8);
+    const weakMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 8);
+    const topLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 10);
+    const weakLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 10);
+
+    let predictionCounts = { total: 0, fire: 0, gamble: 0, avoid: 0, no_safe: 0 };
+    try {
+      const r = await db.execute(`
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN confidence_model = 'FIRE' THEN 1 ELSE 0 END) AS fire,
+          SUM(CASE WHEN confidence_model = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
+          SUM(CASE WHEN confidence_model = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
+          SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
+        FROM predictions_v2
+      `);
+      predictionCounts = {
+        total: Number(r.rows?.[0]?.total || 0),
+        fire: Number(r.rows?.[0]?.fire || 0),
+        gamble: Number(r.rows?.[0]?.gamble || 0),
+        avoid: Number(r.rows?.[0]?.avoid || 0),
+        no_safe: Number(r.rows?.[0]?.no_safe || 0),
+      };
+    } catch (e) {
+      predictionCounts.error = e.message;
+    }
+
+    return res.json({
+      status: 'ok',
+      generatedAt: new Date().toISOString(),
+      predictionCounts,
+      totalOutcomes: summary.totalOutcomes || 0,
+      cacheAge: summary.cacheAge,
+      marketBreakdown: summary.marketBreakdown || [],
+      marketScriptCombos: summary.marketScriptCombos || [],
+      leagueMarketBreakdown: summary.leagueMarketBreakdown || [],
+      topMarkets,
+      weakMarkets,
+      topLeagueMarkets,
+      weakLeagueMarkets,
+      recommendations: [
+        weakLeagueMarkets.length ? 'Review restricted league-market combos before trusting them in ACCA.' : 'No league-market weakness detected yet.',
+        (summary.totalOutcomes || 0) < 50 ? 'Learning sample is still small; calibration will remain conservative.' : 'Outcome sample is large enough for stronger calibration reads.',
+        'Use FIRE picks for premium surfacing and keep GAMBLE picks separate from ACCA unless volatility is low.',
+      ],
+    });
+  } catch (err) {
+    console.error('[Admin Engine Stats] failed:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.use("/api/admin", requireAdminSecret, adminRoutes);
+app.use("/api/track-record", trackRecordRoutes);
+
+// Duplicate /api/admin/seed removed — handled by adminRoutes.js
+
+// Serve React frontend (client/dist)
+const clientDistPath = path.join(__dirname, "..", "client", "dist");
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
+
+
+// Version endpoint — frontend polls this to detect new deploys
+const BUILD_VERSION = process.env.BUILD_VERSION || new Date().toISOString();
+app.get('/api/version', (req, res) => {
+  res.json({ version: BUILD_VERSION, ts: Date.now() });
+});
+
+// Health monitoring endpoint — shows cron job status
+app.get('/api/cron-health', requireAdminSecret, (req, res) => {
+  res.json(getJobHealthSummary());
+});
+
+// Serve standalone admin page (engine room)
+app.get("/admin.html", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "admin.html"));
+});
+
+// SPA fallback — serve index.html for all non-API routes
+  app.get("*", (req, res) => {
+    // Stop the server from trying to serve index.html as a fallback for missing Vite chunks or API calls.
+    // This prevents the "Strict MIME type checking" crash when users load an old tab after a new deployment.
+    if (req.path.startsWith("/api") || req.path.startsWith("/assets/")) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    
+    // Serve React SPA entry point
+  const reactIndex = path.join(clientDistPath, "index.html");
+  if (fs.existsSync(reactIndex)) {
+    // No-cache so browser always gets the latest index.html after a deploy
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.sendFile(reactIndex);
+  }
+  res.status(404).send("Not found");
+});
+
+async function autoSeed() {
+  try {
+    if (!process.env.BSD_API_KEY) {
+      console.warn("[AutoSeed] No BSD_API_KEY set — skipping seed.");
+      return;
+    }
+
+    // Check each of the next 7 days — seed any day that has 0 fixtures
+    const missingDays = [];
+    for (let i = 0; i <= 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      const r = await db.execute({
+        sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
+        args: [`${dateStr}%`],
+      });
+      const count = Number(r.rows[0]?.count || 0);
+      if (count === 0) missingDays.push({ i, dateStr });
+    }
+
+    if (missingDays.length === 0) {
+      console.log("[AutoSeed] All 7 days have fixtures — skipping.");
+      return;
+    }
+
+    console.log(`[AutoSeed] Missing fixtures for ${missingDays.length} days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+
+    // Seed from the earliest missing day forward (without clearing existing data)
+    const fromDay = missingDays[0].i;
+    const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
+    const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
+    console.log(`[AutoSeed] Seeded ${result2.inserted} missing fixtures.`);
+  } catch (err) {
+    console.error("[AutoSeed] Failed:", err.message);
+  }
+}
+
+// ── Auto-enrichment: runs at startup and every 4 hours ───────────────────────
+const ENRICH_BATCH = 200; // full week of fixtures in one pass
+const ENRICH_DELAY_MS = 2500; // increased to avoid rate limiting
+
+async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
+  try {
+    const today = dateFilter || new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    // Count pending unenriched fixtures for today + next 6 days
+    const pending = await db.execute({
+      sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
+            FROM fixtures
+            WHERE enriched = 0 AND match_date >= ?
+            ORDER BY match_date ASC
+            LIMIT ?`,
+      args: [today, limit],
+    });
+
+    const fixtures = pending.rows || [];
+    if (fixtures.length === 0) {
+      console.log(`[AutoEnrich] All fixtures already enriched for ${today}+`);
+      return { enriched: 0, failed: 0 };
+    }
+
+    console.log(`[AutoEnrich] Starting enrichment for ${fixtures.length} fixtures...`);
+
+    // Dynamic import to avoid circular dependencies at startup
+    const { enrichFixture } = await import("./enrichment/enrichOne.js");
+
+    let success = 0;
+    let failed = 0;
+
+    for (const fixture of fixtures) {
+      try {
+        await enrichFixture(fixture);
+        success++;
+        console.log(`[AutoEnrich] ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
+      } catch (err) {
+        failed++;
+        console.warn(`[AutoEnrich] ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
+      }
+      // Respect API rate limits
+      await new Promise((r) => setTimeout(r, ENRICH_DELAY_MS));
+    }
+
+    console.log(`[AutoEnrich] Done. Success: ${success} | Failed: ${failed}`);
+
+    // Re-enrich fixtures that came back LIMITED with 0 form data (API returned empty last time)
+    if (success > 0) {
+      const retryResult = await db.execute({
+        sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
+              FROM fixtures
+              WHERE enrichment_status IN ('limited', 'no_data')
+                AND match_date >= ?
+              ORDER BY match_date ASC
+              LIMIT 30`,
+        args: [today],
+      });
+      const retryFixtures = retryResult.rows || [];
+      if (retryFixtures.length > 0) {
+        console.log(`[AutoEnrich] Retrying ${retryFixtures.length} limited/no_data fixtures...`);
+        const { enrichFixture } = await import('./enrichment/enrichOne.js');
+        for (const fixture of retryFixtures) {
+          try {
+            await enrichFixture(fixture);
+            console.log(`[AutoEnrich] Retry ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
+          } catch (err) {
+            console.warn(`[AutoEnrich] Retry ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
+          }
+          await new Promise(r => setTimeout(r, ENRICH_DELAY_MS));
+        }
+      }
+    }
+    return { enriched: success, failed };
+  } catch (err) {
+    console.error("[AutoEnrich] Fatal:", err.message);
+    return { enriched: 0, failed: 0, error: err.message };
+  }
+}
+
+// Expose autoEnrich so adminRoutes can call it via dynamic import
+export { autoEnrich };
+
+app.use(errorHandler);
+
+app.listen(PORT, async () => {
+  console.log("ScorePhantom running on port " + PORT);
+  startLiveScoreWatcher();
+  console.log("[Live] BSD live score watcher started");
+  await initUsersTable();
+  await initPredictionsTable();
+  await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
+  startBasketballAutoSync();
+  initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
+  
+  // Run maintenance jobs on startup and every 24 hours
+  runMaintenanceJobs().catch(err => console.error("[Maintenance] Startup run failed:", err.message));
+  setInterval(() => {
+    runMaintenanceJobs().catch(err => console.error("[Maintenance] Scheduled run failed:", err.message));
+  }, 24 * 60 * 60 * 1000);
+
+  await autoSeed();
+
+  // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
+  // This ensures all fixtures for the week get enriched on startup
+  console.log('[AutoEnrich] Starting full startup enrichment pass...');
+  const { autoBuildPredictions } = await import('./services/predictionRunner.js');
+  const startupEnrichStart = Date.now();
+  autoEnrich({ limit: 200 })
+    .then((result) => {
+      recordJobRun('startup_enrichment', { success: true, durationMs: Date.now() - startupEnrichStart, meta: { enriched: result?.enriched, failed: result?.failed } });
+      console.log('[PredRunner] Enrichment done — pre-generating predictions...');
+      return autoBuildPredictions({ limit: 100 });
+    })
+    .catch((err) => {
+      recordJobRun('startup_enrichment', { success: false, durationMs: Date.now() - startupEnrichStart, error: err.message });
+      console.error('[AutoEnrich/PredRunner] startup error:', err.message);
+    });
+  // Immediately backfill last 7 days of results on startup (fixes void outcomes)
+  setTimeout(async () => {
+    const backfillStart = Date.now();
+    try {
+      const { autoBuildPredictions } = await import("./services/predictionRunner.js");
+      await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
+      const { backfillResults } = await import("./services/resultChecker.js");
+      const res = await backfillResults(30);
+      recordJobRun('startup_backfill', { success: true, durationMs: Date.now() - backfillStart, meta: { days: 30, results: res.length } });
+      console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
+    } catch (err) {
+      recordJobRun('startup_backfill', { success: false, durationMs: Date.now() - backfillStart, error: err.message });
+      console.error("[ResultChecker] Startup backfill failed:", err.message);
+    }
+  }, 30000);
+
+  // Continuous enrichment pipeline: Every 15 minutes, aggressively prefetch data
+  setInterval(async () => {
+    const cronStart = Date.now();
+    try {
+      const enrichResult = await autoEnrich({ limit: 200 });
+      const predResult = await autoBuildPredictions({ limit: 200 });
+      recordJobRun('15min_enrich_predict', { success: true, durationMs: Date.now() - cronStart, meta: { enriched: enrichResult?.enriched, predictions: predResult?.built } });
+    } catch (err) {
+      recordJobRun('15min_enrich_predict', { success: false, durationMs: Date.now() - cronStart, error: err.message });
+      console.error("[AutoEnrich/PredRunner] scheduled error:", err.message);
+    }
+  }, 15 * 60 * 1000); // every 15 minutes
+
+  // Re-seed fixtures daily at midnight Lagos time
+  function scheduleNextMidnightSeed() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const nextMidnight = new Date(lagosNow);
+    nextMidnight.setDate(nextMidnight.getDate() + 1);
+    nextMidnight.setHours(0, 5, 0, 0);
+    const msUntilMidnight = nextMidnight - lagosNow;
+    setTimeout(async () => {
+      console.log('[DailySeed] Midnight re-seed triggered');
+      try {
+        // NEVER use clearFirst: true — it wipes all fixtures/predictions.
+        // Instead, seed only missing days (INSERT OR IGNORE keeps existing data safe).
+        const missingDays = [];
+        for (let i = 0; i <= 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() + i);
+          const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+          const r = await db.execute({
+            sql: "SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ?",
+            args: [`${dateStr}%`],
+          });
+          const count = Number(r.rows[0]?.count || 0);
+          if (count === 0) missingDays.push({ i, dateStr });
+        }
+        if (missingDays.length > 0) {
+          console.log(`[DailySeed] Seeding ${missingDays.length} missing days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+          const fromDay = missingDays[0].i;
+          const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
+          const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
+          console.log(`[DailySeed] Seeded ${result2.inserted} fixtures.`);
+        } else {
+          console.log('[DailySeed] All days have fixtures — skipping seed.');
+        }
+        // Cleanup fixtures older than 3 days to keep DB tidy (but NEVER wipe predictions)
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 3);
+        const cutoffStr = cutoff.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+        await db.execute({
+          sql: `
+            DELETE FROM fixtures
+            WHERE match_date < ?
+              AND (match_status IS NULL OR match_status NOT IN ('FT','AET','PEN'))
+              AND id NOT IN (SELECT fixture_id FROM predictions_v2)
+              AND id NOT IN (SELECT fixture_id FROM prediction_outcomes)
+          `,
+          args: [`${cutoffStr}T00:00:00`],
+        });
+        console.log(`[DailySeed] Cleaned up fixtures before ${cutoffStr}`);
+        await autoEnrich();
+      } catch (err) {
+        console.error('[DailySeed] Failed:', err.message);
+      }
+      scheduleDaily7amDigest();
+  scheduleNextMidnightSeed();
+    }, msUntilMidnight);
+    const hrs = Math.round(msUntilMidnight / 3600000);
+    console.log('[DailySeed] Next seed in ~' + hrs + 'h');
+  }
+  scheduleNextMidnightSeed();
+
+  // ── Daily result checker: runs at 2 AM Lagos time to evaluate yesterday's picks ──
+  function scheduleNextResultCheck() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+    const next2AM = new Date(lagosNow);
+    next2AM.setDate(next2AM.getDate() + (lagosNow.getHours() >= 2 ? 1 : 0));
+    next2AM.setHours(2, 15, 0, 0); // 2:15 AM Lagos — after midnight seed completes
+    const ms = next2AM - lagosNow;
+    setTimeout(async () => {
+      console.log('[ResultChecker] Daily check triggered');
+      try {
+        const r = await checkResults(); // defaults to yesterday
+        console.log(`[ResultChecker] Checked ${r.checked} predictions — W:${r.outcomes?.wins} L:${r.outcomes?.losses} V:${r.outcomes?.voids}`);
+        // Refresh accuracy cache so the engine learns from last night's results
+        await refreshAccuracyCache();
+        console.log('[AccuracyCache] Refreshed after daily result check');
+      } catch (err) {
+        console.error('[ResultChecker] Failed:', err.message);
+      }
+      scheduleNextResultCheck();
+    }, ms);
+    const hrs = Math.round(ms / 3600000);
+    console.log(`[ResultChecker] Next check in ~${hrs}h`);
+  }
+  scheduleNextResultCheck();
+
+  // Team logos now served via BSD URL template — no scheduled fill needed.
+
+  // Run result checker every 3h during the day to catch todays results as they finish
+  setInterval(async () => {
+    try {
+      const today     = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const yesterday = new Date(Date.now() - 86400000).toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+      const r1 = await checkResults(today);
+      console.log("[ResultChecker] 3h check (today):", r1.outcomes);
+      const r2 = await checkResults(yesterday);
+      if (r2.outcomes?.updated > 0) {
+        console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
+        // New results came in — refresh accuracy cache
+        await refreshAccuracyCache().catch(() => {});
+      }
+    } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
+  }, 3 * 60 * 60 * 1000);
+  // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
+  // Without this, Render spins down after 15 min of inactivity causing
+  // the server to cold-start on the next request, which makes /auth/me
+  // fail and logs users out on browser refresh.
+  const SELF_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
+  setInterval(() => {
+    fetch(SELF_URL + '/api/version')
+      .then(() => console.log('[KeepAlive] ping ok'))
+      .catch((e) => console.warn('[KeepAlive] ping failed:', e.message));
+  }, 10 * 60 * 1000); // every 10 minutes
+  console.log('[KeepAlive] Self-ping started — pinging every 10 min');
+
+});
+
+
+export default app;

@@ -1,0 +1,497 @@
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
+import { useLogin, useSignup } from "@/hooks/use-auth";
+import { Eye, EyeOff, ArrowLeft, CheckCircle2, AlertCircle, MessageCircle } from "lucide-react";
+import { z } from "zod";
+import { fetchApi, setAuthToken } from "@/lib/api";
+import { signInWithGoogle } from "@/lib/firebase";
+import { useQueryClient } from "@tanstack/react-query";
+
+const LoginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+type LoginFormData = z.infer<typeof LoginSchema>;
+type AuthMode = "email-signin" | "email-signup" | "forgot-password";
+
+function InputField({
+  label, type, value, onChange, placeholder, error, rightEl,
+}: {
+  label: string; type: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; error?: string; rightEl?: React.ReactNode;
+}) {
+  const [focused, setFocused] = useState(false);
+  const active = focused || value.length > 0;
+  return (
+    <div className="relative">
+      <div className={`relative rounded-xl border transition-all duration-200 ${
+        error ? "border-red-500/70 bg-red-500/5"
+        : focused ? "border-primary/60 bg-primary/5 shadow-[0_0_0_3px_rgba(16,231,116,0.08)]"
+        : "border-white/10 bg-white/5"
+      }`}>
+        <label className={`absolute left-4 transition-all duration-200 pointer-events-none font-medium ${
+          active ? "top-2 text-[10px] text-primary/80 tracking-wider uppercase" : "top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+        }`}>{label}</label>
+        <input
+          type={type} value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={focused ? placeholder : ""}
+          className="w-full bg-transparent px-4 pt-6 pb-2.5 text-white text-sm focus:outline-none placeholder:text-white/25"
+          style={{ paddingRight: rightEl ? "44px" : "16px" }}
+        />
+        {rightEl && <div className="absolute right-3 top-1/2 -translate-y-1/2">{rightEl}</div>}
+      </div>
+      <AnimatePresence>
+        {error && (
+          <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            className="flex items-center gap-1 text-xs text-red-400 mt-1.5 px-1">
+            <AlertCircle size={11} />{error}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function PasswordInput({ label, value, onChange, error }: { label: string; value: string; onChange: (v: string) => void; error?: string; }) {
+  const [show, setShow] = useState(false);
+  return (
+    <InputField label={label} type={show ? "text" : "password"} value={value} onChange={onChange}
+      placeholder="••••••••" error={error}
+      rightEl={
+        <button type="button" onClick={() => setShow(!show)} className="text-muted-foreground hover:text-white transition-colors p-1">
+          {show ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      }
+    />
+  );
+}
+
+const slideVariants = {
+  enter: (dir: number) => ({ x: dir * 40, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir: number) => ({ x: dir * -40, opacity: 0 }),
+};
+
+export default function Login() {
+  const [authMode, setAuthMode] = useState<AuthMode>("email-signin");
+  const [direction, setDirection] = useState(1);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [formData, setFormData] = useState<LoginFormData>({ email: "", password: "" });
+  const [errors, setErrors] = useState<Partial<LoginFormData>>({});
+  const [generalError, setGeneralError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [showUnverifiedActions, setShowUnverifiedActions] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  // Forgot-password state
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState(() => localStorage.getItem("sp_referral_code") || "");
+
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const loginMutation = useLogin();
+  const signupMutation = useSignup();
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleAuth = async () => {
+    setGoogleLoading(true);
+    setGeneralError("");
+    try {
+      const { idToken } = await signInWithGoogle();
+      const refCode = referralCode || localStorage.getItem("sp_referral_code") || undefined;
+      const res = await fetchApi("/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ idToken, referralCode: refCode }),
+      });
+      setAuthToken(res.token);
+      localStorage.removeItem("sp_referral_code");
+      const user = { ...res.user, has_access: res.has_access, access_status: res.access_status };
+      queryClient.setQueryData(["/api/auth/me"], user);
+      setLocation("/");
+    } catch (err: any) {
+      const msg = err?.message || "Google sign-in failed";
+      if (msg.includes("popup-closed") || msg.includes("cancelled")) {
+        // User closed the popup — don't show an error
+      } else if (msg.includes("disposable")) {
+        setGeneralError("Disposable emails not allowed.");
+      } else {
+        setGeneralError(msg);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "signup") goTo("email-signup");
+    // Capture referral code from URL ?ref=CODE
+    const refCode = params.get("ref");
+    if (refCode) {
+      const code = refCode.trim().toUpperCase();
+      localStorage.setItem("sp_referral_code", code);
+      setReferralCode(code);
+      // Remove ref param from URL without reload
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("ref");
+      window.history.replaceState({}, document.title, clean.toString());
+    }
+  }, []);
+
+  const goTo = (mode: AuthMode, dir = 1) => {
+    setDirection(dir);
+    setGeneralError("");
+    setSuccessMsg("");
+    setErrors({});
+    setShowUnverifiedActions(false);
+    setAuthMode(mode);
+  };
+
+
+  const validateForm = () => {
+    try {
+      LoginSchema.parse(formData);
+      setErrors({});
+      return true;
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const newErrors: Partial<LoginFormData> = {};
+        err.errors.forEach((e) => { newErrors[e.path[0] as keyof LoginFormData] = e.message as any; });
+        setErrors(newErrors);
+      }
+      return false;
+    }
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError("");
+    setShowUnverifiedActions(false);
+    if (!validateForm()) return;
+    if (referralCode) localStorage.setItem("sp_referral_code", referralCode);
+    loginMutation.mutate({ ...formData }, {
+      onError: (err: any) => {
+        const msg = err?.message || "Sign in failed";
+        if (msg.includes("email_not_verified")) {
+          setGeneralError("Email not verified. Check your inbox and spam folder.");
+          setShowUnverifiedActions(true);
+        } else if (
+          msg.includes("auth/invalid-credential") || msg.includes("auth/invalid-login-credentials") ||
+          msg.includes("auth/wrong-password") || msg.includes("auth/user-not-found") ||
+          msg.includes("Invalid credentials")
+        ) {
+          setGeneralError("Incorrect email or password.");
+        } else if (msg.includes("too-many-requests")) {
+          setGeneralError("Too many attempts. Please try again later.");
+        } else if (msg.includes("disposable")) {
+          setGeneralError("Disposable emails not allowed.");
+        } else if (msg.toLowerCase().includes("authentication failed") || msg.toLowerCase().includes("token verification")) {
+          setGeneralError("Connection issue — please tap Sign in again.");
+        } else {
+          setGeneralError(msg);
+        }
+      },
+    });
+  };
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      await fetchApi("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email: formData.email }) });
+      localStorage.setItem("sp_verify_email", formData.email);
+      setLocation("/verify-email");
+    } catch (err: any) {
+      setGeneralError(err.message || "Failed to resend. Please try again.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError(""); setConfirmPasswordError("");
+    if (!validateForm()) return;
+    if (formData.password !== confirmPassword) { setConfirmPasswordError("Passwords do not match."); return; }
+    signupMutation.mutate({ email: formData.email, password: formData.password, referralCode: referralCode || undefined }, {
+      onError: (err: any) => {
+        const msg = err?.message || "Sign up failed";
+        if (msg.includes("email-already-in-use") || msg.includes("already registered")) {
+          // Navigate first, then set error (goTo clears generalError so we delay it)
+          goTo("email-signin", -1);
+          setTimeout(() => setGeneralError("This email already has an account — sign in below."), 50);
+        } else if (msg.includes("weak-password")) setGeneralError("Password must be at least 6 characters.");
+        else if (msg.includes("invalid-email")) setGeneralError("Please enter a valid email address.");
+        else if (msg.includes("disposable")) setGeneralError("Disposable emails not allowed.");
+        else setGeneralError(msg);
+      },
+    });
+  };
+
+  // ── Forgot Password handler ───────────────────────────────────────────────
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) return setGeneralError("Please enter your email address.");
+    setResetLoading(true); setGeneralError("");
+    try {
+      try { await fetchApi("/auth/password/reset-request", { method: "POST", body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }) }); } catch (_) {}
+      setSuccessMsg(`Reset email sent to ${resetEmail}. Check your inbox.`);
+      setResetEmail("");
+      goTo("email-signin", -1);
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("user-not-found") || msg.includes("invalid-email")) {
+        // Still show success to avoid enumeration
+        setSuccessMsg("If that email is registered, a reset link has been sent.");
+        setResetEmail(""); goTo("email-signin", -1);
+      } else {
+        setGeneralError(msg || "Failed to send reset email. Try again.");
+      }
+    } finally { setResetLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a0e] text-white selection:bg-primary/30">
+      {/* Animated background */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary/10 blur-[120px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-500/5 blur-[120px] mix-blend-screen" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+      </div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-[400px] flex flex-col items-center gap-8">
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-4">
+          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}
+            className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-[0_0_30px_rgba(16,231,116,0.1)]">
+            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="ScorePhantom" className="w-8 h-8 object-contain animate-logo-glow" />
+          </motion.div>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="premium-chip text-primary border-primary/20 bg-primary/10">Free 7-Day Trial</span>
+            <span className="premium-chip">No Card Required</span>
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className="w-full rounded-[2rem] p-1 overflow-hidden"
+             style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)" }}>
+          <div className="bg-[#0a110d] rounded-[1.85rem] p-8 w-full border border-white/[0.05] shadow-2xl relative">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+            <AnimatePresence mode="wait" custom={direction}>
+
+              {/* ─── SIGN IN ─── */}
+              {authMode === "email-signin" && (
+                <motion.div key="email-signin" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
+                  transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setLocation("/home")} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
+                    </button>
+                    <div><p className="text-white font-bold text-lg leading-tight tracking-tight">Welcome back</p><p className="text-xs text-white/40">Sign in to your account</p></div>
+                  </div>
+
+                  <AnimatePresence>
+                    {(successMsg || generalError) && (
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                        className={`flex flex-col gap-2 rounded-xl px-4 py-3 text-sm ${successMsg ? "bg-primary/10 border border-primary/25 text-primary" : "bg-red-500/10 border border-red-500/25 text-red-400"}`}>
+                        <div className="flex items-start gap-2.5">
+                          {successMsg ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
+                          <span>{successMsg || generalError}</span>
+                        </div>
+                        {/* Resend Verification button — shown when email is not verified */}
+                        {showUnverifiedActions && (
+                          <button onClick={handleResendVerification} disabled={resendLoading}
+                            className="mt-1 w-full text-center text-xs font-semibold bg-orange-500/20 border border-orange-500/30 text-orange-300 hover:bg-orange-500/30 rounded-lg py-2 px-3 transition-all disabled:opacity-50">
+                            {resendLoading ? "Sending…" : "📧 Resend Verification Email"}
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3">
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => setFormData(prev => ({ ...prev, password: v }))} error={errors.password} />
+
+
+                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={loginMutation.isPending}
+                      className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
+                      {loginMutation.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Signing in…</span> : "Sign in"}
+                    </motion.button>
+                  </form>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                    <span className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-semibold">or</span>
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                  </div>
+
+                  {/* Google Sign-In */}
+                  <motion.button whileTap={{ scale: 0.98 }} type="button" onClick={handleGoogleAuth} disabled={googleLoading}
+                    className="w-full flex items-center justify-center gap-3 bg-white/[0.05] border border-white/10 text-white font-semibold text-sm py-3 rounded-2xl hover:bg-white/[0.08] transition-all disabled:opacity-50">
+                    {googleLoading ? (
+                      <span className="flex items-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Connecting…</span>
+                    ) : (
+                      <><svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>Continue with Google</>
+                    )}
+                  </motion.button>
+
+                  <div className="flex flex-col items-center gap-2">
+                    <button onClick={() => goTo("forgot-password")} className="text-xs text-muted-foreground/60 hover:text-white/70 transition-colors">
+                      Forgot your password?
+                    </button>
+                    <button onClick={() => goTo("email-signup")} className="text-xs text-primary/80 hover:text-primary transition-colors">
+                      Don't have an account? <span className="font-semibold">Sign up free</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ─── SIGN UP ─── */}
+              {authMode === "email-signup" && (
+                <motion.div key="email-signup" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
+                  transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
+                    </button>
+                    <div><p className="text-white font-bold text-lg leading-tight tracking-tight">Create account</p><p className="text-xs text-white/40">Start your 7-day free trial</p></div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/4 border border-primary/10 text-xs space-y-1.5">
+                    <p className="text-white/50 font-semibold uppercase tracking-wider text-[9px] mb-2">Free trial includes</p>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Full Premium Access for 7 Days</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-primary font-bold mr-1">✓</span>Top Picks, ACCA, Stats & PhantomChat</div>
+                    <div className="flex items-center gap-2 text-white/60"><span className="text-orange-500 font-bold mr-1">!</span>Limit: 15 Match Predictions per day</div>
+                  </div>
+                  <AnimatePresence>
+                    {generalError && (
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                        className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm bg-red-500/10 border border-red-500/25 text-red-400">
+                        <AlertCircle size={16} className="mt-0.5 shrink-0" /><span>{generalError}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <form onSubmit={handleEmailSignUp} className="flex flex-col gap-3">
+                    <InputField label="Email" type="email" value={formData.email} onChange={(v) => setFormData(prev => ({ ...prev, email: v }))} placeholder="you@example.com" error={errors.email} />
+                    <PasswordInput label="Password" value={formData.password} onChange={(v) => { setFormData(prev => ({ ...prev, password: v })); setErrors(prev => ({ ...prev, password: undefined })); }} error={errors.password} />
+                    <PasswordInput label="Confirm Password" value={confirmPassword} onChange={(v) => { setConfirmPassword(v); setConfirmPasswordError(""); }} error={confirmPasswordError} />
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Referral Code (optional)</label>
+                      <input
+                        type="text"
+                        value={referralCode}
+                        onChange={e => { const v = e.target.value.toUpperCase(); setReferralCode(v); if (v) localStorage.setItem("sp_referral_code", v); else localStorage.removeItem("sp_referral_code"); }}
+                        placeholder="e.g. MAZI"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-primary/40 font-mono tracking-widest transition-all"
+                      />
+                    </div>
+                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={signupMutation.isPending}
+                      className="w-full mt-1 bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
+                      {signupMutation.isPending ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Creating account…</span> : "Create account"}
+                    </motion.button>
+                  </form>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                    <span className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-semibold">or</span>
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                  </div>
+
+                  {/* Google Sign-Up */}
+                  <motion.button whileTap={{ scale: 0.98 }} type="button" onClick={handleGoogleAuth} disabled={googleLoading}
+                    className="w-full flex items-center justify-center gap-3 bg-white/[0.05] border border-white/10 text-white font-semibold text-sm py-3 rounded-2xl hover:bg-white/[0.08] transition-all disabled:opacity-50">
+                    {googleLoading ? (
+                      <span className="flex items-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Connecting…</span>
+                    ) : (
+                      <><svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>Sign up with Google</>
+                    )}
+                  </motion.button>
+
+                  <div className="flex flex-col items-center">
+                    <button onClick={() => goTo("email-signin", -1)} className="text-xs text-primary/80 hover:text-primary transition-colors">
+                      Already have an account? <span className="font-semibold">Sign in</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ─── FORGOT PASSWORD ─── */}
+              {authMode === "forgot-password" && (
+                <motion.div key="forgot-password" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
+                  transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col gap-5">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => goTo("email-signin", -1)} className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all">
+                      <ArrowLeft size={14} />
+                    </button>
+                    <div>
+                      <p className="text-white font-bold text-lg leading-tight tracking-tight">Reset password</p>
+                      <p className="text-xs text-white/40">We'll send a reset link via email</p>
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {generalError && (
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                        className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm bg-red-500/10 border border-red-500/25 text-red-400">
+                        <AlertCircle size={16} className="mt-0.5 shrink-0" /><span>{generalError}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <form onSubmit={handleForgotPassword} className="flex flex-col gap-4">
+                    <InputField label="Email" type="email" value={resetEmail} onChange={setResetEmail} placeholder="you@example.com" />
+                    <motion.button whileTap={{ scale: 0.98 }} type="submit" disabled={resetLoading}
+                      className="w-full bg-primary text-black font-bold text-sm py-3.5 rounded-2xl hover:brightness-110 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_4px_24px_rgba(16,231,116,0.25)]">
+                      {resetLoading ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />Sending…</span> : "Send Reset Link"}
+                    </motion.button>
+                  </form>
+
+                  <p className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
+                    A reset link will be sent if this email is registered.
+                  </p>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </div>
+          <div className="h-px w-full bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
+        </div>
+
+        {/* Trust strip */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.5 }}
+          className="flex items-center gap-6 text-center">
+          <div><p className="text-primary font-black text-lg leading-tight">7D</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Free trial</p></div>
+          <div className="w-px h-7 bg-white/8" />
+          <div><p className="text-primary font-black text-lg leading-tight">15</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Daily picks</p></div>
+          <div className="w-px h-7 bg-white/8" />
+          <div><p className="text-primary font-black text-lg leading-tight">2</p><p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">Sports live</p></div>
+        </motion.div>
+
+        {/* WhatsApp support — for users who lost premium access */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+          className="flex flex-col items-center gap-2 pb-2">
+          <p className="text-[11px] text-white/30 text-center">
+            Lost premium access after our database update?
+          </p>
+          <a
+            href="https://wa.me/2348117024699?text=Hi%20ScorePhantom%20support%2C%20I%20need%20help%20restoring%20my%20premium%20access."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#25D366] text-xs font-bold hover:bg-[#25D366]/20 transition-all"
+          >
+            <MessageCircle className="w-3.5 h-3.5 fill-[#25D366]" />
+            Contact us on WhatsApp
+          </a>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}

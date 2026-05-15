@@ -1,0 +1,255 @@
+import { Target } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, ReferenceLine } from "recharts";
+
+export function PitchTab({ matchData }: any) {
+  const events = matchData?.meta?.matchEvents || [];
+  const matchStats = matchData?.meta?.matchStats || {};
+  const momentum = matchStats.momentum || matchData?.meta?.momentum || [];
+  const shotmap = matchStats.shotmap || matchData?.meta?.shotmap || [];
+  
+  // Combine shots and events for timeline
+  const timelineEvents = [...events];
+  
+  // Add goals from shotmap if they aren't already in events
+  if (shotmap && shotmap.length > 0) {
+    shotmap.filter((s: any) => s.type === 'goal').forEach((goal: any) => {
+      // Check if we already have this goal at this minute
+      const exists = timelineEvents.some(e => e.minute === goal.min && e.type === 'goal');
+      if (!exists) {
+        timelineEvents.push({
+          minute: goal.min,
+          type: 'goal',
+          team: goal.home ? 'home' : 'away',
+          player: goal.pid ? `Player ${goal.pid}` : 'Goal',
+          detail: `xG: ${goal.xg?.toFixed(2) || 'N/A'}`
+        });
+      }
+    });
+  }
+  
+  // Sort timeline chronologically
+  timelineEvents.sort((a, b) => (a.minute || 0) - (b.minute || 0));
+
+  // Build chart data from momentum
+  const chartData = momentum.map((m: any) => ({
+    minute: m.minute,
+    value: m.value,
+    home: m.value > 0 ? m.value : 0,
+    away: m.value < 0 ? Math.abs(m.value) : 0,
+  }));
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── LIVE SCORE & MINUTE ── */}
+      {['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(matchData?.fixture?.match_status || '') && (
+        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-red-500 uppercase tracking-wider flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              LIVE {matchData?.fixture?.live_minute ? `${matchData?.fixture?.live_minute}'` : ''}
+            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xl font-bold">{matchData?.fixture?.home_score ?? 0}</span>
+              <span className="text-white/30">-</span>
+              <span className="text-xl font-bold">{matchData?.fixture?.away_score ?? 0}</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col items-end text-right">
+            <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Live xG</span>
+            <div className="flex items-center gap-2 mt-1 text-sm font-medium">
+              <span className="text-primary">{matchData?.fixture?.home_xg_live?.toFixed(2) ?? '0.00'}</span>
+              <span className="text-white/30">|</span>
+              <span className="text-blue-500">{matchData?.fixture?.away_xg_live?.toFixed(2) ?? '0.00'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── LIVE MOMENTUM ── */}
+      <div className="relative rounded-2xl overflow-hidden mb-2">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Live Match Momentum</p>
+        <div className="h-32 w-full mt-2">
+          {momentum && momentum.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorAway" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="minute" hide />
+                <YAxis domain={[-100, 100]} hide />
+                <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="home" stroke="#10b981" fillOpacity={1} fill="url(#colorHome)" isAnimationActive={false} />
+                <Area type="monotone" dataKey="away" stroke="#3b82f6" fillOpacity={1} fill="url(#colorAway)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs text-white/30 font-medium">
+              Momentum data not available for this match
+            </div>
+          )}
+        </div>
+        <div className="flex justify-between mt-2 text-[9px] text-white/30 font-bold uppercase">
+          <span className="text-primary">{matchData?.fixture?.home_team_name}</span>
+          <span className="text-blue-500">{matchData?.fixture?.away_team_name}</span>
+        </div>
+        </div>
+      </div>
+
+
+      {/* ── SPATIAL SHOTMAP ── */}
+      <div className="relative rounded-2xl overflow-hidden mb-2">
+        {/* Cinematic green glow backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+        </div>
+        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Spatial Shotmap</p>
+          <div className="flex gap-2">
+            <span className="flex items-center gap-1 text-[9px] text-white/40 font-bold"><div className="w-2 h-2 rounded-full bg-primary" /> Goal</span>
+            <span className="flex items-center gap-1 text-[9px] text-white/40 font-bold"><div className="w-2 h-2 rounded-full bg-white/20" /> Miss</span>
+          </div>
+        </div>
+        
+        {/* Pitch container */}
+        <div className="relative aspect-[1.5] w-full rounded-xl border border-white/20 bg-[#1e4a2d] overflow-hidden">
+          {/* Pitch lines */}
+          <div className="absolute inset-0 opacity-30 pointer-events-none">
+            {/* Center line and circle */}
+            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-white -translate-x-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-[20%] aspect-square rounded-full border border-white -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-1 h-1 rounded-full bg-white -translate-x-1/2 -translate-y-1/2" />
+            
+            {/* Home Penalty Box (Left) */}
+            <div className="absolute top-[20%] bottom-[20%] left-0 w-[18%] border border-l-0 border-white" />
+            <div className="absolute top-[35%] bottom-[35%] left-0 w-[6%] border border-l-0 border-white" />
+            <div className="absolute top-1/2 left-[12%] w-1 h-1 rounded-full bg-white -translate-y-1/2" />
+            
+            {/* Away Penalty Box (Right) */}
+            <div className="absolute top-[20%] bottom-[20%] right-0 w-[18%] border border-r-0 border-white" />
+            <div className="absolute top-[35%] bottom-[35%] right-0 w-[6%] border border-r-0 border-white" />
+            <div className="absolute top-1/2 right-[12%] w-1 h-1 rounded-full bg-white -translate-y-1/2" />
+            
+            {/* Corner Arcs */}
+            <div className="absolute top-0 left-0 w-4 h-4 border-b border-r border-white rounded-br-full" />
+            <div className="absolute bottom-0 left-0 w-4 h-4 border-t border-r border-white rounded-tr-full" />
+            <div className="absolute top-0 right-0 w-4 h-4 border-b border-l border-white rounded-bl-full" />
+            <div className="absolute bottom-0 right-0 w-4 h-4 border-t border-l border-white rounded-tl-full" />
+          </div>
+
+          {/* Plot shots */}
+          {shotmap && shotmap.length > 0 ? (
+            shotmap.map((shot: any, i: number) => {
+              if (!shot.pos || shot.pos.x == null || shot.pos.y == null) return null;
+
+              // Normalize coordinates (0-100 scale). BSD gives x=0 at home goal, x=100 at away goal
+              const x = shot.home ? shot.pos.x : 100 - shot.pos.x;
+              const y = shot.home ? shot.pos.y : 100 - shot.pos.y;
+
+              const isGoal = shot.type === 'goal';
+              const isSaved = shot.type === 'attempt_saved';
+              
+              // Base size on xG (minimum 8px, max 24px)
+              const xgValue = shot.xg || 0.05;
+              const size = Math.max(8, Math.min(24, xgValue * 40)); 
+
+              // Color based on outcome and team
+              let bgColor = "";
+              let borderColor = "";
+              let shadow = "";
+
+              if (isGoal) {
+                bgColor = shot.home ? "bg-primary" : "bg-blue-500";
+                borderColor = "border-white border-2";
+                shadow = shot.home ? "shadow-[0_0_15px_rgba(16,231,116,0.8)]" : "shadow-[0_0_15px_rgba(59,130,246,0.8)]";
+              } else if (isSaved) {
+                bgColor = shot.home ? "bg-primary/40" : "bg-blue-500/40";
+                borderColor = shot.home ? "border-primary border" : "border-blue-500 border";
+              } else {
+                bgColor = "bg-red-500/30";
+                borderColor = "border-red-500/50 border";
+              }
+
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "absolute rounded-full -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-[2] hover:z-50 cursor-pointer z-10 backdrop-blur-sm",
+                    bgColor, borderColor, shadow
+                  )}
+                  style={{
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    width: `${size}px`,
+                    height: `${size}px`
+                  }}
+                  title={`${shot.home ? 'Home' : 'Away'} ${shot.type.replace('_', ' ')} - xG: ${xgValue.toFixed(2)}`}
+                />
+              );
+            })
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 z-20 bg-black/60 backdrop-blur-sm rounded-xl">
+               <Target className="w-10 h-10 text-white/20 mb-3" />
+               <p className="text-xs text-white/50 font-display tracking-widest uppercase">Shotmap Unavailable</p>
+               <p className="text-[10px] text-white/30 mt-1">Awaiting spatial data from engine</p>
+            </div>
+          )}
+        </div>
+        </div>
+      </div>
+
+      {/* ── MATCH EVENTS TIMELINE ── */}
+      {timelineEvents.length > 0 && (
+        <div className="relative rounded-2xl overflow-hidden mt-2 mb-2">
+          {/* Cinematic green glow backdrop */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
+            <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
+            <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
+          </div>
+          <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-4">Key Events</p>
+          <div className="relative pl-4 border-l border-white/10 space-y-6">
+            {timelineEvents.map((ev: any, idx: number) => (
+              <div key={idx} className="relative">
+                <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-[#09090b] bg-white/20" />
+                <div className="flex gap-3">
+                  <span className="text-xs font-bold text-white/60 w-6 shrink-0">{ev.minute}'</span>
+                  <div className="flex flex-col">
+                    <span className={cn("text-xs font-medium", ev.team === 'home' ? 'text-primary' : 'text-blue-400')}>
+                      {ev.type === 'goal' ? '⚽ Goal' : ev.type === 'yellow' ? '🟨 Yellow Card' : ev.type === 'red' ? '🟥 Red Card' : ev.type === 'sub' ? '🔄 Substitution' : ev.type}
+                    </span>
+                    {(ev.player || ev.detail) && (
+                      <span className="text-[10px] text-white/50 mt-0.5">{ev.player} {ev.detail ? `(${ev.detail})` : ''}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
