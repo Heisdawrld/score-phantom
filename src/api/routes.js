@@ -877,8 +877,13 @@ router.post("/refresh", requirePremiumAccess, async (req, res) => {
 
 // ─── GET /acca — Intelligent ACCA builder (premium only) ──────────────────────
 // Query params:
-//   ?mode=safe   (default) — 3 picks, all >= 75%, low volatility, stable markets
-//   ?mode=value             — 4–5 picks, >= 70%, allows 1 moderate risk pick
+//   ?mode=safe   (default) — 3 picks, all >= 60%, low volatility, stable markets
+//   ?mode=value             — 4–5 picks, >= 57%, allows 1 moderate risk pick
+//
+// v2: Now extracts MULTIPLE ranked markets per fixture from prediction_json,
+// not just the single best_pick_market. This fixes the ACCA returning empty
+// when all best picks are under_35 — the builder can now pick a fixture's
+// 2nd or 3rd ranked market (e.g., home_win) instead.
 router.get("/acca", requirePremiumAccess, async (req, res) => {
   // ACCA requires full access — subscription OR active trial
   if (!req.access.has_full_access) {
@@ -897,11 +902,14 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
 
     const mode = req.query.mode === 'value' ? 'value' : 'safe';
 
-    // Pull all today's qualifying predictions with enrichment + volatility data
+    // Pull all today's qualifying predictions WITH prediction_json
+    // so we can extract multiple ranked markets per fixture
     const pool = await db.execute({
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
-                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick, f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away, f.match_status,
+                   p.best_pick_score, p.confidence_model, p.confidence_volatility, p.script_primary, p.no_safe_pick,
+                   p.prediction_json,
+                   f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away, f.match_status,
                    fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
             FROM predictions_v2 p
             JOIN fixtures f ON f.id = p.fixture_id
@@ -915,7 +923,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
     });
 
-    const rows = pool.rows || [];
+    let rows = pool.rows || [];
 
     if (rows.length === 0) {
       // No cached predictions yet — run engine on qualifying fixtures and retry
@@ -939,7 +947,6 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       }
 
       // Warm predictions cache in small batches to avoid request timeout
-      // Process 8 at a time, max 24 total, with a 15s total time budget
       const warmStart = Date.now();
       const batchSize = 8;
       const maxWarm = Math.min(fixtureIds.length, 24);
@@ -954,7 +961,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
         sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                      p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                      p.best_pick_score, p.confidence_model, p.confidence_volatility,
-                     p.script_primary, p.no_safe_pick,
+                     p.script_primary, p.no_safe_pick, p.prediction_json,
                      f.tournament_name, f.match_date, f.enrichment_status, f.data_quality, f.odds_home, f.odds_draw, f.odds_away, f.match_status,
                      fo.home, fo.draw, fo.away, fo.btts_yes, fo.btts_no, fo.over_under
               FROM predictions_v2 p
@@ -968,12 +975,57 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
               LIMIT 50`,
         args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`],
       });
-      rows.push(...(retryPool.rows || []));
+      rows = retryPool.rows || [];
     }
 
-    // Build ACCA using the intelligent builder (async — must be awaited)
+    // ── Expand rows: extract top 5 ranked markets per fixture from prediction_json ──
+    // This is the key v2 change. Previously, ACCA only saw each fixture's SINGLE
+    // best pick. If that was under_35, the fixture contributed nothing useful.
+    // Now we extract the top 5 ranked markets so the ACCA builder can choose
+    // a more specific pick (e.g., home_win at 65%) from the same fixture.
+    const MAX_RANKED_PER_FIXTURE = 5;
+    const expandedRows = [];
+
+    for (const row of rows) {
+      // Always include the best pick row (unchanged behavior)
+      expandedRows.push(row);
+
+      // Try to extract additional ranked markets from prediction_json
+      try {
+        const pj = row.prediction_json ? JSON.parse(row.prediction_json) : null;
+        const engineResult = pj?.engineResult || pj?.prediction || null;
+        const rankedMarkets = engineResult?.rankedMarkets || engineResult?.rankedCandidates || [];
+
+        for (let i = 0; i < Math.min(rankedMarkets.length, MAX_RANKED_PER_FIXTURE); i++) {
+          const rm = rankedMarkets[i];
+          // Skip if this is the same market as the best pick (already included)
+          if (rm.marketKey === row.best_pick_market) continue;
+          // Only include markets with reasonable probability
+          if (!rm.modelProbability || rm.modelProbability < 0.55) continue;
+
+          // Create an expanded row with this market as the "best pick"
+          // but preserving the fixture context
+          expandedRows.push({
+            ...row,
+            best_pick_market: rm.marketKey,
+            best_pick_selection: rm.selection || rm.marketKey,
+            best_pick_probability: rm.modelProbability,
+            best_pick_score: rm.finalScore ?? rm.headlineQualityScore ?? null,
+            confidence_volatility: row.confidence_volatility || 'medium',
+            // Tag this as an alternate market so buildAcca can deduplicate
+            _isAlternateMarket: true,
+            _alternateMarketIndex: i,
+            _originalBestMarket: row.best_pick_market,
+          });
+        }
+      } catch (e) {
+        // prediction_json parse failed — skip alternates for this fixture
+      }
+    }
+
+    // Build ACCA using the intelligent builder with expanded market pool
     const { buildAcca } = await import('../engine/buildAcca.js');
-    const acca = await buildAcca(rows, mode);
+    const acca = await buildAcca(expandedRows, mode);
 
     return res.json({
       ...acca,

@@ -272,12 +272,17 @@ export async function buildAcca(rows, mode = 'safe') {
 
   const selected = [];
   const usedLeagues = new Map();
+  const usedFixtures = new Set();  // v2: track fixtures to avoid duplicate picks from same match
   const scriptCounts = {};
   let underCount = 0;
   let moderateUsed = 0;
 
   for (const pick of candidates) {
     if (selected.length >= targetMax) break;
+    // v2: Each fixture can only contribute ONE pick to the ACCA.
+    // This prevents the same match appearing twice (e.g., under_35 AND home_win).
+    const fixtureId = pick.fixture_id;
+    if (usedFixtures.has(fixtureId)) continue;
     const tournament = pick.tournament_name || 'Unknown';
     const market = (pick.best_pick_market || '').toLowerCase();
     const leagueCount = usedLeagues.get(tournament) || 0;
@@ -294,14 +299,24 @@ export async function buildAcca(rows, mode = 'safe') {
       underCount++;
     }
     selected.push(pick);
+    usedFixtures.add(fixtureId);
     usedLeagues.set(tournament, leagueCount + 1);
     scriptCounts[pick.scriptCat] = catCount + 1;
   }
 
   const hasAttackingPick = selected.some(p => ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
   if (!hasAttackingPick && selected.length > 0) {
-    const replacement = candidates.find(p => !selected.some(s => s.fixture_id === p.fixture_id) && ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase()));
-    if (replacement) selected[selected.length - 1] = replacement;
+    const replacement = candidates.find(p =>
+      !usedFixtures.has(p.fixture_id) &&
+      ATTACKING_MARKETS.has((p.best_pick_market || '').toLowerCase())
+    );
+    if (replacement) {
+      // Remove the old fixture from tracking
+      const oldFixtureId = selected[selected.length - 1].fixture_id;
+      usedFixtures.delete(oldFixtureId);
+      selected[selected.length - 1] = replacement;
+      usedFixtures.add(replacement.fixture_id);
+    }
   }
 
   if (selected.length < targetMin) {

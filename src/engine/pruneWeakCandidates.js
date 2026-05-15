@@ -35,7 +35,7 @@ const MARKET_MIN_PROB = {
   over_25:            0.60,
   under_25:           0.60,
   over_15:            0.60,
-  under_35:           0.68,   // tightened: prevents Under 3.5 becoming a comfort/default pick
+  under_35:           0.74,   // tightened v2: Under 3.5 must be well above natural ~70% base rate
   over_35:            0.65,
 };
 
@@ -48,24 +48,44 @@ function isUnder35ComfortPick(candidate, options) {
   const leagueOver35Rate = safeNum(options.leagueOver35Rate, 0.30);
   const h2hOver35Rate = safeNum(options.h2hOver35Rate, null);
 
-  // Under 3.5 is naturally probable in football, so it needs extra confirmation.
-  // Do not let it headline high-event/open/balanced scripts unless it is truly strong.
+  // ── Under 3.5 Comfort Pick Guard (v2 — stricter) ─────────────────────────
+  // Under 3.5 is naturally probable in ~75-80% of football matches.
+  // This makes it a lazy default that beats more meaningful picks.
+  // The guard forces Under 3.5 to prove it's genuinely the best pick,
+  // not just the safest-looking one.
+
+  // 1. High-event scripts should NEVER default to Under 3.5.
+  //    These scripts say the match will be open/high-scoring —
+  //    picking Under 3.5 contradicts the model's own script classification.
   const highEventScript = script === 'open_end_to_end' || script === 'balanced_high_event';
-  if (highEventScript && prob < 0.74) return true;
+  if (highEventScript && prob < 0.80) return true;
 
-  // If the tactical fit is only default-level and the score is not strong, it is likely just a safe-looking filler.
-  if (tactical <= 0.42 && score < 0.56 && prob < 0.73) return true;
+  // 2. Neutral/balanced scripts — Under 3.5 needs strong tactical support.
+  //    If the tactical fit is only default-level (0.4) and the score isn't
+  //    exceptional, it's a comfort pick masquerading as a real pick.
+  if (tactical <= 0.45 && score < 0.58 && prob < 0.78) return true;
 
-  // NEW: League context guard — in high-scoring leagues (O3.5 > 35%),
-  // Under 3.5 needs an even higher probability to be credible.
-  // If the league Over 3.5 rate is above 35%, the natural Under 3.5 win rate
-  // is below 65%, so we need stronger evidence to pick it.
-  if (leagueOver35Rate > 0.35 && prob < 0.76) return true;
-  if (leagueOver35Rate > 0.40 && prob < 0.80) return true;
+  // 3. Even with decent tactical fit, Under 3.5 needs to be exceptional
+  //    to beat more specific picks like home_win, over_25, etc.
+  if (tactical > 0.45 && tactical < 0.65 && prob < 0.75) return true;
 
-  // NEW: H2H guard — if H2H shows frequent Over 3.5 games, be skeptical
-  if (h2hOver35Rate != null && h2hOver35Rate > 0.35 && prob < 0.76) return true;
-  if (h2hOver35Rate != null && h2hOver35Rate > 0.40 && prob < 0.80) return true;
+  // 4. League context guard — in high-scoring leagues (O3.5 > 30%),
+  //    Under 3.5 needs higher probability to be credible.
+  //    Tightened from 35% to 30% because even moderate-scoring leagues
+  //    make Under 3.5 a questionable headline pick.
+  if (leagueOver35Rate > 0.30 && prob < 0.76) return true;
+  if (leagueOver35Rate > 0.35 && prob < 0.80) return true;
+  if (leagueOver35Rate > 0.40 && prob < 0.85) return true;
+
+  // 5. H2H guard — if H2H shows frequent Over 3.5 games, be skeptical
+  if (h2hOver35Rate != null && h2hOver35Rate > 0.30 && prob < 0.76) return true;
+  if (h2hOver35Rate != null && h2hOver35Rate > 0.35 && prob < 0.80) return true;
+  if (h2hOver35Rate != null && h2hOver35Rate > 0.40 && prob < 0.85) return true;
+
+  // 6. Global floor — Under 3.5 must be at least 74% to headline.
+  //    Below this, it's just the natural probability of a low-scoring game
+  //    and doesn't represent any real model edge.
+  if (prob < 0.74) return true;
 
   return false;
 }

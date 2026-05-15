@@ -4,8 +4,8 @@ function n(value, fallback = 0) {
 }
 
 const COMFORT_MARKET_PENALTY = {
-  under_35: 0.045,
-  over_15: 0.035,
+  under_35: 0.095,   // v2: heavy penalty — Under 3.5 is a lazy default pick in ~75-80% of matches
+  over_15: 0.040,   // slightly increased — Over 1.5 is also naturally probable
   double_chance_home: 0.050,
   double_chance_away: 0.050,
   home_over_05: 0.080,
@@ -13,16 +13,16 @@ const COMFORT_MARKET_PENALTY = {
 };
 
 const SPECIFIC_MARKET_BONUS = {
-  home_win: 0.020,
-  away_win: 0.020,
-  over_25: 0.018,
-  under_25: 0.016,
-  btts_yes: 0.018,
-  btts_no: 0.012,
-  home_over_15: 0.014,
-  away_over_15: 0.014,
-  dnb_home: 0.012,
-  dnb_away: 0.012,
+  home_win: 0.030,   // v2: boosted — result markets are the most meaningful predictions
+  away_win: 0.030,
+  over_25: 0.025,   // boosted — Over 2.5 is a strong, specific pick
+  under_25: 0.020,
+  btts_yes: 0.025,  // boosted — BTTS is a specific, actionable pick
+  btts_no: 0.015,
+  home_over_15: 0.018,
+  away_over_15: 0.018,
+  dnb_home: 0.015,
+  dnb_away: 0.015,
 };
 
 function headlineQualityScore(candidate) {

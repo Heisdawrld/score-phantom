@@ -30,7 +30,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '3.1.0'; // v3.1: Intuitive advisor logic (dual-path FIRE gate), dynamic baselines, advisor_reason
+const CURRENT_ENGINE_VERSION = '3.2.0'; // v3.2: Under 3.5 comfort guard tightened, headline quality gates relaxed for market diversity, ACCA multi-market extraction
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 

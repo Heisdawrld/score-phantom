@@ -37,16 +37,20 @@ function isHeadlineQualityCandidate(candidate, featureVector, scriptOutput) {
   const edge = safeNum(candidate.edge, 0);
 
   // Base headline gates: do not headline a market just because raw probability is high.
+  // v2: Relaxed finalScore from 0.42 → 0.36 and phantomScore from 0.55 → 0.50
+  // to allow more diverse markets (home_win, over_25, etc.) through.
+  // Under_35 is controlled by the comfort pick guard in pruneWeakCandidates.
   if (prob < 0.50) return false;
-  if (finalScore < 0.42) return false;
-  if (phantomScore < 0.55) return false;
+  if (finalScore < 0.36) return false;
+  if (phantomScore < 0.50) return false;
   if (dataScore < 0.30) return false;
 
   // Aggressive/high-risk picks need extra proof. This prevents combinations like:
   // Raw Model 77%, Phantom 59%, HIGH RISK, but still "Pick This".
+  // v2: Slightly relaxed phantomScore from 0.60 → 0.55 and finalScore from 0.48 → 0.42
   if (risk === 'AGGRESSIVE' || volatility === 'HIGH' || chaos >= 0.68) {
-    if (phantomScore < 0.60) return false;
-    if (finalScore < 0.48) return false;
+    if (phantomScore < 0.55) return false;
+    if (finalScore < 0.42) return false;
     if (prob < 0.65) return false;
   }
 
@@ -70,10 +74,11 @@ function isModelOnlyEligible(candidate, featureVector, scriptOutput) {
 
   // Only allow model-only headlines when the model has enough support.
   // This prevents low-data leagues from pretending to have bookmaker-backed edges.
+  // v2: Relaxed finalScore from 0.48 → 0.42, phantomScore from 0.60 → 0.55, dataScore from 0.50 → 0.40
   if (prob < 0.62) return false;
-  if (finalScore < 0.48) return false;
-  if (phantomScore < 0.60) return false;
-  if (dataScore < 0.50) return false;
+  if (finalScore < 0.42) return false;
+  if (phantomScore < 0.55) return false;
+  if (dataScore < 0.40) return false;
   if (chaos > 0.72 || volatility === 'HIGH') return false;
   if (tacticalFit < 0.25) return false;
 

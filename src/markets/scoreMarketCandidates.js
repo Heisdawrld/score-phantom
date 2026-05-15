@@ -47,6 +47,15 @@ function getBadMarketPenalty(candidate) {
   if (marketKey === 'away_over_05') return 0.9;
   if (marketKey === 'home_under_15' || marketKey === 'away_under_15') return 0.45;
   if (marketKey === 'win_either_half_home' || marketKey === 'win_either_half_away') return 0.3;
+  // v2: Under 3.5 is a low-information market — it's naturally 75-80% probable
+  // and doesn't represent meaningful model insight. Penalize it proportionally
+  // to how much its probability exceeds the natural base rate (~0.72).
+  if (marketKey === 'under_35') {
+    const prob = safeNum(modelProbability, 0);
+    const excessAboveBase = Math.max(0, prob - 0.72);
+    // Scale: at prob=0.80 → 0.08*2.5=0.20, at prob=0.90 → 0.18*2.5=0.45, at prob=0.96 → 0.60
+    return clamp(excessAboveBase * 2.5, 0, 0.65);
+  }
   if (marketKey === 'dnb_home' || marketKey === 'dnb_away') {
     const prob = safeNum(modelProbability, 0);
     const excess = Math.max(0, prob - 0.60);
