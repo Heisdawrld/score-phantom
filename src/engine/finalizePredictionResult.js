@@ -1,3 +1,4 @@
+import { safeNum } from "../utils/math.js";
 import { buildConfidenceProfile } from "./buildConfidenceProfile.js";
 import { buildReasonCodes } from "./buildReasonCodes.js";
 import { savePrediction } from "../storage/savePrediction.js";

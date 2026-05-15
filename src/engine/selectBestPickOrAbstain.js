@@ -133,7 +133,7 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
         edge: null,
         impliedProbability: null,
         bookmakerOdds: null,
-        advisor_status: safeNum(modelOnly.modelProbability, 0) >= 0.72 ? 'FIRE' : safeNum(modelOnly.modelProbability, 0) >= 0.60 ? 'GAMBLE' : 'AVOID',
+        advisor_status: safeNum(modelOnly.modelProbability, 0) >= 0.72 ? 'BET' : safeNum(modelOnly.modelProbability, 0) >= 0.60 ? 'ACCA' : 'SKIP',
         reasons: [
           'MODEL_ONLY_NO_ODDS',
           ...(modelOnly.reasons || []),
