@@ -1,4 +1,4 @@
-import { safeNum } from '../utils/math.js';
+import { safeNum, clamp } from '../utils/math.js';
 
 /**
  * Build a confidence profile for the best pick.
