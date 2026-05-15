@@ -120,10 +120,10 @@ export default function TopPicksToday() {
 
   // BUG FIX: Filter out AVOID picks — they should never appear as "Top Picks"
   // Even if the backend misses one (e.g. stale cache), the frontend must not
-  // render AVOID-badge picks as regular tips. This prevents the contradictory
-  // "AVOID" label appearing alongside full tip display.
+  // Don't show SKIP-badge picks as regular tips.
   const nonAvoidPicks = allPicks.filter(p =>
     p.advisor_status !== 'AVOID' &&
+    p.advisor_status !== 'SKIP' &&
     p.valueTier !== 'JUNK' &&
     p.valueTier !== 'NEGATIVE_EV'
   );
@@ -351,7 +351,7 @@ export default function TopPicksToday() {
                           <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
                         <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
-                        <ModelAdvisorBadge status={((pick.advisor_status || "GAMBLE") as AdvisorStatus)} showLabel={false} />
+                        <ModelAdvisorBadge status={((pick.advisor_status || "CAREFUL") as AdvisorStatus)} showLabel={false} />
                         {/* v4: Value tier + EV badges */}
                         {pick.valueTier && pick.valueTier !== 'JUNK' && pick.valueTier !== 'NEGATIVE_EV' && pick.valueTier !== 'UNPRICED' && (
                           <span className={cn(

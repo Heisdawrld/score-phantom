@@ -52,10 +52,14 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     bestPick.valueTierDescription = valueTier.tierDescription;
     bestPick.ev = valueTier.ev;
 
-    // ── Phase 4A: EV-Aware Advisor Badge Sync ─────────────────────────────
-    // The badge now considers both probability AND odds value.
-    // A 72% pick at 1.14 odds is NOT FIRE — it's JUNK or ACCUMULATOR at best.
-    // A 52% pick at 2.00 odds with +4% EV IS a VALUE pick.
+    // ── Simplified 3-Tier Badge: GO / CAREFUL / SKIP ────────────────────────
+    // Beginner-friendly: only 3 verdicts that anyone can understand.
+    //
+    //   GO      = "Bet this" — model is confident AND the odds offer value
+    //   CAREFUL = "Be careful" — there's some value but it's not a sure thing
+    //   SKIP    = "Don't bet" — not worth the risk (junk odds, negative EV, etc.)
+    //
+    // Logic priority: value tier → probability → data quality
     const dataQ = features.dataCompletenessScore || 0.5;
     const isRestricted = bestPick.leagueSignal?.status === 'restricted';
     const ev = odds > 1.0 ? (prob * odds) - 1 : null;
@@ -64,55 +68,52 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     let syncedAdvisorStatus;
 
     if (isRestricted) {
-      syncedAdvisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
+      // Restricted league = unreliable data → at best CAREFUL
+      syncedAdvisorStatus = prob >= 0.65 ? 'CAREFUL' : 'SKIP';
     } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
-      // Junk odds or negative EV — NEVER badge as FIRE or RECOMMENDED
-      syncedAdvisorStatus = 'AVOID';
-    } else if (valueTier.tier === 'STRONG') {
-      // High prob AND fair odds → FIRE
-      syncedAdvisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-    } else if (valueTier.tier === 'VALUE') {
-      // Moderate prob at good odds → RECOMMENDED if positive EV
-      syncedAdvisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+      // Junk odds or negative EV → don't bet
+      syncedAdvisorStatus = 'SKIP';
+    } else if (valueTier.tier === 'STRONG' || valueTier.tier === 'VALUE') {
+      // Strong or Value tier with decent data → GO
+      syncedAdvisorStatus = (isPositiveEV && dataQ >= 0.25) ? 'GO' : 'CAREFUL';
     } else if (valueTier.tier === 'SHARP') {
-      // Low prob at high odds → RECOMMENDED if positive EV, else GAMBLE
-      syncedAdvisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+      // Sharp = high odds, model vs market → CAREFUL (worth a look but risky)
+      syncedAdvisorStatus = isPositiveEV ? 'GO' : 'CAREFUL';
     } else if (valueTier.tier === 'ACCUMULATOR') {
-      // Solid but low odds → GAMBLE (good for ACCAs, not singles)
-      syncedAdvisorStatus = 'GAMBLE';
+      // Solid probability at low odds → CAREFUL (good for ACCAs, not singles)
+      syncedAdvisorStatus = 'CAREFUL';
     } else if (prob >= 0.72 && odds >= 1.30) {
-      // Classic high probability with decent odds → FIRE
-      syncedAdvisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-    } else if (prob >= 0.60) {
-      syncedAdvisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+      // High probability with decent odds → GO
+      syncedAdvisorStatus = dataQ < 0.20 ? 'CAREFUL' : 'GO';
+    } else if (prob >= 0.60 && odds >= 1.25) {
+      // Decent probability → CAREFUL
+      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'CAREFUL';
     } else if (prob >= 0.50 && isPositiveEV) {
-      // ── Phase 3C: CAUTIOUS badge ────────────────────────────────────────
-      // Marginal probability but positive EV — not enough for GAMBLE,
-      // but too much value to AVOID entirely. Small stakes, ACCA filler.
-      syncedAdvisorStatus = 'CAUTIOUS';
+      // Marginal probability but positive EV → CAREFUL
+      syncedAdvisorStatus = 'CAREFUL';
     } else if (prob >= 0.50) {
-      syncedAdvisorStatus = dataQ >= 0.40 ? 'GAMBLE' : 'AVOID';
+      syncedAdvisorStatus = dataQ >= 0.40 ? 'CAREFUL' : 'SKIP';
     } else {
-      syncedAdvisorStatus = 'AVOID';
+      syncedAdvisorStatus = 'SKIP';
     }
     bestPick.advisor_status = syncedAdvisorStatus;
 
-    // ── Phase 4A.1: AVOID sync — when badge is AVOID, treat as smart abstention ──
+    // ── SKIP sync — when badge is SKIP, treat as smart abstention ──
     // The engine still provides the pick data for transparency (showing what we found
-    // and why we're avoiding it), but flags it so the UI doesn't display "Our Best Bet".
-    // This prevents the AVOID + "Our Best Bet" + VALUE tier contradiction.
-    if (syncedAdvisorStatus === 'AVOID') {
-      const avoidReasons = [];
-      if (isRestricted) avoidReasons.push('Restricted league — limited data reliability');
-      if (valueTier.tier === 'JUNK') avoidReasons.push(`Junk odds at ${odds.toFixed(2)} — no value regardless of probability`);
-      if (valueTier.tier === 'NEGATIVE_EV') avoidReasons.push(`Negative EV (${(ev * 100).toFixed(1)}%) — not profitable long-term`);
-      if (dataQ < 0.20) avoidReasons.push('Very low data quality — prediction unreliable');
-      else if (dataQ < 0.40) avoidReasons.push('Below-average data quality — confidence reduced');
-      if (prob < 0.50) avoidReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
+    // and why we're skipping it), but flags it so the UI doesn't display "Our Best Bet".
+    // This prevents the SKIP + "Our Best Bet" contradiction.
+    if (syncedAdvisorStatus === 'SKIP') {
+      const skipReasons = [];
+      if (isRestricted) skipReasons.push('Restricted league — limited data reliability');
+      if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${odds.toFixed(2)} offer no value`);
+      if (valueTier.tier === 'NEGATIVE_EV') skipReasons.push(`Negative expected value (${(ev * 100).toFixed(1)}%) — not profitable`);
+      if (dataQ < 0.20) skipReasons.push('Very low data quality — prediction unreliable');
+      else if (dataQ < 0.40) skipReasons.push('Below-average data quality — confidence reduced');
+      if (prob < 0.50) skipReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
 
       bestPick.isAvoidedPick = true;
-      bestPick.avoidReason = avoidReasons.length > 0
-        ? avoidReasons.join('. ')
+      bestPick.avoidReason = skipReasons.length > 0
+        ? skipReasons.join('. ')
         : `Model does not recommend this pick — insufficient edge or value`;
     }
 
@@ -124,7 +125,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       odds >= 1.30 && odds <= 1.65 &&
       (ev == null || ev >= -0.05) &&
       confidence.volatility !== 'high' &&
-      syncedAdvisorStatus !== 'AVOID';
+      syncedAdvisorStatus !== 'SKIP';
 
     bestPick.isAccaEligible = isAccaEligible;
 

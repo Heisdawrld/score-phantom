@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, Sparkles, DollarSign } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, DollarSign } from "lucide-react";
 import { cn, getOddsForPick } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -141,36 +141,27 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskLabel = (rec.riskLevel || 'MODERATE').toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
-  const advisorStatus = (rec.advisor_status || "GAMBLE") as AdvisorStatus;
-  const advisorReason = rec.advisor_reason || null;
+  const advisorStatus = (rec.advisor_status || "CAREFUL") as AdvisorStatus;
   const isAvoidedPick = rec.isAvoidedPick === true;
   const avoidReason = rec.avoidReason || null;
-  // BUG FIX: Also check advisor_status === 'AVOID' as a safety fallback.
-  // This prevents cached/old API data that lacks isAvoidedPick/no_edge flags
-  // from showing "Our Best Bet" alongside an AVOID badge — the exact
-  // contradictory UI users were seeing on screenshots.
-  const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'AVOID';
-  const edgeAboveBaseline = rec.edgeAboveBaseline != null ? rec.edgeAboveBaseline : null;
-  const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
-  const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
+  // SKIP detection: also handle legacy AVOID status from cached data
+  const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'SKIP' || advisorStatus === 'AVOID';
 
-  // v4 Verdict: Maps all 5 advisor statuses to user-facing labels
-  // FIRE → "PICK THIS" — strong value with fair odds
-  // RECOMMENDED → "RECOMMENDED" — good risk/reward, positive EV
-  // GAMBLE → "GAMBLE" — possible but risky, or accumulator-only
-  // CAUTIOUS → "CAUTIOUS" — marginal prob but positive EV, small stakes
-  // AVOID → "AVOID" — junk odds, negative EV, insufficient edge
-  const verdictLabel = advisorStatus === 'FIRE' ? 'PICK THIS'
-    : advisorStatus === 'RECOMMENDED' ? 'RECOMMENDED'
-    : advisorStatus === 'GAMBLE' ? 'GAMBLE'
-    : advisorStatus === 'CAUTIOUS' ? 'CAUTIOUS'
-    : 'AVOID';
+  // Simplified verdict: just 3 levels
+  // GO = "Bet This", CAREFUL = "Careful", SKIP = "Skip"
+  // Legacy statuses are normalized by ModelAdvisorBadge component
+  const normalizedStatus = advisorStatus === 'FIRE' || advisorStatus === 'RECOMMENDED' ? 'GO'
+    : advisorStatus === 'GAMBLE' || advisorStatus === 'CAUTIOUS' ? 'CAREFUL'
+    : advisorStatus === 'AVOID' ? 'SKIP'
+    : advisorStatus;
+
+  const verdictLabel = normalizedStatus === 'GO' ? 'BET THIS'
+    : normalizedStatus === 'CAREFUL' ? 'CAREFUL'
+    : 'SKIP';
 
   const verdictColor =
-    verdictLabel === "PICK THIS" ? "text-primary" :
-    verdictLabel === "RECOMMENDED" ? "text-blue-400" :
-    verdictLabel === "GAMBLE" ? "text-amber-400" :
-    verdictLabel === "CAUTIOUS" ? "text-orange-400" :
+    verdictLabel === "BET THIS" ? "text-[#10e774]" :
+    verdictLabel === "CAREFUL" ? "text-amber-400" :
     "text-red-400";
     
   // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.
@@ -268,61 +259,25 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             transition={{ delay: 0.15 }}
             className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
-            {/* BUG FIX: Don't show contradictory badges when AVOID */}
-            {/* Only show risk pill and tier badges for non-AVOID picks */}
-            {!isNoPick && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/70 uppercase tracking-wide">
-                {riskPill}
-              </span>
-            )}
-            {rec.isSafeBet && !isNoPick && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
-                CONTROL
-              </span>
-            )}
-            {rec.isValueBet && !isSharpValue && !isNoPick && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> VALUE
-              </span>
-            )}
-            {isSharpValue && !isNoPick && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
-                <TrendingUp className="w-3 h-3" /> SHARP VALUE
-              </span>
-            )}
-            {/* BUG FIX: Don't show VALUE/STRONG/SHARP tier when AVOID — it's contradictory */}
-            {/* Only show tier badges for non-AVOID picks, or JUNK/NEGATIVE_EV for AVOID */}
-            {tierConfig && !isNoPick && valueTier !== 'JUNK' && valueTier !== 'NEGATIVE_EV' && valueTier !== 'UNPRICED' && (
-              <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide", tierConfig.bg, tierConfig.color, tierConfig.border)}>
-                {tierConfig.label}
-              </span>
-            )}
-            {/* For AVOID picks, show JUNK/NEGATIVE_EV tier since it explains WHY */}
-            {tierConfig && isNoPick && (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') && (
-              <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide", tierConfig.bg, tierConfig.color, tierConfig.border)}>
-                {tierConfig.label}
-              </span>
-            )}
-            {/* ── v4: ACCA-Eligible Tag ─────────────────────────────────── */}
+            {/* ACCA pill — only show for non-SKIP picks */}
             {isAccaEligible && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
                 ACCA
               </span>
             )}
+            {/* SHARP MONEY alert — only when Polymarket mispricing detected */}
+            {isSharpValue && !isNoPick && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
+                <TrendingUp className="w-3 h-3" /> SHARP
+              </span>
+            )}
           </motion.div>
 
-          {/* Verdict label + baseline context */}
+          {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[9px] text-white/25 uppercase tracking-wider">Verdict:</span>
             <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
               {verdictLabel}
             </span>
-            {hasThinBaselineEdge && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/40 flex items-center gap-1">
-                <AlertCircle className="w-2.5 h-2.5" />
-                Baseline {Math.round((marketBaseline || 0) * 100)}% — edge +{Math.round((edgeAboveBaseline || 0) * 100)}pp
-              </span>
-            )}
           </div>
 
           {/* OUR BEST BET — or AVOID notice */}
@@ -336,7 +291,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               <div className="p-4 rounded-xl bg-red-500/[0.06] border border-red-500/15">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">No Recommended Pick</p>
+                  <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">Skip This Match</p>
                 </div>
                 {isAvoidedPick && rec.pick && rec.pick !== "No Clear Edge" ? (
                   <>
@@ -344,12 +299,12 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                       The model found <span className="text-white/70 font-semibold">{rec.pick}</span> but does not recommend betting on it.
                     </p>
                     <p className="text-[11px] text-red-400/80 leading-snug">
-                      {avoidReason || "Insufficient edge or value to justify a recommendation."}
+                      {avoidReason || "Not enough value to justify a bet."}
                     </p>
                   </>
                 ) : (
                   <p className="text-xs text-white/50 leading-relaxed">
-                    {avoidReason || rec.reasons?.[0] || "The model found no market with a strong enough edge for this fixture."}
+                    {avoidReason || rec.reasons?.[0] || "No market with enough value to recommend a bet."}
                   </p>
                 )}
               </div>
@@ -752,8 +707,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
       </motion.div>
 
       {/* ── OTHER GOOD OPTIONS ── */}
-      {/* BUG FIX: Don't show "Other Good Options" when AVOID — it's contradictory */}
-      {/* to say "avoid this match" while offering alternative bets. */}
+      {/* Don't show when SKIP — contradictory to offer bets on a skipped match */}
       {backups.length > 0 && !isNoPick && (
         <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02]">
           <p className="text-[10px] font-black text-white/35 uppercase tracking-wider mb-3">Other Good Options</p>

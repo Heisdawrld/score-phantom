@@ -193,73 +193,57 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
+ * Simplified 3-tier badge system: GO / CAREFUL / SKIP
  *
- * PROBABILITY-PRIMARY DESIGN (v3 — FIXED):
- * The badge MUST follow the model probability (probability_pct) that the
- * user sees on the card. The previous version used phantomScore (55% prob +
- * 45% finalScore) which caused a critical inconsistency: Over 1.5 at 80%
- * probability showed GAMBLE because phantomScore was ~62% (finalScore
- * dragged down by low edge vs 75% baseline). Users saw "80% confidence"
- * with a "Gamble" badge — broken.
+ * Beginner-friendly:
+ *   GO      = "Bet this" — model is confident AND odds offer value
+ *   CAREFUL = "Be careful" — some value but not a sure thing
+ *   SKIP    = "Don't bet" — not worth the risk
  *
- * Now: model probability is the primary driver. Data quality is a SOFT
- * modifier, not a hard gate. Only catastrophically bad data can downgrade.
+ * The engine's finalizePredictionResult.js is the primary source of truth.
+ * This function handles legacy API data that might still use old badge names
+ * (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID) and maps them to the new 3-tier system.
  */
 function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeScore, dataCompletenessScore = 0.5, odds = 0, ev = null, valueTier = null) {
   const s = String(engineStatus || '').toUpperCase();
-  const risk = String(riskLevel || '').toUpperCase();
   const prob = safeNum(modelProbability, 0);
-  const edge = safeNum(edgeScore, 0);
   const dataQ = safeNum(dataCompletenessScore, 0.5);
   const isPositiveEV = ev != null && ev >= 0;
 
-  // ── v4: EV-Aware Badge Logic ─────────────────────────────────────────
-  // The badge now considers value tier and EV, not just probability.
-  // Engine-computed status is the primary source, with EV-aware overrides.
+  // ── Pass through new 3-tier badges from engine ────────────────────────
+  if (s === 'GO') return 'GO';
+  if (s === 'CAREFUL') return 'CAREFUL';
+  if (s === 'SKIP') return 'SKIP';
 
-  // Pass through engine-computed badges (including RECOMMENDED and CAUTIOUS)
-  if (s === 'RECOMMENDED') return 'RECOMMENDED';
-  if (s === 'CAUTIOUS') return 'CAUTIOUS';
+  // ── Legacy badge mapping (for cached/old API data) ────────────────────
+  if (s === 'FIRE') return 'GO';
+  if (s === 'RECOMMENDED') return 'GO';
+  if (s === 'CAUTIOUS') return 'CAREFUL';
+  if (s === 'GAMBLE') return 'CAREFUL';
+  if (s === 'AVOID') return 'SKIP';
 
-  // Engine AVOID for junk/negative EV takes priority
-  if (s === 'AVOID' && (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV')) return 'AVOID';
+  // ── Fallback: compute from scratch if no engine status ────────────────
+  if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') return 'SKIP';
+  if (valueTier === 'STRONG') return (isPositiveEV && dataQ >= 0.25) ? 'GO' : 'CAREFUL';
+  if (valueTier === 'VALUE') return isPositiveEV ? 'GO' : 'CAREFUL';
+  if (valueTier === 'SHARP') return isPositiveEV ? 'GO' : 'CAREFUL';
+  if (valueTier === 'ACCUMULATOR') return 'CAREFUL';
 
-  // ── Value-tier-aware logic ─────────────────────────────────────────────
-  if (valueTier === 'STRONG') return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-  if (valueTier === 'VALUE') return isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
-  if (valueTier === 'SHARP') return isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
-  if (valueTier === 'JUNK') return 'AVOID';
-  if (valueTier === 'NEGATIVE_EV') return 'AVOID';
-  if (valueTier === 'ACCUMULATOR') return 'GAMBLE';
-
-  // ── Fallback: Probability + odds logic ─────────────────────────────────
-  if (prob >= 0.72 && odds >= 1.30) {
-    return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-  }
-  if (prob >= 0.72 && odds < 1.30 && odds > 1.0) {
-    // High probability at junk odds — not FIRE
-    return 'GAMBLE';
-  }
-  if (prob >= 0.60) {
-    return dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
-  }
-  if (prob >= 0.50 && isPositiveEV) {
-    return 'CAUTIOUS';
-  }
-  if (prob >= 0.50) {
-    return dataQ >= 0.40 && risk !== 'AGGRESSIVE' ? 'GAMBLE' : 'AVOID';
-  }
-  return 'AVOID';
+  if (prob >= 0.72 && odds >= 1.30) return dataQ < 0.20 ? 'CAREFUL' : 'GO';
+  if (prob >= 0.72) return 'CAREFUL';
+  if (prob >= 0.60 && odds >= 1.25) return dataQ < 0.20 ? 'SKIP' : 'CAREFUL';
+  if (prob >= 0.50 && isPositiveEV) return 'CAREFUL';
+  if (prob >= 0.50) return dataQ >= 0.40 ? 'CAREFUL' : 'SKIP';
+  return 'SKIP';
 }
 
 function normalizeAdvisorStatus(status, modelProbability, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
   const computed = resolveAdvisorStatus(null, riskLevel, modelProbability, edgeScore, dataCompletenessScore);
   const s = String(status || '').toUpperCase();
 
-  // Engine-computed AVOID always takes priority — the engine knows something we don't
-  if (s === 'AVOID' && computed === 'FIRE') return 'AVOID';
-  // Otherwise trust the probability-primary computation
+  // Engine-computed SKIP always takes priority
+  if ((s === 'SKIP' || s === 'AVOID') && computed === 'GO') return 'SKIP';
+  // Otherwise trust the computation
   return computed;
 }
 
@@ -563,11 +547,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
       : humanReasonCodes;
 
-    // BUG FIX: If advisor_status resolves to AVOID in the "normal" branch,
-    // we must set no_edge and isAvoidedPick so the frontend knows to hide
-    // "Our Best Bet" and "Other Good Options". Without this, the frontend
-    // would show AVOID badge + "Our Best Bet" — contradictory.
-    const isAvoidInNormalBranch = advisorStatus === 'AVOID';
+    // SKIP detection: if advisor_status is SKIP, hide "Our Best Bet"
+    const isSkipInNormalBranch = advisorStatus === 'SKIP';
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
@@ -591,22 +572,22 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       // "Our Best Bet" and "Other Good Options". Without this, cached data
       // or edge cases where noSafePick was not set by the engine would show
       // AVOID badge + "Our Best Bet: Over 2.5 Goals" — contradictory.
-      no_edge: isAvoidInNormalBranch ? true : false,
-      isAvoidedPick: isAvoidInNormalBranch ? true : (bestPick.isAvoidedPick || false),
-      avoidReason: isAvoidInNormalBranch ? (bestPick.avoidReason || 'Insufficient edge or value to justify a recommendation') : null,
+      no_edge: isSkipInNormalBranch ? true : false,
+      isAvoidedPick: isSkipInNormalBranch ? true : (bestPick.isAvoidedPick || false),
+      avoidReason: isSkipInNormalBranch ? (bestPick.avoidReason || 'Insufficient edge or value to justify a recommendation') : null,
       modelOnly: isModelOnly,
       isModelOnly,
-      isSafeBet: isAvoidInNormalBranch ? false : isSafeBet,
-      isValueBet: isAvoidInNormalBranch ? false : isValueBet,
-      isSharpValue: isAvoidInNormalBranch ? false : (!isModelOnly && (bestPick.isSharpValue || false)),
+      isSafeBet: isSkipInNormalBranch ? false : isSafeBet,
+      isValueBet: isSkipInNormalBranch ? false : isValueBet,
+      isSharpValue: isSkipInNormalBranch ? false : (!isModelOnly && (bestPick.isSharpValue || false)),
       dataQualityNote: engineConfidence?.dataQualityNote || null,
       // ── v4: Intelligent Analyst new fields ─────────────────────────────
       valueTier: bestValueTier,
       valueTierLabel: bestPick.valueTierLabel || null,
       ev: bestEV != null ? parseFloat(bestEV.toFixed(4)) : null,
       odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
-      isAccaEligible: isAvoidInNormalBranch ? false : (bestPick.isAccaEligible || false),
-      riskReward: isAvoidInNormalBranch ? null : (bestPick.riskReward || null),
+      isAccaEligible: isSkipInNormalBranch ? false : (bestPick.isAccaEligible || false),
+      riskReward: isSkipInNormalBranch ? null : (bestPick.riskReward || null),
       analystSummary: reasonChain?.analystSummary || null,
     };
   } else {
@@ -640,8 +621,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
         riskLevel: resolveRiskLevel(avoidedPick, probability),
         edgeLabel: "NO EDGE",
         reasons: [avoidReason || "Model does not recommend betting on this match", ...humanReasonCodes.slice(0, 3)],
-        advisor_status: "AVOID",
-        advisor_reason: avoidReason || null,
+        advisor_status: "SKIP",
         no_edge: true,
         isAvoidedPick: true,
         avoidReason: avoidReason || null,
@@ -668,23 +648,21 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
         tacticalFit: "WEAK",
         valueRating: "WEAK",
         reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
-        advisor_status: "AVOID",
+        advisor_status: "SKIP",
         no_edge: true,
         analystSummary: engineResult?.reasonChain?.analystSummary || noSafePickReason || null,
       };
     }
   }
 
-  // BUG FIX: When the main recommendation is AVOID, do NOT send backup_picks
-  // or all_candidates. Showing "Other Good Options" or "Secret Angle" alongside
-  // an AVOID verdict is contradictory — it tells the user to avoid the match
-  // while still offering alternative bets. The frontend also gates these sections,
-  // but we suppress at the API level to prevent any client from showing them.
-  const isAvoidResponse = recommendation?.advisor_status === 'AVOID' || recommendation?.no_edge === true || recommendation?.isAvoidedPick === true;
-  const backup_picks = isAvoidResponse ? [] : (backupPicks || []).slice(0, 5)
+  // When the main recommendation is SKIP, do NOT send backup_picks
+  // or all_candidates. Showing "Other Good Options" alongside a SKIP
+  // verdict is contradictory.
+  const isSkipResponse = recommendation?.advisor_status === 'SKIP' || recommendation?.no_edge === true || recommendation?.isAvoidedPick === true;
+  const backup_picks = isSkipResponse ? [] : (backupPicks || []).slice(0, 5)
     .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
-  const all_candidates = isAvoidResponse ? [] : (allCandidates || rankedMarkets || []).slice(0, 10)
+  const all_candidates = isSkipResponse ? [] : (allCandidates || rankedMarkets || []).slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({

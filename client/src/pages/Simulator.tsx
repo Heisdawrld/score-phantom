@@ -398,7 +398,7 @@ function ModelCard({ title, icon, model, muted = false, highlighted = false }: a
             <div key={idx} className={cn('flex items-center justify-between p-4 rounded-2xl border', highlighted ? 'bg-primary/10 border-primary/20 backdrop-blur-sm' : 'bg-black/40 border-white/5')}>
               <div>
                 <p className='font-display tracking-wide text-sm text-white'>{market.market}</p>
-                <ModelAdvisorBadge status={(market.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={highlighted} className={cn('mt-1.5', muted && 'opacity-60')} />
+                <ModelAdvisorBadge status={(market.advisor_status || "CAREFUL") as AdvisorStatus} showLabel={highlighted} className={cn('mt-1.5', muted && 'opacity-60')} />
               </div>
               <div className='text-right'>
                 <p className={cn(highlighted ? 'text-2xl text-primary drop-shadow-[0_0_10px_rgba(16,231,116,0.3)]' : 'text-xl text-white/70', 'font-display')}>{(market.probability * 100).toFixed(0)}%</p>
