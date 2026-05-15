@@ -206,32 +206,48 @@ function resolveEdgeLabel(pick, phantomScore) {
  * Now: model probability is the primary driver. Data quality is a SOFT
  * modifier, not a hard gate. Only catastrophically bad data can downgrade.
  */
-function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeScore, dataCompletenessScore = 0.5) {
+function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeScore, dataCompletenessScore = 0.5, odds = 0, ev = null, valueTier = null) {
   const s = String(engineStatus || '').toUpperCase();
   const risk = String(riskLevel || '').toUpperCase();
   const prob = safeNum(modelProbability, 0);
   const edge = safeNum(edgeScore, 0);
   const dataQ = safeNum(dataCompletenessScore, 0.5);
+  const isPositiveEV = ev != null && ev >= 0;
 
-  // Engine AVOID always takes priority — the engine knows something we don't
-  if (s === 'AVOID' && prob >= 0.72) {
-    // But if the engine says AVOID for a very high probability, check if it's
-    // a restricted league. If not, trust the probability.
-    // (Restricted league AVOID is handled by the engine already)
-  }
+  // ── v4: EV-Aware Badge Logic ─────────────────────────────────────────
+  // The badge now considers value tier and EV, not just probability.
+  // Engine-computed status is the primary source, with EV-aware overrides.
 
-  // ── Probability-Primary Logic ─────────────────────────────────────────
-  // The model probability IS the confidence the user sees. Badge must match.
-  if (prob >= 0.72) {
-    // High probability: FIRE unless catastrophic data quality
+  // Pass through engine-computed badges (including RECOMMENDED and CAUTIOUS)
+  if (s === 'RECOMMENDED') return 'RECOMMENDED';
+  if (s === 'CAUTIOUS') return 'CAUTIOUS';
+
+  // Engine AVOID for junk/negative EV takes priority
+  if (s === 'AVOID' && (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV')) return 'AVOID';
+
+  // ── Value-tier-aware logic ─────────────────────────────────────────────
+  if (valueTier === 'STRONG') return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+  if (valueTier === 'VALUE') return isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+  if (valueTier === 'SHARP') return isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+  if (valueTier === 'JUNK') return 'AVOID';
+  if (valueTier === 'NEGATIVE_EV') return 'AVOID';
+  if (valueTier === 'ACCUMULATOR') return 'GAMBLE';
+
+  // ── Fallback: Probability + odds logic ─────────────────────────────────
+  if (prob >= 0.72 && odds >= 1.30) {
     return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
   }
+  if (prob >= 0.72 && odds < 1.30 && odds > 1.0) {
+    // High probability at junk odds — not FIRE
+    return 'GAMBLE';
+  }
   if (prob >= 0.60) {
-    // Moderate probability: GAMBLE unless very bad data
     return dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
   }
+  if (prob >= 0.50 && isPositiveEV) {
+    return 'CAUTIOUS';
+  }
   if (prob >= 0.50) {
-    // Marginal — needs decent data to be playable
     return dataQ >= 0.40 && risk !== 'AGGRESSIVE' ? 'GAMBLE' : 'AVOID';
   }
   return 'AVOID';
@@ -371,7 +387,10 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
   // Use engine-computed values as source of truth (not recomputed)
   const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
   const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
-  const advisorStatus = resolveAdvisorStatus(pick.advisor_status, riskLvl, probability, edgeScore, dataCompletenessScore);
+  const odds = safeNum(pick.bookmakerOdds, 0);
+  const ev = pick.ev != null ? pick.ev : (odds > 1.0 ? (probability * odds) - 1 : null);
+  const valueTier = pick.valueTier || null;
+  const advisorStatus = resolveAdvisorStatus(pick.advisor_status, riskLvl, probability, edgeScore, dataCompletenessScore, odds, ev, valueTier);
 
   // isSafeBet: use engine-computed value when available, else derive consistently
   // Engine: prob >= 0.72 && volatility === 'low'
@@ -409,6 +428,13 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
     isSafeBet,
     isValueBet,
     isSharpValue: !isModelOnly && (pick.isSharpValue || false),
+    // ── v4: Intelligent Analyst new fields ─────────────────────────────────
+    valueTier: pick.valueTier || null,
+    valueTierLabel: pick.valueTierLabel || null,
+    ev: ev != null ? parseFloat(ev.toFixed(4)) : null,
+    odds: odds > 1.0 ? parseFloat(odds.toFixed(2)) : null,
+    isAccaEligible: pick.isAccaEligible || false,
+    riskReward: pick.riskReward || null,
   };
 }
 
@@ -510,7 +536,10 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     // Use engine-computed values as source of truth
     const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
     const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
-    const advisorStatus = resolveAdvisorStatus(bestPick.advisor_status, riskLvl2, probability, edgeScore, dataCompletenessScore);
+    const bestOdds = safeNum(bestPick.bookmakerOdds, 0);
+    const bestEV = bestPick.ev != null ? bestPick.ev : (bestOdds > 1.0 ? (probability * bestOdds) - 1 : null);
+    const bestValueTier = bestPick.valueTier || null;
+    const advisorStatus = resolveAdvisorStatus(bestPick.advisor_status, riskLvl2, probability, edgeScore, dataCompletenessScore, bestOdds, bestEV, bestValueTier);
 
     // isSafeBet: use engine value when available, else derive consistently
     const isSafeBet = !isModelOnly && bestPick.isSafeBet != null
@@ -521,6 +550,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     const isValueBet = !isModelOnly && bestPick.isValueBet != null
       ? bestPick.isValueBet
       : (!isModelOnly && edgeScore >= 0.08);
+
+    // Add reason chain insights if available (Phase 6C)
+    const reasonChain = engineResult?.reasonChain || null;
+    if (reasonChain && reasonChain.shortReasons) {
+      for (const r of reasonChain.shortReasons) {
+        if (!humanReasonCodes.includes(r) && r) humanReasonCodes.push(r);
+      }
+    }
 
     const reasons = isModelOnly
       ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
@@ -551,6 +588,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       isValueBet,
       isSharpValue: !isModelOnly && (bestPick.isSharpValue || false),
       dataQualityNote: engineConfidence?.dataQualityNote || null,
+      // ── v4: Intelligent Analyst new fields ─────────────────────────────
+      valueTier: bestValueTier,
+      valueTierLabel: bestPick.valueTierLabel || null,
+      ev: bestEV != null ? parseFloat(bestEV.toFixed(4)) : null,
+      odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
+      isAccaEligible: bestPick.isAccaEligible || false,
+      riskReward: bestPick.riskReward || null,
+      analystSummary: reasonChain?.analystSummary || null,
     };
   } else {
     recommendation = {
@@ -567,6 +612,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       reasons: [noSafePickReason || "Insufficient edge or data quality", ...humanReasonCodes.slice(0, 3)],
       advisor_status: "AVOID",
       no_edge: true,
+      analystSummary: engineResult?.reasonChain?.analystSummary || noSafePickReason || null,
     };
   }
 
@@ -603,5 +649,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       dataQualityNote: engineConfidence?.dataQualityNote || null,
       restrictMarkets: engineConfidence?.restrictMarkets || false,
     },
+    // ── v4: Intelligent Analyst context ────────────────────────────────
+    narrative: engineResult?.narrative || null,
+    reasonChain: engineResult?.reasonChain || null,
   };
 }

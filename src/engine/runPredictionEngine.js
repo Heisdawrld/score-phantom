@@ -13,8 +13,7 @@ import { getAccuracyCache } from "../storage/accuracyCache.js";
  *   Stage 3: runMarketSelection        — gate, candidates, prune, rank, selectOrAbstain
  *   Stage 4: finalizePredictionResult  — confidence, reason codes, save, track
  *
- * v2: Passes accuracyCache through the pipeline so probabilities can be
- *     calibrated against observed win rates (calibrateFromHistory).
+ * v4: Intelligent Analyst — passes narrative, contextMods, reasonChain through pipeline
  */
 export async function runPredictionEngine(fixtureId, rawData) {
   try {
@@ -24,7 +23,7 @@ export async function runPredictionEngine(fixtureId, rawData) {
     const ctx = await preparePredictionContext(fixtureId, rawData);
     const probs = runProbabilityPipeline(ctx.features, ctx.script, accuracyCache);
     const selection = await runMarketSelection({ calibratedProbs: probs.calibratedProbs, odds: ctx.odds, script: ctx.script, features: ctx.features, fixtureId, shiftMap: probs.shiftMap, maxShift: probs.maxShift, maxShiftMarket: probs.maxShiftMarket });
-    return finalizePredictionResult({ fixtureId, homeTeamName: ctx.homeTeamName, awayTeamName: ctx.awayTeamName, script: ctx.script, xg: probs.xg, calibratedProbs: probs.calibratedProbs, features: ctx.features, selection, tacticalMatchup: ctx.tacticalMatchup, scoreMatrix: probs.scoreMatrix });
+    return finalizePredictionResult({ fixtureId, homeTeamName: ctx.homeTeamName, awayTeamName: ctx.awayTeamName, script: ctx.script, xg: probs.xg, calibratedProbs: probs.calibratedProbs, features: ctx.features, selection, tacticalMatchup: ctx.tacticalMatchup, scoreMatrix: probs.scoreMatrix, narrative: selection.narrative, contextMods: selection.contextMods, reasonChain: selection.reasonChain });
   } catch (err) {
     console.error("[runPredictionEngine] Error:", err.message, err.stack);
     return {

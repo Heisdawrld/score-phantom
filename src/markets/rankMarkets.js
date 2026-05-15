@@ -5,7 +5,7 @@ function n(value, fallback = 0) {
 
 const COMFORT_MARKET_PENALTY = {
   under_35: 0.095,   // v2: heavy penalty — Under 3.5 is a lazy default pick in ~75-80% of matches
-  over_15: 0.040,   // slightly increased — Over 1.5 is also naturally probable
+  over_15: 0.065,   // v4: increased from 0.040 — Over 1.5 at junk odds was getting recommended too often
   double_chance_home: 0.050,
   double_chance_away: 0.050,
   home_over_05: 0.080,
@@ -38,13 +38,31 @@ function headlineQualityScore(candidate) {
   const comfortPenalty = COMFORT_MARKET_PENALTY[marketKey] || 0;
   const edgeComponent = edge > 0 ? Math.min(edge, 0.18) * 0.25 : Math.max(edge, -0.12) * 0.12;
 
+  // ── v4: EV component in headline quality ──────────────────────────────
+  // If a candidate has EV data, factor it into headline quality.
+  // Positive EV candidates should rank higher than negative EV with same probability.
+  const ev = n(candidate.ev, 0);
+  const evComponent = ev > 0 ? Math.min(ev, 0.20) * 0.30 : Math.max(ev, -0.15) * 0.20;
+
+  // ── v4: Value tier bonus ─────────────────────────────────────────────
+  // STRONG and VALUE tier picks should rank higher than JUNK/MARGINAL
+  const tierBonus =
+    candidate.valueTier === 'STRONG' ? 0.04 :
+    candidate.valueTier === 'VALUE' ? 0.03 :
+    candidate.valueTier === 'SHARP' ? 0.02 :
+    candidate.valueTier === 'ACCUMULATOR' ? 0.01 :
+    candidate.valueTier === 'JUNK' ? -0.06 :
+    candidate.valueTier === 'NEGATIVE_EV' ? -0.08 : 0;
+
   return (
-    finalScore * 0.48 +
-    probability * 0.22 +
+    finalScore * 0.45 +
+    probability * 0.18 +
     tacticalFit * 0.12 +
     historicalAccuracy * 0.06 +
     leagueAccuracy * 0.04 +
     edgeComponent +
+    evComponent +
+    tierBonus +
     specificityBonus -
     comfortPenalty
   );

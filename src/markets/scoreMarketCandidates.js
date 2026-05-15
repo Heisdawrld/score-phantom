@@ -1,5 +1,6 @@
 import { safeNum, clamp } from '../utils/math.js';
 import { getHistoricalAccuracyScore, getLeagueMarketAccuracyScore, getLeagueRestrictionSignal, getDynamicMarketBaselines } from '../storage/accuracyCache.js';
+import { classifyValueTier, computeEVScore } from './valueTiers.js';
 
 const SCRIPT_MARKET_FIT = {
   dominant_home_pressure: {
@@ -47,14 +48,21 @@ function getBadMarketPenalty(candidate) {
   if (marketKey === 'away_over_05') return 0.9;
   if (marketKey === 'home_under_15' || marketKey === 'away_under_15') return 0.45;
   if (marketKey === 'win_either_half_home' || marketKey === 'win_either_half_away') return 0.3;
-  // v2: Under 3.5 is a low-information market — it's naturally 75-80% probable
-  // and doesn't represent meaningful model insight. Penalize it proportionally
-  // to how much its probability exceeds the natural base rate (~0.72).
   if (marketKey === 'under_35') {
     const prob = safeNum(modelProbability, 0);
     const excessAboveBase = Math.max(0, prob - 0.72);
-    // Scale: at prob=0.80 → 0.08*2.5=0.20, at prob=0.90 → 0.18*2.5=0.45, at prob=0.96 → 0.60
     return clamp(excessAboveBase * 2.5, 0, 0.65);
+  }
+  // Phase 1B: Over 1.5 at low odds is a junk pick — heavy penalty
+  if (marketKey === 'over_15') {
+    const odds = safeNum(candidate.bookmakerOdds, 0);
+    const prob = safeNum(modelProbability, 0);
+    // At odds < 1.30: massive penalty (this gets pruned anyway, but safety net)
+    if (odds > 1.0 && odds < 1.30) return 0.80;
+    // At odds 1.30-1.40: significant penalty — only survives as ACCA filler
+    if (odds >= 1.30 && odds < 1.40) return clamp(0.25 + (0.40 - prob) * 1.5, 0.10, 0.45);
+    // At odds 1.40-1.55: moderate penalty — borderline
+    if (odds >= 1.40 && odds < 1.55) return clamp(0.10 + (0.40 - prob) * 0.5, 0, 0.25);
   }
   if (marketKey === 'dnb_home' || marketKey === 'dnb_away') {
     const prob = safeNum(modelProbability, 0);
@@ -69,7 +77,7 @@ function getBadMarketPenalty(candidate) {
   return 0;
 }
 
-export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}, accuracyCache = null) {
+export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}, accuracyCache = null, narrative = null) {
   const fv = featureVector || {};
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
   const volatilityPenalty = clamp(safeNum(fv.matchChaosScore, 0.5), 0, 1);
@@ -79,11 +87,20 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
   const starvationPenalty = isDataStarved ? 0.35 : 0;
   const recentMarketCounts = recentMarkets.markets || {};
   const recentTypeCounts = recentMarkets.marketTypes || {};
+  const nar = narrative || {};
 
   return candidates.map((candidate) => {
     const modelConfidenceScore = clamp(safeNum(candidate.modelProbability, 0), 0, 1);
     const rawEdge = safeNum(candidate.edge, 0);
     const edgeScore = candidate.edge != null ? clamp(rawEdge * 5, -1, 1) : 0;
+
+    // ── Phase 1C: EV-based scoring replaces simple edge ────────────────────
+    // Expected Value is a better metric than raw edge because it accounts
+    // for the odds level. A 5% edge at 1.50 odds = different value than
+    // 5% edge at 3.00 odds. EV captures this.
+    const evScore = computeEVScore(candidate);
+    const combinedEdgeScore = (edgeScore * 0.4) + (evScore * 0.6); // EV-weighted blend
+
     let tacticalFitScore = getTacticalFit(candidate.marketKey, scriptOutput);
 
     if (fv.tacticalMatchup) {
@@ -94,11 +111,26 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       tacticalFitScore = clamp(tacticalFitScore, 0, 1);
     }
 
+    // ── Phase 3A: Volatility as market signal ──────────────────────────────
+    // Instead of penalizing ALL markets for volatility, use it as a SIGNAL:
+    // Volatility → BOOST Over/BTTS markets, PENALTY on straight wins/Unders
+    let volatilityAdjustment = 0;
+    const marketKey = candidate.marketKey || '';
+    if (volatilityPenalty > 0.55) {
+      // Volatile match: goals are more likely, result less predictable
+      if (marketKey.includes('over') || marketKey === 'btts_yes') {
+        volatilityAdjustment = clamp(volatilityPenalty * 0.15, 0, 0.08); // BOOST
+      } else if (marketKey.includes('under') || marketKey === 'btts_no') {
+        volatilityAdjustment = -clamp(volatilityPenalty * 0.10, 0, 0.06); // PENALTY
+      } else if (marketKey.includes('win') && !marketKey.includes('either')) {
+        volatilityAdjustment = -clamp(volatilityPenalty * 0.12, 0, 0.08); // PENALTY on straight wins
+      }
+    }
+
     const badMarketPenalty = getBadMarketPenalty(candidate);
     const homePointsLast5 = safeNum(fv.homePointsLast5, 5);
     const awayPointsLast5 = safeNum(fv.awayPointsLast5, 5);
     const formGap = (homePointsLast5 - awayPointsLast5) / 15;
-    const marketKey = candidate.marketKey || '';
 
     let formMomentumScore = 0;
     if (marketKey.includes('home') && formGap > 0.2) formMomentumScore = 0.6;
@@ -130,13 +162,20 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    // v3 REBALANCED WEIGHTS — league calibration doubled from 6% → 12%.
-    // Previously, league context (6%) was drowned by model confidence (26%),
-    // causing the engine to ignore league-specific patterns (e.g., Swiss SL high O3.5).
-    // Now: model 22%, league 12%, edge 16%, tactical 13%, predictability 13%,
-    //       data 10%, historical 9%, form 5% = 100%
-    const modelScore = 0.22 * modelConfidenceScore;
-    const marketEdgeScore = 0.16 * edgeScore;
+    // ── v4 INTELLIGENT ANALYST REBALANCED WEIGHTS ───────────────────────────
+    // Key changes from v3:
+    // - EV-based scoring replaces simple edge (Phase 1C)
+    // - Model confidence reduced from 22% → 18% (probability alone isn't enough)
+    // - EV/edge component increased from 16% → 25% (value is the real metric)
+    // - Tactical stays at 13%
+    // - Predictability stays at 13%
+    // - Data stays at 10%
+    // - Historical stays at 9%
+    // - League stays at 12%
+    // - Form stays at 5%
+    // Total: 18+25+13+13+10+9+12+5 = 105% → normalized to 100%
+    const modelScore = 0.18 * modelConfidenceScore;
+    const marketEdgeScore = 0.25 * combinedEdgeScore; // EV-weighted edge
     const tacticalFitComponent = 0.13 * tacticalFitScore;
     const predictabilityScore = 0.13 * predScore;
     const dataSupportComponent = 0.10 * dataSupportScore;
@@ -153,7 +192,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let finalScore =
       modelScore + marketEdgeScore + tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
-      formMomentumComponent + diversityBonus + leagueTrustedBonus -
+      formMomentumComponent + diversityBonus + leagueTrustedBonus +
+      volatilityAdjustment -  // Phase 3A: volatility as signal
       riskPenaltyScore - productPenaltyScore;
 
     let contextAdjustmentScore = leagueCalibrationComponent + leagueTrustedBonus - leagueRestrictionPenalty;
@@ -178,9 +218,14 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       candidate.evRating = 'LOW';
     }
 
+    // ── Phase 2B: Narrative-boosted markets get scoring bonus ──────────────
+    if (nar.boostedMarkets && nar.boostedMarkets.includes(marketKey)) {
+      const narrativeBonus = nar.narrativeConfidence === 'high' ? 0.06 : 0.03;
+      finalScore += narrativeBonus;
+      contextAdjustmentScore += narrativeBonus;
+    }
+
     const prob = safeNum(candidate.modelProbability, 0);
-    // Use dynamic baselines from historical outcomes when available,
-    // falling back to hardcoded values for cold start
     const DYNAMIC_BASELINES = getDynamicMarketBaselines(accuracyCache);
     const HARDCODED_BASELINE = {
       home_win: 0.45, away_win: 0.30, draw: 0.25,
@@ -196,27 +241,55 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const baseline = DYNAMIC_BASELINES[candidate.marketKey] || HARDCODED_BASELINE[candidate.marketKey] || 0.50;
     const edgeAboveBaseline = prob - baseline;
 
+    // ── Phase 1D: Classify value tier ──────────────────────────────────────
+    const valueTier = classifyValueTier(candidate);
+
+    // ── Phase 4A: EV-Aware Advisor Badge Logic ─────────────────────────────
+    // The badge now considers both probability AND value.
+    // A 72% pick at 1.14 odds is NOT FIRE — it's JUNK or at best ACCUMULATOR.
+    // A 52% pick at 2.00 odds with +4% EV IS a VALUE pick.
+    const odds = safeNum(candidate.bookmakerOdds, 0);
+    const ev = odds > 1.0 ? (prob * odds) - 1 : null;
+    const isPositiveEV = ev != null && ev >= 0;
+
     let advisorStatus;
     let advisorReason = '';
 
-    // ── Advisor Badge Logic — Probability-Primary ──────────────────────────
-    // The badge MUST follow the probability the user sees.
-    // Data quality (predScore) is a SOFT modifier, not a hard gate.
-    // A 72%+ probability pick should be FIRE unless data is catastrophically bad.
     if (leagueSignal.status === 'restricted') {
-      // League is restricted — always downgrade
       advisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
       advisorReason = 'league_restricted';
-    } else if (prob >= 0.72) {
-      // High probability: FIRE unless data is catastrophically bad (predScore < 0.30)
+    } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
+      // Phase 1D: Junk odds or negative EV — always AVOID regardless of probability
+      advisorStatus = 'AVOID';
+      advisorReason = valueTier.tier === 'JUNK' ? 'junk_odds' : 'negative_ev';
+    } else if (valueTier.tier === 'STRONG') {
+      // STRONG tier: FIRE — high confidence AND fair odds
+      advisorStatus = predScore < 0.25 ? 'GAMBLE' : 'FIRE';
+      advisorReason = 'strong_value';
+    } else if (valueTier.tier === 'VALUE') {
+      // VALUE tier: probability is moderate but odds offer good return
+      advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+      advisorReason = isPositiveEV ? 'value_pick_positive_ev' : 'value_pick_marginal_ev';
+    } else if (valueTier.tier === 'SHARP') {
+      // SHARP tier: model disagrees with market — high risk/reward
+      advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+      advisorReason = isPositiveEV ? 'sharp_value_positive_ev' : 'sharp_value_risky';
+    } else if (valueTier.tier === 'ACCUMULATOR') {
+      // ACCUMULATOR tier: solid but low odds — not great for singles
+      advisorStatus = 'GAMBLE';
+      advisorReason = 'accumulator_only';
+    } else if (prob >= 0.72 && odds >= 1.30) {
+      // High probability with decent odds — classic FIRE
       advisorStatus = predScore < 0.30 ? 'GAMBLE' : 'FIRE';
       advisorReason = predScore < 0.30 ? 'high_prob_poor_data' : 'high_confidence';
     } else if (prob >= 0.60) {
-      // Moderate probability: GAMBLE unless data is very bad
       advisorStatus = predScore < 0.25 ? 'AVOID' : 'GAMBLE';
       advisorReason = predScore < 0.25 ? 'moderate_prob_poor_data' : 'moderate_confidence';
+    } else if (prob >= 0.50 && isPositiveEV) {
+      // Marginal probability but positive EV — CAUTIOUS (Phase 3C)
+      advisorStatus = 'CAUTIOUS';
+      advisorReason = 'marginal_prob_positive_ev';
     } else if (prob >= 0.50) {
-      // Marginal probability: needs good data to be GAMBLE
       advisorStatus = predScore >= 0.45 ? 'GAMBLE' : 'AVOID';
       advisorReason = predScore >= 0.45 ? 'marginal_confidence' : 'marginal_poor_data';
     } else {
@@ -245,6 +318,11 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       advisor_reason: advisorReason,
       edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)),
       marketBaseline: parseFloat(baseline.toFixed(4)),
+      valueTier: valueTier.tier,
+      valueTierLabel: valueTier.tierLabel,
+      valueTierDescription: valueTier.tierDescription,
+      ev: valueTier.ev,
+      volatilityAdjustment: parseFloat(volatilityAdjustment.toFixed(4)),
     };
   });
 }

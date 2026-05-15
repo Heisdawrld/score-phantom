@@ -67,9 +67,22 @@ export function assessMatchPredictability(features, script, calibratedProbs) {
     }
   }
 
-  // 6. Open end-to-end + high volatility — whole match is unsafe because total-event path is unstable too.
+  // 6. Open end-to-end + high volatility — Phase 3A: DON'T kill the whole match.
+  // Previously, this killed the entire match. But volatile matches are great for
+  // Over/BTTS markets! Instead, block result markets and let goals markets compete.
   if (scriptPrimary === 'open_end_to_end' && volatilityScore > 0.75 && scriptConfidence > 0.60) {
-    return { predictable: false, reason: 'Open end-to-end script with high volatility — outcome too unpredictable', code: 'HIGH_VOLATILITY_SCRIPT' };
+    // Only kill if data is also weak — otherwise, restrict result markets
+    if (dataCompleteness < 0.45) {
+      return { predictable: false, reason: 'Open end-to-end with high volatility AND weak data — too unpredictable', code: 'HIGH_VOLATILITY_SCRIPT' };
+    }
+    // Volatile but decent data → block result markets, allow goals markets
+    restrictions.blockMarketTypes.push('match_result');
+    restrictions.blockMarketKeys.push('home_win', 'away_win', 'draw', 'double_chance_home', 'double_chance_away', 'dnb_home', 'dnb_away');
+    restrictions.notes.push('Volatile open match — result markets blocked, goals/BTTS markets still allowed');
+    warnings.push({
+      code: 'VOLATILE_MATCH_RESULT_BLOCKED',
+      reason: 'Volatile open match — blocking result markets, goals markets still in play',
+    });
   }
 
   return { predictable: true, restrictions, warnings };
