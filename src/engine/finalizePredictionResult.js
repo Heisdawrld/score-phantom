@@ -37,26 +37,34 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     const finalScore = bestPick.finalScore || 0;
 
     // ── Displayed Confidence — the number the user sees ──────────────────
-    // Blends model probability (55%) with finalScore (45%) to create the
-    // phantom score — the SINGLE source of truth for confidence display
-    // and advisor badge. This ensures badge always matches displayed %.
+    // The user-facing confidence is the model probability — this is what
+    // the Poisson + calibration pipeline actually computed. The phantom score
+    // is kept as an INTERNAL quality metric for ranking/scoring only.
+    // NEVER use phantomScore to determine the advisor badge — it dilutes
+    // high-probability picks in high-baseline markets (e.g., Over 1.5 at 80%
+    // has phantomScore ~62% because baseline is 75%, causing GAMBLE mislabel).
+    bestPick.displayedConfidence = parseFloat((prob * 100).toFixed(1));
     const phantomScoreRaw = (prob * 0.55) + (finalScore * 0.45);
-    bestPick.displayedConfidence = parseFloat((phantomScoreRaw * 100).toFixed(1));
     bestPick.phantomScoreRaw = parseFloat(phantomScoreRaw.toFixed(4));
 
-    // ── Sync advisor_status with phantom score ────────────────────────────
-    // The advisor badge follows the displayed confidence (phantom score).
-    // This is probability-primary: high confidence = FIRE, moderate = GAMBLE.
+    // ── Sync advisor_status with model probability ────────────────────────
+    // The advisor badge MUST follow the model probability the user sees.
+    // An 80% probability pick is FIRE — period. Data quality is a SOFT
+    // modifier, not a hard gate. Only catastrophically bad data (predScore
+    // < 0.25) can downgrade a high-probability pick.
     const dataQ = features.dataCompletenessScore || 0.5;
     const isRestricted = bestPick.leagueSignal?.status === 'restricted';
     let syncedAdvisorStatus;
     if (isRestricted) {
       syncedAdvisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
-    } else if (phantomScoreRaw >= 0.72) {
+    } else if (prob >= 0.72) {
+      // High probability: FIRE unless data is catastrophically bad
       syncedAdvisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-    } else if (phantomScoreRaw >= 0.60) {
+    } else if (prob >= 0.60) {
+      // Moderate probability: GAMBLE unless very bad data
       syncedAdvisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
-    } else if (phantomScoreRaw >= 0.50) {
+    } else if (prob >= 0.50) {
+      // Marginal: needs decent data to be GAMBLE
       syncedAdvisorStatus = dataQ >= 0.40 ? 'GAMBLE' : 'AVOID';
     } else {
       syncedAdvisorStatus = 'AVOID';

@@ -144,24 +144,36 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Adjusted probability for confidence classification
   const adjustedProbability = Math.max(0, modelProbability - dataPenalty + leagueBaselineAdjustment + h2hAdjustment);
 
-  // ── Model confidence (market-baseline-aware) ───────────────────────────────
-  // The threshold now considers the signal strength relative to baseline,
-  // not just the absolute probability.
+  // ── Model confidence (probability-primary, baseline-informed) ────────────────
+  // v3 FIX: The model confidence label MUST respect absolute probability.
+  // Previously, edgeAboveBaseline was the primary gate, causing 80% probability
+  // picks in high-baseline markets (e.g., Over 1.5 with 75% baseline) to be
+  // labeled "lean" because edgeAboveBaseline was only 5%. This is nonsensical —
+  // an 80% model probability is HIGH confidence regardless of baseline.
   //
-  // For markets with high baselines (like under_35 at 70%), we require
-  // a larger margin above baseline to reach "high" confidence.
-  //
-  // Signal strength = edgeAboveBaseline (how much better than random for this market)
+  // Now: absolute probability is the primary driver. edgeAboveBaseline is a
+  // SOFT modifier that can boost or nudge, but NEVER downgrade below what
+  // the absolute probability warrants.
   let model;
-  if (edgeAboveBaseline >= 0.15 && adjustedProbability >= 0.62) model = 'high';
-  else if (edgeAboveBaseline >= 0.08 && adjustedProbability >= 0.52) model = 'medium';
-  else if (edgeAboveBaseline >= 0.02 && adjustedProbability >= 0.44) model = 'lean';
-  else if (adjustedProbability >= 0.50) model = 'lean'; // positive but weak
-  else model = 'low';
+  if (adjustedProbability >= 0.80) {
+    // Very high absolute probability — always HIGH
+    model = 'high';
+  } else if (adjustedProbability >= 0.72) {
+    // High probability — at least MEDIUM; HIGH if strong edge
+    model = edgeAboveBaseline >= 0.10 ? 'high' : 'medium';
+  } else if (adjustedProbability >= 0.62) {
+    // Good probability — at least LEAN; MEDIUM if decent edge
+    model = edgeAboveBaseline >= 0.06 ? 'medium' : 'lean';
+  } else if (adjustedProbability >= 0.52) {
+    // Marginal probability — LEAN if any edge, else LOW
+    model = edgeAboveBaseline >= 0.02 ? 'lean' : 'low';
+  } else {
+    model = 'low';
+  }
 
-  // Force low if data is too thin regardless of probability
-  if (enrichmentTier === 'thin' && model !== 'low') {
-    model = 'lean'; // never show high/medium on thin data
+  // Force lean if data is too thin regardless of probability (never high/medium on thin data)
+  if (enrichmentTier === 'thin') {
+    if (model === 'high' || model === 'medium') model = 'lean';
   }
 
   // ── Value confidence ──────────────────────────────────────────────────────
@@ -215,9 +227,9 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Enrichment tier "thin" (< 0.3) → restrict markets signal
   const restrictMarkets = enrichmentTier === "thin" || safeNum(fv.enrichmentCompleteness, 0.5) < 0.30;
 
-  // Log the market-baseline-aware classification for debugging
-  if (marketKey === 'under_35' || marketKey === 'over_35') {
-    console.log(`[confidence] ${marketKey}: prob=${(modelProbability*100).toFixed(1)}% baseline=${(baseline*100).toFixed(0)}% edgeAboveBaseline=${(edgeAboveBaseline*100).toFixed(1)}pp leagueAdj=${(leagueBaselineAdjustment*100).toFixed(1)}pp h2hAdj=${(h2hAdjustment*100).toFixed(1)}pp → ${model}`);
+  // Log the probability-primary classification for debugging
+  if (marketKey === 'under_35' || marketKey === 'over_35' || marketKey === 'over_15') {
+    console.log(`[confidence] ${marketKey}: prob=${(modelProbability*100).toFixed(1)}% adjProb=${(adjustedProbability*100).toFixed(1)}% baseline=${(baseline*100).toFixed(0)}% edgeAboveBaseline=${(edgeAboveBaseline*100).toFixed(1)}pp → ${model}`);
   }
 
   return { model, value, volatility, dataQualityNote, restrictMarkets: !!restrictMarkets, edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)), marketBaseline: parseFloat(baseline.toFixed(4)) };

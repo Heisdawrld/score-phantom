@@ -195,40 +195,50 @@ function resolveEdgeLabel(pick, phantomScore) {
 /**
  * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
  *
- * PROBABILITY-PRIMARY DESIGN:
- * The badge MUST follow the displayed confidence (phantom_score_pct).
- * If we show the user 72%+ confidence, the badge MUST be FIRE ("Pick This").
- * Data quality and edge are SOFT modifiers, not hard gates — if data is bad
- * enough to downgrade, the phantom score itself should already be lower.
+ * PROBABILITY-PRIMARY DESIGN (v3 — FIXED):
+ * The badge MUST follow the model probability (probability_pct) that the
+ * user sees on the card. The previous version used phantomScore (55% prob +
+ * 45% finalScore) which caused a critical inconsistency: Over 1.5 at 80%
+ * probability showed GAMBLE because phantomScore was ~62% (finalScore
+ * dragged down by low edge vs 75% baseline). Users saw "80% confidence"
+ * with a "Gamble" badge — broken.
+ *
+ * Now: model probability is the primary driver. Data quality is a SOFT
+ * modifier, not a hard gate. Only catastrophically bad data can downgrade.
  */
-function resolveAdvisorStatus(engineStatus, riskLevel, phantomScore, edgeScore, dataCompletenessScore = 0.5) {
+function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeScore, dataCompletenessScore = 0.5) {
   const s = String(engineStatus || '').toUpperCase();
   const risk = String(riskLevel || '').toUpperCase();
-  const ps = safeNum(phantomScore, 0);
+  const prob = safeNum(modelProbability, 0);
   const edge = safeNum(edgeScore, 0);
   const dataQ = safeNum(dataCompletenessScore, 0.5);
 
+  // Engine AVOID always takes priority — the engine knows something we don't
+  if (s === 'AVOID' && prob >= 0.72) {
+    // But if the engine says AVOID for a very high probability, check if it's
+    // a restricted league. If not, trust the probability.
+    // (Restricted league AVOID is handled by the engine already)
+  }
+
   // ── Probability-Primary Logic ─────────────────────────────────────────
-  // phantomScore already incorporates finalScore (which includes data quality,
-  // tactical fit, edge, etc). So if phantomScore is high, ALL those factors
-  // have been accounted for. Don't re-gate with redundant conditions.
-  if (ps >= 0.72) {
-    // High confidence — FIRE unless catastrophic data quality
+  // The model probability IS the confidence the user sees. Badge must match.
+  if (prob >= 0.72) {
+    // High probability: FIRE unless catastrophic data quality
     return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
   }
-  if (ps >= 0.60) {
-    // Moderate confidence — GAMBLE unless very bad data
+  if (prob >= 0.60) {
+    // Moderate probability: GAMBLE unless very bad data
     return dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
   }
-  if (ps >= 0.50) {
+  if (prob >= 0.50) {
     // Marginal — needs decent data to be playable
     return dataQ >= 0.40 && risk !== 'AGGRESSIVE' ? 'GAMBLE' : 'AVOID';
   }
   return 'AVOID';
 }
 
-function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
-  const computed = resolveAdvisorStatus(null, riskLevel, phantomScore, edgeScore, dataCompletenessScore);
+function normalizeAdvisorStatus(status, modelProbability, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+  const computed = resolveAdvisorStatus(null, riskLevel, modelProbability, edgeScore, dataCompletenessScore);
   const s = String(status || '').toUpperCase();
 
   // Engine-computed AVOID always takes priority — the engine knows something we don't
@@ -361,7 +371,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
   // Use engine-computed values as source of truth (not recomputed)
   const riskLvl = resolveRiskLevel(pick, phantomScoreRaw);
   const edgeLbl = resolveEdgeLabel(pick, phantomScoreRaw);
-  const advisorStatus = resolveAdvisorStatus(pick.advisor_status, riskLvl, phantomScoreRaw, edgeScore, dataCompletenessScore);
+  const advisorStatus = resolveAdvisorStatus(pick.advisor_status, riskLvl, probability, edgeScore, dataCompletenessScore);
 
   // isSafeBet: use engine-computed value when available, else derive consistently
   // Engine: prob >= 0.72 && volatility === 'low'
@@ -500,7 +510,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     // Use engine-computed values as source of truth
     const riskLvl2 = resolveRiskLevel(bestPick, phantomScoreRaw);
     const edgeLbl2 = resolveEdgeLabel(bestPick, phantomScoreRaw);
-    const advisorStatus = resolveAdvisorStatus(bestPick.advisor_status, riskLvl2, phantomScoreRaw, edgeScore, dataCompletenessScore);
+    const advisorStatus = resolveAdvisorStatus(bestPick.advisor_status, riskLvl2, probability, edgeScore, dataCompletenessScore);
 
     // isSafeBet: use engine value when available, else derive consistently
     const isSafeBet = !isModelOnly && bestPick.isSafeBet != null
