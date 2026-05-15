@@ -551,10 +551,18 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         className="space-y-5"
                       >
                         {/* Best Bet Angle — only show for non-SKIP picks */}
-                        {rec && !rec.no_edge && !rec.isAvoidedPick && rec.advisor_status !== 'AVOID' && rec.advisor_status !== 'SKIP' ? (
+                        {/* Normalize status to handle legacy badges (GAMBLE→ACCA, CAUTIOUS→ACCA, AVOID→SKIP, etc.) */}
+                        {(() => {
+                          const rawStatus = String(rec?.advisor_status || '').toUpperCase();
+                          const normalized = rawStatus === 'BET' || rawStatus === 'FIRE' || rawStatus === 'RECOMMENDED' || rawStatus === 'GO' ? 'BET'
+                            : rawStatus === 'SKIP' || rawStatus === 'AVOID' ? 'SKIP'
+                            : 'ACCA'; // ACCA, GAMBLE, CAUTIOUS, CAREFUL, or default
+                          const isSkip = normalized === 'SKIP' || rec?.no_edge || rec?.isAvoidedPick;
+                          const isAcca = normalized === 'ACCA';
+                          return !isSkip && rec ? (
                           <div className={cn(
                             "rounded-3xl p-6 relative overflow-hidden border",
-                            rec.advisor_status === 'ACCA' || rec.advisor_status === 'ACCA'
+                            isAcca
                               ? "bg-gradient-to-br from-cyan-400/10 to-cyan-400/3 border-cyan-400/20"
                               : "bg-gradient-to-br from-primary/15 to-primary/5 border-primary/25"
                           )}>
@@ -565,9 +573,9 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                                 <p className={cn(
                                   "text-[10px] font-bold tracking-widest uppercase",
-                                  rec.advisor_status === 'ACCA' ? 'text-cyan-400' : 'text-primary'
+                                  isAcca ? 'text-cyan-400' : 'text-primary'
                                 )}>
-                                  {rec.advisor_status === 'ACCA' ? 'Acca Pick' : 'Best Bet Angle'}
+                                  {isAcca ? 'Acca Pick' : 'Best Bet Angle'}
                                 </p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <ModelAdvisorBadge status={rec.advisor_status || 'ACCA'} />
@@ -672,7 +680,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               {rec?.reasons?.[0] ?? "The model found no market with a strong enough edge for this fixture."}
                             </p>
                           </div>
-                        )}
+                        );
+                        })()}
 
                         {/* ── PREMIUM SECRET ANGLE ── */}
                         {secretPick ? (

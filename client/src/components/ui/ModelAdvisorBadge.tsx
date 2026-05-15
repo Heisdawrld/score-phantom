@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 export type AdvisorStatus = 'BET' | 'ACCA' | 'SKIP';
 
 // Legacy→new mapping for backward compatibility
-function normalizeStatus(status: string): AdvisorStatus {
+export function normalizeStatus(status: string): AdvisorStatus {
   const s = status.toUpperCase();
   if (s === 'BET') return 'BET';
   if (s === 'ACCA') return 'ACCA';

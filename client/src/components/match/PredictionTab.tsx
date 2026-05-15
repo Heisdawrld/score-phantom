@@ -6,7 +6,7 @@ import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy
 import { cn, getOddsForPick } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
+import { ModelAdvisorBadge, AdvisorStatus, normalizeStatus } from "@/components/ui/ModelAdvisorBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 import { SpiralWatermark } from "@/pages/MatchCenter";
 
@@ -141,19 +141,17 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskLabel = (rec.riskLevel || 'MODERATE').toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
-  const advisorStatus = (rec.advisor_status || "ACCA") as AdvisorStatus;
+  const advisorStatusRaw = rec.advisor_status || "ACCA";
+  const advisorStatus = normalizeStatus(advisorStatusRaw) as AdvisorStatus;
   const isAvoidedPick = rec.isAvoidedPick === true;
   const avoidReason = rec.avoidReason || null;
   // SKIP detection: also handle legacy AVOID status from cached data
-  const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'SKIP' || advisorStatus === 'AVOID';
+  const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'SKIP';
 
   // Simplified verdict: BET / ACCA / SKIP
   // Every badge gives ONE clear message — no more CAREFUL+ACCA contradiction.
   // Legacy statuses are normalized by ModelAdvisorBadge component.
-  const normalizedStatus = advisorStatus === 'FIRE' || advisorStatus === 'RECOMMENDED' || advisorStatus === 'GO' ? 'BET'
-    : advisorStatus === 'GAMBLE' || advisorStatus === 'CAUTIOUS' || advisorStatus === 'CAREFUL' ? 'ACCA'
-    : advisorStatus === 'AVOID' ? 'SKIP'
-    : advisorStatus;
+  const normalizedStatus = advisorStatus;
 
   const verdictLabel = normalizedStatus === 'BET' ? 'BET'
     : normalizedStatus === 'ACCA' ? 'ACCA PICK'
