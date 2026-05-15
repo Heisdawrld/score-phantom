@@ -348,6 +348,12 @@ export function getProbabilityAdjustmentFactor(marketKey, cache) {
  * NEW: Get dynamic minimum probability floor for a market based on observed accuracy.
  * Replaces the hardcoded MARKET_MIN_PROB values in pruneWeakCandidates.
  *
+ * v2: Added sample-size gate. The dynamic floor is only used when we have
+ * enough samples (40+) AND the market has been picked regularly (at least 2%
+ * of total predictions). This prevents rare-pick markets (like over_15, which
+ * the engine almost never selects) from getting inflated floors based on
+ * a handful of unrepresentative samples.
+ *
  * Logic: if a market historically wins at X%, we need the model to predict
  * at least X% + margin to justify the pick. The margin accounts for variance.
  */
@@ -355,14 +361,22 @@ export function getDynamicMarketFloor(marketKey, cache) {
   if (!cache || !marketKey) return null;
   const byMarket = cache.byMarket || {};
   const entry = byMarket[marketKey];
-  if (!entry || entry.samples < MIN_SAMPLES * 2) return null; // need 20+ samples
+  if (!entry) return null;
+
+  // v2: Need 40+ samples (was 20) — small samples give unreliable floors
+  if (entry.samples < 40) return null;
+
+  // v2: Need the market to be picked regularly — at least 1% of total outcomes
+  // This prevents rarely-picked markets from getting biased floors
+  const totalOutcomes = cache.totalOutcomes || 0;
+  if (totalOutcomes > 0 && (entry.samples / totalOutcomes) < 0.01) return null;
 
   const observedWinRate = entry.weightedWinRate || entry.winRate;
 
-  // Floor = observed win rate - 5% margin (allows for some improvement)
+  // Floor = observed win rate - 8% margin (v2: increased from 5% to 8%)
   // But never go below 0.50 (must be better than a coin flip)
-  // And never above 0.80 (would be too restrictive)
-  const floor = Math.max(0.50, Math.min(0.80, observedWinRate - 0.05));
+  // And never above 0.75 (v2: lowered from 0.80 — 80% floors were too restrictive)
+  const floor = Math.max(0.50, Math.min(0.75, observedWinRate - 0.08));
   return { floor, winRate: observedWinRate, samples: entry.samples };
 }
 

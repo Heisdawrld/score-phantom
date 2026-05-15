@@ -26,8 +26,12 @@ const MIN_SAMPLES_FOR_ADJUSTMENT = 30;
 // Minimum samples for league-market calibration
 const LEAGUE_MIN_SAMPLES = 15;
 
-// Maximum regression toward observed rate (0.25 = pull 25% of the way from model to reality)
-const MAX_REGRESSION = 0.25;
+// v2: Increased from 0.25 → 0.40. The old 25% max was far too conservative.
+// When the model says homeWin=16% but observed is 64%, we only moved 6.5pp
+// (16%→22.9%). With 40% regression, we'd move 19.2pp (16%→35.2%), which
+// is still conservative but actually meaningful.
+// The 10pp per-pass cap still prevents wild swings.
+const MAX_REGRESSION = 0.40;
 
 // How much weight to give odds-band calibration vs general market calibration
 const ODDS_BAND_WEIGHT = 0.60;
@@ -168,20 +172,37 @@ export function calibrateFromHistory(calibratedProbs, accuracyCache, options = {
     if (finalTarget == null || finalRegression <= 0) continue;
 
     // ── Step 5: Apply regression toward reality ────────────────────────────
-    // Only adjust if the model is significantly different from reality
+    // v2: Adjusted regression logic to be more impactful while safe.
+    //
+    // The old logic used a flat regression which barely moved probabilities.
+    // Example: modelProb=16%, target=64%, regression=14% → only 6.5pp movement.
+    // That's nearly useless for a 48pp gap.
+    //
+    // New logic: scale regression strength by divergence magnitude.
+    // Small divergence (3-10pp): use base regression (conservative)
+    // Large divergence (10-30pp): boost regression by 50%
+    // Extreme divergence (30+pp): boost regression by 100%
+    // This ensures massive model-reality gaps get meaningfully corrected.
     const divergence = modelProb - finalTarget;
     const absDivergence = Math.abs(divergence);
 
     // Only adjust if divergence is meaningful (> 3 percentage points)
     if (absDivergence < 0.03) continue;
 
+    // Scale regression by divergence magnitude
+    let scaledRegression = finalRegression;
+    if (absDivergence >= 0.30) scaledRegression = Math.min(MAX_REGRESSION, finalRegression * 2.0);
+    else if (absDivergence >= 0.10) scaledRegression = Math.min(MAX_REGRESSION, finalRegression * 1.5);
+
     // Regression: pull the model probability toward the observed rate
     // adjustedProb = modelProb - (divergence * regressionStrength)
-    const adjustment = divergence * finalRegression;
+    const adjustment = divergence * scaledRegression;
     const newProb = modelProb - adjustment;
 
-    // Safety: never adjust more than 10 percentage points in one pass
-    const cappedAdjustment = clamp(newProb, modelProb - 0.10, modelProb + 0.10);
+    // Safety: v2 increased from 10pp → 15pp per pass.
+    // 10pp was too restrictive for the massive divergences we see
+    // (e.g., homeWin model=16% vs observed=64% is a 48pp gap).
+    const cappedAdjustment = clamp(newProb, modelProb - 0.15, modelProb + 0.15);
 
     adjusted[probKey] = parseFloat(clamp(cappedAdjustment, 0.01, 0.99).toFixed(4));
 
