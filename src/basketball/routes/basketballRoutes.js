@@ -2,7 +2,7 @@ import express from 'express';
 import { getEnabledBasketballLeagues, BASKETBALL_LEAGUES, assertEnabledBasketballLeague } from '../config/leagues.js';
 import { getApiSportsTopBasketballLeagues } from '../config/apiSportsTopLeagues.js';
 import { initBasketballTables, listBasketballGames, findBasketballGameByExternalId, getBasketballOddsForGame, listBasketballPredictions, getLatestBasketballPrediction } from '../storage/basketballDb.js';
-import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions } from '../jobs/basketballSync.js';
+import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions, syncEspnScoreboards, syncEspnStandings } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction, BASKETBALL_ENGINE_VERSION } from '../engine/basketballEngine.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
@@ -101,6 +101,8 @@ router.get('/health', async (req, res) => {
       apiSports: (process.env.APISPORTS_BASKETBALL_KEY || process.env.API_SPORTS_BASKETBALL_KEY || process.env.APISPORTS_KEY) ? 'configured' : 'missing_key',
       oddsApiBackup: (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'configured' : 'missing_key',
       ballDontLie: process.env.BALLDONTLIE_API_KEY ? 'manual_backup_only' : 'disabled',
+      espnApi: 'free_no_key_required',
+      nbaStatsApi: 'free_no_key_required',
       selectedApiSportsLeagues: selectedApiSportsLeagues.map((l) => `${l.name}${l.country ? ` (${l.country})` : ''}`),
       selectedApiSportsLeagueCount: selectedApiSportsLeagues.length,
       oddsApiBackupLeagues: getEnabledBasketballLeagues().map((l) => l.key),
@@ -486,6 +488,86 @@ router.post('/admin/force-rebuild', requireAdminSecret, async (req, res) => {
       rebuilt: result,
       message: 'Basketball predictions cleared and rebuilt with latest engine logic',
     });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ── ESPN Sync Routes (FREE — no API key) ────────────────────────────────
+router.post('/admin/sync-espn', requireAdminSecret, async (req, res) => {
+  try {
+    const result = await syncEspnScoreboards({
+      leagueKey: req.body?.league || null,
+      daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 3), 1), 7),
+    });
+    res.json({ ok: true, source: 'espn_free', result });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/sync-espn-standings', requireAdminSecret, async (req, res) => {
+  try {
+    const result = await syncEspnStandings({
+      leagueKey: req.body?.league || null,
+    });
+    res.json({ ok: true, source: 'espn_free', result });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ── NBA Stats API Routes (FREE — no API key) ────────────────────────────
+router.post('/admin/test-nba-stats', requireAdminSecret, async (req, res) => {
+  try {
+    const { fetchTeamAdvanced, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
+    const season = req.body?.season || inferCurrentNbaSeason();
+    const result = await fetchTeamAdvanced({ season });
+    const teamCount = result?.data?.LeagueDashTeamStats?.length || 0;
+    res.json({ ok: true, source: 'nba_stats_api_free', season, teamCount, sample: result?.data?.LeagueDashTeamStats?.slice(0, 3) || [] });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/fetch-nba-boxscore', requireAdminSecret, async (req, res) => {
+  try {
+    const { fetchBoxScore } = await import('../services/nbaStatsApi.js');
+    const gameId = req.body?.gameId;
+    if (!gameId) return res.status(400).json({ error: 'gameId is required (e.g. "0022500001")' });
+    const result = await fetchBoxScore(gameId);
+    res.json({ ok: true, source: 'nba_stats_api_free', gameId, resultSetNames: Object.keys(result.data || {}), playerCount: result?.data?.PlayerStats?.length || 0 });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/fetch-nba-team-stats', requireAdminSecret, async (req, res) => {
+  try {
+    const { fetchTeamAdvanced, fetchTeamDashboard, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
+    const season = req.body?.season || inferCurrentNbaSeason();
+    const [advanced, base] = await Promise.all([
+      fetchTeamAdvanced({ season }).catch(e => ({ error: e.message })),
+      fetchTeamDashboard({ season }).catch(e => ({ error: e.message })),
+    ]);
+    res.json({
+      ok: true,
+      source: 'nba_stats_api_free',
+      season,
+      advancedTeamCount: advanced?.data?.LeagueDashTeamStats?.length || 0,
+      baseTeamCount: base?.data?.TeamDashboard?.length || 0,
+    });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+router.post('/admin/fetch-nba-standings', requireAdminSecret, async (req, res) => {
+  try {
+    const { fetchStandings, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
+    const season = req.body?.season || inferCurrentNbaSeason();
+    const result = await fetchStandings({ season });
+    res.json({ ok: true, source: 'nba_stats_api_free', season, resultSetNames: Object.keys(result.data || {}) });
   } catch (err) {
     handleError(res, err);
   }

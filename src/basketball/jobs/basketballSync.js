@@ -2,6 +2,7 @@ import { getEnabledBasketballLeagues, assertEnabledBasketballLeague } from '../c
 import { fetchBasketballOdds, fetchBasketballOddsEvents, normalizeOddsGame, normalizeOddsEventGame, extractBestBasketballMarkets } from '../services/oddsApiBasketball.js';
 import { fetchNbaGames, normalizeNbaGame } from '../services/ballDontLieNba.js';
 import { fetchApiSportsStatus, fetchApiSportsLeagues, fetchApiSportsGames, summarizeApiSportsLeague } from '../services/apiSportsBasketball.js';
+import { fetchScoreboard as fetchEspnScoreboard, fetchStandings as fetchEspnStandings, extractEspnGames, extractEspnStandings } from '../services/espnBasketballApi.js';
 import { initBasketballTables, upsertBasketballGame, upsertOddsGame, saveBasketballOdds, listBasketballGames } from '../storage/basketballDb.js';
 import { syncApiSportsBasketballGamesCached } from './apiSportsPremiumSync.js';
 import { syncApiSportsBasketballOddsCached } from './apiSportsOddsSync.js';
@@ -171,8 +172,97 @@ export async function syncBasketballOdds({ leagueKey = null, regions = 'us', mar
   return results;
 }
 
-export async function syncBasketballV1({ includeNbaGames = false, leagueKey = null, daysAhead = 7, includeApiSports = true, includeOddsApiBackup = true } = {}) {
-  const output = { apiSports: null, apiSportsOdds: null, nbaGames: 'skipped_auto_sync', events: null, odds: null };
+// ── ESPN Scoreboard Sync (FREE — no API key needed) ──────────────────────
+// Syncs today + N days ahead for NBA, WNBA, NCAAM, NCAAW
+export async function syncEspnScoreboards({ leagueKey = null, daysAhead = 3 } = {}) {
+  await initBasketballTables();
+  const results = [];
+
+  // Determine which leagues to sync
+  const leagues = leagueKey
+    ? [assertEnabledBasketballLeague(leagueKey)]
+    : getEnabledBasketballLeagues();
+
+  for (const league of leagues) {
+    // Only sync leagues that have ESPN support
+    if (!league.espnLeague) continue;
+
+    for (let dayOffset = 0; dayOffset <= daysAhead; dayOffset++) {
+      const d = new Date();
+      d.setDate(d.getDate() + dayOffset);
+      const dateStr = d.toISOString().slice(0, 10).replace(/-/g, ''); // 20260115
+
+      try {
+        const scoreboard = await fetchEspnScoreboard(league.espnLeague, { date: dateStr });
+        const games = extractEspnGames(scoreboard, league.key);
+
+        let saved = 0;
+        for (const game of games) {
+          try {
+            await upsertBasketballGame(game);
+            saved++;
+          } catch (dbErr) {
+            // Individual game upsert failure shouldn't block the rest
+          }
+        }
+
+        results.push({
+          league: league.key,
+          espnLeague: league.espnLeague,
+          date: dateStr,
+          found: games.length,
+          saved,
+        });
+      } catch (err) {
+        results.push({
+          league: league.key,
+          espnLeague: league.espnLeague,
+          date: dateStr,
+          error: err.message,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+export async function syncEspnStandings({ leagueKey = null } = {}) {
+  const results = [];
+  const leagues = leagueKey
+    ? [assertEnabledBasketballLeague(leagueKey)]
+    : getEnabledBasketballLeagues();
+
+  for (const league of leagues) {
+    if (!league.espnLeague) continue;
+    try {
+      const standings = await fetchEspnStandings(league.espnLeague);
+      const entries = extractEspnStandings(standings);
+      results.push({
+        league: league.key,
+        espnLeague: league.espnLeague,
+        teams: entries.length,
+        standings: entries,
+      });
+    } catch (err) {
+      results.push({ league: league.key, error: err.message });
+    }
+  }
+
+  return results;
+}
+
+export async function syncBasketballV1({ includeNbaGames = false, leagueKey = null, daysAhead = 7, includeApiSports = true, includeOddsApiBackup = true, includeEspn = true } = {}) {
+  const output = { apiSports: null, apiSportsOdds: null, nbaGames: 'skipped_auto_sync', events: null, odds: null, espn: null };
+
+  // ── ESPN sync: free scores/schedules for NBA, WNBA, NCAAM, NCAAW ────
+  if (includeEspn) {
+    try {
+      output.espn = await syncEspnScoreboards({ leagueKey, daysAhead });
+    } catch (err) {
+      output.espn = { error: err.message };
+    }
+  }
 
   if (includeApiSports) {
     const windowDays = Math.min(Math.max(Number(daysAhead || 7), 1), 14);
