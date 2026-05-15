@@ -1150,4 +1150,56 @@ router.get("/debug/enrich/:fixtureId", adminLimiter, requireAdmin, async (req, r
   }
 });
 
+// ── GET /basketball-fixtures — list basketball fixtures for admin ──────────────
+router.get("/basketball-fixtures", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await db.execute({
+      sql: `SELECT id, league, home_team, away_team, match_date, status, home_score, away_score
+            FROM basketball_fixtures
+            WHERE match_date >= ?
+            ORDER BY match_date ASC, league ASC
+            LIMIT 50`,
+      args: [today],
+    });
+    return res.json({ games: result.rows || [], count: (result.rows || []).length });
+  } catch (err) {
+    // If table doesn't exist, return empty
+    return res.json({ games: [], count: 0, error: 'Basketball fixtures table not available' });
+  }
+});
+
+// ── POST /sync-basketball — manually trigger basketball ESPN sync ────────────
+router.post("/sync-basketball", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    console.log('[Admin] Manual basketball sync triggered');
+    // Try to import the basketball auto-sync module
+    let syncResult;
+    try {
+      const { syncESPN } = await import('../basketball/espnBasketballApi.js');
+      const leagues = ['nba', 'wnba'];
+      const results = [];
+      for (const league of leagues) {
+        for (let dayOffset = 0; dayOffset <= 3; dayOffset++) {
+          const d = new Date();
+          d.setDate(d.getDate() + dayOffset);
+          const dateStr = d.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+          try {
+            const games = await syncESPN(league, dateStr);
+            results.push({ league, date: dateStr, found: games?.length || 0 });
+          } catch (e) {
+            results.push({ league, date: dateStr, error: e.message });
+          }
+        }
+      }
+      syncResult = { results };
+    } catch (importErr) {
+      syncResult = { message: 'Basketball sync module not available', error: importErr.message };
+    }
+    return res.json({ success: true, message: 'Basketball sync triggered', ...syncResult });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

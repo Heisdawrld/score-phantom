@@ -309,7 +309,8 @@
       <button class="tab-btn" onclick="switchTab('system')" id="tab-system">⚡ System</button>
       <button class="tab-btn" onclick="switchTab('cache')" id="tab-cache">🗑️ Cache</button>
       <button class="tab-btn" onclick="switchTab('referrals')" id="tab-referrals">🤝 Referrals</button>
-      <button class="tab-btn" onclick="showTab('backtest')">&#127919; Accuracy</button>
+      <button class="tab-btn" onclick="switchTab('backtest')" id="tab-backtest">🎯 Accuracy</button>
+      <button class="tab-btn" onclick="switchTab('basketball')" id="tab-basketball">🏀 Basketball</button>
     </div>
 
     <!-- Enrichment Control -->
@@ -394,6 +395,63 @@
         <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🧠 Prediction Cache</p>
         <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Force engine to re-run fresh predictions (use after accuracy upgrades)</p>
         <button class="btn-danger" onclick="clearPredictions()">⚠️ Clear Prediction Cache</button>
+      </div>
+    </div>
+
+    <!-- Referrals Tab -->
+    <div id="panel-referrals" style="display:none;">
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="font-size:16px;font-weight:700;">Standard User Referrals (10%)</h2>
+          <button class="btn-secondary" onclick="loadReferrals()">↻ Refresh</button>
+        </div>
+        <div id="standardReferralTableWrap" style="overflow:auto;">
+          <p style="color:#64748b;text-align:center;padding:20px;">Click Refresh to load...</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="font-size:16px;font-weight:700;">Dedicated Partners (Custom %)</h2>
+        </div>
+        <div id="partnerTableWrap" style="overflow:auto;">
+          <p style="color:#64748b;text-align:center;padding:20px;">Click Refresh to load...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backtest / Accuracy Tab -->
+    <div id="panel-backtest" style="display:none;">
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;gap:8px;margin-bottom:20px;">
+          <button class="btn-primary" onclick="loadBacktestStats()">🔄 Load Stats</button>
+          <button class="btn-success" onclick="runBacktest()">▶ Find Pending Results</button>
+          <button class="btn-secondary" onclick="loadEngineStats()">📊 Engine Stats</button>
+          <button class="btn-warn" onclick="reevaluateVoids()">🔧 Re-evaluate Voids</button>
+          <button class="btn-secondary" onclick="checkResultsNow()">✅ Check Results Now</button>
+        </div>
+        <div id="backtest-stats"><p style="color:#64748b;">Click Load Stats to see accuracy data</p></div>
+      </div>
+    </div>
+
+    <!-- Basketball Tab -->
+    <div id="panel-basketball" style="display:none;">
+      <div class="card" style="margin-bottom:18px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">🏀 Basketball Auto-Sync</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">ESPN scoreboard sync + prediction engine for NBA, WNBA, NCAAB</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn-primary" onclick="syncBasketballNow()">▶ Sync ESPN Now</button>
+          <button class="btn-secondary" onclick="loadBasketballStats()">↻ Refresh Stats</button>
+        </div>
+        <div id="basketball-sync-status" style="font-size:13px;color:#64748b;"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <p style="font-weight:700;font-size:14px;margin-bottom:4px;">📊 Basketball Fixtures</p>
+        <p style="color:#64748b;font-size:12px;margin-bottom:14px;">Today's synced basketball games</p>
+        <div id="basketball-fixtures-wrap" style="overflow:auto;max-height:400px;">
+          <p style="color:#64748b;text-align:center;padding:20px;">Click Refresh Stats to load...</p>
+        </div>
       </div>
     </div>
 
@@ -808,16 +866,20 @@
   function switchTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
-    document.getElementById('panel-users').style.display = tab === 'users' ? 'block' : 'none';
-    document.getElementById('panel-payments').style.display = tab === 'payments' ? 'block' : 'none';
-    document.getElementById('panel-system').style.display = tab === 'system' ? 'block' : 'none';
-    document.getElementById('panel-cache').style.display = tab === 'cache' ? 'block' : 'none';
-      document.getElementById('panel-referrals').style.display = tab === 'referrals' ? 'block' : 'none';
+    const tabBtn = document.getElementById(`tab-${tab}`);
+    if (tabBtn) tabBtn.classList.add('active');
+    // Hide all panels
+    ['users','payments','system','cache','referrals','backtest','basketball'].forEach(p => {
+      const el = document.getElementById(`panel-${p}`);
+      if (el) el.style.display = p === tab ? 'block' : 'none';
+    });
+    // Load data for specific tabs
     if (tab === 'payments') loadPayments(1);
     if (tab === 'system') loadHealth();
     if (tab === 'cache') loadCacheStats();
-      if (tab === 'referrals') loadReferrals();
+    if (tab === 'referrals') loadReferrals();
+    if (tab === 'backtest') loadBacktestStats();
+    if (tab === 'basketball') loadBasketballStats();
   }
 
 
@@ -1037,9 +1099,11 @@
 
 
 async function loadBacktestStats() {
-  const r = await api('/admin/backtest/stats');
   const el = document.getElementById('backtest-stats');
-  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>';
+  try {
+    const r = await api('/api/admin/backtest/stats');
+    if (r.error) { el.innerHTML = '<p style="color:#f87171">'+r.error+'</p>'; return; }
   const o = r.overall || {};
   let html = '<div style="background:#1e293b;padding:16px;border-radius:8px;margin-bottom:16px">';
   html += '<h3 style="margin:0 0 8px">Overall</h3>';
@@ -1062,54 +1126,128 @@ async function loadBacktestStats() {
     });
     html += '</table>';
   }
-  if (!o.total) html += '<p style="color:#888;margin-top:16px">No results yet. Add scores using the Backtest Run button or via API.</p>';
+  if (!o.total) html += '<p style="color:#64748b;margin-top:16px">No results yet. Results auto-populate when matches finish and ResultChecker runs.</p>';
   el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<p style="color:#f87171;">Error: '+e.message+'</p>'; }
 }
 
 async function runBacktest() {
-  const r = await api('/admin/backtest/run', 'POST', {});
   const el = document.getElementById('backtest-stats');
-  if (r.error) { el.innerHTML = '<p style="color:red">'+r.error+'</p>'; return; }
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>';
+  try {
+    const r = await api('/api/admin/backtest/run', { method: 'POST', body: JSON.stringify({}) });
+    if (r.error) { el.innerHTML = '<p style="color:#f87171">'+r.error+'</p>'; return; }
   if (r.pending === 0) {
     el.innerHTML = '<p style="color:#888">No finished fixtures awaiting evaluation. Once matches complete (2h+ ago), results appear here.</p>';
   } else {
     let html = '<p style="color:#22c55e">' + r.pending + ' fixtures found awaiting scores:</p><ul>';
     (r.fixtures||[]).forEach(f => { html += '<li>'+f.home+' vs '+f.away+' — Pick: '+f.selection+'</li>'; });
-    html += '</ul><p style="color:#888">Submit scores via: POST /api/admin/backtest/run {fixtureId, homeScore, awayScore}</p>';
+    html += '</ul><p style="color:#64748b">Submit scores via: POST /api/admin/backtest/run {fixtureId, homeScore, awayScore}</p>';
     el.innerHTML = html;
   }
+  } catch(e) { el.innerHTML = '<p style="color:#f87171;">Error: '+e.message+'</p>'; }
 }
 
-    <!-- Referrals Tab -->
-    <div id="panel-referrals" class="tab-content" style="display:none">
-      <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2>Standard User Referrals (10%)</h2>
-          <button class="btn" onclick="loadReferrals()">Refresh</button>
-        </div>
-        <div id="standardReferralTableWrap">
-          <div style="color:#8b949e">Click Refresh to load...</div>
-        </div>
-      </div>
+  // ── Engine Stats (Admin Accuracy Tab) ────────────────────────────────────────
+  async function loadEngineStats() {
+    const el = document.getElementById('backtest-stats');
+    el.innerHTML = '<div style="display:flex;justify-content:center;padding:20px;"><div class="spinner"></div></div>';
+    try {
+      const r = await api('/api/admin/engine-stats');
+      const o = r.overview || {};
+      const total = Number(o.total_predictions || 0);
+      const wins = Number(o.wins || 0);
+      const losses = Number(o.losses || 0);
+      const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) : '0';
+      let html = '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">';
+      html += '<h3 style="margin:0 0 8px;font-size:14px;">Engine Performance (Last 30 Days)</h3>';
+      html += '<p>Total: <b>'+total+'</b> | Wins: <b style="color:#10e774">'+wins+'</b> | Losses: <b style="color:#f87171">'+losses+'</b> | True Voids: <b>'+Number(o.true_voids||0)+'</b> | Ghost Voids: <b style="color:#fb923c">'+Number(o.ghost_voids||0)+'</b></p>';
+      html += '<p style="margin-top:6px;">Win Rate: <b style="color:'+(parseFloat(winRate)>=55?'#10e774':'#f87171')+';font-size:18px;">'+winRate+'%</b></p>';
+      html += '</div>';
+      // Market breakdown
+      if ((r.markets||[]).length) {
+        html += '<h3 style="font-size:14px;margin-bottom:8px;">By Market</h3><table><thead><tr><th>Market</th><th>Total</th><th>Wins</th><th>Losses</th><th>Win Rate</th></tr></thead><tbody>';
+        r.markets.forEach(m => {
+          const wr = Number(m.total) > 0 ? ((Number(m.wins)/Number(m.total))*100).toFixed(1) : '0';
+          html += '<tr><td>'+m.market+'</td><td style="text-align:center">'+m.total+'</td><td style="text-align:center;color:#10e774">'+m.wins+'</td><td style="text-align:center;color:#f87171">'+m.losses+'</td><td style="text-align:center;font-weight:700;color:'+(parseFloat(wr)>=55?'#10e774':'#f87171')+'">'+wr+'%</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      // Calibration chart
+      if ((r.calibration||[]).length) {
+        html += '<h3 style="font-size:14px;margin:16px 0 8px;">Calibration (Predicted vs Actual)</h3><table><thead><tr><th>Prob Bucket</th><th>Total</th><th>Wins</th><th>Actual %</th></tr></thead><tbody>';
+        r.calibration.forEach(c => {
+          const actual = Number(c.total) > 0 ? ((Number(c.wins)/Number(c.total))*100).toFixed(1) : '0';
+          html += '<tr><td>'+(c.bucket_min||0)+'-'+((c.bucket_min||0)+10)+'%</td><td style="text-align:center">'+c.total+'</td><td style="text-align:center">'+c.wins+'</td><td style="text-align:center;font-weight:700;">'+actual+'%</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      el.innerHTML = html;
+    } catch(e) {
+      el.innerHTML = '<p style="color:#f87171;">Error: '+e.message+'</p>';
+    }
+  }
 
-      <div class="card" style="margin-top: 24px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2>Dedicated Partners (Custom %)</h2>
-        </div>
-        <div id="partnerTableWrap">
-          <div style="color:#8b949e">Click Refresh to load...</div>
-        </div>
-      </div>
-    </div>
+  // ── Re-evaluate Voids ──────────────────────────────────────────────────────
+  async function reevaluateVoids() {
+    if (!confirm('Re-evaluate all void outcomes that have scores? This fixes incorrectly voided picks.')) return;
+    try {
+      const r = await api('/api/admin/reevaluate-voids', { method: 'POST', body: JSON.stringify({}) });
+      showToast(`✅ ${r.message || 'Done: '+(r.reclassified||0)+' reclassified'}`, 'success');
+    } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
 
-  <div id="tab-backtest" class="tab-content" style="display:none">
-    <h2>&#127919; Prediction Accuracy</h2>
-    <div style="margin-bottom:16px">
-      <button onclick="loadBacktestStats()" style="background:#6366f1;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer">&#128257; Load Stats</button>
-      <button onclick="runBacktest()" style="background:#059669;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-left:8px">&#9654; Find Pending Results</button>
-    </div>
-    <div id="backtest-stats"><p style="color:#888">Click Load Stats to see accuracy data</p></div>
-  </div>
+  // ── Check Results Now ──────────────────────────────────────────────────────
+  async function checkResultsNow() {
+    showToast('Running result checker...');
+    try {
+      const r = await api('/api/admin/check-results', { method: 'POST', body: JSON.stringify({ backfill_days: 3 }) });
+      showToast(`✅ Results checked: ${r.totals?.wins||0} wins, ${r.totals?.losses||0} losses`, 'success');
+    } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+  // ── Basketball Admin ─────────────────────────────────────────────────────────
+  async function loadBasketballStats() {
+    const statusEl = document.getElementById('basketball-sync-status');
+    const fixturesEl = document.getElementById('basketball-fixtures-wrap');
+    statusEl.innerHTML = 'Loading...';
+    try {
+      // Get basketball fixtures from today
+      const today = new Date().toISOString().slice(0, 10);
+      const statsRes = await api('/api/admin/fixture-stats');
+      statusEl.innerHTML = `System healthy — today's fixtures: ${statsRes.fixtures?.total || 0} (enriched: ${statsRes.fixtures?.enriched || 0}, with odds: ${statsRes.fixtures?.withOdds || 0})`;
+    } catch(e) {
+      statusEl.innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
+    }
+    try {
+      // Show basketball fixtures from the basketball_fixtures table if available
+      const bkRes = await api('/api/admin/basketball-fixtures');
+      const games = bkRes.games || [];
+      if (!games.length) {
+        fixturesEl.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px;">No basketball games synced yet. Click Sync ESPN Now to pull games.</p>';
+        return;
+      }
+      let html = '<table><thead><tr><th>League</th><th>Home</th><th>Away</th><th>Date</th><th>Status</th></tr></thead><tbody>';
+      games.forEach(g => {
+        html += `<tr><td style="font-size:12px;">${g.league || '—'}</td><td>${g.home_team || '—'}</td><td>${g.away_team || '—'}</td><td style="color:#64748b;font-size:12px;">${g.match_date || '—'}</td><td><span class="badge ${g.status==='upcoming'?'badge-trial':'badge-active'}">${g.status||'—'}</span></td></tr>`;
+      });
+      html += '</tbody></table>';
+      fixturesEl.innerHTML = html;
+    } catch(e) {
+      fixturesEl.innerHTML = `<p style="color:#64748b;text-align:center;padding:20px;">${e.message}</p>`;
+    }
+  }
+
+  async function syncBasketballNow() {
+    showToast('Syncing ESPN basketball scoreboards...');
+    try {
+      const r = await api('/api/admin/sync-basketball', { method: 'POST', body: JSON.stringify({}) });
+      showToast(`✅ ${r.message || 'Sync complete'}`, 'success');
+      loadBasketballStats();
+    } catch(e) { showToast(`❌ ${e.message}`, 'error'); }
+  }
+
+
 </script>
 </body>
 </html>
