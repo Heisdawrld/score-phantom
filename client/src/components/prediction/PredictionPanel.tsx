@@ -274,6 +274,28 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const model = data?.model;
   const odds = (data as any)?.odds ?? null;
 
+  // ── v4 Intelligent Analyst fields ────────────────────────────────────
+  const ev = rec?.ev != null ? rec.ev : null;
+  const valueTier = rec?.valueTier || null;
+  const engineOdds = rec?.odds || null;
+  const isAccaEligible = rec?.isAccaEligible === true;
+  const riskReward = rec?.riskReward || null;
+  const analystSummary = rec?.analystSummary || null;
+  const narrative = (data as any)?.narrative || null;
+
+  // Value tier display config (matches PredictionTab)
+  const VALUE_TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    STRONG:      { label: 'Strong', color: 'text-[#10e774]', bg: 'bg-[#10e774]/10', border: 'border-[#10e774]/25' },
+    VALUE:       { label: 'Value', color: 'text-blue-400', bg: 'bg-blue-400/10', border: 'border-blue-400/25' },
+    SHARP:       { label: 'Sharp', color: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/25' },
+    ACCUMULATOR: { label: 'ACCA', color: 'text-cyan-400', bg: 'bg-cyan-400/10', border: 'border-cyan-400/25' },
+    MARGINAL:    { label: 'Marginal', color: 'text-white/40', bg: 'bg-white/5', border: 'border-white/10' },
+    JUNK:        { label: 'Junk', color: 'text-red-400', bg: 'bg-red-400/10', border: 'border-red-400/25' },
+    NEGATIVE_EV: { label: '-EV', color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/25' },
+    UNPRICED:    { label: 'Unpriced', color: 'text-white/30', bg: 'bg-white/5', border: 'border-white/10' },
+  };
+  const tierConfig = valueTier ? VALUE_TIER_CONFIG[valueTier] || VALUE_TIER_CONFIG.MARGINAL : null;
+
   // The "secret angle" is the first high-quality backup pick
   const secretPick = backups.find((b: any) => b.probability_pct >= 60) ?? backups[0] ?? null;
 
@@ -550,10 +572,75 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   <h3 className="font-display text-3xl sm:text-4xl text-white tracking-wide leading-none">{rec.pick}</h3>
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <p className="font-display text-4xl sm:text-5xl text-primary leading-none">{rec.phantom_score_pct ?? rec.probability_pct}%</p>
+                                  {/* v4 fix: Use probability_pct (model probability) as primary, consistent with PredictionTab */}
+                                  <p className="font-display text-4xl sm:text-5xl text-primary leading-none">{rec.probability_pct ?? rec.phantom_score_pct}%</p>
                                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Confidence</p>
                                 </div>
                               </div>
+                              {/* ── v4: Value Tier + ACCA + EV strip ── */}
+                              <div className="flex items-center gap-2 flex-wrap mb-3">
+                                {tierConfig && valueTier !== 'JUNK' && valueTier !== 'NEGATIVE_EV' && valueTier !== 'UNPRICED' && (
+                                  <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border", tierConfig.bg, tierConfig.color, tierConfig.border)}>
+                                    {tierConfig.label}
+                                  </span>
+                                )}
+                                {isAccaEligible && (
+                                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
+                                    ACCA
+                                  </span>
+                                )}
+                                {ev != null && (
+                                  <span className={cn(
+                                    "text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border",
+                                    ev >= 0 ? "bg-primary/10 text-primary border-primary/25" : "bg-red-500/10 text-red-400 border-red-500/25"
+                                  )}>
+                                    EV {ev >= 0 ? '+' : ''}{(ev * 100).toFixed(1)}%
+                                  </span>
+                                )}
+                                {engineOdds != null && (
+                                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/5 text-white/60 border border-white/10 uppercase tracking-wide">
+                                    {engineOdds.toFixed(2)}x
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* v4: Analyst Summary */}
+                              {analystSummary && (
+                                <div className="mb-3 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold mb-1">Analyst Summary</p>
+                                  <p className="text-[11px] text-white/60 leading-snug">{analystSummary}</p>
+                                </div>
+                              )}
+
+                              {/* v4: EV + Edge strip */}
+                              {(ev != null || riskReward?.edge != null) && (
+                                <div className="flex gap-2 mb-3">
+                                  {ev != null && (
+                                    <div className={cn(
+                                      "flex-1 rounded-xl p-2.5 text-center border",
+                                      ev >= 0 ? "bg-primary/[0.06] border-primary/20" : "bg-red-500/[0.04] border-red-500/15"
+                                    )}>
+                                      <p className={cn("text-sm font-black tabular-nums", ev >= 0 ? "text-primary" : "text-red-400")}>
+                                        {ev >= 0 ? '+' : ''}{(ev * 100).toFixed(1)}%
+                                      </p>
+                                      <p className="text-[8px] text-white/25 uppercase">EV</p>
+                                    </div>
+                                  )}
+                                  {riskReward?.edge != null && (
+                                    <div className="flex-1 rounded-xl bg-blue-500/[0.06] border border-blue-500/20 p-2.5 text-center">
+                                      <p className="text-sm font-black text-blue-400 tabular-nums">+{(riskReward.edge * 100).toFixed(1)}pp</p>
+                                      <p className="text-[8px] text-white/25 uppercase">Edge</p>
+                                    </div>
+                                  )}
+                                  {engineOdds != null && (
+                                    <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5 text-center">
+                                      <p className="text-sm font-black text-white tabular-nums">{engineOdds.toFixed(2)}</p>
+                                      <p className="text-[8px] text-white/25 uppercase">Odds</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {rec.reasons?.length > 0 && (
                                 <div className="space-y-1.5 border-t border-white/10 pt-4">
                                   {rec.reasons.map((reason: string, i: number) => (
@@ -598,7 +685,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                     <h3 className="font-display text-2xl sm:text-3xl text-white tracking-wide leading-none">{secretPick.pick}</h3>
                                   </div>
                                   <div className="text-right shrink-0">
-                                    <p className="font-display text-3xl sm:text-4xl text-amber-400 leading-none">{secretPick.phantom_score_pct ?? secretPick.probability_pct}%</p>
+                                    <p className="font-display text-3xl sm:text-4xl text-amber-400 leading-none">{secretPick.probability_pct ?? secretPick.phantom_score_pct}%</p>
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Confidence</p>
                                   </div>
                                 </div>

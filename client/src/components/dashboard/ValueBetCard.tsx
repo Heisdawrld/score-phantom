@@ -1,9 +1,10 @@
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ChevronRight, Lock, Sparkles } from "lucide-react";
+import { ChevronRight, Lock, Sparkles, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { getOddsForPick } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
   const [, setLocation] = useLocation();
@@ -94,6 +95,23 @@ export function ValueBetCard({ isPremium }: { isPremium: boolean }) {
             <p className="text-[9px] text-amber-300/60 font-bold uppercase tracking-wider mb-1">Edge</p>
             <p className="text-xl font-black text-amber-300 tabular-nums">+{data.edge?.toFixed(0)}%</p>
           </div>
+          {/* v4: EV + Value Tier display */}
+          {data.ev != null && (
+            <div className={cn("premium-stat text-center border", data.ev >= 0 ? "border-primary/25 bg-primary/[0.06]" : "border-red-500/25 bg-red-500/[0.06]")}>
+              <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-1">EV</p>
+              <p className={cn("text-xl font-black tabular-nums", data.ev >= 0 ? "text-primary" : "text-red-400")}>{data.ev >= 0 ? '+' : ''}{(data.ev * 100).toFixed(1)}%</p>
+            </div>
+          )}
+          {data.valueTier && (
+            <div className="premium-stat text-center">
+              <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-1">Tier</p>
+              <p className={cn("text-xl font-black tabular-nums",
+                data.valueTier === 'STRONG' ? 'text-[#10e774]' :
+                data.valueTier === 'VALUE' ? 'text-blue-400' :
+                data.valueTier === 'SHARP' ? 'text-purple-400' :
+                'text-white/60')}>{data.valueTier}</p>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

@@ -1,8 +1,20 @@
 import { motion } from 'framer-motion';
-import { Flame, Dices, ShieldAlert, Crosshair } from 'lucide-react';
+import { Flame, Dices, ShieldAlert, Crosshair, ThumbsUp, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type AdvisorStatus = 'FIRE' | 'GAMBLE' | 'AVOID';
+/**
+ * v4 Intelligent Analyst — 5 badge tiers matching engine output:
+ *
+ *   FIRE        → "Pick This" — Strong value with fair odds
+ *   RECOMMENDED → "Recommended" — Good risk/reward ratio, positive EV
+ *   GAMBLE      → "Gamble" — Possible but risky, or accumulator-only
+ *   CAUTIOUS    → "Cautious" — Marginal probability but positive EV, small stakes
+ *   AVOID       → "Avoid" — Junk odds, negative EV, or insufficient edge
+ *
+ * The engine's finalizePredictionResult.js and scoreMarketCandidates.js compute these
+ * using EV-aware logic. The responseAdapter.js resolves the final badge.
+ */
+export type AdvisorStatus = 'FIRE' | 'RECOMMENDED' | 'GAMBLE' | 'CAUTIOUS' | 'AVOID';
 
 interface ModelAdvisorBadgeProps {
   status: AdvisorStatus;
@@ -27,6 +39,20 @@ export function ModelAdvisorBadge({ status, className, showLabel = true }: Model
     );
   }
 
+  if (status === 'RECOMMENDED') {
+    return (
+      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/15 border border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.2)] backdrop-blur-md', className)}>
+        <motion.div
+          animate={{ scale: [1, 1.12, 1] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <ThumbsUp className="w-4 h-4 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]" />
+        </motion.div>
+        {showLabel && <span className="text-[10px] font-bold text-blue-400 tracking-[0.15em] uppercase drop-shadow-[0_0_3px_rgba(59,130,246,0.3)]">Recommended</span>}
+      </div>
+    );
+  }
+
   if (status === 'GAMBLE') {
     return (
       <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.15)] backdrop-blur-md', className)}>
@@ -41,6 +67,21 @@ export function ModelAdvisorBadge({ status, className, showLabel = true }: Model
     );
   }
 
+  if (status === 'CAUTIOUS') {
+    return (
+      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-400/12 border border-orange-400/35 shadow-[0_0_8px_rgba(251,146,60,0.12)] backdrop-blur-md', className)}>
+        <motion.div
+          animate={{ opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <AlertTriangle className="w-4 h-4 text-orange-400 drop-shadow-[0_0_5px_rgba(251,146,60,0.5)]" />
+        </motion.div>
+        {showLabel && <span className="text-[10px] font-bold text-orange-400 tracking-[0.15em] uppercase">Cautious</span>}
+      </div>
+    );
+  }
+
+  // AVOID
   return (
     <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/15 border border-red-500/40 backdrop-blur-md', className)}>
       <motion.div

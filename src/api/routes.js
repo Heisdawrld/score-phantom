@@ -1413,17 +1413,72 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // Composite rank score (0–100 range for display)
       const composite = (score * 0.5 + (conf / 100) * 0.3 + prob * 0.2) * 100;
 
-      // ── Compute advisor_status using probability-primary logic ──────────
-      // phantomScore blends probability and finalScore, same as responseAdapter
-      const phantomScoreRaw = (prob * 0.55) + (score * 0.45);
-      const dataQ = parseFloat(row.data_quality || 0.5);
-      let advisorStatus = 'AVOID';
-      if (phantomScoreRaw >= 0.72) {
-        advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-      } else if (phantomScoreRaw >= 0.60) {
-        advisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
-      } else if (phantomScoreRaw >= 0.50) {
-        advisorStatus = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+      // ── Extract v4 fields from explanation_json ────────────────────────────
+      // The engine stores the full prediction in explanation_json including
+      // v4 fields like valueTier, ev, odds, isAccaEligible, advisor_status
+      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null };
+      try {
+        const predJson = typeof row.explanation_json === 'string'
+          ? JSON.parse(row.explanation_json)
+          : row.explanation_json;
+        if (predJson) {
+          // Try to get v4 fields from bestPick or recommendations
+          const bestPick = predJson.bestPick || predJson.recommendation || null;
+          if (bestPick) {
+            v4Fields.valueTier = bestPick.valueTier || bestPick.value_tier || null;
+            v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+            v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+            v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
+            v4Fields.advisor_status = bestPick.advisor_status || null;
+          }
+          // Also check predictions.recommendation (responseAdapter format)
+          const predictions = predJson.predictions || null;
+          if (predictions?.recommendation && !v4Fields.advisor_status) {
+            const rec = predictions.recommendation;
+            v4Fields.valueTier = rec.valueTier || v4Fields.valueTier;
+            v4Fields.ev = rec.ev != null ? rec.ev : v4Fields.ev;
+            v4Fields.odds = rec.odds || v4Fields.odds;
+            v4Fields.isAccaEligible = rec.isAccaEligible || v4Fields.isAccaEligible;
+            v4Fields.advisor_status = rec.advisor_status || v4Fields.advisor_status;
+          }
+        }
+      } catch (_) {}
+
+      // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
+      let advisorStatus;
+      if (v4Fields.advisor_status && ['FIRE', 'RECOMMENDED', 'GAMBLE', 'CAUTIOUS', 'AVOID'].includes(v4Fields.advisor_status)) {
+        // Use engine-computed status (most accurate — comes from scoreMarketCandidates/finalizePredictionResult)
+        advisorStatus = v4Fields.advisor_status;
+      } else {
+        // Fallback: probability-primary logic (legacy)
+        const phantomScoreRaw = (prob * 0.55) + (score * 0.45);
+        const dataQ = parseFloat(row.data_quality || 0.5);
+        const ev = v4Fields.ev;
+        const odds = v4Fields.odds;
+        const isPositiveEV = ev != null && ev >= 0;
+        const valueTier = v4Fields.valueTier;
+
+        if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') {
+          advisorStatus = 'AVOID';
+        } else if (valueTier === 'STRONG') {
+          advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+        } else if (valueTier === 'VALUE' || valueTier === 'SHARP') {
+          advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+        } else if (valueTier === 'ACCUMULATOR') {
+          advisorStatus = 'GAMBLE';
+        } else if (prob >= 0.72 && odds >= 1.30) {
+          advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+        } else if (prob >= 0.72 && odds && odds < 1.30) {
+          advisorStatus = 'GAMBLE';
+        } else if (prob >= 0.60) {
+          advisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+        } else if (prob >= 0.50 && isPositiveEV) {
+          advisorStatus = 'CAUTIOUS';
+        } else if (prob >= 0.50) {
+          advisorStatus = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+        } else {
+          advisorStatus = 'AVOID';
+        }
       }
 
       return {
@@ -1448,6 +1503,11 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         dataQuality: row.data_quality,
         sharp:       Number(row.is_sharp_value || 0) === 1,
         advisor_status: advisorStatus,
+        // ── v4: Intelligent Analyst fields ────────────────────────────────
+        valueTier:      v4Fields.valueTier,
+        ev:             v4Fields.ev != null ? parseFloat(v4Fields.ev.toFixed(4)) : null,
+        odds:           v4Fields.odds != null ? parseFloat(v4Fields.odds.toFixed(2)) : null,
+        isAccaEligible: v4Fields.isAccaEligible,
         factors,
       };
     });
@@ -1521,7 +1581,7 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
       sql: `SELECT p.fixture_id, p.home_team, p.away_team,
                    p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
                    p.best_pick_implied_probability, p.best_pick_edge,
-                   p.best_pick_score,
+                   p.best_pick_score, p.explanation_json,
                    f.tournament_name, f.match_date, f.enrichment_status, f.match_status,
                    fo.home AS odds_home, fo.draw AS odds_draw, fo.away AS odds_away,
                    fo.btts_yes AS odds_btts_yes, fo.btts_no AS odds_btts_no,
@@ -1548,6 +1608,35 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     const impl = parseFloat(row.best_pick_implied_probability || 0);
     const edge = parseFloat(row.best_pick_edge || 0);
 
+    // ── Extract v4 fields from explanation_json ────────────────────────────
+    let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false };
+    try {
+      const predJson = typeof row.explanation_json === 'string'
+        ? JSON.parse(row.explanation_json)
+        : row.explanation_json;
+      if (predJson) {
+        const bestPick = predJson.bestPick || predJson.recommendation || null;
+        if (bestPick) {
+          v4Fields.valueTier = bestPick.valueTier || null;
+          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
+        }
+        const predictions = predJson.predictions || null;
+        if (predictions?.recommendation) {
+          const rec = predictions.recommendation;
+          v4Fields.valueTier = rec.valueTier || v4Fields.valueTier;
+          v4Fields.ev = rec.ev != null ? rec.ev : v4Fields.ev;
+          v4Fields.odds = rec.odds || v4Fields.odds;
+          v4Fields.isAccaEligible = rec.isAccaEligible || v4Fields.isAccaEligible;
+        }
+      }
+    } catch (_) {}
+
+    // Calculate EV from prob + odds if not in JSON
+    const bookOdds = v4Fields.odds || (impl > 0 ? (1 / impl) : null);
+    const calcEV = v4Fields.ev != null ? v4Fields.ev : (bookOdds > 1.0 ? (prob * bookOdds) - 1 : null);
+
     return res.json({
       found:               true,
       fixtureId:           row.fixture_id,
@@ -1560,6 +1649,11 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
       edge:                edge > 0 ? parseFloat((edge * 100).toFixed(1)) : null,
       tournament:          row.tournament_name,
       enrichmentStatus:    row.enrichment_status,
+      // ── v4: Intelligent Analyst fields ────────────────────────────────
+      valueTier:           v4Fields.valueTier,
+      ev:                  calcEV != null ? parseFloat(calcEV.toFixed(4)) : null,
+      odds:                bookOdds != null ? parseFloat(parseFloat(bookOdds).toFixed(2)) : null,
+      isAccaEligible:      v4Fields.isAccaEligible,
       access:              buildAccessPayload(req.access),
     });
   } catch (err) {

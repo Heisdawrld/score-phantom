@@ -35,6 +35,9 @@ interface Pick {
   isSafeBet?: boolean;
   isValueBet?: boolean;
   advisor_status?: string;
+  valueTier?: string | null;
+  ev?: number | null;
+  isAccaEligible?: boolean;
   factors?: {
     form?: boolean;
     h2h?: boolean;
@@ -338,7 +341,31 @@ export default function TopPicksToday() {
                           <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
                         <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
-                        <ModelAdvisorBadge status={(pick.advisor_status || "GAMBLE") as AdvisorStatus} showLabel={false} />
+                        <ModelAdvisorBadge status={((pick.advisor_status || "GAMBLE") as AdvisorStatus)} showLabel={false} />
+                        {/* v4: Value tier + EV badges */}
+                        {pick.valueTier && pick.valueTier !== 'JUNK' && pick.valueTier !== 'NEGATIVE_EV' && pick.valueTier !== 'UNPRICED' && (
+                          <span className={cn(
+                            "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border",
+                            pick.valueTier === 'STRONG' ? 'bg-[#10e774]/10 text-[#10e774] border-[#10e774]/25' :
+                            pick.valueTier === 'VALUE' ? 'bg-blue-400/10 text-blue-400 border-blue-400/25' :
+                            pick.valueTier === 'SHARP' ? 'bg-purple-400/10 text-purple-400 border-purple-400/25' :
+                            pick.valueTier === 'ACCUMULATOR' ? 'bg-cyan-400/10 text-cyan-400 border-cyan-400/25' :
+                            'bg-white/5 text-white/40 border-white/10'
+                          )}>
+                            {pick.valueTier === 'ACCUMULATOR' ? 'ACCA' : pick.valueTier}
+                          </span>
+                        )}
+                        {pick.isAccaEligible && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-cyan-400/10 text-cyan-400 border border-cyan-400/20">ACCA</span>
+                        )}
+                        {pick.ev != null && (
+                          <span className={cn(
+                            "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border",
+                            pick.ev >= 0 ? 'bg-primary/10 text-primary border-primary/25' : 'bg-red-500/10 text-red-400 border-red-500/25'
+                          )}>
+                            EV {pick.ev >= 0 ? '+' : ''}{(pick.ev * 100).toFixed(1)}%
+                          </span>
+                        )}
                       </div>
 
                       {/* Analysis factor tags */}

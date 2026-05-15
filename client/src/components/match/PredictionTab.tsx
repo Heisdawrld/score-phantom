@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, Sparkles } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, AlertCircle, Sparkles, DollarSign } from "lucide-react";
 import { cn, getOddsForPick } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -147,17 +147,23 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
   const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
   
-  // Verdict is derived from advisor_status (FIRE/GAMBLE/AVOID from engine)
-  // FIRE = strong recommendation → "PICK THIS"
-  // GAMBLE = risky but possible → "GAMBLE"
-  // AVOID = skip → "AVOID"
+  // v4 Verdict: Maps all 5 advisor statuses to user-facing labels
+  // FIRE → "PICK THIS" — strong value with fair odds
+  // RECOMMENDED → "RECOMMENDED" — good risk/reward, positive EV
+  // GAMBLE → "GAMBLE" — possible but risky, or accumulator-only
+  // CAUTIOUS → "CAUTIOUS" — marginal prob but positive EV, small stakes
+  // AVOID → "AVOID" — junk odds, negative EV, insufficient edge
   const verdictLabel = advisorStatus === 'FIRE' ? 'PICK THIS'
+    : advisorStatus === 'RECOMMENDED' ? 'RECOMMENDED'
     : advisorStatus === 'GAMBLE' ? 'GAMBLE'
+    : advisorStatus === 'CAUTIOUS' ? 'CAUTIOUS'
     : 'AVOID';
 
   const verdictColor =
     verdictLabel === "PICK THIS" ? "text-primary" :
+    verdictLabel === "RECOMMENDED" ? "text-blue-400" :
     verdictLabel === "GAMBLE" ? "text-amber-400" :
+    verdictLabel === "CAUTIOUS" ? "text-orange-400" :
     "text-red-400";
     
   // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.
@@ -174,6 +180,29 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   });
   const tacticalMatchup = (data as any)?.features?.tacticalMatchup || rec?.tacticalMatchup || null;
   const hasTacticalPanel = !!tacticalMatchup || !!homeManager || !!awayManager;
+
+  // ── v4 Intelligent Analyst fields ────────────────────────────────────
+  const valueTier = rec.valueTier || null;           // STRONG, VALUE, SHARP, JUNK, NEGATIVE_EV, ACCUMULATOR, MARGINAL
+  const valueTierLabel = rec.valueTierLabel || null; // Human-readable tier label
+  const ev = rec.ev != null ? rec.ev : null;         // Expected Value (decimal, e.g. 0.05 = +5%)
+  const engineOdds = rec.odds || null;                // Bookmaker odds from engine (not from oddsData)
+  const isAccaEligible = rec.isAccaEligible === true; // Good for accumulators
+  const riskReward = rec.riskReward || null;          // Risk/reward data object
+  const analystSummary = rec.analystSummary || null;  // Analyst reasoning summary
+  const narrative = (data as any)?.narrative || null;  // Match narrative from engine
+
+  // Value tier display config
+  const VALUE_TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    STRONG:      { label: 'Strong', color: 'text-[#10e774]', bg: 'bg-[#10e774]/10', border: 'border-[#10e774]/25' },
+    VALUE:       { label: 'Value', color: 'text-blue-400', bg: 'bg-blue-400/10', border: 'border-blue-400/25' },
+    SHARP:       { label: 'Sharp', color: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/25' },
+    ACCUMULATOR: { label: 'ACCA', color: 'text-cyan-400', bg: 'bg-cyan-400/10', border: 'border-cyan-400/25' },
+    MARGINAL:    { label: 'Marginal', color: 'text-white/40', bg: 'bg-white/5', border: 'border-white/10' },
+    JUNK:        { label: 'Junk', color: 'text-red-400', bg: 'bg-red-400/10', border: 'border-red-400/25' },
+    NEGATIVE_EV: { label: '-EV', color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/25' },
+    UNPRICED:    { label: 'Unpriced', color: 'text-white/30', bg: 'bg-white/5', border: 'border-white/10' },
+  };
+  const tierConfig = valueTier ? VALUE_TIER_CONFIG[valueTier] || VALUE_TIER_CONFIG.MARGINAL : null;
 
   // Match result probabilities
   const matchResult = (data as any)?.predictions?.match_result;
@@ -214,7 +243,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                 if (navigator.share) {
                    navigator.share({
                       title: "ScorePhantom Edge",
-                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.selection || pickLo}\nConfidence: ${displayConfidence}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
+                      text: `🎯 ${homeNm} vs ${(matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "")}\nPick: ${rec.pick || rec.selection || "No pick"}\nConfidence: ${displayConfidence}%\nEdge: ${edgeLabel}\nGet winning predictions on ScorePhantom!`
                    }).catch(()=>{});
                 }
              }} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">
@@ -245,6 +274,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             {isSharpValue && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
                 <TrendingUp className="w-3 h-3" /> SHARP VALUE
+              </span>
+            )}
+            {/* ── v4: Value Tier Badge ──────────────────────────────────── */}
+            {tierConfig && valueTier !== 'JUNK' && valueTier !== 'NEGATIVE_EV' && valueTier !== 'UNPRICED' && (
+              <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide", tierConfig.bg, tierConfig.color, tierConfig.border)}>
+                {tierConfig.label}
+              </span>
+            )}
+            {/* ── v4: ACCA-Eligible Tag ─────────────────────────────────── */}
+            {isAccaEligible && (
+              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
+                ACCA
               </span>
             )}
           </motion.div>
@@ -493,8 +534,47 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </div>
           )}
 
+          {/* ── v4: EV & RISK/REWARD STRIP ── */}
+          {(ev != null || engineOdds != null) && (
+            <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar">
+              {ev != null && (
+                <div className={cn(
+                  "shrink-0 rounded-xl px-3 py-2 text-center min-w-[70px] border",
+                  ev >= 0 ? "bg-primary/[0.06] border-primary/20" : "bg-red-500/[0.06] border-red-500/20"
+                )}>
+                  <p className={cn("text-sm font-black tabular-nums", ev >= 0 ? "text-primary" : "text-red-400")}>
+                    {ev >= 0 ? '+' : ''}{(ev * 100).toFixed(1)}%
+                  </p>
+                  <p className="text-[8px] text-white/25 uppercase">EV</p>
+                </div>
+              )}
+              {engineOdds != null && (
+                <div className="shrink-0 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2 text-center min-w-[70px]">
+                  <p className="text-sm font-black text-white tabular-nums">{engineOdds.toFixed(2)}</p>
+                  <p className="text-[8px] text-white/25 uppercase">Odds</p>
+                </div>
+              )}
+              {riskReward?.edge != null && (
+                <div className="shrink-0 rounded-xl bg-blue-500/[0.06] border border-blue-500/20 px-3 py-2 text-center min-w-[70px]">
+                  <p className="text-sm font-black text-blue-400 tabular-nums">+{(riskReward.edge * 100).toFixed(1)}pp</p>
+                  <p className="text-[8px] text-white/25 uppercase">Edge</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── v4: ANALYST SUMMARY ── */}
+          {analystSummary && (
+            <div className="mt-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Analyst Summary</span>
+              </div>
+              <p className="text-[12px] text-white/60 leading-snug">{analystSummary}</p>
+            </div>
+          )}
+
           {/* ── KEY REASONS ── */}
-          {reasonCodes.length > 0 && (
+          {(reasonCodes.length > 0 || (narrative?.narrativeReasons?.length > 0)) && (
             <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <p className="text-[10px] font-black text-white/40 uppercase tracking-wider mb-3">Key Reasons</p>
               <div className="flex flex-col gap-2.5">
@@ -580,6 +660,18 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                 <p className={cn("text-[10px] font-black uppercase", riskColor(riskLabel))}>{RISK_LABELS[riskLabel] ?? riskLabel}</p>
                 <p className="text-[8px] text-white/25 uppercase">Consistency</p>
               </div>
+              {/* v4: EV stat in bottom strip */}
+              {ev != null && (
+                <div className={cn(
+                  "shrink-0 rounded-xl px-3 py-2 text-center min-w-[70px] border",
+                  ev >= 0 ? "bg-primary/[0.06] border-primary/20" : "bg-red-500/[0.04] border-red-500/15"
+                )}>
+                  <p className={cn("text-sm font-black tabular-nums", ev >= 0 ? "text-primary" : "text-red-400")}>
+                    {ev >= 0 ? '+' : ''}{(ev * 100).toFixed(1)}%
+                  </p>
+                  <p className="text-[8px] text-white/25 uppercase">EV</p>
+                </div>
+              )}
             </div>
           )}
         </div>
