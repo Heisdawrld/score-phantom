@@ -1032,8 +1032,10 @@ router.post("/password/reset-confirm", authLimiter, async (req, res) => {
     if (!user) return res.status(400).json({ error: "Invalid or expired reset token" });
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
+    // BUG FIX: Increment token_version on password reset to invalidate all existing sessions.
+    // Without this, old JWTs remain valid after a security event (password change).
     await db.execute({
-      sql: `UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires_at = NULL WHERE id = ?`,
+      sql: `UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires_at = NULL, token_version = token_version + 1 WHERE id = ?`,
       args: [hashedPassword, user.id],
     });
 

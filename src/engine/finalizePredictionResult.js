@@ -34,11 +34,11 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
   }
 
   if (bestPick) {
-    const prob = bestPick.modelProbability || 0;
-    const impl = bestPick.impliedProbability || 0;
-    const edge = bestPick.edge || 0;
-    const finalScore = bestPick.finalScore || 0;
-    const odds = bestPick.bookmakerOdds || 0;
+    const prob = bestPick.modelProbability ?? 0;
+    const impl = bestPick.impliedProbability ?? null;   // keep null — model-only picks have no implied
+    const edge = bestPick.edge ?? null;                 // keep null — model-only picks have no edge
+    const finalScore = bestPick.finalScore ?? 0;
+    const odds = bestPick.bookmakerOdds ?? null;         // keep null — model-only picks have no odds
 
     // ── Displayed Confidence ──────────────────────────────────────────────
     bestPick.displayedConfidence = parseFloat((prob * 100).toFixed(1));
@@ -64,9 +64,14 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     // Now every pick has exactly ONE clear message.
     //
     // Logic priority: value tier → probability → data quality
-    const dataQ = features.dataCompletenessScore || 0.5;
+    const dataQ = features.dataCompletenessScore ?? 0.5;  // BUG FIX: use ?? not || — 0 is a valid score
+    const matchChaos = safeNum(features.matchChaosScore, 0.5);
+    const upsetRisk = safeNum(features.upsetRiskScore, 0.5);
+    // BUG FIX: Use full predScore (data+chaos+upset) to match scoreMarketCandidates,
+    // not just dataQ. Using dataQ alone could promote ACCA→BET on chaotic matches.
+    const predScore = (dataQ * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
     const isRestricted = bestPick.leagueSignal?.status === 'restricted';
-    const ev = odds > 1.0 ? (prob * odds) - 1 : null;
+    const ev = (odds != null && odds > 1.0) ? (prob * odds) - 1 : null;
     const isPositiveEV = ev != null && ev >= 0;
 
     let syncedAdvisorStatus;
@@ -82,24 +87,24 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       syncedAdvisorStatus = 'ACCA';
     } else if (valueTier.tier === 'STRONG' || valueTier.tier === 'VALUE') {
       // Strong or Value tier with decent data → BET (trusted as a single)
-      syncedAdvisorStatus = (isPositiveEV && dataQ >= 0.25) ? 'BET' : 'ACCA';
+      syncedAdvisorStatus = (isPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
     } else if (valueTier.tier === 'SHARP') {
       // Sharp = model disagrees with market → BET if +EV (value exists), SKIP if not
       syncedAdvisorStatus = isPositiveEV ? 'BET' : 'SKIP';
     } else if (prob >= 0.72 && odds >= 1.30) {
       // High probability with decent odds → BET
-      syncedAdvisorStatus = dataQ < 0.20 ? 'ACCA' : 'BET';
+      syncedAdvisorStatus = predScore < 0.20 ? 'ACCA' : 'BET';
     } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
       // ACCA-eligible probability/odds range → ACCA
-      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'ACCA';
+      syncedAdvisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
     } else if (prob >= 0.60 && odds >= 1.25) {
       // Decent probability → ACCA (good building block, not a standalone single)
-      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'ACCA';
+      syncedAdvisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
     } else if (prob >= 0.50 && isPositiveEV) {
       // Marginal probability but positive EV → ACCA (has some value but risky as single)
       syncedAdvisorStatus = 'ACCA';
     } else if (prob >= 0.50) {
-      syncedAdvisorStatus = dataQ >= 0.40 ? 'ACCA' : 'SKIP';
+      syncedAdvisorStatus = predScore >= 0.40 ? 'ACCA' : 'SKIP';
     } else {
       syncedAdvisorStatus = 'SKIP';
     }
@@ -129,7 +134,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     // ACCA-eligible: solid probability (≥58%), odds in useful range (1.30-1.65),
     // positive or near-neutral EV, not chaotic
     const isAccaEligible = prob >= 0.58 &&
-      odds >= 1.30 && odds <= 1.65 &&
+      (odds != null && odds >= 1.30 && odds <= 1.65) &&
       (ev == null || ev >= -0.05) &&
       confidence.volatility !== 'high' &&
       syncedAdvisorStatus !== 'SKIP';
@@ -137,17 +142,17 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     bestPick.isAccaEligible = isAccaEligible;
 
     // Safe Bet = probability >= 72%, low volatility, decent odds
-    bestPick.isSafeBet = prob >= 0.72 && confidence.volatility === 'low' && odds >= 1.25;
+    bestPick.isSafeBet = prob >= 0.72 && confidence.volatility === 'low' && (odds != null && odds >= 1.25);
 
     // Value Bet = positive EV with decent edge
-    bestPick.isValueBet = impl > 0 && edge >= 0.08;
+    bestPick.isValueBet = (impl != null && impl > 0) && (edge != null && edge >= 0.08);
 
     // ── Phase 4C: Risk Reward Data ────────────────────────────────────────
     bestPick.riskReward = {
-      odds: parseFloat(odds.toFixed(2)),
+      odds: odds != null ? parseFloat(odds.toFixed(2)) : null,
       ev: ev != null ? parseFloat(ev.toFixed(4)) : null,
       probability: parseFloat(prob.toFixed(4)),
-      impliedProbability: impl > 0 ? parseFloat(impl.toFixed(4)) : null,
+      impliedProbability: (impl != null && impl > 0) ? parseFloat(impl.toFixed(4)) : null,
       edge: edge != null ? parseFloat(edge.toFixed(4)) : null,
       tier: valueTier.tier,
       tierLabel: valueTier.tierLabel,

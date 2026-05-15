@@ -151,7 +151,12 @@ async function getCurrentUser(req) {
       sql: `SELECT *, email_verified FROM users WHERE id = ? LIMIT 1`,
       args: [decoded.id],
     });
-    return result.rows?.[0] || null;
+    const user = result.rows?.[0] || null;
+    // BUG FIX: Check token_version to reject revoked JWTs (password reset, logout-all)
+    if (user && decoded.token_version != null && user.token_version != null && decoded.token_version !== user.token_version) {
+      return null;
+    }
+    return user;
   } catch {
     return null;
   }

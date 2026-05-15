@@ -38,7 +38,11 @@ function isHeadlineQualityCandidate(candidate, featureVector, scriptOutput) {
   const phantomScore = phantomScoreOf(candidate);
   const dataScore = safeNum(featureVector?.dataCompletenessScore, 0.5);
   const risk = String(annotated.riskLevel || '').toUpperCase();
-  const volatility = String(scriptOutput?.volatility || '').toUpperCase();
+  // BUG FIX: scriptOutput exposes `volatilityScore` (number 0-1), not `volatility` (string 'HIGH').
+  // The old code checked `volatility === 'HIGH'` which NEVER matched because `volatilityScore`
+  // is a number, not a string. This bypassed the extra-proof gate for high-volatility picks.
+  const volatilityScore = safeNum(scriptOutput?.volatilityScore, 0.5);
+  const isHighVolatility = volatilityScore > 0.70;
   const chaos = safeNum(featureVector?.matchChaosScore, 0.5);
   const edge = safeNum(candidate.edge, 0);
 
@@ -54,7 +58,7 @@ function isHeadlineQualityCandidate(candidate, featureVector, scriptOutput) {
   // Aggressive/high-risk picks need extra proof. This prevents combinations like:
   // Raw Model 77%, Phantom 59%, HIGH RISK, but still "Pick This".
   // v2: Slightly relaxed phantomScore from 0.60 → 0.55 and finalScore from 0.48 → 0.42
-  if (risk === 'AGGRESSIVE' || volatility === 'HIGH' || chaos >= 0.68) {
+  if (risk === 'AGGRESSIVE' || isHighVolatility || chaos >= 0.68) {
     if (phantomScore < 0.55) return false;
     if (finalScore < 0.42) return false;
     if (prob < 0.65) return false;
@@ -75,7 +79,8 @@ function isModelOnlyEligible(candidate, featureVector, scriptOutput) {
   const phantomScore = phantomScoreOf(candidate);
   const dataScore = safeNum(featureVector?.dataCompletenessScore, 0.5);
   const chaos = safeNum(featureVector?.matchChaosScore, 0.5);
-  const volatility = String(scriptOutput?.volatility || '').toUpperCase();
+  const volatilityScore = safeNum(scriptOutput?.volatilityScore, 0.5);
+  const isHighVolatility = volatilityScore > 0.70;
   const tacticalFit = safeNum(candidate.tacticalFitScore, 0.4);
 
   // Only allow model-only headlines when the model has enough support.
@@ -85,7 +90,7 @@ function isModelOnlyEligible(candidate, featureVector, scriptOutput) {
   if (finalScore < 0.42) return false;
   if (phantomScore < 0.55) return false;
   if (dataScore < 0.40) return false;
-  if (chaos > 0.72 || volatility === 'HIGH') return false;
+  if (chaos > 0.72 || isHighVolatility) return false;
   if (tacticalFit < 0.25) return false;
 
   return true;

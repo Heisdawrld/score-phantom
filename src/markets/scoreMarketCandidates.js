@@ -65,7 +65,8 @@ function computeSmartRiskReward(candidate) {
 
   // Kelly Criterion: optimal bet fraction = (p*o - 1) / (o - 1)
   // Higher Kelly = better risk/reward ratio
-  const kelly = (prob * odds - 1) / (odds - 1);
+  const denominator = odds - 1;
+  const kelly = denominator > 0.01 ? (prob * odds - 1) / denominator : 0;
   const kellyClamped = clamp(kelly, 0, 0.25);
 
   // Risk-adjusted EV: EV scaled by sqrt(probability)
