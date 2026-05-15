@@ -12,6 +12,46 @@ import { buildMatchNarrative } from './buildMatchNarrative.js';
 import { computeContextModifiers, applyContextModifiers } from './contextModifiers.js';
 import { checkMarketEscalation, checkCrossMarketEscalation, applyEscalationBonuses } from '../markets/marketEscalation.js';
 import { buildReasonChain } from './buildReasonChain.js';
+import { safeNum } from '../utils/math.js';
+
+// ── Cheap pre-filter: eliminate obviously-dead candidates before expensive scoring ──
+// The scoring pipeline (scoreMarketCandidates) runs ~15 components per candidate
+// including Smart Risk Reward, Market Efficiency, Kelly Criterion, accuracy cache
+// lookups, etc. Candidates with very low probability will be pruned anyway, so
+// we skip scoring them entirely.
+//
+// The Smart Risk Exception in pruneWeakCandidates allows survival up to 0.08
+// below the market floor. The lowest floor is 0.55 (over_25/under_25), so
+// the minimum survivable probability is 0.47. We set the pre-filter at 0.40
+// to be safely below that threshold while catching obviously-dead candidates.
+// Markets NOT in the floor table use the default floor of 0.60.
+const PRE_FILTER_MIN_PROB = {
+  home_win: 0.44, away_win: 0.44, draw: 0.48,
+  over_25: 0.43, under_25: 0.43, over_15: 0.48,
+  over_35: 0.48, under_35: 0.60,
+  btts_yes: 0.52, btts_no: 0.56,
+  double_chance_home: 0.56, double_chance_away: 0.56,
+  dnb_home: 0.48, dnb_away: 0.48,
+};
+const PRE_FILTER_DEFAULT = 0.48; // default floor (0.60) - 0.08 exception margin - buffer
+
+function preFilterCandidates(candidates) {
+  const kept = [];
+  const removed = [];
+  for (const c of candidates || []) {
+    const prob = safeNum(c.modelProbability, 0);
+    const minProb = PRE_FILTER_MIN_PROB[c.marketKey] ?? PRE_FILTER_DEFAULT;
+    if (prob < minProb) {
+      removed.push(c.marketKey + '(' + (prob * 100).toFixed(1) + '%<' + (minProb * 100).toFixed(0) + '%)');
+    } else {
+      kept.push(c);
+    }
+  }
+  if (removed.length > 0) {
+    console.log('[runMarketSelection] Pre-filter removed ' + removed.length + ' low-prob candidates: ' + removed.join(', '));
+  }
+  return kept;
+}
 
 function applyMarketRestrictions(candidates, restrictions = {}) {
   const blockSet = new Set((restrictions.blockMarketKeys || []).map((k) => String(k).toLowerCase()));
@@ -109,7 +149,12 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
     }
   }
 
-  const candidatesWithEdge = computeImpliedProbabilities(candidatesAfterRestrictions, odds, features);
+  // ── Stage 3e.5: Cheap pre-filter — remove obviously-dead candidates ────────
+  // This runs BEFORE computeImpliedProbabilities and scoreMarketCandidates,
+  // saving expensive computation on candidates that would be pruned anyway.
+  const candidatesAfterPreFilter = preFilterCandidates(candidatesAfterRestrictions);
+
+  const candidatesWithEdge = computeImpliedProbabilities(candidatesAfterPreFilter, odds, features);
   const recentMarkets      = await getRecentMarkets(fixtureId, 24);
 
   // Fetch accuracy cache (non-blocking — null = neutral, engine unaffected)

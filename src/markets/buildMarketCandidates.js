@@ -6,6 +6,8 @@ const MARKET_DEFINITIONS = [
   { marketKey: 'draw',               selection: 'Draw',                 probKey: 'draw' },
   { marketKey: 'double_chance_home', selection: 'Double Chance 1X',     probKey: null,    compute: (p) => safeNum(p.homeWin, 0) + safeNum(p.draw, 0) },
   { marketKey: 'double_chance_away', selection: 'Double Chance X2',     probKey: null,    compute: (p) => safeNum(p.awayWin, 0) + safeNum(p.draw, 0) },
+  { marketKey: 'dnb_home',           selection: 'Home Win (DNB)',        probKey: null,    compute: (p) => { const h = safeNum(p.homeWin, 0); const a = safeNum(p.awayWin, 0); const denom = h + a; return denom > 0.01 ? h / denom : 0; } },
+  { marketKey: 'dnb_away',           selection: 'Away Win (DNB)',        probKey: null,    compute: (p) => { const h = safeNum(p.homeWin, 0); const a = safeNum(p.awayWin, 0); const denom = h + a; return denom > 0.01 ? a / denom : 0; } },
   { marketKey: 'over_15',            selection: 'Over 1.5 Goals',       probKey: 'over15' },
   { marketKey: 'over_25',            selection: 'Over 2.5 Goals',       probKey: 'over25' },
   { marketKey: 'over_35',            selection: 'Over 3.5 Goals',       probKey: 'over35' },

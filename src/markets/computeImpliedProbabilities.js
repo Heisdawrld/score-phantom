@@ -15,6 +15,8 @@ const ODDS_MAP = {
   under_35: ['under_35', 'under_3_5', 'under35', 'under_3.5'],
   btts_yes: ['btts_yes', 'bttsYes', 'both_teams_score_yes'],
   btts_no: ['btts_no', 'bttsNo', 'both_teams_score_no'],
+  dnb_home: ['odds_dnb_home', 'dnb_home', 'draw_no_bet_home'],
+  dnb_away: ['odds_dnb_away', 'dnb_away', 'draw_no_bet_away'],
 };
 
 /**
