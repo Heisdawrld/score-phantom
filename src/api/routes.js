@@ -594,6 +594,15 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       f.engine_odds = v4Fields.odds != null ? parseFloat(v4Fields.odds.toFixed(2)) : null;
       f.is_acca_eligible = v4Fields.isAccaEligible;
 
+      // ── BUG FIX: Suppress is_safe_bet/is_value_bet for AVOID picks ──
+      // Showing "Safe Bet" or "Value Bet" badges alongside an AVOID advisor status
+      // is contradictory and confuses users. AVOID overrides these flags.
+      if (f.advisor_status === 'AVOID' || v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
+        f.is_safe_bet = false;
+        f.is_value_bet = false;
+        f.is_acca_eligible = false;
+      }
+
       // Remove prediction_json from response (too large for fixture list)
       delete f.prediction_json;
 
@@ -976,6 +985,7 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
             WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
+              AND COALESCE(p.no_safe_pick, 0) = 0
               AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
               AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
             ORDER BY p.best_pick_probability DESC
@@ -1371,7 +1381,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       JOIN fixtures f ON f.id = p.fixture_id
       WHERE ${dateFilter}
         AND p.best_pick_selection IS NOT NULL
-        AND p.best_pick_probability >= 0.44
+        AND COALESCE(p.no_safe_pick, 0) = 0
+        AND p.best_pick_probability >= 0.50
         AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
         AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
     `;
@@ -1561,10 +1572,20 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       };
     });
 
+    // ── BUG FIX: Filter out AVOID picks — they should never appear as "Top Picks" ──
+    // The SQL filter (no_safe_pick=0) catches engine-abstained picks, but AVOID-badge
+    // picks (junk odds, negative EV, low data quality) can still slip through because
+    // they have a bestPick with probability > 50%. Filter them here.
+    const filteredPicks = picks.filter(p =>
+      p.advisor_status !== 'AVOID' &&
+      p.valueTier !== 'JUNK' &&
+      p.valueTier !== 'NEGATIVE_EV'
+    );
+
     return res.json({
       date: today,
-      topPicksCount: picks.length,
-      picks,
+      topPicksCount: filteredPicks.length,
+      picks: filteredPicks,
       filtered: favoritesOnly,
       access: buildAccessPayload(req.access),
     });
@@ -1640,6 +1661,7 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
             LEFT JOIN fixture_odds fo ON fo.fixture_id = f.id
             WHERE (f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)
               AND p.best_pick_selection IS NOT NULL
+              AND COALESCE(p.no_safe_pick, 0) = 0
               AND p.best_pick_probability > 0.57
               AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
             ORDER BY COALESCE(p.best_pick_edge, 0) DESC,
@@ -1679,6 +1701,13 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     // Calculate EV from prob + odds if not in JSON
     const bookOdds = v4Fields.odds || (impl > 0 ? (1 / impl) : null);
     const calcEV = v4Fields.ev != null ? v4Fields.ev : (bookOdds > 1.0 ? (prob * bookOdds) - 1 : null);
+
+    // ── BUG FIX: Don't return AVOID/junk picks as the "value bet of the day" ──
+    // Even with the SQL no_safe_pick filter, an AVOID-badge pick (junk odds, negative EV)
+    // could still be the top result by edge. These should never be promoted.
+    if (v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
+      return res.json({ found: false, access: buildAccessPayload(req.access) });
+    }
 
     return res.json({
       found:               true,

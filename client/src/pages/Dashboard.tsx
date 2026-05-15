@@ -125,7 +125,11 @@ export default function Dashboard() {
   useScrollRestoration("dashboard", !fixturesLoading && !authLoading);
 
   const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5 * 60 * 1000 });
-  const heroPick = (heroData as any)?.picks?.[0] || null;
+  // BUG FIX: Don't show hero card if the top pick is AVOID — showing an AVOID pick
+  // as "Top Pick" with green glow is contradictory and confuses users.
+  const rawHeroPick = (heroData as any)?.picks?.[0] || null;
+  const heroPick = rawHeroPick && rawHeroPick.advisor_status !== 'AVOID' && rawHeroPick.valueTier !== 'JUNK' && rawHeroPick.valueTier !== 'NEGATIVE_EV'
+    ? rawHeroPick : null;
   const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30&sport=football"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
   const trackStats = (trackData as any)?.overallStats || null;
 

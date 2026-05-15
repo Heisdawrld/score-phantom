@@ -118,8 +118,18 @@ export default function TopPicksToday() {
 
   const allPicks: Pick[] = data?.picks || [];
 
+  // BUG FIX: Filter out AVOID picks — they should never appear as "Top Picks"
+  // Even if the backend misses one (e.g. stale cache), the frontend must not
+  // render AVOID-badge picks as regular tips. This prevents the contradictory
+  // "AVOID" label appearing alongside full tip display.
+  const nonAvoidPicks = allPicks.filter(p =>
+    p.advisor_status !== 'AVOID' &&
+    p.valueTier !== 'JUNK' &&
+    p.valueTier !== 'NEGATIVE_EV'
+  );
+
   // Apply filter
-  const picks = allPicks.filter(p => {
+  const picks = nonAvoidPicks.filter(p => {
     if (filter === "safe") return p.isSafeBet;
     if (filter === "value") return p.isValueBet;
     const comp = p.composite ?? p.score * 100;
@@ -153,10 +163,10 @@ export default function TopPicksToday() {
     );
   }
 
-  const avgConf = allPicks.length > 0
-    ? (allPicks.reduce((s, p) => s + p.confidence, 0) / allPicks.length).toFixed(0)
+  const avgConf = nonAvoidPicks.length > 0
+    ? (nonAvoidPicks.reduce((s, p) => s + p.confidence, 0) / nonAvoidPicks.length).toFixed(0)
     : null;
-  const eliteCount = allPicks.filter(p => (p.composite ?? p.score * 100) >= 65).length;
+  const eliteCount = nonAvoidPicks.filter(p => (p.composite ?? p.score * 100) >= 65).length;
 
   if (isLoading) {
     return (

@@ -297,7 +297,10 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const tierConfig = valueTier ? VALUE_TIER_CONFIG[valueTier] || VALUE_TIER_CONFIG.MARGINAL : null;
 
   // The "secret angle" is the first high-quality backup pick
-  const secretPick = backups.find((b: any) => b.probability_pct >= 60) ?? backups[0] ?? null;
+  // BUG FIX: Don't use AVOID-badge picks as the "secret angle" — showing a
+  // "Premium Secret Angle" with an AVOID badge is contradictory.
+  const secretPick = backups.find((b: any) => b.probability_pct >= 60 && b.advisor_status !== 'AVOID') ??
+    backups.find((b: any) => b.advisor_status !== 'AVOID') ?? null;
 
   const goToPaywall = () => { onClose(); setLocation("/paywall"); };
 
@@ -545,8 +548,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         transition={{ duration: 0.18 }}
                         className="space-y-5"
                       >
-                        {/* Best Bet Angle */}
-                        {rec && !rec.no_edge ? (
+                        {/* Best Bet Angle — BUG FIX: also check isAvoidedPick and advisor_status */}
+                        {rec && !rec.no_edge && !rec.isAvoidedPick && rec.advisor_status !== 'AVOID' ? (
                           <div className="bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/25 rounded-3xl p-6 relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-3 opacity-8 pointer-events-none">
                               <Target className="w-28 h-28 text-primary" />
