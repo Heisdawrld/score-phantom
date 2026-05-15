@@ -24,21 +24,26 @@ import { checkOddsGate } from '../markets/valueTiers.js';
  *
  * v3: Intelligent Analyst — adds odds gate (Phase 1A/1B), Over 1.5 comfort guard
  */
+// ── v5: Lowered floors to allow smart-risk picks through ────────────────
+// Key changes: Home/Away Win 0.62→0.56, Over 2.5 0.60→0.55, BTTS Yes 0.68→0.64
+// These were too high, causing +EV picks to get pruned simply because they
+// were below a one-size-fits-all probability floor.
+// The Smart Risk Exception (below) adds further intelligence.
 const MARKET_MIN_PROB = {
-  btts_yes:           0.68,
-  btts_no:            0.72,
-  double_chance_home: 0.72,
-  double_chance_away: 0.72,
-  draw:               0.65,
-  home_win:           0.62,
-  away_win:           0.62,
-  dnb_home:           0.65,
-  dnb_away:           0.65,
-  over_25:            0.60,
-  under_25:           0.60,
+  btts_yes:           0.64,
+  btts_no:            0.68,
+  double_chance_home: 0.68,
+  double_chance_away: 0.68,
+  draw:               0.60,
+  home_win:           0.56,
+  away_win:           0.56,
+  dnb_home:           0.60,
+  dnb_away:           0.60,
+  over_25:            0.55,
+  under_25:           0.55,
   over_15:            0.60,
-  under_35:           0.74,   // tightened v2: Under 3.5 must be well above natural ~70% base rate
-  over_35:            0.65,
+  under_35:           0.72,   // still protective — Under 3.5 must be well above base rate
+  over_35:            0.60,
 };
 
 function isUnder35ComfortPick(candidate, options) {
@@ -49,6 +54,13 @@ function isUnder35ComfortPick(candidate, options) {
   const script = String(options.scriptPrimary || options.primaryScript || '').toLowerCase();
   const leagueOver35Rate = safeNum(options.leagueOver35Rate, 0.30);
   const h2hOver35Rate = safeNum(options.h2hOver35Rate, null);
+
+  // ── v5: Strong tactical override ─────────────────────────────────────
+  // If tight_low_event script AND tactical > 0.85 AND +EV, allow Under 3.5
+  // even at slightly lower probability — the match script strongly supports it.
+  const odds = safeNum(candidate.bookmakerOdds, 0);
+  const ev = odds > 1.0 ? (prob * odds) - 1 : 0;
+  if (tactical > 0.85 && ev >= 0.03 && prob >= 0.70) return false; // Exception granted
 
   const highEventScript = script === 'open_end_to_end' || script === 'balanced_high_event';
   if (highEventScript && prob < 0.80) return true;
@@ -80,6 +92,13 @@ function isOver15ComfortPick(candidate, options) {
   const odds = safeNum(candidate.bookmakerOdds, 0);
   const score = safeNum(candidate.finalScore, 0);
   const script = String(options.scriptPrimary || options.primaryScript || '').toLowerCase();
+  const tactical = safeNum(candidate.tacticalFitScore, 0);
+
+  // ── v5: Strong tactical override ─────────────────────────────────────
+  // If open/high-event script AND tactical > 0.85 AND +EV, allow Over 1.5
+  // at moderate odds — the match script strongly supports it.
+  const ev = odds > 1.0 ? (prob * odds) - 1 : 0;
+  if (tactical > 0.85 && ev >= 0.03 && odds >= 1.35) return false; // Exception granted
 
   // Hard prune: odds below 1.25 — no value at all
   if (odds > 1.0 && odds < 1.25) return true;
@@ -131,7 +150,32 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
       continue;
     }
 
-    if (prob < marketFloor) { removed.push(c.marketKey + '(prob=' + (prob*100).toFixed(1) + '%<floor=' + (marketFloor*100).toFixed(0) + '%)'); continue; }
+    // ── v5: Smart Risk Exception ────────────────────────────────────────
+    // Don't prune a market below floor if it has genuine value.
+    // ALL five conditions must be true — this is NOT a general loosening.
+    if (prob < marketFloor) {
+      const odds = safeNum(c.bookmakerOdds, 0);
+      const ev = odds > 1.0 ? (prob * odds) - 1 : 0;
+      const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
+      const isComfortMarket = [
+        'under_35', 'over_15', 'double_chance_home', 'double_chance_away',
+        'home_over_05', 'away_over_05',
+      ].includes(c.marketKey);
+      const smartRiskException =
+        ev >= 0.02 &&                    // Genuine positive EV
+        tactical >= 0.65 &&              // Strong tactical alignment
+        !isComfortMarket &&              // Not a lazy/safe market
+        prob >= marketFloor - 0.08 &&    // Not too far below floor
+        dataCompleteness >= 0.40;        // Adequate data to trust the model
+
+      if (!smartRiskException) {
+        removed.push(c.marketKey + '(prob=' + (prob*100).toFixed(1) + '%<floor=' + (marketFloor*100).toFixed(0) + '%)');
+        continue;
+      }
+      // Exception granted — mark for transparency
+      c.smartRiskException = true;
+      c.smartRiskExceptionReason = 'Below floor (' + (prob*100).toFixed(1) + '% < ' + (marketFloor*100).toFixed(0) + '%) but +EV=' + (ev*100).toFixed(1) + '% tactical=' + tactical.toFixed(2);
+    }
     if (isUnder35ComfortPick(c, {
       ...options,
       leagueOver35Rate: featureVector.leagueOver35Rate,

@@ -199,6 +199,161 @@ export function checkMarketDeEscalation(candidate, allCandidates, narrative) {
   };
 }
 
+// ── Cross-market escalation ────────────────────────────────────────────────
+// When a result/DC/DNB market is the top pick but offers poor value
+// (low odds, volatile context), check if a goals/BTTS market offers
+// better risk/reward. An experienced bettor thinks:
+//   "Home Win is too risky here, but both teams attack → Over 2.5 is the smart play."
+
+const CROSS_MARKET_ESCALATION = [
+  // Result → Specific goals market
+  { from: 'home_win', to: 'home_over_15', condition: 'dominant_side_goals',
+    minFromProb: 0.50, minToProb: 0.55, minToOdds: 1.40 },
+  { from: 'home_win', to: 'over_25', condition: 'high_event_script',
+    minFromProb: 0.48, minToProb: 0.50, minToOdds: 1.50 },
+  { from: 'away_win', to: 'away_over_15', condition: 'dominant_side_goals',
+    minFromProb: 0.50, minToProb: 0.55, minToOdds: 1.40 },
+  { from: 'away_win', to: 'over_25', condition: 'high_event_script',
+    minFromProb: 0.48, minToProb: 0.50, minToOdds: 1.50 },
+  // Result → BTTS (when both teams score profile is strong)
+  { from: 'home_win', to: 'btts_yes', condition: 'btts_profile',
+    minFromProb: 0.48, minToProb: 0.52, minToOdds: 1.50 },
+  { from: 'away_win', to: 'btts_yes', condition: 'btts_profile',
+    minFromProb: 0.48, minToProb: 0.52, minToOdds: 1.50 },
+  // DC → Goals (DC is a safety blanket, look for value instead)
+  { from: 'double_chance_home', to: 'over_25', condition: 'high_event_script',
+    minFromProb: 0.60, minToProb: 0.50, minToOdds: 1.55 },
+  { from: 'double_chance_home', to: 'btts_yes', condition: 'btts_profile',
+    minFromProb: 0.60, minToProb: 0.52, minToOdds: 1.50 },
+  { from: 'double_chance_away', to: 'over_25', condition: 'high_event_script',
+    minFromProb: 0.60, minToProb: 0.50, minToOdds: 1.55 },
+  { from: 'double_chance_away', to: 'btts_yes', condition: 'btts_profile',
+    minFromProb: 0.60, minToProb: 0.52, minToOdds: 1.50 },
+  // DNB → Specific goals (DNB is half-measure, goals are clearer)
+  { from: 'dnb_home', to: 'home_over_15', condition: 'dominant_side_goals',
+    minFromProb: 0.55, minToProb: 0.55, minToOdds: 1.40 },
+  { from: 'dnb_away', to: 'away_over_15', condition: 'dominant_side_goals',
+    minFromProb: 0.55, minToProb: 0.55, minToOdds: 1.40 },
+];
+
+/**
+ * Check if a cross-market escalation condition is met.
+ */
+function checkCrossEscalationCondition(condition, narrative, script) {
+  const nar = narrative || {};
+  const sc = script || {};
+  const scriptPrimary = sc.primary || '';
+
+  switch (condition) {
+    case 'high_event_script':
+      return scriptPrimary === 'open_end_to_end' || scriptPrimary === 'balanced_high_event'
+        || nar.goalExpectation === 'high' || nar.goalExpectation === 'very_high';
+
+    case 'btts_profile':
+      return (nar.styleProfile === 'both_attacking' || nar.bttsRate > 0.50)
+        && (nar.goalExpectation === 'high' || nar.goalExpectation === 'very_high' || nar.goalExpectation === 'moderate');
+
+    case 'dominant_side_goals':
+      return nar.scriptAssessment === 'one_sided'
+        || nar.qualityAssessment === 'home_clearly_better'
+        || nar.qualityAssessment === 'away_clearly_better';
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Check if a candidate should be cross-escalated to a different market category.
+ *
+ * Cross-escalation triggers when:
+ *   1. The current pick is a result/DC/DNB market
+ *   2. The current pick offers poor odds-to-value ratio (odds too low for the risk)
+ *   3. The narrative/script supports a goals/BTTS alternative
+ *   4. The target market has better EV and adequate probability
+ *
+ * @param {object} candidate — the current top candidate
+ * @param {object[]} allCandidates — all scored candidates
+ * @param {object} narrative — match narrative
+ * @param {object} script — script output
+ * @returns {{ shouldEscalate: boolean, escalatedTo: object|null, reason: string|null }}
+ */
+export function checkCrossMarketEscalation(candidate, allCandidates, narrative, script) {
+  if (!candidate || !allCandidates) return { shouldEscalate: false, escalatedTo: null, reason: null };
+
+  const marketKey = candidate.marketKey;
+  const prob = safeNum(candidate.modelProbability, 0);
+  const odds = safeNum(candidate.bookmakerOdds, 0);
+
+  // Find matching cross-market escalation pairs
+  const pairs = CROSS_MARKET_ESCALATION.filter(p => p.from === marketKey);
+  if (pairs.length === 0) return { shouldEscalate: false, escalatedTo: null, reason: null };
+
+  // Check if current pick has poor value (low odds / low EV for the risk)
+  const currentEV = odds > 1.0 ? (prob * odds) - 1 : 0;
+  const isPoorValue = odds < 1.40 || (odds < 1.60 && currentEV < 0.03);
+  if (!isPoorValue) {
+    return { shouldEscalate: false, escalatedTo: null, reason: 'Current pick has acceptable value' };
+  }
+
+  // Evaluate each cross-market pair
+  let bestEscalation = null;
+  let bestEVImprovement = -Infinity;
+
+  for (const pair of pairs) {
+    // Check condition
+    if (!checkCrossEscalationCondition(pair.condition, narrative, script)) continue;
+
+    // Find target candidate
+    const target = allCandidates.find(c => c.marketKey === pair.to);
+    if (!target) continue;
+
+    const targetProb = safeNum(target.modelProbability, 0);
+    const targetOdds = safeNum(target.bookmakerOdds, 0);
+
+    // Check thresholds
+    if (prob < pair.minFromProb) continue;
+    if (targetProb < pair.minToProb) continue;
+    if (targetOdds < pair.minToOdds || targetOdds <= 1.0) continue;
+
+    // EV comparison
+    const targetEV = targetOdds > 1.0 ? (targetProb * targetOdds) - 1 : 0;
+    if (targetEV <= currentEV) continue; // Target must have better EV
+
+    const evImprovement = targetEV - currentEV;
+    if (evImprovement > bestEVImprovement) {
+      bestEVImprovement = evImprovement;
+      bestEscalation = {
+        pair,
+        target,
+        targetProb,
+        targetOdds,
+        targetEV,
+        evImprovement,
+      };
+    }
+  }
+
+  if (!bestEscalation) {
+    return { shouldEscalate: false, escalatedTo: null, reason: 'No cross-market target meets criteria' };
+  }
+
+  return {
+    shouldEscalate: true,
+    escalatedTo: {
+      ...bestEscalation.target,
+      escalatedFrom: marketKey,
+      escalatedFromOdds: odds,
+      escalatedFromProb: prob,
+      escalationEVImprovement: parseFloat(bestEscalation.evImprovement.toFixed(4)),
+      escalationType: 'cross_market',
+      escalationCondition: bestEscalation.pair.condition,
+      escalationReason: `${marketKey} at ${odds.toFixed(2)} cross-escalated to ${bestEscalation.pair.to} at ${bestEscalation.targetOdds.toFixed(2)} — EV ${(currentEV*100).toFixed(1)}% → ${(bestEscalation.targetEV*100).toFixed(1)}%`,
+    },
+    reason: `Cross-escalating ${marketKey} → ${bestEscalation.pair.to}: better value (${(currentEV*100).toFixed(1)}% → ${(bestEscalation.targetEV*100).toFixed(1)}% EV), condition=${bestEscalation.pair.condition}`,
+  };
+}
+
 /**
  * Apply escalation bonus to scored candidates.
  * If narrative strongly supports high-event, boost Over 3.5 / BTTS Yes scoring.

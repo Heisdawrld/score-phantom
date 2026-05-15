@@ -10,7 +10,7 @@ import { selectBestPickOrAbstain } from './selectBestPickOrAbstain.js';
 import { getAccuracyCache } from '../storage/accuracyCache.js';
 import { buildMatchNarrative } from './buildMatchNarrative.js';
 import { computeContextModifiers, applyContextModifiers } from './contextModifiers.js';
-import { checkMarketEscalation, applyEscalationBonuses } from '../markets/marketEscalation.js';
+import { checkMarketEscalation, checkCrossMarketEscalation, applyEscalationBonuses } from '../markets/marketEscalation.js';
 import { buildReasonChain } from './buildReasonChain.js';
 
 function applyMarketRestrictions(candidates, restrictions = {}) {
@@ -143,10 +143,20 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
   // ── Stage 3l: Check market escalation (Phase 5A) ──────────────────────────
   // If the best pick is at low odds with high probability, consider escalating
   if (bestPick && !noSafePick && ranked.length > 1) {
+    // Same-category escalation (e.g., Over 1.5 → Over 2.5)
     const escalation = checkMarketEscalation(bestPick, ranked, narrative);
     if (escalation.shouldEscalate && escalation.escalatedTo) {
       console.log('[runMarketSelection] ESCALATION: ' + escalation.reason);
       bestPick = escalation.escalatedTo;
+    }
+
+    // v5: Cross-market escalation (e.g., Home Win → Over 2.5 when Home Win has poor value)
+    // An experienced bettor thinks: "Home Win is too risky at these odds, but both
+    // teams attack → Over 2.5 is the smarter play."
+    const crossEscalation = checkCrossMarketEscalation(bestPick, ranked, narrative, script);
+    if (crossEscalation.shouldEscalate && crossEscalation.escalatedTo) {
+      console.log('[runMarketSelection] CROSS-ESCALATION: ' + crossEscalation.reason);
+      bestPick = crossEscalation.escalatedTo;
     }
   }
 

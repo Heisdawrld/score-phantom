@@ -42,6 +42,82 @@ function getTacticalFit(marketKey, scriptOutput) {
   return DEFAULT_TACTICAL_FIT;
 }
 
+/**
+ * Smart Risk Reward — rewards markets with quality odds/probability balance.
+ *
+ * This is NOT just "positive EV" (already captured in edge/EV scoring).
+ * It's specifically about the RISK-ADJUSTED QUALITY of the bet:
+ *   - Kelly Criterion fraction: optimal sizing = risk/reward ratio
+ *   - Odds quality bonus: odds in the "bettable range" (1.50-2.20) are preferred
+ *   - EV confidence: higher probability = more likely to realize the EV
+ *
+ * Example outputs:
+ *   Home Win 55% @ 1.91 → Kelly=0.084, riskAdjEV=+0.049, oddsQuality=+0.15 → score≈0.37
+ *   DC Home 85% @ 1.14 → Kelly=0, riskAdjEV=+0.018, oddsQuality=0 → score≈0.04
+ *   Over 2.5 58% @ 1.80 → Kelly=0.074, riskAdjEV=+0.038, oddsQuality=+0.15 → score≈0.33
+ */
+function computeSmartRiskReward(candidate) {
+  const prob = safeNum(candidate.modelProbability, 0);
+  const odds = safeNum(candidate.bookmakerOdds, 0);
+  if (odds <= 1.0) return 0;
+
+  const ev = (prob * odds) - 1;
+
+  // Kelly Criterion: optimal bet fraction = (p*o - 1) / (o - 1)
+  // Higher Kelly = better risk/reward ratio
+  const kelly = (prob * odds - 1) / (odds - 1);
+  const kellyClamped = clamp(kelly, 0, 0.25);
+
+  // Risk-adjusted EV: EV scaled by sqrt(probability)
+  // High prob + high EV = great. Low prob + high EV = speculative.
+  // sqrt avoids pure probability dominance while still favoring confidence
+  const riskAdjEV = clamp(ev * Math.sqrt(prob), -0.3, 0.5);
+
+  // Odds quality: the "bettable range" where real money is made
+  // 1.50-2.20 is the sweet spot for singles (real return for real risk)
+  let oddsQualityBonus = 0;
+  if (odds >= 1.50 && odds <= 2.20) oddsQualityBonus = 0.15;      // sweet spot
+  else if (odds >= 1.40 && odds <= 2.50) oddsQualityBonus = 0.08;  // near sweet spot
+  else if (odds >= 1.30 && odds <= 3.00) oddsQualityBonus = 0.03;  // acceptable range
+  // odds < 1.30 or > 3.00: no bonus (too safe or too speculative)
+
+  return clamp(kellyClamped * 2.0 + clamp(riskAdjEV, 0, 0.5) + oddsQualityBonus, 0, 1);
+}
+
+/**
+ * Market Efficiency — scores how exploitable the gap between model and market is.
+ *
+ * Concept:
+ *   - Tiny gap (<3pp): Market is efficient → thin edge, hard to profit
+ *   - Moderate gap (3-10pp): Sweet spot → exploitable inefficiency
+ *   - Large gap (>15pp): Probably model error → unreliable signal
+ *
+ * Positive EV in the moderate gap range = gold zone = highest efficiency score
+ */
+function computeMarketEfficiency(candidate) {
+  const prob = safeNum(candidate.modelProbability, 0);
+  const implied = safeNum(candidate.impliedProbability, 0);
+  const odds = safeNum(candidate.bookmakerOdds, 0);
+  if (implied <= 0 || odds <= 1.0) return 0.5; // neutral when unknown
+
+  const gap = Math.abs(prob - implied);
+  const ev = (prob * odds) - 1;
+
+  let efficiencyScore;
+  if (gap < 0.03)      efficiencyScore = 0.35;   // Tight market, thin edge
+  else if (gap < 0.06) efficiencyScore = 0.55;   // Moderate inefficiency
+  else if (gap < 0.10) efficiencyScore = 0.80;   // Sweet spot of inefficiency
+  else if (gap < 0.15) efficiencyScore = 0.65;   // Larger gap, more caution
+  else                 efficiencyScore = 0.25;   // Very large gap, likely model error
+
+  // Gold zone bonus: positive EV + moderate inefficiency = exploitable value
+  if (ev > 0 && gap >= 0.03 && gap <= 0.12) {
+    efficiencyScore += 0.15;
+  }
+
+  return clamp(efficiencyScore, 0, 1);
+}
+
 function getBadMarketPenalty(candidate) {
   const { marketKey, modelProbability } = candidate;
   if (marketKey === 'home_over_05') return 0.9;
@@ -162,35 +238,46 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    // ── v4 INTELLIGENT ANALYST REBALANCED WEIGHTS ───────────────────────────
-    // Key changes from v3:
-    // - EV-based scoring replaces simple edge (Phase 1C)
-    // - Model confidence reduced from 22% → 18% (probability alone isn't enough)
-    // - EV/edge component increased from 16% → 25% (value is the real metric)
-    // - Tactical stays at 13%
-    // - Predictability stays at 13%
-    // - Data stays at 10%
-    // - Historical stays at 9%
-    // - League stays at 12%
+    // ── v5 INTELLIGENT ANALYST — EXPERIENCED BETTOR REBALANCED WEIGHTS ───────
+    // Key changes from v4:
+    // - Model confidence reduced from 18% → 14% (probability alone isn't enough)
+    // - EV/edge component reduced from 25% → 22% (still important, but not sole driver)
+    // - NEW: Smart Risk Reward 10% (reward quality odds/prob balance — Kelly-based)
+    // - NEW: Market Efficiency 6% (reward exploitable inefficiencies)
+    // - Tactical UP from 13% → 14% (tactical alignment is key for smart picks)
+    // - Predictability DOWN from 13% → 8% (stop favoring predictable matches so heavily)
+    // - Data DOWN from 10% → 8%
+    // - Historical DOWN from 9% → 8%
+    // - League DOWN from 12% → 10%
     // - Form stays at 5%
-    // Total: 18+25+13+13+10+9+12+5 = 105% → normalized to 100%
-    const modelScore = 0.18 * modelConfidenceScore;
-    const marketEdgeScore = 0.25 * combinedEdgeScore; // EV-weighted edge
-    const tacticalFitComponent = 0.13 * tacticalFitScore;
-    const predictabilityScore = 0.13 * predScore;
-    const dataSupportComponent = 0.10 * dataSupportScore;
-    const historicalAccuracyComponent = 0.09 * historicalAccuracyScore;
-    const leagueCalibrationComponent = 0.12 * leagueMarketScore;
+    // Total: 14+22+10+6+14+8+8+8+10+5 = 105% → normalized to 100%
+    const modelScore = 0.14 * modelConfidenceScore;
+    const marketEdgeScore = 0.22 * combinedEdgeScore; // EV-weighted edge
+    const smartRiskRewardScore = computeSmartRiskReward(candidate);
+    const smartRiskRewardComponent = 0.10 * smartRiskRewardScore;
+    const marketEfficiencyScore = computeMarketEfficiency(candidate);
+    const marketEfficiencyComponent = 0.06 * marketEfficiencyScore;
+    const tacticalFitComponent = 0.14 * tacticalFitScore;
+    const predictabilityScore = 0.08 * predScore;
+    const dataSupportComponent = 0.08 * dataSupportScore;
+    const historicalAccuracyComponent = 0.08 * historicalAccuracyScore;
+    const leagueCalibrationComponent = 0.10 * leagueMarketScore;
     const formMomentumComponent = 0.05 * formMomentumScore;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;
     const leagueTrustedBonus = leagueSignal.status === 'trusted' ? 0.04 : 0;
 
-    const riskPenaltyScore = (0.22 * volatilityPenalty) + (0.15 * scriptMismatchPenalty) + starvationPenalty + leagueRestrictionPenalty;
+    // Smarter risk penalty: reduce blanket volatility coefficient,
+    // since Smart Risk Reward already handles "volatility with value"
+    const volatilityCoefficient = marketKey.includes('over') || marketKey === 'btts_yes'
+      ? 0.08   // Goals markets: volatility is a SIGNAL, not pure risk
+      : 0.14;  // Other markets: still penalize, but less aggressively
+    const riskPenaltyScore = (volatilityCoefficient * volatilityPenalty) + (0.12 * scriptMismatchPenalty) + starvationPenalty + leagueRestrictionPenalty;
     const productPenaltyScore = (0.14 * badMarketPenalty) + (0.08 * repetitionPenalty) + diversityPenalty;
 
     let finalScore =
-      modelScore + marketEdgeScore + tacticalFitComponent + predictabilityScore +
+      modelScore + marketEdgeScore + smartRiskRewardComponent + marketEfficiencyComponent +
+      tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
       formMomentumComponent + diversityBonus + leagueTrustedBonus +
       volatilityAdjustment -  // Phase 3A: volatility as signal
@@ -307,6 +394,10 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       ...candidate,
       modelScore: parseFloat(modelScore.toFixed(4)),
       marketEdgeScore: parseFloat(marketEdgeScore.toFixed(4)),
+      smartRiskRewardScore: parseFloat(smartRiskRewardScore.toFixed(4)),
+      smartRiskRewardComponent: parseFloat(smartRiskRewardComponent.toFixed(4)),
+      marketEfficiencyScore: parseFloat(marketEfficiencyScore.toFixed(4)),
+      marketEfficiencyComponent: parseFloat(marketEfficiencyComponent.toFixed(4)),
       predictabilityScore: parseFloat(predictabilityScore.toFixed(4)),
       riskPenaltyScore: parseFloat(riskPenaltyScore.toFixed(4)),
       productPenaltyScore: parseFloat(productPenaltyScore.toFixed(4)),

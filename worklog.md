@@ -154,3 +154,30 @@ Stage Summary:
 - All 3 writers use same 22-column INSERT for prediction_outcomes
 - Health monitoring gives visibility into cron job failures
 - marketCalibrationReport.js works on Turso
+---
+Task ID: 3
+Agent: Main Agent
+Task: Implement intelligent market selection — BEST BET = highest-quality actionable market, not lowest risk
+
+Work Log:
+- Analyzed full engine pipeline: buildMarketCandidates → scoreMarketCandidates → pruneWeakCandidates → rankMarkets → selectBestPickOrAbstain → runMarketSelection
+- Identified 5 core problems: aggressive pruning, safety-biased scoring, no smart risk reward, no cross-market escalation, weak comfort penalties
+- Added computeSmartRiskReward() to scoreMarketCandidates.js — Kelly Criterion + odds quality + risk-adjusted EV
+- Added computeMarketEfficiency() to scoreMarketCandidates.js — exploits market-model gaps in gold zone
+- Rebalanced scoring weights: model 18%→14%, edge 25%→22%, NEW smart risk 10%, NEW efficiency 6%, tactical 13%→14%, predictability 13%→8%
+- Made volatility penalty smarter: goals markets get 0.08 coeff (signal), others get 0.14 (risk)
+- Lowered market floors in pruneWeakCandidates.js: home_win 0.62→0.56, over_25 0.60→0.55, btts_yes 0.68→0.64, etc.
+- Added Smart Risk Exception: below-floor markets survive if +EV ≥ 2%, tactical ≥ 0.65, not comfort market, within 8pp of floor, data ≥ 0.40
+- Added tactical overrides to comfort pick guards (Under 3.5 and Over 1.5)
+- Added CROSS_MARKET_ESCALATION table with 12 pairs: result→goals, DC→goals, DNB→team goals
+- Added checkCrossMarketEscalation() with condition checker (high_event_script, btts_profile, dominant_side_goals)
+- Wired cross-market escalation into runMarketSelection.js Stage 3l
+- Increased comfort market penalties in rankMarkets.js: under_35 0.095→0.150, over_15 0.065→0.100, DC 0.050→0.080
+- Doubled specific market bonuses: home_win/away_win 0.030→0.060, over_25 0.025→0.050, btts_yes 0.025→0.045
+- Added Smart Risk Adjustment and Smart Risk Reward component to headline quality scoring
+
+Stage Summary:
+- Engine now thinks like an experienced bettor: not cowardly, not reckless, but optimized for realistic winning decisions
+- BEST BET ≠ LOWEST RISK BET — now properly implemented
+- Cross-market escalation enables: Home Win too risky → Over 2.5 as smart alternative
+- All 5 modified files pass syntax check
