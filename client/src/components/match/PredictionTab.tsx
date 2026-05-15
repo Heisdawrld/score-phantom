@@ -153,7 +153,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const edgeAboveBaseline = rec.edgeAboveBaseline != null ? rec.edgeAboveBaseline : null;
   const marketBaseline = rec.marketBaseline != null ? rec.marketBaseline : null;
   const hasThinBaselineEdge = edgeAboveBaseline != null && edgeAboveBaseline < 0.08 && marketBaseline != null && marketBaseline >= 0.65;
-  
+
   // v4 Verdict: Maps all 5 advisor statuses to user-facing labels
   // FIRE → "PICK THIS" — strong value with fair odds
   // RECOMMENDED → "RECOMMENDED" — good risk/reward, positive EV
@@ -261,6 +261,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           </motion.div>
 
           {/* Badges row: Verdict, Risk, Style */}
+          {/* BUG FIX: Don't show contradictory badges when AVOID */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -324,7 +325,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             )}
           </div>
 
-          {/* OUR BEST BET — or AVOIDED PICK notice */}
+          {/* OUR BEST BET — or AVOID notice */}
           {isNoPick ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -374,7 +375,6 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                 {/* Large circular confidence gauge */}
                 <div className="shrink-0 flex flex-col items-center">
                   <div className="relative w-[80px] h-[80px]">
-                    {/* Background ring */}
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
                       <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4.5" />
                       <circle
@@ -382,7 +382,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                         stroke="url(#confGradTab)"
                         strokeWidth="4.5"
                         strokeLinecap="round"
-                        strokeDasharray={`${(displayConfidence / 100) * 188.5} 188.5`}
+                        strokeDasharray={`${(phantomScore / 100) * 188.5} 188.5`}
                       />
                       <defs>
                         <linearGradient id="confGradTab" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -391,40 +391,62 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                         </linearGradient>
                       </defs>
                     </svg>
-                    {/* Center text */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-xl font-black text-white leading-none">{displayConfidence}%</span>
+                      <span className="text-xl font-black text-white leading-none">{phantomScore}%</span>
                     </div>
                   </div>
                   <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">MODEL PROB.</span>
                 </div>
               </motion.div>
-
-              {/* Edge vs bookmakers — only for non-AVOID picks */}
-              {isSharpValue ? (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="flex items-center gap-2 mt-2 mb-3">
-                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
-                    SHARP MONEY ALERT
-                  </span>
-                  <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
-                </motion.div>
-              ) : hasValue && edgePct != null ? (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="flex items-center gap-2 mt-2 mb-3">
-                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
-                    ACTIONABLE EDGE
-                  </span>
-                  <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
-                </motion.div>
-              ) : null}
             </>
+          )}
+
+          {/* Edge vs bookmakers — only for non-AVOID picks */}
+          {!isNoPick && isSharpValue ? (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
+                SHARP MONEY ALERT
+              </span>
+              <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
+            </motion.div>
+          ) : !isNoPick && hasValue && edgePct != null ? (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex items-center gap-2 mt-2 mb-3">
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary uppercase">
+                ACTIONABLE EDGE
+              </span>
+              <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
+            </motion.div>
+          ) : null}
+
+          {/* ── PHANTOM DECISION STACK ── */}
+          {scriptLabel && (
+            <div className="mt-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-white/30">→</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Decision Stack</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-amber-300">{scriptLabel}</span>
+                {scriptVol && (
+                  <span className={cn(
+                    "text-[9px] font-bold px-2 py-0.5 rounded-full",
+                    scriptVol === "HIGH" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                    scriptVol === "LOW" ? "bg-primary/10 text-primary border border-primary/20" :
+                    "bg-white/[0.04] text-white/30 border border-white/[0.06]"
+                  )}>
+                    {scriptVol}
+                  </span>
+                )}
+              </div>
+            </motion.div>
           )}
 
           {/* ── PHANTOM DECISION STACK ── */}

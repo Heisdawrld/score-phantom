@@ -563,6 +563,11 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       ? ['Model-only pick — no bookmaker odds were available for this market', ...humanReasonCodes]
       : humanReasonCodes;
 
+    // BUG FIX: If advisor_status resolves to AVOID in the "normal" branch,
+    // we must set no_edge and isAvoidedPick so the frontend knows to hide
+    // "Our Best Bet" and "Other Good Options". Without this, the frontend
+    // would show AVOID badge + "Our Best Bet" — contradictory.
+    const isAvoidInNormalBranch = advisorStatus === 'AVOID';
     recommendation = {
       market: mapMarketName(bestPick.marketKey),
       pick: formatPickLabel(bestPick.marketKey, bestPick.selection, homeTeam, awayTeam),
@@ -586,22 +591,22 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       // "Our Best Bet" and "Other Good Options". Without this, cached data
       // or edge cases where noSafePick was not set by the engine would show
       // AVOID badge + "Our Best Bet: Over 2.5 Goals" — contradictory.
-      no_edge: advisorStatus === 'AVOID' ? true : false,
-      isAvoidedPick: advisorStatus === 'AVOID' ? true : (bestPick.isAvoidedPick || false),
-      avoidReason: advisorStatus === 'AVOID' ? (bestPick.avoidReason || 'Insufficient edge or value to justify a recommendation') : null,
+      no_edge: isAvoidInNormalBranch ? true : false,
+      isAvoidedPick: isAvoidInNormalBranch ? true : (bestPick.isAvoidedPick || false),
+      avoidReason: isAvoidInNormalBranch ? (bestPick.avoidReason || 'Insufficient edge or value to justify a recommendation') : null,
       modelOnly: isModelOnly,
       isModelOnly,
-      isSafeBet: advisorStatus === 'AVOID' ? false : isSafeBet,
-      isValueBet: advisorStatus === 'AVOID' ? false : isValueBet,
-      isSharpValue: advisorStatus === 'AVOID' ? false : (!isModelOnly && (bestPick.isSharpValue || false)),
+      isSafeBet: isAvoidInNormalBranch ? false : isSafeBet,
+      isValueBet: isAvoidInNormalBranch ? false : isValueBet,
+      isSharpValue: isAvoidInNormalBranch ? false : (!isModelOnly && (bestPick.isSharpValue || false)),
       dataQualityNote: engineConfidence?.dataQualityNote || null,
       // ── v4: Intelligent Analyst new fields ─────────────────────────────
       valueTier: bestValueTier,
       valueTierLabel: bestPick.valueTierLabel || null,
       ev: bestEV != null ? parseFloat(bestEV.toFixed(4)) : null,
       odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
-      isAccaEligible: advisorStatus === 'AVOID' ? false : (bestPick.isAccaEligible || false),
-      riskReward: advisorStatus === 'AVOID' ? null : (bestPick.riskReward || null),
+      isAccaEligible: isAvoidInNormalBranch ? false : (bestPick.isAccaEligible || false),
+      riskReward: isAvoidInNormalBranch ? null : (bestPick.riskReward || null),
       analystSummary: reasonChain?.analystSummary || null,
     };
   } else {
