@@ -1183,24 +1183,35 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
 
               {/* Basketball Predictions */}
               <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5 space-y-3">
-                <h3 className="text-sm font-bold text-white">🏀 Basketball Predictions</h3>
-                <p className="text-xs text-gray-500">Clear basketball prediction cache so the engine rebuilds with latest logic.</p>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">🏀 Basketball Control Room</h3>
+                  <a href="/admin/basketball" className="text-[10px] font-black text-primary hover:underline">Full Panel →</a>
+                </div>
+                <p className="text-xs text-gray-500">Quick actions. For the full control room with ESPN + NBA Stats API, use the dedicated panel.</p>
                 <div className="flex flex-col gap-2">
-                  <button onClick={() => { if(confirm("Clear ALL basketball predictions? Engine will rebuild fresh.")) run(() => call("/api/basketball/admin/clear-predictions", { method: "POST" }), "Basketball predictions cleared — engine will rebuild on next request"); }}
-                    className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
-                    🗑️ Clear Basketball Predictions
+                  <button onClick={() => run(() => call("/api/basketball/admin/sync-espn", { method: "POST", body: JSON.stringify({ daysAhead: 3 }) }), "ESPN scoreboards synced (FREE — NBA, WNBA, NCAAM, NCAAW)")}
+                    className="w-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-cyan-500/20 transition-all">
+                    🌐 Sync ESPN Scoreboards (Free)
+                  </button>
+                  <button onClick={() => run(() => call("/api/basketball/admin/test-nba-stats", { method: "POST", body: "{}" }), "Testing NBA Stats API (FREE — advanced metrics)")}
+                    className="w-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-cyan-500/20 transition-all">
+                    📊 Test NBA Stats API (Free)
+                  </button>
+                  <button onClick={() => run(() => call("/api/basketball/admin/sync", { method: "POST", body: JSON.stringify({ daysAhead: 3, includeEspn: true }) }), "Syncing all basketball data (ESPN + API-Sports + odds)…")}
+                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
+                    📡 Sync All Basketball Data
                   </button>
                   <button onClick={() => run(() => call("/api/basketball/admin/force-rebuild", { method: "POST" }), "Basketball predictions clearing + rebuilding… this may take 1-2 minutes")}
                     className="w-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-primary/20 transition-all">
-                    🔄 Force Rebuild Basketball Predictions
+                    🔄 Force Rebuild Predictions
                   </button>
                   <button onClick={() => run(() => call("/api/basketball/admin/run-predictions", { method: "POST" }), "Running basketball predictions (keeps existing cache, fills missing)…")}
                     className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
-                    ▶️ Run Predictions (fill missing only)
+                    ▶️ Run Predictions
                   </button>
-                  <button onClick={() => run(() => call("/api/basketball/admin/sync", { method: "POST", body: JSON.stringify({ daysAhead: 3 }) }), "Syncing basketball games + odds…")}
-                    className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
-                    📡 Sync Basketball Games & Odds
+                  <button onClick={() => { if(confirm("Clear ALL basketball predictions? Engine will rebuild fresh.")) run(() => call("/api/basketball/admin/clear-predictions", { method: "POST" }), "Basketball predictions cleared"); }}
+                    className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-500/20 transition-all">
+                    🗑️ Clear Basketball Predictions
                   </button>
                 </div>
               </div>

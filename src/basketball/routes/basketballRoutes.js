@@ -5,6 +5,7 @@ import { initBasketballTables, listBasketballGames, findBasketballGameByExternal
 import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSportsBasketballGames, syncApiSportsBasketballOdds, testApiSportsBasketballCoverage, syncNbaGames, runBasketballPredictions, syncEspnScoreboards, syncEspnStandings } from '../jobs/basketballSync.js';
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction, BASKETBALL_ENGINE_VERSION } from '../engine/basketballEngine.js';
+import { basketballAutoSyncStatus } from '../jobs/basketballAutoSync.js';
 import { requireAdminSecret } from '../../middlewares/adminGuard.js';
 
 const router = express.Router();
@@ -95,6 +96,7 @@ router.get('/health', async (req, res) => {
   try {
     await initBasketballTables();
     const selectedApiSportsLeagues = getApiSportsTopBasketballLeagues({ limit: 15 });
+    const autoSync = basketballAutoSyncStatus();
     const checks = {
       database: 'ok',
       primaryProvider: 'api_sports_basketball',
@@ -103,9 +105,11 @@ router.get('/health', async (req, res) => {
       ballDontLie: process.env.BALLDONTLIE_API_KEY ? 'manual_backup_only' : 'disabled',
       espnApi: 'free_no_key_required',
       nbaStatsApi: 'free_no_key_required',
+      engineVersion: BASKETBALL_ENGINE_VERSION,
       selectedApiSportsLeagues: selectedApiSportsLeagues.map((l) => `${l.name}${l.country ? ` (${l.country})` : ''}`),
       selectedApiSportsLeagueCount: selectedApiSportsLeagues.length,
       oddsApiBackupLeagues: getEnabledBasketballLeagues().map((l) => l.key),
+      autoSync,
     };
     res.json({ status: checks.apiSports === 'configured' ? 'ok' : 'degraded', checks });
   } catch (err) {
