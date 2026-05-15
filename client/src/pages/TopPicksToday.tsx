@@ -351,7 +351,7 @@ export default function TopPicksToday() {
                           <span className="text-[11px] text-white/50">{pick.probability.toFixed(1)}%</span>
                         </div>
                         <ConfidenceBadge value={pick.composite ?? pick.score * 100} />
-                        <ModelAdvisorBadge status={((pick.advisor_status || "CAREFUL") as AdvisorStatus)} showLabel={false} />
+                        <ModelAdvisorBadge status={((pick.advisor_status || "ACCA") as AdvisorStatus)} showLabel={false} />
                         {/* v4: Value tier + EV badges */}
                         {pick.valueTier && pick.valueTier !== 'JUNK' && pick.valueTier !== 'NEGATIVE_EV' && pick.valueTier !== 'UNPRICED' && (
                           <span className={cn(
@@ -365,8 +365,8 @@ export default function TopPicksToday() {
                             {pick.valueTier === 'ACCUMULATOR' ? 'ACCA' : pick.valueTier}
                           </span>
                         )}
-                        {pick.isAccaEligible && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-cyan-400/10 text-cyan-400 border border-cyan-400/20">ACCA</span>
+                        {pick.isAccaEligible && pick.advisor_status === 'BET' && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-cyan-400/10 text-cyan-400 border border-cyan-400/20">+ACCA</span>
                         )}
                         {pick.ev != null && (
                           <span className={cn(

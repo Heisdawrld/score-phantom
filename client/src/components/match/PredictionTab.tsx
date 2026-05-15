@@ -141,27 +141,27 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskLabel = (rec.riskLevel || 'MODERATE').toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
-  const advisorStatus = (rec.advisor_status || "CAREFUL") as AdvisorStatus;
+  const advisorStatus = (rec.advisor_status || "ACCA") as AdvisorStatus;
   const isAvoidedPick = rec.isAvoidedPick === true;
   const avoidReason = rec.avoidReason || null;
   // SKIP detection: also handle legacy AVOID status from cached data
   const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'SKIP' || advisorStatus === 'AVOID';
 
-  // Simplified verdict: just 3 levels
-  // GO = "Bet This", CAREFUL = "Careful", SKIP = "Skip"
-  // Legacy statuses are normalized by ModelAdvisorBadge component
-  const normalizedStatus = advisorStatus === 'FIRE' || advisorStatus === 'RECOMMENDED' ? 'GO'
-    : advisorStatus === 'GAMBLE' || advisorStatus === 'CAUTIOUS' ? 'CAREFUL'
+  // Simplified verdict: BET / ACCA / SKIP
+  // Every badge gives ONE clear message — no more CAREFUL+ACCA contradiction.
+  // Legacy statuses are normalized by ModelAdvisorBadge component.
+  const normalizedStatus = advisorStatus === 'FIRE' || advisorStatus === 'RECOMMENDED' || advisorStatus === 'GO' ? 'BET'
+    : advisorStatus === 'GAMBLE' || advisorStatus === 'CAUTIOUS' || advisorStatus === 'CAREFUL' ? 'ACCA'
     : advisorStatus === 'AVOID' ? 'SKIP'
     : advisorStatus;
 
-  const verdictLabel = normalizedStatus === 'GO' ? 'BET THIS'
-    : normalizedStatus === 'CAREFUL' ? 'CAREFUL'
+  const verdictLabel = normalizedStatus === 'BET' ? 'BET'
+    : normalizedStatus === 'ACCA' ? 'ACCA PICK'
     : 'SKIP';
 
   const verdictColor =
-    verdictLabel === "BET THIS" ? "text-[#10e774]" :
-    verdictLabel === "CAREFUL" ? "text-amber-400" :
+    verdictLabel === "BET" ? "text-[#10e774]" :
+    verdictLabel === "ACCA PICK" ? "text-cyan-400" :
     "text-red-400";
     
   // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.
@@ -259,10 +259,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             transition={{ delay: 0.15 }}
             className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
-            {/* ACCA pill — only show for non-SKIP picks */}
-            {isAccaEligible && !isNoPick && (
+            {/* ACCA pill — only show for BET picks that are ALSO good for ACCAs */}
+            {/* Don't show when badge is already ACCA (no contradiction) */}
+            {isAccaEligible && !isNoPick && normalizedStatus === 'BET' && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
-                ACCA
+                +ACCA
               </span>
             )}
             {/* SHARP MONEY alert — only when Polymarket mispricing detected */}
@@ -311,7 +312,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </motion.div>
           ) : (
             <>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">Our Best Bet</p>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">{normalizedStatus === 'ACCA' ? 'Acca Pick' : 'Our Best Bet'}</p>
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}

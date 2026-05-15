@@ -552,15 +552,25 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                       >
                         {/* Best Bet Angle — only show for non-SKIP picks */}
                         {rec && !rec.no_edge && !rec.isAvoidedPick && rec.advisor_status !== 'AVOID' && rec.advisor_status !== 'SKIP' ? (
-                          <div className="bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/25 rounded-3xl p-6 relative overflow-hidden">
+                          <div className={cn(
+                            "rounded-3xl p-6 relative overflow-hidden border",
+                            rec.advisor_status === 'ACCA' || rec.advisor_status === 'ACCA'
+                              ? "bg-gradient-to-br from-cyan-400/10 to-cyan-400/3 border-cyan-400/20"
+                              : "bg-gradient-to-br from-primary/15 to-primary/5 border-primary/25"
+                          )}>
                             <div className="absolute top-0 right-0 p-3 opacity-8 pointer-events-none">
                               <Target className="w-28 h-28 text-primary" />
                             </div>
                             <div className="relative z-10">
                               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                                <p className="text-[10px] font-bold tracking-widest text-primary uppercase">Best Bet Angle</p>
+                                <p className={cn(
+                                  "text-[10px] font-bold tracking-widest uppercase",
+                                  rec.advisor_status === 'ACCA' ? 'text-cyan-400' : 'text-primary'
+                                )}>
+                                  {rec.advisor_status === 'ACCA' ? 'Acca Pick' : 'Best Bet Angle'}
+                                </p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <ModelAdvisorBadge status={rec.advisor_status || 'CAREFUL'} />
+                                  <ModelAdvisorBadge status={rec.advisor_status || 'ACCA'} />
                                 </div>
                               </div>
                               {rec.dataQualityNote && (
@@ -580,11 +590,13 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Confidence</p>
                                 </div>
                               </div>
-                              {/* ── ACCA + EV strip ── */}
+                              {/* ── ACCA pill + EV strip ── */}
+                              {/* Only show +ACCA pill for BET picks that are also ACCA-eligible */}
+                              {/* Don't show when badge is already ACCA (no contradiction) */}
                               <div className="flex items-center gap-2 flex-wrap mb-3">
-                                {isAccaEligible && (
+                                {isAccaEligible && rec.advisor_status === 'BET' && (
                                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
-                                    ACCA
+                                    +ACCA
                                   </span>
                                 )}
                                 {ev != null && (

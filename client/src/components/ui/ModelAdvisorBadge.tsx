@@ -1,30 +1,35 @@
 import { motion } from 'framer-motion';
-import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { CheckCircle2, Layers, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
  * Simplified 3-tier badge system — beginner-friendly.
  *
- *   GO      = "Bet this" — model is confident AND the odds are fair
- *   CAREFUL = "Be careful" — some value but not a sure thing
- *   SKIP    = "Don't bet" — not worth the risk
+ *   BET   = "Bet on this" — model trusts it as a single bet
+ *   ACCA  = "Acca pick" — reliable, but only use in accumulators, not as a single
+ *   SKIP  = "Don't bet" — not worth the risk
  *
- * Legacy statuses (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID) are mapped
- * to the new 3 tiers automatically so old cached data still works.
+ * Every badge gives ONE clear message. No contradictions.
+ *
+ * Legacy statuses (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID, GO, CAREFUL)
+ * are mapped to the new 3 tiers automatically so old cached data still works.
  */
-export type AdvisorStatus = 'GO' | 'CAREFUL' | 'SKIP';
+export type AdvisorStatus = 'BET' | 'ACCA' | 'SKIP';
 
 // Legacy→new mapping for backward compatibility
 function normalizeStatus(status: string): AdvisorStatus {
   const s = status.toUpperCase();
-  if (s === 'GO') return 'GO';
-  if (s === 'CAREFUL') return 'CAREFUL';
+  if (s === 'BET') return 'BET';
+  if (s === 'ACCA') return 'ACCA';
   if (s === 'SKIP') return 'SKIP';
-  // Legacy mapping
-  if (s === 'FIRE' || s === 'RECOMMENDED') return 'GO';
-  if (s === 'GAMBLE' || s === 'CAUTIOUS') return 'CAREFUL';
+  // Previous 3-tier (GO/CAREFUL/SKIP)
+  if (s === 'GO') return 'BET';
+  if (s === 'CAREFUL') return 'ACCA';
+  // Legacy mapping (original 6-badge system)
+  if (s === 'FIRE' || s === 'RECOMMENDED') return 'BET';
+  if (s === 'GAMBLE' || s === 'CAUTIOUS') return 'ACCA';
   if (s === 'AVOID') return 'SKIP';
-  return 'CAREFUL'; // safe default
+  return 'ACCA'; // safe default
 }
 
 interface ModelAdvisorBadgeProps {
@@ -34,10 +39,10 @@ interface ModelAdvisorBadgeProps {
 }
 
 export function ModelAdvisorBadge({ status, className, showLabel = true }: ModelAdvisorBadgeProps) {
-  const badge = normalizeStatus(status || 'CAREFUL');
+  const badge = normalizeStatus(status || 'ACCA');
 
-  // ── GO — green, checkmark, "Bet This" ───────────────────────────────
-  if (badge === 'GO') {
+  // ── BET — green, checkmark, "Bet" ───────────────────────────────────────
+  if (badge === 'BET') {
     return (
       <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#10e774]/20 border border-[#10e774]/50 shadow-[0_0_15px_rgba(16,231,116,0.3)] backdrop-blur-md', className)}>
         <motion.div
@@ -47,27 +52,27 @@ export function ModelAdvisorBadge({ status, className, showLabel = true }: Model
         >
           <CheckCircle2 className="w-4 h-4 text-[#10e774] drop-shadow-[0_0_8px_rgba(16,231,116,0.8)]" fill="currentColor" fillOpacity={0.2} />
         </motion.div>
-        {showLabel && <span className="text-[10px] font-black text-[#10e774] tracking-[0.15em] uppercase drop-shadow-[0_0_5px_rgba(16,231,116,0.5)]">Bet This</span>}
+        {showLabel && <span className="text-[10px] font-black text-[#10e774] tracking-[0.15em] uppercase drop-shadow-[0_0_5px_rgba(16,231,116,0.5)]">Bet</span>}
       </div>
     );
   }
 
-  // ── CAREFUL — amber, warning triangle, "Careful" ────────────────────
-  if (badge === 'CAREFUL') {
+  // ── ACCA — cyan, layers icon, "Acca Pick" ─────────────────────────────
+  if (badge === 'ACCA') {
     return (
-      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.15)] backdrop-blur-md', className)}>
+      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-400/15 border border-cyan-400/40 shadow-[0_0_12px_rgba(34,211,238,0.2)] backdrop-blur-md', className)}>
         <motion.div
           animate={{ opacity: [0.7, 1, 0.7] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
-          <AlertTriangle className="w-4 h-4 text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" />
+          <Layers className="w-4 h-4 text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]" />
         </motion.div>
-        {showLabel && <span className="text-[10px] font-bold text-amber-400 tracking-[0.15em] uppercase">Careful</span>}
+        {showLabel && <span className="text-[10px] font-bold text-cyan-400 tracking-[0.15em] uppercase">Acca Pick</span>}
       </div>
     );
   }
 
-  // ── SKIP — red, X circle, "Skip" ────────────────────────────────────
+  // ── SKIP — red, X circle, "Skip" ────────────────────────────────────────
   return (
     <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/15 border border-red-500/40 backdrop-blur-md', className)}>
       <motion.div

@@ -52,12 +52,16 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     bestPick.valueTierDescription = valueTier.tierDescription;
     bestPick.ev = valueTier.ev;
 
-    // ── Simplified 3-Tier Badge: GO / CAREFUL / SKIP ────────────────────────
-    // Beginner-friendly: only 3 verdicts that anyone can understand.
+    // ── Simplified 3-Tier Badge: BET / ACCA / SKIP ────────────────────────
+    // Beginner-friendly: only 3 verdicts, each gives ONE clear message.
     //
-    //   GO      = "Bet this" — model is confident AND the odds offer value
-    //   CAREFUL = "Be careful" — there's some value but it's not a sure thing
-    //   SKIP    = "Don't bet" — not worth the risk (junk odds, negative EV, etc.)
+    //   BET   = "Bet on this" — model trusts it as a single bet
+    //   ACCA  = "Acca pick" — reliable but only use in accumulators, not singles
+    //   SKIP  = "Don't bet" — not worth the risk (junk odds, negative EV, etc.)
+    //
+    // This eliminates the old CAREFUL+ACCA contradiction where "careful"
+    // sounded like a warning but "ACCA" sounded like a recommendation.
+    // Now every pick has exactly ONE clear message.
     //
     // Logic priority: value tier → probability → data quality
     const dataQ = features.dataCompletenessScore || 0.5;
@@ -68,31 +72,34 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     let syncedAdvisorStatus;
 
     if (isRestricted) {
-      // Restricted league = unreliable data → at best CAREFUL
-      syncedAdvisorStatus = prob >= 0.65 ? 'CAREFUL' : 'SKIP';
+      // Restricted league = unreliable data → at best ACCA (not a single bet)
+      syncedAdvisorStatus = prob >= 0.65 ? 'ACCA' : 'SKIP';
     } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
       // Junk odds or negative EV → don't bet
       syncedAdvisorStatus = 'SKIP';
-    } else if (valueTier.tier === 'STRONG' || valueTier.tier === 'VALUE') {
-      // Strong or Value tier with decent data → GO
-      syncedAdvisorStatus = (isPositiveEV && dataQ >= 0.25) ? 'GO' : 'CAREFUL';
-    } else if (valueTier.tier === 'SHARP') {
-      // Sharp = high odds, model vs market → CAREFUL (worth a look but risky)
-      syncedAdvisorStatus = isPositiveEV ? 'GO' : 'CAREFUL';
     } else if (valueTier.tier === 'ACCUMULATOR') {
-      // Solid probability at low odds → CAREFUL (good for ACCAs, not singles)
-      syncedAdvisorStatus = 'CAREFUL';
+      // Solid probability at low odds → ACCA (not "careful" — this IS the recommendation)
+      syncedAdvisorStatus = 'ACCA';
+    } else if (valueTier.tier === 'STRONG' || valueTier.tier === 'VALUE') {
+      // Strong or Value tier with decent data → BET (trusted as a single)
+      syncedAdvisorStatus = (isPositiveEV && dataQ >= 0.25) ? 'BET' : 'ACCA';
+    } else if (valueTier.tier === 'SHARP') {
+      // Sharp = model disagrees with market → BET if +EV (value exists), SKIP if not
+      syncedAdvisorStatus = isPositiveEV ? 'BET' : 'SKIP';
     } else if (prob >= 0.72 && odds >= 1.30) {
-      // High probability with decent odds → GO
-      syncedAdvisorStatus = dataQ < 0.20 ? 'CAREFUL' : 'GO';
+      // High probability with decent odds → BET
+      syncedAdvisorStatus = dataQ < 0.20 ? 'ACCA' : 'BET';
+    } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
+      // ACCA-eligible probability/odds range → ACCA
+      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'ACCA';
     } else if (prob >= 0.60 && odds >= 1.25) {
-      // Decent probability → CAREFUL
-      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'CAREFUL';
+      // Decent probability → ACCA (good building block, not a standalone single)
+      syncedAdvisorStatus = dataQ < 0.20 ? 'SKIP' : 'ACCA';
     } else if (prob >= 0.50 && isPositiveEV) {
-      // Marginal probability but positive EV → CAREFUL
-      syncedAdvisorStatus = 'CAREFUL';
+      // Marginal probability but positive EV → ACCA (has some value but risky as single)
+      syncedAdvisorStatus = 'ACCA';
     } else if (prob >= 0.50) {
-      syncedAdvisorStatus = dataQ >= 0.40 ? 'CAREFUL' : 'SKIP';
+      syncedAdvisorStatus = dataQ >= 0.40 ? 'ACCA' : 'SKIP';
     } else {
       syncedAdvisorStatus = 'SKIP';
     }

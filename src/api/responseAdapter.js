@@ -193,16 +193,17 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Simplified 3-tier badge system: GO / CAREFUL / SKIP
+ * Simplified 3-tier badge system: BET / ACCA / SKIP
  *
  * Beginner-friendly:
- *   GO      = "Bet this" — model is confident AND odds offer value
- *   CAREFUL = "Be careful" — some value but not a sure thing
- *   SKIP    = "Don't bet" — not worth the risk
+ *   BET   = "Bet on this" — model trusts it as a single bet
+ *   ACCA  = "Acca pick" — use in accumulators, not as a single
+ *   SKIP  = "Don't bet" — not worth the risk
  *
  * The engine's finalizePredictionResult.js is the primary source of truth.
  * This function handles legacy API data that might still use old badge names
- * (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID) and maps them to the new 3-tier system.
+ * (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID, GO, CAREFUL) and maps them
+ * to the new 3-tier system.
  */
 function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeScore, dataCompletenessScore = 0.5, odds = 0, ev = null, valueTier = null) {
   const s = String(engineStatus || '').toUpperCase();
@@ -211,29 +212,34 @@ function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeSco
   const isPositiveEV = ev != null && ev >= 0;
 
   // ── Pass through new 3-tier badges from engine ────────────────────────
-  if (s === 'GO') return 'GO';
-  if (s === 'CAREFUL') return 'CAREFUL';
+  if (s === 'BET') return 'BET';
+  if (s === 'ACCA') return 'ACCA';
   if (s === 'SKIP') return 'SKIP';
 
-  // ── Legacy badge mapping (for cached/old API data) ────────────────────
-  if (s === 'FIRE') return 'GO';
-  if (s === 'RECOMMENDED') return 'GO';
-  if (s === 'CAUTIOUS') return 'CAREFUL';
-  if (s === 'GAMBLE') return 'CAREFUL';
+  // ── Previous 3-tier (GO/CAREFUL/SKIP) mapping ────────────────────────
+  if (s === 'GO') return 'BET';
+  if (s === 'CAREFUL') return 'ACCA';       // CAREFUL → ACCA (the pick has value, just not as a single)
+  // SKIP stays SKIP (handled above)
+
+  // ── Legacy badge mapping (for old cached API data) ────────────────────
+  if (s === 'FIRE') return 'BET';
+  if (s === 'RECOMMENDED') return 'BET';
+  if (s === 'GAMBLE') return 'ACCA';        // GAMBLE was "risky but worth it" → ACCA
+  if (s === 'CAUTIOUS') return 'ACCA';      // CAUTIOUS → ACCA (same as CAREFUL)
   if (s === 'AVOID') return 'SKIP';
 
   // ── Fallback: compute from scratch if no engine status ────────────────
   if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') return 'SKIP';
-  if (valueTier === 'STRONG') return (isPositiveEV && dataQ >= 0.25) ? 'GO' : 'CAREFUL';
-  if (valueTier === 'VALUE') return isPositiveEV ? 'GO' : 'CAREFUL';
-  if (valueTier === 'SHARP') return isPositiveEV ? 'GO' : 'CAREFUL';
-  if (valueTier === 'ACCUMULATOR') return 'CAREFUL';
+  if (valueTier === 'STRONG') return (isPositiveEV && dataQ >= 0.25) ? 'BET' : 'ACCA';
+  if (valueTier === 'VALUE') return isPositiveEV ? 'BET' : 'ACCA';
+  if (valueTier === 'SHARP') return isPositiveEV ? 'BET' : 'SKIP';
+  if (valueTier === 'ACCUMULATOR') return 'ACCA';
 
-  if (prob >= 0.72 && odds >= 1.30) return dataQ < 0.20 ? 'CAREFUL' : 'GO';
-  if (prob >= 0.72) return 'CAREFUL';
-  if (prob >= 0.60 && odds >= 1.25) return dataQ < 0.20 ? 'SKIP' : 'CAREFUL';
-  if (prob >= 0.50 && isPositiveEV) return 'CAREFUL';
-  if (prob >= 0.50) return dataQ >= 0.40 ? 'CAREFUL' : 'SKIP';
+  if (prob >= 0.72 && odds >= 1.30) return dataQ < 0.20 ? 'ACCA' : 'BET';
+  if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) return dataQ < 0.20 ? 'SKIP' : 'ACCA';
+  if (prob >= 0.60 && odds >= 1.25) return dataQ < 0.20 ? 'SKIP' : 'ACCA';
+  if (prob >= 0.50 && isPositiveEV) return 'ACCA';
+  if (prob >= 0.50) return dataQ >= 0.40 ? 'ACCA' : 'SKIP';
   return 'SKIP';
 }
 
@@ -242,7 +248,7 @@ function normalizeAdvisorStatus(status, modelProbability, riskLevel, edgeScore, 
   const s = String(status || '').toUpperCase();
 
   // Engine-computed SKIP always takes priority
-  if ((s === 'SKIP' || s === 'AVOID') && computed === 'GO') return 'SKIP';
+  if ((s === 'SKIP' || s === 'AVOID') && computed === 'BET') return 'SKIP';
   // Otherwise trust the computation
   return computed;
 }

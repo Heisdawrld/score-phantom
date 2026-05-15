@@ -244,10 +244,11 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     // ── Phase 1D: Classify value tier ──────────────────────────────────────
     const valueTier = classifyValueTier(candidate);
 
-    // ── Phase 4A: EV-Aware Advisor Badge Logic ─────────────────────────────
-    // The badge now considers both probability AND value.
-    // A 72% pick at 1.14 odds is NOT FIRE — it's JUNK or at best ACCUMULATOR.
-    // A 52% pick at 2.00 odds with +4% EV IS a VALUE pick.
+    // ── Phase 4A: Simplified 3-Tier Badge: BET / ACCA / SKIP ────────────
+    // Beginner-friendly: each badge gives ONE clear message.
+    //   BET   = "Bet on this" — trusted as a single bet
+    //   ACCA  = "Acca pick" — use in accumulators, not as a single
+    //   SKIP  = "Don't bet" — not worth it
     const odds = safeNum(candidate.bookmakerOdds, 0);
     const ev = odds > 1.0 ? (prob * odds) - 1 : null;
     const isPositiveEV = ev != null && ev >= 0;
@@ -256,44 +257,49 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let advisorReason = '';
 
     if (leagueSignal.status === 'restricted') {
-      advisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
+      advisorStatus = prob >= 0.65 ? 'ACCA' : 'SKIP';
       advisorReason = 'league_restricted';
     } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
-      // Phase 1D: Junk odds or negative EV — always AVOID regardless of probability
-      advisorStatus = 'AVOID';
+      // Junk odds or negative EV — always SKIP
+      advisorStatus = 'SKIP';
       advisorReason = valueTier.tier === 'JUNK' ? 'junk_odds' : 'negative_ev';
+    } else if (valueTier.tier === 'ACCUMULATOR') {
+      // ACCUMULATOR tier: solid probability at low odds → ACCA (not a single)
+      advisorStatus = 'ACCA';
+      advisorReason = 'accumulator_pick';
     } else if (valueTier.tier === 'STRONG') {
-      // STRONG tier: FIRE — high confidence AND fair odds
-      advisorStatus = predScore < 0.25 ? 'GAMBLE' : 'FIRE';
-      advisorReason = 'strong_value';
+      // STRONG tier: BET if data is decent, ACCA if data is poor
+      advisorStatus = (isPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
+      advisorReason = isPositiveEV ? 'strong_value_bet' : 'strong_poor_data';
     } else if (valueTier.tier === 'VALUE') {
-      // VALUE tier: probability is moderate but odds offer good return
-      advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+      // VALUE tier: BET if +EV, ACCA if marginal EV
+      advisorStatus = isPositiveEV ? 'BET' : 'ACCA';
       advisorReason = isPositiveEV ? 'value_pick_positive_ev' : 'value_pick_marginal_ev';
     } else if (valueTier.tier === 'SHARP') {
-      // SHARP tier: model disagrees with market — high risk/reward
-      advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
-      advisorReason = isPositiveEV ? 'sharp_value_positive_ev' : 'sharp_value_risky';
-    } else if (valueTier.tier === 'ACCUMULATOR') {
-      // ACCUMULATOR tier: solid but low odds — not great for singles
-      advisorStatus = 'GAMBLE';
-      advisorReason = 'accumulator_only';
+      // SHARP tier: BET if +EV (value exists), SKIP if not
+      advisorStatus = isPositiveEV ? 'BET' : 'SKIP';
+      advisorReason = isPositiveEV ? 'sharp_value_positive_ev' : 'sharp_negative_ev';
     } else if (prob >= 0.72 && odds >= 1.30) {
-      // High probability with decent odds — classic FIRE
-      advisorStatus = predScore < 0.30 ? 'GAMBLE' : 'FIRE';
-      advisorReason = predScore < 0.30 ? 'high_prob_poor_data' : 'high_confidence';
+      // High probability with decent odds → BET
+      advisorStatus = predScore < 0.20 ? 'ACCA' : 'BET';
+      advisorReason = predScore < 0.20 ? 'high_prob_poor_data' : 'high_confidence';
+    } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
+      // ACCA-eligible probability/odds range → ACCA
+      advisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
+      advisorReason = predScore < 0.20 ? 'moderate_poor_data' : 'acca_eligible';
     } else if (prob >= 0.60) {
-      advisorStatus = predScore < 0.25 ? 'AVOID' : 'GAMBLE';
-      advisorReason = predScore < 0.25 ? 'moderate_prob_poor_data' : 'moderate_confidence';
+      // Decent probability → ACCA (good building block)
+      advisorStatus = predScore < 0.25 ? 'SKIP' : 'ACCA';
+      advisorReason = predScore < 0.25 ? 'moderate_poor_data' : 'moderate_confidence';
     } else if (prob >= 0.50 && isPositiveEV) {
-      // Marginal probability but positive EV — CAUTIOUS (Phase 3C)
-      advisorStatus = 'CAUTIOUS';
+      // Marginal probability but positive EV → ACCA
+      advisorStatus = 'ACCA';
       advisorReason = 'marginal_prob_positive_ev';
     } else if (prob >= 0.50) {
-      advisorStatus = predScore >= 0.45 ? 'GAMBLE' : 'AVOID';
-      advisorReason = predScore >= 0.45 ? 'marginal_confidence' : 'marginal_poor_data';
+      advisorStatus = predScore >= 0.40 ? 'ACCA' : 'SKIP';
+      advisorReason = predScore >= 0.40 ? 'marginal_acca' : 'marginal_skip';
     } else {
-      advisorStatus = 'AVOID';
+      advisorStatus = 'SKIP';
       advisorReason = 'low_probability';
     }
 

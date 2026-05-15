@@ -80,7 +80,7 @@ export function AccaSection({ isPremium }: { isPremium: boolean }) {
                   <p className='text-xs font-bold text-white mt-0.5'>{(pick.market || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} — {pick.selection}</p>
                   {/* v4: ACCA-eligible + EV badges */}
                   <div className='flex items-center gap-1.5 mt-1'>
-                    {isAccaEligible && <span className='text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-cyan-400/10 text-cyan-400 border border-cyan-400/20'>ACCA</span>}
+                    {isAccaEligible && pick.advisor_status === 'BET' && <span className='text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-cyan-400/10 text-cyan-400 border border-cyan-400/20'>+ACCA</span>}
                     {pickEV != null && <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded uppercase border', pickEV >= 0 ? 'bg-primary/10 text-primary border-primary/25' : 'bg-red-500/10 text-red-400 border-red-500/25')}>EV {pickEV >= 0 ? '+' : ''}{(pickEV * 100).toFixed(1)}%</span>}
                     {pick.valueTier && <span className='text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-white/5 text-white/40 border border-white/10'>{pick.valueTier}</span>}
                   </div>
