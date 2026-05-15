@@ -170,27 +170,6 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     }
 
     const prob = safeNum(candidate.modelProbability, 0);
-    // Market-baseline-aware advisor gate (v4 — intuitive + edge-aware):
-    //
-    // The advisor should follow the probability the user sees, while still
-    // accounting for market baseline. The old gate (edgeAboveBaseline >= 0.08)
-    // caused confusing UX: Over 1.5 at 82% showed "Gamble" because its baseline
-    // is 75% (only 7pp edge). That's misleading — 82% IS genuinely confident.
-    //
-    // NEW LOGIC — Two pathways to FIRE:
-    //   Path A: prob >= 78% + decent data + no restrictions
-    //     → 78%+ means the model says this happens ~4 out of 5 times.
-    //     → Even for high-baseline markets, this IS a strong pick.
-    //   Path B: prob >= 72% + strong baseline edge (>=8pp) + good data
-    //     → Signal is meaningfully above market baseline — bookies are underpricing this.
-    //     → This catches the 72% Home Win (27pp above 45% baseline = huge edge).
-    //
-    // GAMBLE: 60-77% probability with reasonable data quality
-    // AVOID: Below 60% or poor data quality
-    //
-    // The edgeAboveBaseline is still computed and passed through to the frontend
-    // so users can see the baseline context ("this market naturally wins 75% of
-    // the time — your edge is 7pp above that").
     // Use dynamic baselines from historical outcomes when available,
     // falling back to hardcoded values for cold start
     const DYNAMIC_BASELINES = getDynamicMarketBaselines(accuracyCache);
@@ -208,43 +187,32 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const baseline = DYNAMIC_BASELINES[candidate.marketKey] || HARDCODED_BASELINE[candidate.marketKey] || 0.50;
     const edgeAboveBaseline = prob - baseline;
 
-    let advisorStatus = 'AVOID';
+    let advisorStatus;
     let advisorReason = '';
 
-    // Path A: Very high probability — model is genuinely confident
-    // 78%+ is a strong pick regardless of market baseline.
-    // Example: Over 1.5 at 82% (baseline 75%, edge 7pp) → FIRE ✓
-    // Example: Under 3.5 at 78% (baseline 70%, edge 8pp) → FIRE ✓
-    if (prob >= 0.78 && predScore >= 0.50 && leagueSignal.status !== 'restricted') {
-      advisorStatus = 'FIRE';
-      advisorReason = edgeAboveBaseline >= 0.08
-        ? 'high_confidence_strong_edge'
-        : 'high_confidence_thin_baseline_edge';
-    }
-    // Path B: Good probability + strong baseline edge — bookies are underpricing
-    // Example: Home Win at 72% (baseline 45%, edge 27pp) → FIRE ✓
-    // Example: BTTS Yes at 73% (baseline 50%, edge 23pp) → FIRE ✓
-    else if (prob >= 0.72 && predScore >= 0.55 && leagueSignal.status !== 'restricted' && edgeAboveBaseline >= 0.08) {
-      advisorStatus = 'FIRE';
-      advisorReason = 'strong_baseline_edge';
-    }
-    // GAMBLE: Decent probability but not enough for full confidence
-    // Either the probability is moderate (60-77%), or data quality is thin,
-    // or the market baseline edge is modest.
-    else if (prob >= 0.60 && predScore >= 0.40) {
-      advisorStatus = 'GAMBLE';
-      if (prob >= 0.72 && edgeAboveBaseline < 0.08) {
-        advisorReason = 'high_prob_but_thin_baseline_edge';
-      } else if (prob >= 0.70) {
-        advisorReason = 'moderate_confidence';
-      } else {
-        advisorReason = 'speculative_edge';
-      }
-    }
-    // AVOID: Not enough signal to recommend
-    else {
+    // ── Advisor Badge Logic — Probability-Primary ──────────────────────────
+    // The badge MUST follow the probability the user sees.
+    // Data quality (predScore) is a SOFT modifier, not a hard gate.
+    // A 72%+ probability pick should be FIRE unless data is catastrophically bad.
+    if (leagueSignal.status === 'restricted') {
+      // League is restricted — always downgrade
+      advisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
+      advisorReason = 'league_restricted';
+    } else if (prob >= 0.72) {
+      // High probability: FIRE unless data is catastrophically bad (predScore < 0.30)
+      advisorStatus = predScore < 0.30 ? 'GAMBLE' : 'FIRE';
+      advisorReason = predScore < 0.30 ? 'high_prob_poor_data' : 'high_confidence';
+    } else if (prob >= 0.60) {
+      // Moderate probability: GAMBLE unless data is very bad
+      advisorStatus = predScore < 0.25 ? 'AVOID' : 'GAMBLE';
+      advisorReason = predScore < 0.25 ? 'moderate_prob_poor_data' : 'moderate_confidence';
+    } else if (prob >= 0.50) {
+      // Marginal probability: needs good data to be GAMBLE
+      advisorStatus = predScore >= 0.45 ? 'GAMBLE' : 'AVOID';
+      advisorReason = predScore >= 0.45 ? 'marginal_confidence' : 'marginal_poor_data';
+    } else {
       advisorStatus = 'AVOID';
-      advisorReason = prob < 0.60 ? 'low_probability' : 'poor_data_quality';
+      advisorReason = 'low_probability';
     }
 
     return {

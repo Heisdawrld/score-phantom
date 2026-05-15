@@ -515,9 +515,28 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       const impl = parseFloat(f.best_pick_implied_probability || 0);
       const edge = parseFloat(f.best_pick_edge || 0);
       const vol = (f.confidence_volatility || '').toLowerCase();
-      
+      const score = parseFloat(f.best_pick_score || 0);
+      const dataQ = parseFloat(f.data_quality || 0.5);
+
       f.is_safe_bet = prob >= 0.72 && vol === 'low';
       f.is_value_bet = impl > 0 && edge >= 0.08;
+
+      // ── Compute advisor_status for fixture list cards ──────────────────
+      const phantomRaw = (prob * 0.55) + (score * 0.45);
+      if (prob > 0) {
+        if (phantomRaw >= 0.72) {
+          f.advisor_status = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+        } else if (phantomRaw >= 0.60) {
+          f.advisor_status = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+        } else if (phantomRaw >= 0.50) {
+          f.advisor_status = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+        } else {
+          f.advisor_status = 'AVOID';
+        }
+      } else {
+        f.advisor_status = null;
+      }
+
       return f;
     });
 
@@ -1340,6 +1359,19 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // Composite rank score (0–100 range for display)
       const composite = (score * 0.5 + (conf / 100) * 0.3 + prob * 0.2) * 100;
 
+      // ── Compute advisor_status using probability-primary logic ──────────
+      // phantomScore blends probability and finalScore, same as responseAdapter
+      const phantomScoreRaw = (prob * 0.55) + (score * 0.45);
+      const dataQ = parseFloat(row.data_quality || 0.5);
+      let advisorStatus = 'AVOID';
+      if (phantomScoreRaw >= 0.72) {
+        advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+      } else if (phantomScoreRaw >= 0.60) {
+        advisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+      } else if (phantomScoreRaw >= 0.50) {
+        advisorStatus = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+      }
+
       return {
         fixtureId:   row.fixture_id,
         match:       `${row.home_team} vs ${row.away_team}`,
@@ -1361,6 +1393,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         enrichment:  row.enrichment_status,
         dataQuality: row.data_quality,
         sharp:       Number(row.is_sharp_value || 0) === 1,
+        advisor_status: advisorStatus,
         factors,
       };
     });
@@ -1834,10 +1867,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
       market: m.marketKey,
       probability: m.modelProbability,
-      advisor_status: m.advisor_status || m.advisorStatus || 'GAMBLE',
-      advisor_reason: m.advisor_reason || null,
-      edgeAboveBaseline: m.edgeAboveBaseline != null ? parseFloat(m.edgeAboveBaseline.toFixed(4)) : null,
-      marketBaseline: m.marketBaseline != null ? parseFloat(m.marketBaseline.toFixed(4)) : null,
+      advisor_status: m.advisor_status || m.advisorStatus || 'GAMBLE'
     }));
 
     res.json({

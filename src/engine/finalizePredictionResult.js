@@ -34,10 +34,38 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     const prob = bestPick.modelProbability || 0;
     const impl = bestPick.impliedProbability || 0;
     const edge = bestPick.edge || 0;
-    
+    const finalScore = bestPick.finalScore || 0;
+
+    // ── Displayed Confidence — the number the user sees ──────────────────
+    // Blends model probability (55%) with finalScore (45%) to create the
+    // phantom score — the SINGLE source of truth for confidence display
+    // and advisor badge. This ensures badge always matches displayed %.
+    const phantomScoreRaw = (prob * 0.55) + (finalScore * 0.45);
+    bestPick.displayedConfidence = parseFloat((phantomScoreRaw * 100).toFixed(1));
+    bestPick.phantomScoreRaw = parseFloat(phantomScoreRaw.toFixed(4));
+
+    // ── Sync advisor_status with phantom score ────────────────────────────
+    // The advisor badge follows the displayed confidence (phantom score).
+    // This is probability-primary: high confidence = FIRE, moderate = GAMBLE.
+    const dataQ = features.dataCompletenessScore || 0.5;
+    const isRestricted = bestPick.leagueSignal?.status === 'restricted';
+    let syncedAdvisorStatus;
+    if (isRestricted) {
+      syncedAdvisorStatus = prob >= 0.65 ? 'GAMBLE' : 'AVOID';
+    } else if (phantomScoreRaw >= 0.72) {
+      syncedAdvisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+    } else if (phantomScoreRaw >= 0.60) {
+      syncedAdvisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+    } else if (phantomScoreRaw >= 0.50) {
+      syncedAdvisorStatus = dataQ >= 0.40 ? 'GAMBLE' : 'AVOID';
+    } else {
+      syncedAdvisorStatus = 'AVOID';
+    }
+    bestPick.advisor_status = syncedAdvisorStatus;
+
     // Safe Bet = probability >= 72%, low volatility, regardless of odds
     bestPick.isSafeBet = prob >= 0.72 && confidence.volatility === 'low';
-    
+
     // Value Bet = model probability exceeds implied probability by >= 8pp
     bestPick.isValueBet = impl > 0 && edge >= 0.08;
   }

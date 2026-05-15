@@ -193,15 +193,13 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Resolve advisor status — prefers engine-computed value, validates conservatively.
+ * Frontend contract: ModelAdvisorBadge supports exactly FIRE/GAMBLE/AVOID.
  *
- * BUG FIX: Previously the responseAdapter recomputed advisor_status from scratch
- * using phantomScore + riskLevel + edgeScore, which could downgrade a valid FIRE
- * to GAMBLE (e.g., when edge < 0.02 but the engine determined FIRE based on
- * probability + predictability + league signal).
- *
- * Now: engine value is the starting point. We only override to AVOID if the
- * engine's FIRE/GAMBLE contradicts the risk level (AGGRESSIVE risk = never FIRE).
+ * PROBABILITY-PRIMARY DESIGN:
+ * The badge MUST follow the displayed confidence (phantom_score_pct).
+ * If we show the user 72%+ confidence, the badge MUST be FIRE ("Pick This").
+ * Data quality and edge are SOFT modifiers, not hard gates — if data is bad
+ * enough to downgrade, the phantom score itself should already be lower.
  */
 function resolveAdvisorStatus(engineStatus, riskLevel, phantomScore, edgeScore, dataCompletenessScore = 0.5) {
   const s = String(engineStatus || '').toUpperCase();
@@ -210,18 +208,33 @@ function resolveAdvisorStatus(engineStatus, riskLevel, phantomScore, edgeScore, 
   const edge = safeNum(edgeScore, 0);
   const dataQ = safeNum(dataCompletenessScore, 0.5);
 
-  // Valid FIRE/GAMBLE/AVOID from engine
-  if (s === 'FIRE') {
-    // Safety gate: AGGRESSIVE risk + thin data → never show "Pick This"
-    if (risk === 'AGGRESSIVE' && dataQ < 0.40) return 'GAMBLE';
-    // Safety gate: no edge at all → downgrade to GAMBLE
-    if (edge < 0.01 && ps < 0.65) return 'GAMBLE';
-    return 'FIRE';
+  // ── Probability-Primary Logic ─────────────────────────────────────────
+  // phantomScore already incorporates finalScore (which includes data quality,
+  // tactical fit, edge, etc). So if phantomScore is high, ALL those factors
+  // have been accounted for. Don't re-gate with redundant conditions.
+  if (ps >= 0.72) {
+    // High confidence — FIRE unless catastrophic data quality
+    return dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
   }
-  if (s === 'AVOID') return 'AVOID';
-  // GAMBLE or any other value
-  if (ps < 0.50) return 'AVOID';
-  return 'GAMBLE';
+  if (ps >= 0.60) {
+    // Moderate confidence — GAMBLE unless very bad data
+    return dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+  }
+  if (ps >= 0.50) {
+    // Marginal — needs decent data to be playable
+    return dataQ >= 0.40 && risk !== 'AGGRESSIVE' ? 'GAMBLE' : 'AVOID';
+  }
+  return 'AVOID';
+}
+
+function normalizeAdvisorStatus(status, phantomScore, riskLevel, edgeScore, dataCompletenessScore = 0.5) {
+  const computed = resolveAdvisorStatus(null, riskLevel, phantomScore, edgeScore, dataCompletenessScore);
+  const s = String(status || '').toUpperCase();
+
+  // Engine-computed AVOID always takes priority — the engine knows something we don't
+  if (s === 'AVOID' && computed === 'FIRE') return 'AVOID';
+  // Otherwise trust the probability-primary computation
+  return computed;
 }
 
 function mapValueRating(edgeScore, modelOnly = false) {

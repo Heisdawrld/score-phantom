@@ -117,8 +117,7 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
         edge: null,
         impliedProbability: null,
         bookmakerOdds: null,
-        advisor_status: phantomScoreOf(modelOnly) >= 0.68 ? 'FIRE' : 'GAMBLE',
-        advisor_reason: phantomScoreOf(modelOnly) >= 0.68 ? 'model_only_high_confidence' : 'model_only_moderate_confidence',
+        advisor_status: phantomScoreOf(modelOnly) >= 0.72 ? 'FIRE' : phantomScoreOf(modelOnly) >= 0.55 ? 'GAMBLE' : 'AVOID',
         reasons: [
           'MODEL_ONLY_NO_ODDS',
           ...(modelOnly.reasons || []),

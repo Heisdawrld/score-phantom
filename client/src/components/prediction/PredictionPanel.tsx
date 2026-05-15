@@ -550,8 +550,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   <h3 className="font-display text-3xl sm:text-4xl text-white tracking-wide leading-none">{rec.pick}</h3>
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <p className="font-display text-4xl sm:text-5xl text-primary leading-none">{rec.probability_pct}%</p>
-                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Model Prob.</p>
+                                  <p className="font-display text-4xl sm:text-5xl text-primary leading-none">{rec.phantom_score_pct ?? rec.probability_pct}%</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Confidence</p>
                                 </div>
                               </div>
                               {rec.reasons?.length > 0 && (
@@ -598,7 +598,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                     <h3 className="font-display text-2xl sm:text-3xl text-white tracking-wide leading-none">{secretPick.pick}</h3>
                                   </div>
                                   <div className="text-right shrink-0">
-                                    <p className="font-display text-3xl sm:text-4xl text-amber-400 leading-none">{secretPick.probability_pct}%</p>
+                                    <p className="font-display text-3xl sm:text-4xl text-amber-400 leading-none">{secretPick.phantom_score_pct ?? secretPick.probability_pct}%</p>
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Confidence</p>
                                   </div>
                                 </div>
