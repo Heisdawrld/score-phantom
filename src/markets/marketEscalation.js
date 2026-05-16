@@ -234,6 +234,16 @@ const CROSS_MARKET_ESCALATION = [
     minFromProb: 0.55, minToProb: 0.55, minToOdds: 1.40 },
   { from: 'dnb_away', to: 'away_over_15', condition: 'dominant_side_goals',
     minFromProb: 0.55, minToProb: 0.55, minToOdds: 1.40 },
+  // Result → Handicap (the punter's natural move for junk-odds straight wins)
+  { from: 'home_win', to: 'handicap_home_minus1', condition: 'dominant_side_goals',
+    minFromProb: 0.55, minToProb: 0.30, minToOdds: 1.55 },
+  { from: 'away_win', to: 'handicap_away_minus1', condition: 'dominant_side_goals',
+    minFromProb: 0.55, minToProb: 0.25, minToOdds: 1.60 },
+  // DC → Handicap (DC is safe but low value, handicap gives better price)
+  { from: 'double_chance_home', to: 'handicap_home_plus1', condition: 'dominant_side_goals',
+    minFromProb: 0.65, minToProb: 0.55, minToOdds: 1.25 },
+  { from: 'double_chance_away', to: 'handicap_away_plus1', condition: 'dominant_side_goals',
+    minFromProb: 0.65, minToProb: 0.55, minToOdds: 1.25 },
 ];
 
 /**

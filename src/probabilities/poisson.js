@@ -86,6 +86,7 @@ export function deriveMarketProbabilities(scoreMatrix) {
   let homeOver05 = 0, homeOver15 = 0, homeOver25 = 0, homeOver35 = 0;
   let awayOver05 = 0, awayOver15 = 0, awayOver25 = 0, awayOver35 = 0;
   let handicapHome1 = 0, handicapAway1 = 0;
+  let handicapAwayMinus1 = 0, handicapHomePlus1 = 0;
 
   for (let h = 0; h <= maxGoals; h++) {
     for (let a = 0; a <= maxGoals; a++) {
@@ -111,6 +112,13 @@ export function deriveMarketProbabilities(scoreMatrix) {
       if (a > 3) awayOver35 += p;
       // Handicap: home team -1 (home wins by 2+)
       if (h - a >= 2) handicapHome1 += p;
+      // Handicap: away team -1 (away wins by 2+)
+      if (a - h >= 2) handicapAwayMinus1 += p;
+      // Handicap: home team +1 (home wins, draws, or loses by exactly 1)
+      // After applying +1 to home: (h+1) > a → h >= a (win) or (h+1) = a → h = a-1 (draw)
+      // So home +1 wins when NOT (away wins by 2+) = 1 - handicapAwayMinus1
+      // But we compute it directly for accuracy:
+      if (h >= a - 1) handicapHomePlus1 += p;
       // Handicap: away team +1 (away wins outright OR draw)
       if (a >= h) handicapAway1 += p;
     }
@@ -150,5 +158,7 @@ export function deriveMarketProbabilities(scoreMatrix) {
     awayUnder15: cap(1 - awayOver15),
     handicapHome1: cap(handicapHome1),
     handicapAway1: cap(handicapAway1),
+    handicapAwayMinus1: cap(handicapAwayMinus1),
+    handicapHomePlus1: cap(handicapHomePlus1),
   };
 }

@@ -24,6 +24,13 @@ export const MARKET_REGISTRY = {
   win_either_half_away: { selectable: true, requiresOdds: true, headlineEligible: false },
   dnb_home: { selectable: true, requiresOdds: true, headlineEligible: false },
   dnb_away: { selectable: true, requiresOdds: true, headlineEligible: false },
+  // ── European Handicap Markets ────────────────────────────────────────────
+  // The punter's natural escalation when straight win odds are junk.
+  // Home Win at 1.20 → Home -1 at 1.85 (same conviction, better price)
+  handicap_home_minus1: { selectable: true, requiresOdds: true, headlineEligible: true },
+  handicap_away_minus1: { selectable: true, requiresOdds: true, headlineEligible: true },
+  handicap_home_plus1:  { selectable: true, requiresOdds: true, headlineEligible: false },
+  handicap_away_plus1:  { selectable: true, requiresOdds: true, headlineEligible: false },
 };
 
 export function isHeadlineEligibleMarket(marketKey) {
