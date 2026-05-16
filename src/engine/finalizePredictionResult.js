@@ -14,9 +14,10 @@ import { classifyValueTier } from "../markets/valueTiers.js";
  *     value tier classification, reason chain
  */
 export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix, narrative, contextMods, reasonChain }) {
-  const { bestPick, backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
-  const confidence = buildConfidenceProfile(bestPick, features);
-  const reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
+  const { backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
+  let bestPick = selection.bestPick; // let — may be replaced by SKIP cascade
+  let confidence = buildConfidenceProfile(bestPick, features);
+  let reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
 
   // ── Correct score probabilities from Poisson score matrix ───────────────
   let correctScoreProbs = [];
@@ -111,15 +112,123 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     }
     bestPick.advisor_status = syncedAdvisorStatus;
 
-    // ── SKIP sync — when badge is SKIP, treat as smart abstention ──
-    // The engine still provides the pick data for transparency (showing what we found
-    // and why we're skipping it), but flags it so the UI doesn't display "Our Best Bet".
-    // This prevents the SKIP + "Our Best Bet" contradiction.
-    if (syncedAdvisorStatus === 'SKIP') {
+    // ── SKIP cascade — when #1 gets SKIP'd, try #2, #3, etc. ────────────
+    // The engine may have found a great alternative market that the user would
+    // actually want to bet on. Example: Home Win at 1.22 odds = SKIP (junk),
+    // but Over 2.5 at 1.85 = ACCA (positive EV). The user should see Over 2.5,
+    // not a blank screen.
+    if (syncedAdvisorStatus === 'SKIP' && rankedCandidates && rankedCandidates.length > 1) {
+      const originalSkipPick = bestPick;
+      const originalSkipReason = (() => {
+        const reasons = [];
+        if (isRestricted) reasons.push('Restricted league');
+        if (valueTier.tier === 'JUNK') reasons.push(`Odds at ${(odds ?? 0).toFixed(2)} offer no value`);
+        if (valueTier.tier === 'NEGATIVE_EV') reasons.push('Negative EV');
+        return reasons.length > 0 ? reasons.join(', ') : 'Insufficient edge or value';
+      })();
+
+      // Check remaining ranked candidates for one that earns BET or ACCA
+      for (let i = 0; i < rankedCandidates.length; i++) {
+        const candidate = rankedCandidates[i];
+        if (!candidate || candidate === originalSkipPick) continue;
+
+        const cProb = safeNum(candidate.modelProbability, 0);
+        const cOdds = safeNum(candidate.bookmakerOdds, 0);
+        const cFinalScore = safeNum(candidate.finalScore, 0);
+
+        // Quick viability check — skip obviously weak candidates
+        if (cProb < 0.50 || cFinalScore <= 0) continue;
+        if (cOdds > 0 && cOdds < 1.25) continue; // Junk odds
+
+        // Compute badge for this candidate
+        const cValueTier = classifyValueTier(candidate);
+        const cEv = cOdds > 1.0 ? (cProb * cOdds) - 1 : null;
+        const cIsPositiveEV = cEv != null && cEv >= 0;
+        const cIsRestricted = candidate.leagueSignal?.status === 'restricted';
+
+        let candidateBadge;
+        if (cIsRestricted && cProb < 0.65) {
+          candidateBadge = 'SKIP';
+        } else if (cValueTier.tier === 'JUNK' || cValueTier.tier === 'NEGATIVE_EV') {
+          candidateBadge = 'SKIP';
+        } else if (cValueTier.tier === 'ACCUMULATOR') {
+          candidateBadge = 'ACCA';
+        } else if (cValueTier.tier === 'STRONG' || cValueTier.tier === 'VALUE') {
+          candidateBadge = (cIsPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
+        } else if (cValueTier.tier === 'SHARP') {
+          candidateBadge = cIsPositiveEV ? 'BET' : 'SKIP';
+        } else if (cProb >= 0.72 && cOdds >= 1.30) {
+          candidateBadge = predScore < 0.20 ? 'ACCA' : 'BET';
+        } else if (cProb >= 0.58 && cOdds >= 1.30 && cOdds <= 1.65) {
+          candidateBadge = predScore < 0.20 ? 'SKIP' : 'ACCA';
+        } else if (cProb >= 0.60 && cOdds >= 1.25) {
+          candidateBadge = predScore < 0.20 ? 'SKIP' : 'ACCA';
+        } else if (cProb >= 0.50 && cIsPositiveEV) {
+          candidateBadge = 'ACCA';
+        } else if (cProb >= 0.50) {
+          candidateBadge = predScore >= 0.40 ? 'ACCA' : 'SKIP';
+        } else {
+          candidateBadge = 'SKIP';
+        }
+
+        // Found a keeper! Promote it to bestPick
+        if (candidateBadge !== 'SKIP') {
+          console.log(`[finalize] SKIP cascade: ${originalSkipPick.marketKey}(${originalSkipPick.selection}) → ${candidate.marketKey}(${candidate.selection}) badge=${candidateBadge} prob=${(cProb*100).toFixed(1)}% odds=${cOdds.toFixed(2)} ev=${cEv != null ? (cEv*100).toFixed(1) + '%' : 'N/A'}`);
+
+          // Compute full metadata for the promoted candidate
+          const cPhantomScoreRaw = (cProb * 0.55) + (cFinalScore * 0.45);
+          candidate.displayedConfidence = parseFloat((cProb * 100).toFixed(1));
+          candidate.phantomScoreRaw = parseFloat(cPhantomScoreRaw.toFixed(4));
+          candidate.valueTier = cValueTier.tier;
+          candidate.valueTierLabel = cValueTier.tierLabel;
+          candidate.valueTierDescription = cValueTier.tierDescription;
+          candidate.ev = cValueTier.ev;
+          candidate.advisor_status = candidateBadge;
+
+          // Preserve the original SKIP as a skip note for transparency
+          candidate.skipNote = {
+            originalPick: originalSkipPick.marketKey,
+            originalSelection: originalSkipPick.selection,
+            originalProb: originalSkipPick.modelProbability,
+            originalOdds: originalSkipPick.bookmakerOdds,
+            reason: originalSkipReason,
+          };
+
+          // Replace bestPick with the promoted candidate
+          // (The original SKIP pick is preserved in skipNote)
+          bestPick = candidate;
+          syncedAdvisorStatus = candidateBadge;
+
+          // Rebuild confidence and reason codes for the promoted pick
+          confidence = buildConfidenceProfile(bestPick, features);
+          reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
+
+          // Recompute odds/ev/prob for downstream code
+          break; // Stop after first valid alternative
+        }
+      }
+
+      // If cascade didn't find anything, mark original as SKIP
+      if (syncedAdvisorStatus === 'SKIP') {
+        const skipReasons = [];
+        if (isRestricted) skipReasons.push('Restricted league — limited data reliability');
+        if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${(odds ?? 0).toFixed(2)} offer no value`);
+        if (valueTier.tier === 'NEGATIVE_EV') skipReasons.push(`Negative expected value (${(ev != null ? (ev * 100).toFixed(1) : '?')}%) — not profitable`);
+        if (dataQ < 0.20) skipReasons.push('Very low data quality — prediction unreliable');
+        else if (dataQ < 0.40) skipReasons.push('Below-average data quality — confidence reduced');
+        if (prob < 0.50) skipReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
+
+        bestPick.isAvoidedPick = true;
+        bestPick.avoidReason = skipReasons.length > 0
+          ? skipReasons.join('. ')
+          : `Model does not recommend this pick — insufficient edge or value`;
+      }
+    } else if (syncedAdvisorStatus === 'SKIP') {
+      // SKIP but no rankedCandidates to cascade through
       const skipReasons = [];
       if (isRestricted) skipReasons.push('Restricted league — limited data reliability');
-      if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${odds.toFixed(2)} offer no value`);
-      if (valueTier.tier === 'NEGATIVE_EV') skipReasons.push(`Negative expected value (${(ev * 100).toFixed(1)}%) — not profitable`);
+      if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${(odds ?? 0).toFixed(2)} offer no value`);
+      if (valueTier.tier === 'NEGATIVE_EV') skipReasons.push(`Negative expected value (${(ev != null ? (ev * 100).toFixed(1) : '?')}%) — not profitable`);
       if (dataQ < 0.20) skipReasons.push('Very low data quality — prediction unreliable');
       else if (dataQ < 0.40) skipReasons.push('Below-average data quality — confidence reduced');
       if (prob < 0.50) skipReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
@@ -134,29 +243,38 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     // Separate "good for singles" from "good for accumulators"
     // ACCA-eligible: solid probability (≥58%), odds in useful range (1.30-1.65),
     // positive or near-neutral EV, not chaotic
-    const isAccaEligible = prob >= 0.58 &&
-      (odds != null && odds >= 1.30 && odds <= 1.65) &&
-      (ev == null || ev >= -0.05) &&
+    // NOTE: Use bestPick values (may differ from local vars if cascade promoted a new pick)
+    const bp = bestPick;
+    const bpProb = safeNum(bp.modelProbability, 0);
+    const bpOdds = safeNum(bp.bookmakerOdds, 0);
+    const bpImpl = safeNum(bp.impliedProbability, 0);
+    const bpEdge = safeNum(bp.edge, 0);
+    const bpEv = bpOdds > 1.0 ? (bpProb * bpOdds) - 1 : null;
+    const bpValueTier = bp.valueTier || classifyValueTier(bp).tier;
+
+    const isAccaEligible = bpProb >= 0.58 &&
+      (bpOdds >= 1.30 && bpOdds <= 1.65) &&
+      (bpEv == null || bpEv >= -0.05) &&
       confidence.volatility !== 'high' &&
       syncedAdvisorStatus !== 'SKIP';
 
-    bestPick.isAccaEligible = isAccaEligible;
+    bp.isAccaEligible = isAccaEligible;
 
     // Safe Bet = probability >= 72%, low volatility, decent odds
-    bestPick.isSafeBet = prob >= 0.72 && confidence.volatility === 'low' && (odds != null && odds >= 1.25);
+    bp.isSafeBet = bpProb >= 0.72 && confidence.volatility === 'low' && bpOdds >= 1.25;
 
     // Value Bet = positive EV with decent edge
-    bestPick.isValueBet = (impl != null && impl > 0) && (edge != null && edge >= 0.08);
+    bp.isValueBet = (bpImpl > 0) && (bpEdge >= 0.08);
 
     // ── Phase 4C: Risk Reward Data ────────────────────────────────────────
-    bestPick.riskReward = {
-      odds: odds != null ? parseFloat(odds.toFixed(2)) : null,
-      ev: ev != null ? parseFloat(ev.toFixed(4)) : null,
-      probability: parseFloat(prob.toFixed(4)),
-      impliedProbability: (impl != null && impl > 0) ? parseFloat(impl.toFixed(4)) : null,
-      edge: edge != null ? parseFloat(edge.toFixed(4)) : null,
-      tier: valueTier.tier,
-      tierLabel: valueTier.tierLabel,
+    bp.riskReward = {
+      odds: bpOdds > 0 ? parseFloat(bpOdds.toFixed(2)) : null,
+      ev: bpEv != null ? parseFloat(bpEv.toFixed(4)) : null,
+      probability: parseFloat(bpProb.toFixed(4)),
+      impliedProbability: bpImpl > 0 ? parseFloat(bpImpl.toFixed(4)) : null,
+      edge: bpEdge !== 0 ? parseFloat(bpEdge.toFixed(4)) : null,
+      tier: bpValueTier,
+      tierLabel: bp.valueTierLabel || classifyValueTier(bp).tierLabel,
     };
   }
 
