@@ -117,6 +117,12 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     // actually want to bet on. Example: Home Win at 1.22 odds = SKIP (junk),
     // but Over 2.5 at 1.85 = ACCA (positive EV). The user should see Over 2.5,
     // not a blank screen.
+    //
+    // CRITICAL: The cascade must apply the SAME headline quality gates that
+    // selectBestPickOrAbstain uses for the #1 pick. Just because a candidate
+    // isn't technically SKIP doesn't mean the engine is sure about it.
+    // A 51% pick with +0.5% EV earns ACCA on paper — but the engine isn't
+    // confident. The cascade should only promote picks the engine genuinely trusts.
     if (syncedAdvisorStatus === 'SKIP' && rankedCandidates && rankedCandidates.length > 1) {
       const originalSkipPick = bestPick;
       const originalSkipReason = (() => {
@@ -135,12 +141,49 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
         const cProb = safeNum(candidate.modelProbability, 0);
         const cOdds = safeNum(candidate.bookmakerOdds, 0);
         const cFinalScore = safeNum(candidate.finalScore, 0);
+        const cPhantomScore = (cProb * 0.55) + (cFinalScore * 0.45);
+        const cDataScore = safeNum(features.dataCompletenessScore, 0.5);
+        const cEdge = safeNum(candidate.edge, 0);
+        const cTacticalFit = safeNum(candidate.tacticalFitScore, 0);
+        const cVolatilityScore = safeNum(script?.volatilityScore, 0.5);
+        const cIsHighVolatility = cVolatilityScore > 0.70;
+        const cChaos = safeNum(features.matchChaosScore, 0.5);
 
-        // Quick viability check — skip obviously weak candidates
-        if (cProb < 0.50 || cFinalScore <= 0) continue;
-        if (cOdds > 0 && cOdds < 1.25) continue; // Junk odds
+        // ── Headline Quality Gates (same as selectBestPickOrAbstain) ──────
+        // These ensure the engine is genuinely sure about this pick.
+        // Without these, a 51% +0.5% EV pick would get promoted as ACCA
+        // even though the engine barely trusts it.
 
-        // Compute badge for this candidate
+        // Gate 1: Minimum probability — must be genuinely likely
+        if (cProb < 0.50) continue;
+
+        // Gate 2: Minimum composite score — scoring components must agree
+        if (cFinalScore < 0.36) continue;
+
+        // Gate 3: Minimum phantom score — blended prob+score must be decent
+        if (cPhantomScore < 0.50) continue;
+
+        // Gate 4: Minimum data quality — can't be confident on thin data
+        if (cDataScore < 0.30) continue;
+
+        // Gate 5: Volatility/chaos extra proof — risky picks need more support
+        if (cIsHighVolatility || cChaos >= 0.68) {
+          if (cPhantomScore < 0.55) continue;
+          if (cFinalScore < 0.42) continue;
+          if (cProb < 0.65) continue;
+        }
+
+        // Gate 6: Tactical alignment — engine must see a tactical reason
+        if (cTacticalFit < 0.15) continue;
+
+        // Gate 7: Junk odds — no value in betting
+        if (cOdds > 0 && cOdds < 1.25) continue;
+
+        // Gate 8: Weak EV with odds — bookmaker disagrees strongly
+        const cImpl = safeNum(candidate.impliedProbability, 0);
+        if (cImpl > 0 && cEdge < 0.01 && cProb < 0.72) continue;
+
+        // ── All quality gates passed — now compute badge ──────────────────
         const cValueTier = classifyValueTier(candidate);
         const cEv = cOdds > 1.0 ? (cProb * cOdds) - 1 : null;
         const cIsPositiveEV = cEv != null && cEv >= 0;
@@ -173,7 +216,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
 
         // Found a keeper! Promote it to bestPick
         if (candidateBadge !== 'SKIP') {
-          console.log(`[finalize] SKIP cascade: ${originalSkipPick.marketKey}(${originalSkipPick.selection}) → ${candidate.marketKey}(${candidate.selection}) badge=${candidateBadge} prob=${(cProb*100).toFixed(1)}% odds=${cOdds.toFixed(2)} ev=${cEv != null ? (cEv*100).toFixed(1) + '%' : 'N/A'}`);
+          console.log(`[finalize] SKIP cascade: ${originalSkipPick.marketKey}(${originalSkipPick.selection}) → ${candidate.marketKey}(${candidate.selection}) badge=${candidateBadge} prob=${(cProb*100).toFixed(1)}% phantom=${(cPhantomScore*100).toFixed(1)}% tactical=${cTacticalFit.toFixed(2)} odds=${cOdds.toFixed(2)} ev=${cEv != null ? (cEv*100).toFixed(1) + '%' : 'N/A'}`);
 
           // Compute full metadata for the promoted candidate
           const cPhantomScoreRaw = (cProb * 0.55) + (cFinalScore * 0.45);
@@ -210,6 +253,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
 
       // If cascade didn't find anything, mark original as SKIP
       if (syncedAdvisorStatus === 'SKIP') {
+        console.log(`[finalize] SKIP cascade: no quality alternative found for ${originalSkipPick.marketKey} — ${rankedCandidates.length - 1} alternatives checked, none passed headline quality gates`);
         const skipReasons = [];
         if (isRestricted) skipReasons.push('Restricted league — limited data reliability');
         if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${(odds ?? 0).toFixed(2)} offer no value`);
