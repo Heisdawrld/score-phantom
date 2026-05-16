@@ -8,39 +8,57 @@
  *   - VALUE:       Mid-range odds with genuine edge — good for singles
  *   - SHARP:       High odds with model disagreeing with bookmaker — high risk/reward
  *
- * This is Phase 1D of the Intelligent Analyst Engine.
+ * v5: Now uses per-market worth ranges from marketWorthRanges.js.
+ * Every market has its OWN junk/acceptable/sweet thresholds — a real punter
+ * doesn't treat Over 1.5 at 1.22 the same as Home Win at 1.25.
  */
 
 import { safeNum } from '../utils/math.js';
+import { isJunkOdds, isAcceptableOdds, getMarketWorth, classifyOddsWorth } from './marketWorthRanges.js';
 
 /**
  * Minimum odds per advisor badge level.
  * If odds are below these thresholds, the pick is not useful regardless of probability.
  */
 const MIN_ODDS_BY_BADGE = {
-  FIRE:        1.30,   // A FIRE pick at 1.14 odds is useless — no return
-  RECOMMENDED: 1.35,   // RECOMMENDED needs at least 1.35 to be meaningful
-  GAMBLE:      1.45,   // GAMBLE needs decent odds to justify the risk
-  VALUE:       1.55,   // VALUE picks need odds that reflect the uncertainty
-  CAUTIOUS:    1.70,   // CAUTIOUS picks need high odds to justify low probability
+  BET:         1.30,   // A BET pick at 1.14 odds is useless — no return
+  ACCA:        1.22,   // ACCA picks can tolerate slightly lower odds (they're building blocks)
+  SKIP:        0,      // SKIP has no minimum — it's already being skipped
 };
 
 /**
- * Hard minimum odds per market — below this, the market is pruned.
- * Some markets have naturally low odds (Over 1.5, Under 3.5) so they need
- * higher minimums to prevent spam.
+ * Check if odds are junk for a specific market using per-market worth ranges.
+ * Falls back to generic 1.30 threshold if market not found.
  */
-const MARKET_MIN_ODDS = {
-  over_15:  1.30,   // Over 1.5 is naturally 75%+ probable — odds below 1.30 are junk
-  under_35: 1.25,   // Under 3.5 at 1.20 odds = not useful
-  btts_no:  1.30,   // BTTS No at low odds is a comfort pick
-  under_25: 1.40,   // Under 2.5 needs decent odds to be worth it
-};
+function isMarketJunkOdds(marketKey, odds) {
+  const o = safeNum(odds, 0);
+  if (o <= 1.0) return false; // No odds — can't classify
+  // Use per-market worth ranges if available
+  if (isJunkOdds(marketKey, o)) return true;
+  // Fallback: generic junk threshold
+  return o < 1.15;
+}
+
+/**
+ * Get the effective minimum odds for a market using per-market worth ranges.
+ * If the market has a defined acceptableMin in marketWorthRanges, use that.
+ * Otherwise fall back to the generic 1.10.
+ */
+function getMarketMinOdds(marketKey) {
+  try {
+    const worth = getMarketWorth(marketKey);
+    if (worth && worth.acceptableMin) return worth.acceptableMin;
+  } catch (e) { /* fallback */ }
+  return 1.10;
+}
 
 /**
  * Classify a candidate into a value tier.
  *
- * @param {object} candidate — must have modelProbability, impliedProbability, edge, bookmakerOdds
+ * v5: Now uses per-market worth ranges for JUNK classification.
+ * A market with odds below its specific junk threshold → JUNK tier.
+ *
+ * @param {object} candidate — must have modelProbability, impliedProbability, edge, bookmakerOdds, marketKey
  * @returns {{ tier: string, tierLabel: string, tierDescription: string, minOddsMet: boolean, ev: number }}
  */
 export function classifyValueTier(candidate) {
@@ -48,6 +66,7 @@ export function classifyValueTier(candidate) {
   const odds = safeNum(candidate.bookmakerOdds, 0);
   const implied = safeNum(candidate.impliedProbability, 0);
   const edge = safeNum(candidate.edge, 0);
+  const marketKey = candidate.marketKey || '';
 
   // Expected Value: how much profit per unit stake
   // EV = (probability * odds) - 1
@@ -65,9 +84,25 @@ export function classifyValueTier(candidate) {
     };
   }
 
-  // Check minimum odds gate for this market
-  const marketMinOdds = MARKET_MIN_ODDS[candidate.marketKey] || 1.10;
+  // Check minimum odds gate for this market using per-market thresholds
+  const marketMinOdds = getMarketMinOdds(marketKey);
   const minOddsMet = odds >= marketMinOdds;
+
+  // ── Per-market worth classification ────────────────────────────────────
+  // Use the marketWorthRanges classifier for richer tier info
+  const worthClassification = classifyOddsWorth(marketKey, odds);
+
+  // JUNK tier: odds are below the market-specific junk threshold
+  // Over 1.5 at 1.15 = junk, Home Win at 1.20 = junk, Away Win at 1.25 = junk
+  if (isMarketJunkOdds(marketKey, odds) && prob >= 0.50) {
+    return {
+      tier: 'JUNK',
+      tierLabel: 'Junk Odds',
+      tierDescription: `${worthClassification.label}: ${worthClassification.description}`,
+      minOddsMet: false,
+      ev: parseFloat(ev.toFixed(4)),
+    };
+  }
 
   // ACCUMULATOR tier: solid probability at low-ish odds (1.30-1.60)
   // Good for building accumulators, not great for singles
@@ -117,18 +152,6 @@ export function classifyValueTier(candidate) {
     };
   }
 
-  // JUNK tier: odds too low for the probability level
-  // Over 1.5 at 1.14 = junk, Under 3.5 at 1.10 = junk
-  if (odds > 1.0 && odds < 1.30 && prob >= 0.60) {
-    return {
-      tier: 'JUNK',
-      tierLabel: 'Junk Odds',
-      tierDescription: `Probability is decent but odds at ${odds.toFixed(2)} offer no value`,
-      minOddsMet: false,
-      ev: parseFloat(ev.toFixed(4)),
-    };
-  }
-
   // NEGATIVE_EV tier: the bookmaker's price is worse than the model suggests
   if (odds > 1.0 && ev < -0.10) {
     return {
@@ -153,32 +176,37 @@ export function classifyValueTier(candidate) {
 /**
  * Check if a candidate should be hard-pruned due to junk odds.
  *
+ * v5: Now uses per-market junk thresholds from marketWorthRanges.
+ * Each market has its own definition of "too low" — Over 1.5 at 1.22 is junk,
+ * but Home Win at 1.25 might be acceptable.
+ *
  * @param {object} candidate
  * @returns {{ shouldPrune: boolean, reason: string|null }}
  */
 export function checkOddsGate(candidate) {
   const odds = safeNum(candidate.bookmakerOdds, 0);
   const prob = safeNum(candidate.modelProbability, 0);
+  const marketKey = candidate.marketKey || '';
 
   // No odds — skip gate (can't evaluate)
   if (odds <= 1.0) return { shouldPrune: false, reason: null };
 
-  // Market-specific minimum odds
-  const marketMin = MARKET_MIN_ODDS[candidate.marketKey] || 1.10;
+  // Per-market minimum odds using worth ranges
+  const marketMin = getMarketMinOdds(marketKey);
   if (odds < marketMin) {
+    const worth = getMarketWorth(marketKey);
     return {
       shouldPrune: true,
-      reason: `${candidate.marketKey} odds ${odds.toFixed(2)} below market minimum ${marketMin.toFixed(2)} — no value`,
+      reason: `${marketKey} odds ${odds.toFixed(2)} below market minimum ${marketMin.toFixed(2)} — ${worth.label} needs at least ${marketMin.toFixed(2)}`,
     };
   }
 
-  // General minimum: if odds < 1.15 and it's a headline-eligible market, prune
-  // Over 1.5 at 1.14, Under 3.5 at 1.12, etc.
-  const headlineMarkets = ['over_15', 'under_35', 'under_25', 'btts_no', 'double_chance_home', 'double_chance_away'];
-  if (headlineMarkets.includes(candidate.marketKey) && odds < 1.20) {
+  // Deep junk: odds way below junk threshold
+  if (isMarketJunkOdds(marketKey, odds)) {
+    const worth = getMarketWorth(marketKey);
     return {
       shouldPrune: true,
-      reason: `${candidate.marketKey} odds ${odds.toFixed(2)} below 1.20 — junk odds for a headline market`,
+      reason: `${marketKey} odds ${odds.toFixed(2)} below junk threshold ${worth.junkMax.toFixed(2)} — no value`,
     };
   }
 
@@ -187,7 +215,7 @@ export function checkOddsGate(candidate) {
   if (ev < -0.15) {
     return {
       shouldPrune: true,
-      reason: `${candidate.marketKey} EV ${(ev*100).toFixed(1)}% below -15% — bookmaker strongly disagrees`,
+      reason: `${marketKey} EV ${(ev*100).toFixed(1)}% below -15% — bookmaker strongly disagrees`,
     };
   }
 
@@ -220,4 +248,4 @@ export function computeEVScore(candidate) {
   return Math.max(-1.0, ev * 10); // Strongly negative EV
 }
 
-export { MIN_ODDS_BY_BADGE, MARKET_MIN_ODDS };
+export { MIN_ODDS_BY_BADGE, isMarketJunkOdds, getMarketMinOdds };

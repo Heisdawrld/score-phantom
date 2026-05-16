@@ -1,15 +1,16 @@
 import { safeNum, clamp } from '../utils/math.js';
 import { getHistoricalAccuracyScore, getLeagueMarketAccuracyScore, getLeagueRestrictionSignal, getDynamicMarketBaselines } from '../storage/accuracyCache.js';
 import { classifyValueTier, computeEVScore } from './valueTiers.js';
+import { classifyOddsWorth, isJunkOdds, isAcceptableOdds, isSweetSpotOdds, getMarketWorth, getFlexedMarketWorth } from './marketWorthRanges.js';
 
 const SCRIPT_MARKET_FIT = {
   dominant_home_pressure: {
     home_win: 0.92, dnb_home: 0.85, home_over_15: 0.85, win_either_half_home: 0.80,
-    away_under_15: 0.78, double_chance_home: 0.72, under_25: 0.68, btts_no: 0.65, home_over_25: 0.60,
+    handicap_home_minus1: 0.78, away_under_15: 0.78, double_chance_home: 0.72, under_25: 0.68, btts_no: 0.65, home_over_25: 0.60,
   },
   dominant_away_pressure: {
     away_win: 0.92, dnb_away: 0.85, away_over_15: 0.85, win_either_half_away: 0.80,
-    home_under_15: 0.78, double_chance_away: 0.72, under_25: 0.68, btts_no: 0.65, away_over_25: 0.60,
+    handicap_away_minus1: 0.78, home_under_15: 0.78, double_chance_away: 0.72, under_25: 0.68, btts_no: 0.65, away_over_25: 0.60,
   },
   open_end_to_end: {
     btts_yes: 0.92, over_25: 0.88, over_35: 0.72, home_over_05: 0.70, away_over_05: 0.70,
@@ -50,11 +51,6 @@ function getTacticalFit(marketKey, scriptOutput) {
  *   - Kelly Criterion fraction: optimal sizing = risk/reward ratio
  *   - Odds quality bonus: odds in the "bettable range" (1.50-2.20) are preferred
  *   - EV confidence: higher probability = more likely to realize the EV
- *
- * Example outputs:
- *   Home Win 55% @ 1.91 → Kelly=0.084, riskAdjEV=+0.049, oddsQuality=+0.15 → score≈0.37
- *   DC Home 85% @ 1.14 → Kelly=0, riskAdjEV=+0.018, oddsQuality=0 → score≈0.04
- *   Over 2.5 58% @ 1.80 → Kelly=0.074, riskAdjEV=+0.038, oddsQuality=+0.15 → score≈0.33
  */
 function computeSmartRiskReward(candidate) {
   const prob = safeNum(candidate.modelProbability, 0);
@@ -62,61 +58,122 @@ function computeSmartRiskReward(candidate) {
   if (odds <= 1.0) return 0;
 
   const ev = (prob * odds) - 1;
-
-  // Kelly Criterion: optimal bet fraction = (p*o - 1) / (o - 1)
-  // Higher Kelly = better risk/reward ratio
   const denominator = odds - 1;
   const kelly = denominator > 0.01 ? (prob * odds - 1) / denominator : 0;
   const kellyClamped = clamp(kelly, 0, 0.25);
-
-  // Risk-adjusted EV: EV scaled by sqrt(probability)
-  // High prob + high EV = great. Low prob + high EV = speculative.
-  // sqrt avoids pure probability dominance while still favoring confidence
   const riskAdjEV = clamp(ev * Math.sqrt(prob), -0.3, 0.5);
 
-  // Odds quality: the "bettable range" where real money is made
-  // 1.50-2.20 is the sweet spot for singles (real return for real risk)
   let oddsQualityBonus = 0;
-  if (odds >= 1.50 && odds <= 2.20) oddsQualityBonus = 0.15;      // sweet spot
-  else if (odds >= 1.40 && odds <= 2.50) oddsQualityBonus = 0.08;  // near sweet spot
-  else if (odds >= 1.30 && odds <= 3.00) oddsQualityBonus = 0.03;  // acceptable range
-  // odds < 1.30 or > 3.00: no bonus (too safe or too speculative)
+  if (odds >= 1.50 && odds <= 2.20) oddsQualityBonus = 0.15;
+  else if (odds >= 1.40 && odds <= 2.50) oddsQualityBonus = 0.08;
+  else if (odds >= 1.30 && odds <= 3.00) oddsQualityBonus = 0.03;
 
   return clamp(kellyClamped * 2.0 + clamp(riskAdjEV, 0, 0.5) + oddsQualityBonus, 0, 1);
 }
 
 /**
  * Market Efficiency — scores how exploitable the gap between model and market is.
- *
- * Concept:
- *   - Tiny gap (<3pp): Market is efficient → thin edge, hard to profit
- *   - Moderate gap (3-10pp): Sweet spot → exploitable inefficiency
- *   - Large gap (>15pp): Probably model error → unreliable signal
- *
- * Positive EV in the moderate gap range = gold zone = highest efficiency score
  */
 function computeMarketEfficiency(candidate) {
   const prob = safeNum(candidate.modelProbability, 0);
   const implied = safeNum(candidate.impliedProbability, 0);
   const odds = safeNum(candidate.bookmakerOdds, 0);
-  if (implied <= 0 || odds <= 1.0) return 0.5; // neutral when unknown
+  if (implied <= 0 || odds <= 1.0) return 0.5;
 
   const gap = Math.abs(prob - implied);
   const ev = (prob * odds) - 1;
 
   let efficiencyScore;
-  if (gap < 0.03)      efficiencyScore = 0.35;   // Tight market, thin edge
-  else if (gap < 0.06) efficiencyScore = 0.55;   // Moderate inefficiency
-  else if (gap < 0.10) efficiencyScore = 0.80;   // Sweet spot of inefficiency
-  else if (gap < 0.15) efficiencyScore = 0.65;   // Larger gap, more caution
-  else                 efficiencyScore = 0.25;   // Very large gap, likely model error
+  if (gap < 0.03)      efficiencyScore = 0.35;
+  else if (gap < 0.06) efficiencyScore = 0.55;
+  else if (gap < 0.10) efficiencyScore = 0.80;
+  else if (gap < 0.15) efficiencyScore = 0.65;
+  else                 efficiencyScore = 0.25;
 
-  // Gold zone bonus: positive EV + moderate inefficiency = exploitable value
   if (ev > 0 && gap >= 0.03 && gap <= 0.12) {
     efficiencyScore += 0.15;
   }
 
   return clamp(efficiencyScore, 0, 1);
+}
+
+/**
+ * ── v5: WORTH-AWARE SCORING — Bake worth INTO the score ──────────────────
+ *
+ * This is the KEY change from the previous architecture. Before, worth ranges
+ * were applied AFTER scoring as a band-aid (JUNK → SKIP cascade). Now they're
+ * baked INTO the scoring so markets with junk odds never rank #1 in the first place.
+ *
+ * How it works:
+ *   1. classifyOddsWorth() returns a tier: junk/thin/acceptable/sweet/value
+ *   2. Each tier gets a scoring modifier:
+ *      - JUNK:   Heavy penalty (-0.18 to -0.30) proportional to how far below junkMax
+ *                Over 1.5 at 1.15 = deep junk → penalty ≈ -0.28
+ *                Over 1.5 at 1.20 = near junk boundary → penalty ≈ -0.18
+ *      - THIN:   Moderate penalty (-0.06 to -0.12) — barely acceptable odds
+ *                Good for ACCA at best, never headline as a single
+ *      - ACCEPTABLE: Neutral to small bonus (-0.02 to +0.02)
+ *      - SWEET:  Bonus (+0.04 to +0.08) — ideal odds range for this market
+ *      - VALUE:  Small bonus (+0.02 to +0.04) — high reward potential
+ *
+ *   3. Context-aware flex: getFlexedMarketWorth() adjusts the thresholds
+ *      based on match context (dominance gap, form, motivation, league position).
+ *      A dominant home team's Home -1 handicap gets a MORE LENIENT junk threshold
+ *      (the engine is more willing to take the handicap because floodgates).
+ *
+ * This means: when the engine scores Home Win at 1.22 and Home -1 at 1.85,
+ * the Home Win gets a -0.25 worth penalty while Home -1 gets +0.06 sweet bonus.
+ * Home -1 naturally ranks HIGHER without needing a post-hoc cascade.
+ * The cascade in finalizePredictionResult is now a SAFETY NET, not the primary mechanism.
+ */
+function computeWorthScore(candidate, contextFlex = null) {
+  const odds = safeNum(candidate.bookmakerOdds, 0);
+  const marketKey = candidate.marketKey || '';
+
+  if (odds <= 1.0) return 0; // No odds — neutral
+
+  // Use context-flexed worth ranges if available, otherwise base ranges
+  const worth = contextFlex || getMarketWorth(marketKey);
+  const classification = classifyOddsWorth(marketKey, odds);
+
+  switch (classification.tier) {
+    case 'junk': {
+      // Deep penalty proportional to how far below junk threshold
+      // odds = 1.10 with junkMax = 1.25 → depth = (1.25 - 1.10) / 1.25 = 0.12 → penalty = -0.30
+      // odds = 1.21 with junkMax = 1.25 → depth = (1.25 - 1.21) / 1.25 = 0.032 → penalty = -0.18
+      const depth = Math.max(0, (worth.junkMax - odds) / worth.junkMax);
+      const penalty = clamp(-0.18 - depth * 1.0, -0.35, -0.12);
+      return penalty;
+    }
+    case 'thin': {
+      // Moderate penalty — barely acceptable, ACCA at best
+      // How close to acceptable? Deeper into thin = worse
+      const thinRange = worth.acceptableMin - worth.junkMax;
+      if (thinRange <= 0) return -0.08; // Fallback
+      const position = (odds - worth.junkMax) / thinRange; // 0 = barely above junk, 1 = at acceptable
+      const penalty = clamp(-0.12 + position * 0.06, -0.12, -0.04);
+      return penalty;
+    }
+    case 'sweet': {
+      // Bonus for being in the ideal odds range
+      // More centered in sweet spot = better
+      const sweetMid = (worth.sweetMin + worth.sweetMax) / 2;
+      const sweetRange = worth.sweetMax - worth.sweetMin;
+      if (sweetRange <= 0) return 0.06;
+      const distanceFromMid = Math.abs(odds - sweetMid) / sweetRange;
+      const bonus = clamp(0.08 - distanceFromMid * 0.04, 0.03, 0.08);
+      return bonus;
+    }
+    case 'value': {
+      // Small bonus for high-reward odds
+      return 0.03;
+    }
+    case 'acceptable':
+    default: {
+      // Neutral to small bonus
+      return 0.01;
+    }
+  }
 }
 
 function getBadMarketPenalty(candidate) {
@@ -131,14 +188,13 @@ function getBadMarketPenalty(candidate) {
     return clamp(excessAboveBase * 2.5, 0, 0.65);
   }
   // Phase 1B: Over 1.5 at low odds is a junk pick — heavy penalty
+  // NOTE: Worth scoring now handles this more precisely, but keeping
+  // this as a safety net for model-only picks (no odds)
   if (marketKey === 'over_15') {
     const odds = safeNum(candidate.bookmakerOdds, 0);
     const prob = safeNum(modelProbability, 0);
-    // At odds < 1.30: massive penalty (this gets pruned anyway, but safety net)
     if (odds > 1.0 && odds < 1.30) return 0.80;
-    // At odds 1.30-1.40: significant penalty — only survives as ACCA filler
     if (odds >= 1.30 && odds < 1.40) return clamp(0.25 + (0.40 - prob) * 1.5, 0.10, 0.45);
-    // At odds 1.40-1.55: moderate penalty — borderline
     if (odds >= 1.40 && odds < 1.55) return clamp(0.10 + (0.40 - prob) * 0.5, 0, 0.25);
   }
   if (marketKey === 'dnb_home' || marketKey === 'dnb_away') {
@@ -154,6 +210,51 @@ function getBadMarketPenalty(candidate) {
   return 0;
 }
 
+/**
+ * ── Build C: Context-aware worth flex ────────────────────────────────────
+ *
+ * Extracts context signals from the feature vector to flex the worth ranges.
+ * This is wired into scoring so the engine adjusts by match context:
+ *   - Dominant home team → Home -1 gets more lenient junk threshold
+ *   - Hot form → Straight win gets stricter junk threshold (go for the handicap!)
+ *   - Low motivation → All junk thresholds go UP (junk odds are even worse)
+ *   - Big league position gap → Handicap thresholds go DOWN (floodgates)
+ */
+function extractWorthContext(featureVector) {
+  const fv = featureVector || {};
+
+  // Dominance gap: home xG vs away xG
+  const homeXg = safeNum(fv.homeExpectedGoals ?? fv.homeXg, 0);
+  const awayXg = safeNum(fv.awayExpectedGoals ?? fv.awayXg, 0);
+  const totalXg = homeXg + awayXg;
+  const dominanceGap = totalXg > 0.5 ? (homeXg - awayXg) / totalXg : 0;
+
+  // Form: points from last 5, normalized
+  const homePointsLast5 = safeNum(fv.homePointsLast5, 5);
+  const awayPointsLast5 = safeNum(fv.awayPointsLast5, 5);
+  const homeFormStreak = clamp(homePointsLast5 / 15, 0, 1);
+  const awayFormStreak = clamp(awayPointsLast5 / 15, 0, 1);
+
+  // Motivation: inferred from league position and season stage
+  // This is a rough proxy — could be refined with actual motivation scores
+  const homeMotivation = safeNum(fv.homeMotivationScore, 0.5);
+  const awayMotivation = safeNum(fv.awayMotivationScore, 0.5);
+
+  // League position gap: how big is the quality gap between teams
+  const homeLeaguePos = safeNum(fv.homeLeaguePosition, 10);
+  const awayLeaguePos = safeNum(fv.awayLeaguePosition, 10);
+  const leaguePositionGap = clamp(Math.abs(homeLeaguePos - awayLeaguePos) / 15, 0, 1);
+
+  return {
+    dominanceGap,
+    homeFormStreak,
+    awayFormStreak,
+    homeMotivation,
+    awayMotivation,
+    leaguePositionGap,
+  };
+}
+
 export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}, accuracyCache = null, narrative = null) {
   const fv = featureVector || {};
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
@@ -166,17 +267,17 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
   const recentTypeCounts = recentMarkets.marketTypes || {};
   const nar = narrative || {};
 
+  // ── Build C: Extract context for worth flex ─────────────────────────────
+  const worthContext = extractWorthContext(featureVector);
+
   return candidates.map((candidate) => {
     const modelConfidenceScore = clamp(safeNum(candidate.modelProbability, 0), 0, 1);
     const rawEdge = safeNum(candidate.edge, 0);
     const edgeScore = candidate.edge != null ? clamp(rawEdge * 5, -1, 1) : 0;
 
-    // ── Phase 1C: EV-based scoring replaces simple edge ────────────────────
-    // Expected Value is a better metric than raw edge because it accounts
-    // for the odds level. A 5% edge at 1.50 odds = different value than
-    // 5% edge at 3.00 odds. EV captures this.
+    // ── EV-based scoring ──────────────────────────────────────────────────
     const evScore = computeEVScore(candidate);
-    const combinedEdgeScore = (edgeScore * 0.4) + (evScore * 0.6); // EV-weighted blend
+    const combinedEdgeScore = (edgeScore * 0.4) + (evScore * 0.6);
 
     let tacticalFitScore = getTacticalFit(candidate.marketKey, scriptOutput);
 
@@ -188,19 +289,16 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       tacticalFitScore = clamp(tacticalFitScore, 0, 1);
     }
 
-    // ── Phase 3A: Volatility as market signal ──────────────────────────────
-    // Instead of penalizing ALL markets for volatility, use it as a SIGNAL:
-    // Volatility → BOOST Over/BTTS markets, PENALTY on straight wins/Unders
+    // ── Volatility as market signal ──────────────────────────────────────
     let volatilityAdjustment = 0;
     const marketKey = candidate.marketKey || '';
     if (volatilityPenalty > 0.55) {
-      // Volatile match: goals are more likely, result less predictable
       if (marketKey.includes('over') || marketKey === 'btts_yes') {
-        volatilityAdjustment = clamp(volatilityPenalty * 0.15, 0, 0.08); // BOOST
+        volatilityAdjustment = clamp(volatilityPenalty * 0.15, 0, 0.08);
       } else if (marketKey.includes('under') || marketKey === 'btts_no') {
-        volatilityAdjustment = -clamp(volatilityPenalty * 0.10, 0, 0.06); // PENALTY
+        volatilityAdjustment = -clamp(volatilityPenalty * 0.10, 0, 0.06);
       } else if (marketKey.includes('win') && !marketKey.includes('either')) {
-        volatilityAdjustment = -clamp(volatilityPenalty * 0.12, 0, 0.08); // PENALTY on straight wins
+        volatilityAdjustment = -clamp(volatilityPenalty * 0.12, 0, 0.08);
       }
     }
 
@@ -239,49 +337,60 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const upsetRisk = safeNum(featureVector?.upsetRiskScore, 0.5);
     const predScore = (dataCompleteness * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
 
-    // ── v5 INTELLIGENT ANALYST — EXPERIENCED BETTOR REBALANCED WEIGHTS ───────
+    // ── v5 WORTH-AWARE SCORING — Bake worth INTO the score ────────────────
+    // This is the KEY architectural change. Instead of applying worth AFTER
+    // scoring as a band-aid, we bake it INTO the score so junk-odds markets
+    // naturally rank lower and never become the #1 pick.
+    //
+    // Context-aware flex: getFlexedMarketWorth() adjusts thresholds based on
+    // match context. A dominant home team → Home -1 gets more lenient thresholds.
+    const contextFlexedWorth = getFlexedMarketWorth(marketKey, worthContext);
+    const worthScore = computeWorthScore(candidate, contextFlexedWorth);
+
+    // ── v5 REBALANCED WEIGHTS — Worth-aware ─────────────────────────────────
     // Key changes from v4:
-    // - Model confidence reduced from 18% → 14% (probability alone isn't enough)
-    // - EV/edge component reduced from 25% → 22% (still important, but not sole driver)
-    // - NEW: Smart Risk Reward 10% (reward quality odds/prob balance — Kelly-based)
-    // - NEW: Market Efficiency 6% (reward exploitable inefficiencies)
-    // - Tactical UP from 13% → 14% (tactical alignment is key for smart picks)
-    // - Predictability DOWN from 13% → 8% (stop favoring predictable matches so heavily)
-    // - Data DOWN from 10% → 8%
-    // - Historical DOWN from 9% → 8%
-    // - League DOWN from 12% → 10%
-    // - Form stays at 5%
-    // Total: 14+22+10+6+14+8+8+8+10+5 = 105% → normalized to 100%
-    const modelScore = 0.14 * modelConfidenceScore;
-    const marketEdgeScore = 0.22 * combinedEdgeScore; // EV-weighted edge
+    // - Model confidence: 14% → 13% (probability alone isn't enough)
+    // - EV/edge: 22% → 20% (still important, but worth scoring captures some of this)
+    // - Smart Risk Reward: 10% (unchanged)
+    // - Market Efficiency: 6% (unchanged)
+    // - NEW: Worth Score 7% (per-market odds quality — the punter's instinct)
+    // - Tactical: 14% → 13%
+    // - Predictability: 8% (unchanged)
+    // - Data: 8% (unchanged)
+    // - Historical: 8% (unchanged)
+    // - League: 10% (unchanged)
+    // - Form: 5% → 4%
+    // Total: 13+20+10+6+7+13+8+8+8+10+4 = 107% → normalized
+    const modelScore = 0.13 * modelConfidenceScore;
+    const marketEdgeScore = 0.20 * combinedEdgeScore;
     const smartRiskRewardScore = computeSmartRiskReward(candidate);
     const smartRiskRewardComponent = 0.10 * smartRiskRewardScore;
     const marketEfficiencyScore = computeMarketEfficiency(candidate);
     const marketEfficiencyComponent = 0.06 * marketEfficiencyScore;
-    const tacticalFitComponent = 0.14 * tacticalFitScore;
+    const worthComponent = 0.07 * worthScore; // v5: Worth baked into scoring
+    const tacticalFitComponent = 0.13 * tacticalFitScore;
     const predictabilityScore = 0.08 * predScore;
     const dataSupportComponent = 0.08 * dataSupportScore;
     const historicalAccuracyComponent = 0.08 * historicalAccuracyScore;
     const leagueCalibrationComponent = 0.10 * leagueMarketScore;
-    const formMomentumComponent = 0.05 * formMomentumScore;
+    const formMomentumComponent = 0.04 * formMomentumScore;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;
     const leagueTrustedBonus = leagueSignal.status === 'trusted' ? 0.04 : 0;
 
-    // Smarter risk penalty: reduce blanket volatility coefficient,
-    // since Smart Risk Reward already handles "volatility with value"
     const volatilityCoefficient = marketKey.includes('over') || marketKey === 'btts_yes'
-      ? 0.08   // Goals markets: volatility is a SIGNAL, not pure risk
-      : 0.14;  // Other markets: still penalize, but less aggressively
+      ? 0.08
+      : 0.14;
     const riskPenaltyScore = (volatilityCoefficient * volatilityPenalty) + (0.12 * scriptMismatchPenalty) + starvationPenalty + leagueRestrictionPenalty;
     const productPenaltyScore = (0.14 * badMarketPenalty) + (0.08 * repetitionPenalty) + diversityPenalty;
 
     let finalScore =
       modelScore + marketEdgeScore + smartRiskRewardComponent + marketEfficiencyComponent +
+      worthComponent + // v5: Worth baked into scoring
       tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
       formMomentumComponent + diversityBonus + leagueTrustedBonus +
-      volatilityAdjustment -  // Phase 3A: volatility as signal
+      volatilityAdjustment -
       riskPenaltyScore - productPenaltyScore;
 
     let contextAdjustmentScore = leagueCalibrationComponent + leagueTrustedBonus - leagueRestrictionPenalty;
@@ -306,7 +415,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       candidate.evRating = 'LOW';
     }
 
-    // ── Phase 2B: Narrative-boosted markets get scoring bonus ──────────────
+    // ── Narrative-boosted markets get scoring bonus ──────────────────────
     if (nar.boostedMarkets && nar.boostedMarkets.includes(marketKey)) {
       const narrativeBonus = nar.narrativeConfidence === 'high' ? 0.06 : 0.03;
       finalScore += narrativeBonus;
@@ -325,18 +434,16 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       home_over_05: 0.80, away_over_05: 0.75,
       home_over_15: 0.55, away_over_15: 0.45,
       home_over_25: 0.35, away_over_25: 0.25,
+      handicap_home_minus1: 0.30, handicap_away_minus1: 0.20,
+      handicap_home_plus1: 0.75, handicap_away_plus1: 0.70,
     };
     const baseline = DYNAMIC_BASELINES[candidate.marketKey] || HARDCODED_BASELINE[candidate.marketKey] || 0.50;
     const edgeAboveBaseline = prob - baseline;
 
-    // ── Phase 1D: Classify value tier ──────────────────────────────────────
+    // ── Value tier classification ─────────────────────────────────────────
     const valueTier = classifyValueTier(candidate);
 
-    // ── Phase 4A: Simplified 3-Tier Badge: BET / ACCA / SKIP ────────────
-    // Beginner-friendly: each badge gives ONE clear message.
-    //   BET   = "Bet on this" — trusted as a single bet
-    //   ACCA  = "Acca pick" — use in accumulators, not as a single
-    //   SKIP  = "Don't bet" — not worth it
+    // ── 3-Tier Badge: BET / ACCA / SKIP ──────────────────────────────────
     const odds = safeNum(candidate.bookmakerOdds, 0);
     const ev = odds > 1.0 ? (prob * odds) - 1 : null;
     const isPositiveEV = ev != null && ev >= 0;
@@ -348,39 +455,30 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       advisorStatus = prob >= 0.65 ? 'ACCA' : 'SKIP';
       advisorReason = 'league_restricted';
     } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
-      // Junk odds or negative EV — always SKIP
       advisorStatus = 'SKIP';
       advisorReason = valueTier.tier === 'JUNK' ? 'junk_odds' : 'negative_ev';
     } else if (valueTier.tier === 'ACCUMULATOR') {
-      // ACCUMULATOR tier: solid probability at low odds → ACCA (not a single)
       advisorStatus = 'ACCA';
       advisorReason = 'accumulator_pick';
     } else if (valueTier.tier === 'STRONG') {
-      // STRONG tier: BET if data is decent, ACCA if data is poor
       advisorStatus = (isPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
       advisorReason = isPositiveEV ? 'strong_value_bet' : 'strong_poor_data';
     } else if (valueTier.tier === 'VALUE') {
-      // VALUE tier: BET if +EV, ACCA if marginal EV
       advisorStatus = isPositiveEV ? 'BET' : 'ACCA';
       advisorReason = isPositiveEV ? 'value_pick_positive_ev' : 'value_pick_marginal_ev';
     } else if (valueTier.tier === 'SHARP') {
-      // SHARP tier: BET if +EV (value exists), SKIP if not
       advisorStatus = isPositiveEV ? 'BET' : 'SKIP';
       advisorReason = isPositiveEV ? 'sharp_value_positive_ev' : 'sharp_negative_ev';
     } else if (prob >= 0.72 && odds >= 1.30) {
-      // High probability with decent odds → BET
       advisorStatus = predScore < 0.20 ? 'ACCA' : 'BET';
       advisorReason = predScore < 0.20 ? 'high_prob_poor_data' : 'high_confidence';
     } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
-      // ACCA-eligible probability/odds range → ACCA
       advisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
       advisorReason = predScore < 0.20 ? 'moderate_poor_data' : 'acca_eligible';
     } else if (prob >= 0.60) {
-      // Decent probability → ACCA (good building block)
       advisorStatus = predScore < 0.25 ? 'SKIP' : 'ACCA';
       advisorReason = predScore < 0.25 ? 'moderate_poor_data' : 'moderate_confidence';
     } else if (prob >= 0.50 && isPositiveEV) {
-      // Marginal probability but positive EV → ACCA
       advisorStatus = 'ACCA';
       advisorReason = 'marginal_prob_positive_ev';
     } else if (prob >= 0.50) {
@@ -399,6 +497,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       smartRiskRewardComponent: parseFloat(smartRiskRewardComponent.toFixed(4)),
       marketEfficiencyScore: parseFloat(marketEfficiencyScore.toFixed(4)),
       marketEfficiencyComponent: parseFloat(marketEfficiencyComponent.toFixed(4)),
+      worthScore: parseFloat(worthScore.toFixed(4)),        // v5: Worth score
+      worthComponent: parseFloat(worthComponent.toFixed(4)), // v5: Worth component
       predictabilityScore: parseFloat(predictabilityScore.toFixed(4)),
       riskPenaltyScore: parseFloat(riskPenaltyScore.toFixed(4)),
       productPenaltyScore: parseFloat(productPenaltyScore.toFixed(4)),

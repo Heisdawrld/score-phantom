@@ -26,6 +26,14 @@ const MARKET_DEFINITIONS = [
   { marketKey: 'away_under_15',      selection: 'Away Under 1.5 Goals', probKey: 'awayUnder15' },
   { marketKey: 'win_either_half_home', selection: 'Home Win Either Half', probKey: null,  compute: (p) => safeNum(p.homeOver05, 0) * 0.75 },
   { marketKey: 'win_either_half_away', selection: 'Away Win Either Half', probKey: null,  compute: (p) => safeNum(p.awayOver05, 0) * 0.7 },
+  // ── European Handicap Markets ────────────────────────────────────────────
+  // The punter's natural move when straight win odds are junk.
+  // Home Win at 1.20 → Home -1 at 1.85 (same conviction, better price)
+  // Away Win at 1.25 → Away -1 at 1.90
+  { marketKey: 'handicap_home_minus1', selection: 'Home -1 (Handicap)', probKey: 'handicapHome1' },
+  { marketKey: 'handicap_away_minus1', selection: 'Away -1 (Handicap)', probKey: 'handicapAwayMinus1' },
+  { marketKey: 'handicap_home_plus1',  selection: 'Home +1 (Handicap)', probKey: 'handicapHomePlus1' },
+  { marketKey: 'handicap_away_plus1',  selection: 'Away +1 (Handicap)', probKey: 'handicapAway1' },
 ];
 
 /**
