@@ -2,9 +2,12 @@
   "name": "scorephantom",
   "version": "1.0.2",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node src/app.js",
-    "build": "npm run build:client",
+    "build": "npm --prefix client ci --include=dev && npm run build:client",
     "build:client": "npm --prefix client run build",
     "env:check": "node src/scripts/checkEnv.js",
     "seed": "node src/services/fixtureSeeder.js",
