@@ -726,7 +726,7 @@ router.post("/signup", authLimiter, async (req, res) => {
         
         // Reload user to return token
         const created = await db.execute({
-          sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE id = ? LIMIT 1`,
+          sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE id = ? LIMIT 1`,
           args: [existingUser.id],
         });
         const user = created.rows?.[0];
@@ -760,7 +760,7 @@ router.post("/signup", authLimiter, async (req, res) => {
     });
 
     const created = await db.execute({
-      sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE email = ? LIMIT 1`,
+      sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code, email_verified FROM users WHERE email = ? LIMIT 1`,
       args: [normalizedEmail],
     });
     const user   = created.rows?.[0];
