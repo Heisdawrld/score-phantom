@@ -187,6 +187,10 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const analystSummary = rec.analystSummary || null;  // Analyst reasoning summary
   const narrative = (data as any)?.narrative || null;  // Match narrative from engine
   const lineupIntel = rec.lineupIntelligence || (data as any)?.features?.lineupIntelligence || null;
+  const verdict = rec.verdict || null;
+  const marketLadder = Array.isArray((data as any)?.predictions?.market_ladder)
+    ? (data as any).predictions.market_ladder
+    : [];
 
   // Value tier display config
   const VALUE_TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -265,7 +269,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                 +ACCA
               </span>
             )}
-            {/* SHARP MONEY alert — only when Polymarket mispricing detected */}
+            {/* External market context badge — does not steer the core pick */}
             {isSharpValue && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
                 <TrendingUp className="w-3 h-3" /> SHARP
@@ -364,9 +368,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               transition={{ delay: 0.3 }}
               className="flex items-center gap-2 mt-2 mb-3">
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#E5F522]/20 border border-[#E5F522]/40 text-[#E5F522] uppercase shadow-[0_0_8px_rgba(229,245,34,0.15)]">
-                SHARP MONEY ALERT
+                MARKET GAP
               </span>
-              <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
+              <span className="text-[11px] font-bold text-[#E5F522]/90">External market odds disagree with the model</span>
             </motion.div>
           ) : !isNoPick && hasValue && edgePct != null ? (
             <motion.div
@@ -418,6 +422,94 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </div>
           )}
 
+          {(verdict || marketLadder.length > 0) && (
+            <div className="mt-3 space-y-3">
+              {verdict && (
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart2 size={13} className="text-primary" />
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Phantom Verdict</span>
+                  </div>
+                  {verdict.headline && <p className="text-[13px] font-bold text-white mb-1.5">{verdict.headline}</p>}
+                  {verdict.thesis && <p className="text-[11px] text-white/60 leading-snug">{verdict.thesis}</p>}
+
+                  {Array.isArray(verdict.support) && verdict.support.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-1.5">
+                      {verdict.support.slice(0, 3).map((item: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px] text-white/65 leading-snug">
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {Array.isArray(verdict.cautions) && verdict.cautions.length > 0 && (
+                    <div className="mt-3 p-2.5 rounded-lg bg-amber-400/5 border border-amber-400/15">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <AlertCircle size={12} className="text-amber-300" />
+                        <span className="text-[9px] font-black text-amber-300/80 uppercase tracking-wider">Watchouts</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {verdict.cautions.slice(0, 3).map((item: string, i: number) => (
+                          <p key={i} className="text-[10px] text-amber-200/75 leading-snug">{item}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {marketLadder.length > 0 && !isNoPick && (
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp size={13} className="text-primary" />
+                      <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Market Ladder</span>
+                    </div>
+                    {verdict?.ladderSummary && (
+                      <span className="text-[9px] text-white/30 text-right">{verdict.ladderSummary}</span>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {marketLadder.slice(0, 4).map((entry: any) => (
+                      <div key={`${entry.marketKey || entry.pick}-${entry.rank}`} className={cn(
+                        "rounded-lg border p-2.5",
+                        entry.isPrimary ? "bg-primary/[0.07] border-primary/15" : "bg-white/[0.02] border-white/[0.05]"
+                      )}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={cn(
+                                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black",
+                                entry.isPrimary ? "bg-primary text-black" : "bg-white/[0.06] text-white/55"
+                              )}>
+                                {entry.rank}
+                              </span>
+                              <p className="text-[12px] font-bold text-white truncate">{entry.pick}</p>
+                              {entry.advisor_status && <ModelAdvisorBadge status={normalizeStatus(entry.advisor_status) as AdvisorStatus} showLabel={false} />}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap text-[10px] text-white/35">
+                              {entry.marketFamilyLabel && <span>{entry.marketFamilyLabel}</span>}
+                              {entry.rationaleTag && <span className="text-primary/80">• {entry.rationaleTag}</span>}
+                              {entry.cautionTag && <span className="text-amber-300/75">• {entry.cautionTag}</span>}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <p className="text-[12px] font-black text-white">{entry.probability_pct?.toFixed ? entry.probability_pct.toFixed(1) : entry.probability_pct}%</p>
+                            <p className="text-[9px] text-white/30">{entry.odds ? `${Number(entry.odds).toFixed(2)} odds` : 'model only'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── PHANTOM DECISION STACK ── */}
           {/* Shows script + match outcome probabilities. Always visible when either exists. */}
           {(scriptLabel || matchResult) && (
@@ -463,11 +555,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </div>
           )}
 
-          {/* ── POLYMARKET SHARP ODDS ── */}
+          {/* ── EXTERNAL MARKET CHECK ── */}
           {hasSharpMoney1x2 && (
             <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Polymarket Sharp Money</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">External Market Check</span>
                 {isSharpValue && <TrendingUp size={12} className="text-[#E5F522]" />}
               </div>
               <div className="grid grid-cols-3 gap-2">

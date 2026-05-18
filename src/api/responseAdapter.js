@@ -510,6 +510,74 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
   };
 }
 
+function normalizeMarketLadderEntry(entry, rank, homeTeam, awayTeam, dataCompletenessScore, engineConfidenceModel = null) {
+  if (!entry) return null;
+
+  if (entry.pickLabel || entry.marketFamily) {
+    return {
+      rank: entry.rank ?? (rank + 1),
+      marketKey: entry.marketKey || null,
+      marketFamily: entry.marketFamily || null,
+      marketFamilyLabel: entry.marketFamilyLabel || null,
+      pick: entry.pickLabel || formatPickLabel(entry.marketKey, entry.selection, homeTeam, awayTeam),
+      probability: safeNum(entry.probability, 0),
+      probability_pct: entry.probabilityPct != null ? safeNum(entry.probabilityPct, 0) : parseFloat((safeNum(entry.probability, 0) * 100).toFixed(1)),
+      score: entry.headlineScore != null
+        ? parseFloat((safeNum(entry.headlineScore, 0) * 100).toFixed(1))
+        : parseFloat((safeNum(entry.finalScore, 0) * 100).toFixed(1)),
+      finalScore: entry.finalScore != null ? safeNum(entry.finalScore, 0) : null,
+      odds: entry.odds != null ? safeNum(entry.odds, 0) : null,
+      ev: entry.ev != null ? safeNum(entry.ev, 0) : null,
+      advisor_status: entry.advisorStatus || entry.advisor_status || null,
+      valueTier: entry.valueTier || null,
+      rationaleTag: entry.rationaleTag || null,
+      cautionTag: entry.cautionTag || null,
+      isPrimary: entry.isPrimary === true,
+    };
+  }
+
+  const mapped = buildPickObject(entry, homeTeam, awayTeam, dataCompletenessScore, engineConfidenceModel);
+  if (!mapped) return null;
+
+  return {
+    rank: rank + 1,
+    marketKey: entry.marketKey || null,
+    marketFamily: null,
+    marketFamilyLabel: null,
+    pick: mapped.pick,
+    probability: mapped.probability,
+    probability_pct: mapped.probability_pct,
+    score: mapped.score,
+    finalScore: entry.finalScore != null ? safeNum(entry.finalScore, 0) : null,
+    odds: mapped.odds,
+    ev: mapped.ev,
+    advisor_status: mapped.advisor_status,
+    valueTier: mapped.valueTier,
+    rationaleTag: null,
+    cautionTag: null,
+    isPrimary: rank === 0,
+  };
+}
+
+function buildFallbackVerdict(recommendation, marketLadder = [], noSafePickReason = null) {
+  if (!recommendation) return null;
+  return {
+    status: recommendation.advisor_status || 'SKIP',
+    headline: recommendation.advisor_status === 'SKIP'
+      ? 'No featured pre-match pick'
+      : `${recommendation.pick || 'This pick'} leads the internal market ladder.`,
+    thesis: recommendation.analystSummary || recommendation.pick || noSafePickReason || null,
+    support: Array.isArray(recommendation.reasons) ? recommendation.reasons.slice(0, 3) : [],
+    cautions: [recommendation.avoidReason || noSafePickReason].filter(Boolean),
+    leader: marketLadder[0] || null,
+    marketFamily: marketLadder[0]?.marketFamily || null,
+    marketFamilyLabel: marketLadder[0]?.marketFamilyLabel || null,
+    ladderSummary: marketLadder.length > 1
+      ? `${marketLadder[0]?.pick} leads ${marketLadder[1]?.pick}.`
+      : 'No clear secondary market angle.',
+  };
+}
+
 export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const {
     fixtureId,
@@ -523,6 +591,8 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     noSafePickReason,
     reasonCodes = [],
     rankedMarkets = [],
+    marketLadder = [],
+    phantomVerdict = null,
     correctScoreProbs,
   } = engineResult;
 
@@ -758,6 +828,14 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   const all_candidates = isSkipResponse ? [] : (allCandidates || rankedMarkets || []).slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
+  const market_ladder = isSkipResponse ? [] : ((marketLadder && marketLadder.length > 0 ? marketLadder : (allCandidates || rankedMarkets || []).slice(0, 4))
+    .map((entry, index) => normalizeMarketLadderEntry(entry, index, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
+    .filter(Boolean)
+    .slice(0, 4));
+  const verdict = phantomVerdict || buildFallbackVerdict(recommendation, market_ladder, noSafePickReason);
+  if (recommendation) {
+    recommendation.verdict = verdict;
+  }
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({
     score: cs.score || `${cs.home}-${cs.away}`,
     probability: safeNum(cs.probability || cs.prob, 0),
@@ -772,6 +850,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       over_under,
       btts,
       recommendation,
+      market_ladder,
       backup_picks,
       all_candidates,
       correct_score,

@@ -5,6 +5,7 @@ import { savePrediction } from "../storage/savePrediction.js";
 import { logRecommendedMarket } from "../storage/marketTracking.js";
 import { classifyValueTier } from "../markets/valueTiers.js";
 import { getMarketEscalationTargets, isJunkOdds, isAcceptableOdds } from "../markets/marketWorthRanges.js";
+import { buildMarketLadder, buildPhantomVerdictPayload } from './buildPhantomVerdict.js';
 
 /**
  * Stage 4 — Finalize prediction result.
@@ -339,12 +340,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     h2hUsed: (features.h2hMatchesAvailable || 0) > 0,
     xgUsed: xg.homeExpectedGoals > 0 && xg.awayExpectedGoals > 0,
     tacticalUsed: !!(features.tacticalMatchup && features.tacticalMatchup.tacticalConfidence !== 'low'),
-    sharpUsed: !!features.bestOdds || !!(
-      features.polymarketOdds?.odds &&
-      Object.values(features.polymarketOdds.odds).some((market) =>
-        market && typeof market === 'object' && Object.values(market).some((value) => Number.isFinite(value) && value > 0)
-      )
-    ),
+    sharpUsed: !!features.bestOdds,
     injuriesUsed: features.homeMissingXgImpact > 0 || features.awayMissingXgImpact > 0,
   };
 
@@ -357,6 +353,27 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
   const finalAbstainCode = abstainCode
     || (isAvoidedPick ? 'AVOID_BADGE_NO_PICK' : null)
     || null;
+
+  const marketLadder = finalNoSafePick
+    ? []
+    : buildMarketLadder({
+      rankedCandidates,
+      bestPick,
+      narrative,
+      features,
+      limit: 4,
+    });
+
+  const phantomVerdict = buildPhantomVerdictPayload({
+    bestPick,
+    noSafePick: finalNoSafePick,
+    noSafePickReason: finalNoSafePickReason,
+    features,
+    narrative,
+    reasonChain,
+    script,
+    marketLadder,
+  });
 
   const result = {
     fixtureId,
@@ -375,6 +392,8 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     confidence,
     reasonCodes,
     rankedMarkets: rankedCandidates,
+    marketLadder,
+    phantomVerdict,
     correctScoreProbs,
     topProbKey: topProbKey || null,
     features,
