@@ -10,6 +10,19 @@ function getMissingReason(p: any) {
   return p?.reason || p?.status || p?.type || 'Unavailable';
 }
 
+function formatConfidence(value: any) {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return null;
+  return `${Math.round(num * 100)}%`;
+}
+
+function statusTone(status: any) {
+  const low = String(status || '').toLowerCase();
+  if (low === 'confirmed') return 'bg-primary/15 text-primary border-primary/25';
+  if (low === 'predicted') return 'bg-amber-400/10 text-amber-300 border-amber-400/20';
+  return 'bg-white/5 text-white/40 border-white/10';
+}
+
 export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureId?: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['predicted-lineup', fixtureId],
@@ -31,14 +44,15 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
   let awayUnavailable: any[] = [];
   let homeFormation = null;
   let awayFormation = null;
+  const lineupIntel = data?.lineupIntelligence || matchData?.meta?.lineupIntelligence || null;
 
   if (isLiveFormat) {
     const allPlayers = matchData.meta.lineups || [];
     homeLineup = allPlayers.filter((p: any) => p.is_home);
     awayLineup = allPlayers.filter((p: any) => !p.is_home);
   } else if (data && data.lineups) {
-    homeLineup = data.lineups.home?.starters || data.lineups.home?.players || [];
-    awayLineup = data.lineups.away?.starters || data.lineups.away?.players || [];
+    homeLineup = data.lineups.home?.starters || data.lineups.home?.players || data.lineups.home?.lineup || [];
+    awayLineup = data.lineups.away?.starters || data.lineups.away?.players || data.lineups.away?.lineup || [];
     homeSubs = data.lineups.home?.substitutes || [];
     awaySubs = data.lineups.away?.substitutes || [];
     homeUnavailable = data.lineups.home?.unavailable || [];
@@ -46,8 +60,8 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
     homeFormation = data.lineups.home?.predicted_formation || data.lineups.home?.formation;
     awayFormation = data.lineups.away?.predicted_formation || data.lineups.away?.formation;
   } else {
-    homeLineup = matchData?.meta?.lineups?.home?.players || [];
-    awayLineup = matchData?.meta?.lineups?.away?.players || [];
+    homeLineup = matchData?.meta?.lineups?.home?.players || matchData?.meta?.lineups?.home?.lineup || [];
+    awayLineup = matchData?.meta?.lineups?.away?.players || matchData?.meta?.lineups?.away?.lineup || [];
     homeSubs = matchData?.meta?.lineups?.home?.substitutes || [];
     awaySubs = matchData?.meta?.lineups?.away?.substitutes || [];
     homeFormation = matchData?.meta?.lineups?.home?.formation || null;
@@ -83,12 +97,30 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
         <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Starting XIs & Formations</p>
-          {data?.beta && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 uppercase">
-              AI PREDICTED
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {lineupIntel?.certaintyLabel && (
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.certaintyLabel)}`}>
+                {lineupIntel.certaintyLabel}
+              </span>
+            )}
+            {data?.beta && (
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 uppercase">
+                AI PREDICTED
+              </span>
+            )}
+          </div>
         </div>
+
+        {lineupIntel?.note && (
+          <div className="mb-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[11px] text-white/65">{lineupIntel.note}</p>
+              {lineupIntel?.certaintyScore != null && (
+                <span className="text-[10px] font-bold text-white/40">{formatConfidence(lineupIntel.certaintyScore)} certainty</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {hasLineups ? (
           <div className="space-y-6">
@@ -97,6 +129,12 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
                   <div className="flex flex-col items-center mb-3 pb-2 border-b border-white/10">
                     <h3 className="text-sm font-bold text-white text-center leading-tight mb-1">{matchData?.fixture?.home_team_name}</h3>
                     {homeFormation && <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">{homeFormation}</span>}
+                    {lineupIntel?.home && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.home.status)}`}>{lineupIntel.home.status || 'unknown'}</span>
+                        {formatConfidence(lineupIntel.home.confidence) && <span className="text-[10px] text-white/35">{formatConfidence(lineupIntel.home.confidence)}</span>}
+                      </div>
+                    )}
                   </div>
                   <ul className="space-y-1.5">
                     {homeLineup.map((l: any, i: number) => (
@@ -114,6 +152,12 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
                   <div className="flex flex-col items-center mb-3 pb-2 border-b border-white/10">
                     <h3 className="text-sm font-bold text-white text-center leading-tight mb-1">{matchData?.fixture?.away_team_name}</h3>
                     {awayFormation && <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">{awayFormation}</span>}
+                    {lineupIntel?.away && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.away.status)}`}>{lineupIntel.away.status || 'unknown'}</span>
+                        {formatConfidence(lineupIntel.away.confidence) && <span className="text-[10px] text-white/35">{formatConfidence(lineupIntel.away.confidence)}</span>}
+                      </div>
+                    )}
                   </div>
                   <ul className="space-y-1.5">
                     {awayLineup.map((l: any, i: number) => (
@@ -144,6 +188,13 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.home_team_name || 'Home'}</p>
+                {!!lineupIntel?.home?.keyAbsenceReasons?.length && (
+                  <div className="mb-2 space-y-1">
+                    {lineupIntel.home.keyAbsenceReasons.slice(0, 2).map((reason: string, idx: number) => (
+                      <p key={idx} className="text-[10px] text-amber-300/80">• {reason}</p>
+                    ))}
+                  </div>
+                )}
                 {homeUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : homeUnavailable.map((p: any, i: number) => (
                   <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
                     <span className="text-white/70 font-medium">{getPlayerName(p)}</span>
@@ -153,6 +204,13 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
               </div>
               <div>
                 <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.away_team_name || 'Away'}</p>
+                {!!lineupIntel?.away?.keyAbsenceReasons?.length && (
+                  <div className="mb-2 space-y-1">
+                    {lineupIntel.away.keyAbsenceReasons.slice(0, 2).map((reason: string, idx: number) => (
+                      <p key={idx} className="text-[10px] text-amber-300/80">• {reason}</p>
+                    ))}
+                  </div>
+                )}
                 {awayUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : awayUnavailable.map((p: any, i: number) => (
                   <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
                     <span className="text-white/70 font-medium">{getPlayerName(p)}</span>

@@ -607,82 +607,6 @@ export async function fetchVenueDetail(venueId) {
   return await bsdFetch(`/venues/${venueId}/`);
 }
 
-// ── v1 fallback-only endpoints ────────────────────────────────────────────────
-
-function normalizePredictionRow(exact) {
-  const rawPred = String(exact?.predicted_result || '').toUpperCase();
-
-  let canonicalPrediction = null;
-  if (rawPred === '1' || rawPred === 'H' || rawPred === 'HOME') canonicalPrediction = 'home_win';
-  else if (rawPred === '2' || rawPred === 'A' || rawPred === 'AWAY') canonicalPrediction = 'away_win';
-  else if (rawPred === 'X' || rawPred === 'D' || rawPred === 'DRAW') canonicalPrediction = 'draw';
-  else if (rawPred.includes('OVER')) canonicalPrediction = 'over_25';
-  else if (rawPred.includes('UNDER')) canonicalPrediction = 'under_25';
-  else if (rawPred.includes('BTTS') || rawPred.includes('YES')) canonicalPrediction = 'btts_yes';
-
-  return {
-    prediction: canonicalPrediction || null,
-    homeWinProb: exact.prob_home_win || null,
-    drawProb: exact.prob_draw || null,
-    awayWinProb: exact.prob_away_win || null,
-    expectedHomeGoals: exact.expected_home_goals || null,
-    expectedAwayGoals: exact.expected_away_goals || null,
-  };
-}
-
-/**
- * Fetch the BSD CatBoost ML prediction for a specific event.
- * Uses the v2 /events/{id}/prediction/ endpoint (direct lookup, no pagination).
- * Falls back to /predictions/?date_from=...&date_to=... if the direct endpoint returns 404.
- */
-export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
-  if (!eventId) return null;
-
-  // Primary: direct event prediction endpoint (v2)
-  const direct = await bsdFetch(`/events/${eventId}/prediction/`);
-  if (direct) {
-    const mkt = direct.markets || {};
-    const mr = mkt.match_result || {};
-    const eg = mkt.expected_goals || {};
-    const rec = direct.recommendations || {};
-    return {
-      prediction: mr.predicted === 'H' ? 'home_win' : mr.predicted === 'A' ? 'away_win' : mr.predicted === 'D' ? 'draw' : null,
-      homeWinProb: mr.prob_home != null ? mr.prob_home / 100 : null,
-      drawProb: mr.prob_draw != null ? mr.prob_draw / 100 : null,
-      awayWinProb: mr.prob_away != null ? mr.prob_away / 100 : null,
-      expectedHomeGoals: eg.home ?? null,
-      expectedAwayGoals: eg.away ?? null,
-    };
-  }
-
-  // Fallback: search predictions by date (for events without direct prediction)
-  if (!matchDateIso) return null;
-  const date = String(matchDateIso).slice(0, 10);
-  const limit = 50;
-  let offset = 0;
-
-  while (offset < 500) {
-    const data = await bsdFetch('/predictions/', {
-      date_from: date,
-      date_to: date,
-      limit,
-      offset,
-    });
-
-    const rows = asArray(data);
-    const exact = rows.find((r) => {
-      const event = r.event || {};
-      return String(event.id ?? r.event) === String(eventId);
-    });
-
-    if (exact) return normalizePredictionRow(exact);
-    if (!data?.next || rows.length === 0) break;
-    offset += limit;
-  }
-
-  return null;
-}
-
 /**
  * Fetch Polymarket prediction-market prices for a specific event.
  * Uses the v2 /events/{id}/polymarket/ endpoint.
@@ -814,6 +738,7 @@ export function normaliseBsdLineup(bsdLineup) {
   if (!bsdLineup) return null;
 
   const lineups = bsdLineup.lineups || bsdLineup;
+  const unavailablePlayers = bsdLineup.unavailable_players || {};
 
   const mapTeam = (side) => {
     if (!side) return { players: [], substitutes: [] };
@@ -822,12 +747,19 @@ export function normaliseBsdLineup(bsdLineup) {
     const substitutes = side.substitutes || [];
 
     return {
-      formation: side.formation || null,
+      formation: side.formation || side.predicted_formation || null,
+      predicted_formation: side.predicted_formation || side.formation || null,
+      confirmed: side.confirmed ?? side.is_confirmed ?? side.confirmed_lineup ?? side.lineup_confirmed ?? null,
+      status: side.status || side.lineup_status || null,
+      confidence: side.confidence ?? side.lineup_confidence ?? side.prediction_confidence ?? side.ai_confidence ?? null,
       players: players.map(p => ({
         id: p.id || p.player_id || null,
         position: p.position || p.specific_position || p.pos || '',
         name: p.name || p.player || p.short_name || '',
         rating: p.rating ?? null,
+        ai_score: p.ai_score ?? null,
+        role: p.role || null,
+        captain: p.captain ?? false,
         jersey_number: p.jersey_number ?? null,
       })),
       substitutes: substitutes.map(p => ({
@@ -835,15 +767,22 @@ export function normaliseBsdLineup(bsdLineup) {
         position: p.position || p.specific_position || p.pos || '',
         name: p.name || p.player || p.short_name || '',
         rating: p.rating ?? null,
+        ai_score: p.ai_score ?? null,
         jersey_number: p.jersey_number ?? null,
       })),
+      unavailable: [],
     };
   };
 
+  const home = mapTeam(lineups.home);
+  const away = mapTeam(lineups.away);
+  home.unavailable = unavailablePlayers.home || [];
+  away.unavailable = unavailablePlayers.away || [];
+
   return {
-    home: mapTeam(lineups.home),
-    away: mapTeam(lineups.away),
-    unavailable_players: bsdLineup.unavailable_players || null,
+    home,
+    away,
+    unavailable_players: unavailablePlayers || null,
   };
 }
 

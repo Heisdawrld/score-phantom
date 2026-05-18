@@ -185,6 +185,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     shotmap: data?.shotmap ?? null,
     lineups: data?.lineups ?? null,
     predicted_lineup: data?.lineups ?? null,
+    lineupIntelligence: data?.lineupIntelligence ?? null,
     unavailable_players: data?.injuries ?? null,
     average_positions: data?.average_positions ?? null,
     momentum: data?.momentum ?? null,
@@ -195,8 +196,6 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     polymarket_odds: data?.polymarketOdds ?? null,
     home_manager: data?.homeManager ?? null,
     away_manager: data?.awayManager ?? null,
-    bsd_prediction: data?.bsdPrediction ?? null,
-
     // Full BSD intelligence bridge: fetched -> stored -> loaded -> used.
     refereeData: data?.refereeData ?? null,
     refereeVolatility: data?.refereeVolatility ?? null,

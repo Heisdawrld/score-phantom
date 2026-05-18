@@ -40,6 +40,25 @@ function extractStoredBestPick(predictionJson) {
   return extractBestPickFromPredictionJson(predictionJson);
 }
 
+function compactLineupPayload(lineupIntelligence) {
+  if (!lineupIntelligence) return null;
+  return {
+    certaintyScore: lineupIntelligence.certaintyScore ?? null,
+    certaintyLabel: lineupIntelligence.certaintyLabel || null,
+    note: lineupIntelligence.note || null,
+    home: {
+      status: lineupIntelligence.home?.status || null,
+      confidence: lineupIntelligence.home?.confidence ?? null,
+      keyAbsenceReasons: (lineupIntelligence.home?.keyAbsenceReasons || []).slice(0, 2),
+    },
+    away: {
+      status: lineupIntelligence.away?.status || null,
+      confidence: lineupIntelligence.away?.confidence ?? null,
+      keyAbsenceReasons: (lineupIntelligence.away?.keyAbsenceReasons || []).slice(0, 2),
+    },
+  };
+}
+
 // ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
 const CHAT_RATE_LIMIT = 20;       // max messages per user per hour
 const CHAT_RATE_WINDOW = 3600000; // 1 hour in ms
@@ -1448,6 +1467,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           h2h:       true, // always computed by engine
           xg:        row.best_pick_probability != null,
           tactical:  row.confidence_volatility != null,
+          injury:    false,
+          lineup:    false,
           sharp:     Number(row.is_sharp_value || 0) === 1,
         };
       } catch (_) {}
@@ -1467,7 +1488,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // ── Extract v4 fields from prediction_json ────────────────────────────
       // BUG FIX: Previously used explanation_json which stores explanation lines (array),
       // NOT the full prediction. prediction_json stores the full engine result.
-      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
+      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null, lineupIntelligence: null };
       try {
         const bestPick = extractStoredBestPick(row.prediction_json);
         if (bestPick) {
@@ -1488,6 +1509,12 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           v4Fields.bookmakerDisagreement = bestPick.bookmakerDisagreement != null ? parseFloat(Number(bestPick.bookmakerDisagreement).toFixed(4)) : null;
           v4Fields.priceConfidenceAdjustment = bestPick.priceConfidenceAdjustment != null ? parseFloat(Number(bestPick.priceConfidenceAdjustment).toFixed(4)) : null;
           v4Fields.priceQuoteCount = bestPick.priceQuoteCount ?? null;
+          v4Fields.lineupIntelligence = compactLineupPayload(bestPick.lineupIntelligence || null);
+
+          if (factors) {
+            factors.lineup = bestPick.lineupCertaintyScore != null || !!bestPick.homeLineupStatus || !!bestPick.awayLineupStatus;
+            factors.injury = (bestPick.homeKeyAbsenceReasons || []).length > 0 || (bestPick.awayKeyAbsenceReasons || []).length > 0;
+          }
         }
       } catch (_) {}
 
@@ -1563,6 +1590,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         bookmakerDisagreement: v4Fields.bookmakerDisagreement ?? null,
         priceConfidenceAdjustment: v4Fields.priceConfidenceAdjustment ?? null,
         priceQuoteCount: v4Fields.priceQuoteCount ?? null,
+        lineupIntelligence: v4Fields.lineupIntelligence || null,
         factors,
       };
     });
@@ -1999,11 +2027,11 @@ router.get("/predicted-lineup/:fixtureId", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Fixture not found" });
     }
     const { meta } = bundle;
-    const lineups = meta?.lineups || null;
+    const lineups = meta?.lineups || meta?.predicted_lineup || null;
     if (!lineups) {
-      return res.json({ lineups: null, beta: true });
+      return res.json({ lineups: null, lineupIntelligence: meta?.lineupIntelligence || null, beta: true });
     }
-    return res.json({ lineups, beta: true });
+    return res.json({ lineups, lineupIntelligence: meta?.lineupIntelligence || null, beta: true });
   } catch (err) {
     console.error("[PredictedLineup]", err.message);
     return res.status(500).json({ error: "Failed to fetch predicted lineup" });

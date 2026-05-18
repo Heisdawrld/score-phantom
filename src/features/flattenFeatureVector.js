@@ -27,6 +27,9 @@ function flattenFeatureVector(fv) {
   const lc = fv.leagueContext || {};
   const priceIntel = fv.priceIntelligence || {};
   const priceSummary = priceIntel.summary || {};
+  const lineupIntel = fv.lineupIntelligence || {};
+  const lineupHome = lineupIntel.home || {};
+  const lineupAway = lineupIntel.away || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -106,8 +109,27 @@ function flattenFeatureVector(fv) {
     awayWinRate: safeNum(af.win_rate, 0.35),
     homeMissingXgImpact: safeNum(inf.homeMissingXgImpact, 0),
     awayMissingXgImpact: safeNum(inf.awayMissingXgImpact, 0),
+    homeAttackAbsenceScore: safeNum(inf.homeAttackAbsenceScore, 0),
+    awayAttackAbsenceScore: safeNum(inf.awayAttackAbsenceScore, 0),
+    homeDefenseAbsenceScore: safeNum(inf.homeDefenseAbsenceScore, 0),
+    awayDefenseAbsenceScore: safeNum(inf.awayDefenseAbsenceScore, 0),
+    homeGoalkeeperAbsenceScore: safeNum(inf.homeGoalkeeperAbsenceScore, 0),
+    awayGoalkeeperAbsenceScore: safeNum(inf.awayGoalkeeperAbsenceScore, 0),
+    homeWeightedAbsenceScore: safeNum(inf.homeWeightedAbsenceScore, 0),
+    awayWeightedAbsenceScore: safeNum(inf.awayWeightedAbsenceScore, 0),
+    homeDependenceScore: safeNum(inf.homeDependenceScore, 0),
+    awayDependenceScore: safeNum(inf.awayDependenceScore, 0),
+    homeKeyAbsenceReasons: inf.homeKeyAbsenceReasons || [],
+    awayKeyAbsenceReasons: inf.awayKeyAbsenceReasons || [],
     homePredictedStrength: safeNum(blf.homePredictedStrength, 1.0),
     awayPredictedStrength: safeNum(blf.awayPredictedStrength, 1.0),
+    lineupCertaintyScore: safeNum(blf.lineupCertaintyScore, safeNum(inf.lineupCertaintyScore, null)),
+    homeLineupConfidence: safeNum(blf.homeLineupConfidence, safeNum(inf.homeLineupCertainty, null)),
+    awayLineupConfidence: safeNum(blf.awayLineupConfidence, safeNum(inf.awayLineupCertainty, null)),
+    homeLineupStatus: blf.homeLineupStatus || fv.lineupFeatures?.homeLineupStatus || lineupHome.status || 'unknown',
+    awayLineupStatus: blf.awayLineupStatus || fv.lineupFeatures?.awayLineupStatus || lineupAway.status || 'unknown',
+    homeLineupWeightedAbsence: safeNum(lineupHome.weightedAbsenceScore, safeNum(inf.homeWeightedAbsenceScore, 0)),
+    awayLineupWeightedAbsence: safeNum(lineupAway.weightedAbsenceScore, safeNum(inf.awayWeightedAbsenceScore, 0)),
     homeWeightedPts,
     awayWeightedPts,
     homePointsLast5,
@@ -203,9 +225,9 @@ function flattenFeatureVector(fv) {
     awayOpponentShotsOnTargetAllowed: safeNum(fv.awayProfileFeatures?.avgOpponentShotsOnTargetAllowed, null),
     homeStatsMatchCount: safeNum(fv.homeProfileFeatures?.statsMatchesAvailable, safeNum(bsdHomeFormStats.matches_played, 0)),
     awayStatsMatchCount: safeNum(fv.awayProfileFeatures?.statsMatchesAvailable, safeNum(bsdAwayFormStats.matches_played, 0)),
-    hasLineupData: fv.lineupFeatures?.hasLineup === true,
-    homeLineupComplete: fv.lineupFeatures?.homeLineupComplete || false,
-    awayLineupComplete: fv.lineupFeatures?.awayLineupComplete || false,
+    hasLineupData: fv.lineupFeatures?.hasLineup === true || fv.lineupIntelligence?.available === true,
+    homeLineupComplete: fv.lineupFeatures?.homeLineupComplete || lineupHome.confirmed === true || false,
+    awayLineupComplete: fv.lineupFeatures?.awayLineupComplete || lineupAway.confirmed === true || false,
     homeAttackers: safeNum(fv.lineupFeatures?.homeAttackers, null),
     awayAttackers: safeNum(fv.lineupFeatures?.awayAttackers, null),
     enrichmentCompleteness: fv.enrichmentCompleteness?.score ?? null,
@@ -258,9 +280,9 @@ function flattenFeatureVector(fv) {
     polymarketOdds: fv.polymarketOdds || null,
     homeManager: fv.homeManager || null,
     awayManager: fv.awayManager || null,
-    bsdPrediction: fv.bsdPrediction || null,
     bestOdds: fv.bestOdds || null,
     priceIntelligence: fv.priceIntelligence || null,
+    lineupIntelligence: fv.lineupIntelligence || null,
     priceBookmakerCount: safeNum(priceSummary.bookmakerCount, 0),
     priceQuoteCount: safeNum(priceSummary.quoteCount, 0),
     priceDisagreementScore: safeNum(priceSummary.disagreementScore, 0),

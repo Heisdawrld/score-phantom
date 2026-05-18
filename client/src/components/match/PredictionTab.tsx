@@ -186,6 +186,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskReward = rec.riskReward || null;          // Risk/reward data object
   const analystSummary = rec.analystSummary || null;  // Analyst reasoning summary
   const narrative = (data as any)?.narrative || null;  // Match narrative from engine
+  const lineupIntel = rec.lineupIntelligence || (data as any)?.features?.lineupIntelligence || null;
 
   // Value tier display config
   const VALUE_TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -379,6 +380,43 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               <span className="text-[11px] font-bold text-primary">+{edgePct.toFixed(1)}% vs Bookmakers</span>
             </motion.div>
           ) : null}
+
+          {lineupIntel && (
+            <div className="mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-wider">Lineup Intelligence</span>
+                {lineupIntel.certaintyLabel && (
+                  <span className={cn(
+                    "text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase",
+                    lineupIntel.certaintyLabel === 'confirmed'
+                      ? 'bg-primary/10 text-primary border-primary/20'
+                      : lineupIntel.certaintyLabel === 'predicted'
+                        ? 'bg-amber-400/10 text-amber-300 border-amber-400/20'
+                        : 'bg-white/[0.04] text-white/35 border-white/[0.08]'
+                  )}>
+                    {lineupIntel.certaintyLabel}
+                  </span>
+                )}
+              </div>
+              {lineupIntel.note && <p className="text-[11px] text-white/60 mb-2">{lineupIntel.note}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-white/[0.02] border border-white/[0.05] p-2.5">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">{homeNm}</p>
+                  <p className="text-[11px] font-bold text-white/80">{lineupIntel.home?.status || 'unknown'}</p>
+                  {Array.isArray(lineupIntel.home?.keyAbsenceReasons) && lineupIntel.home.keyAbsenceReasons[0] && (
+                    <p className="text-[10px] text-amber-300/80 mt-1 leading-snug">{lineupIntel.home.keyAbsenceReasons[0]}</p>
+                  )}
+                </div>
+                <div className="rounded-lg bg-white/[0.02] border border-white/[0.05] p-2.5">
+                  <p className="text-[9px] text-white/30 uppercase mb-1">{matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || 'Away'}</p>
+                  <p className="text-[11px] font-bold text-white/80">{lineupIntel.away?.status || 'unknown'}</p>
+                  {Array.isArray(lineupIntel.away?.keyAbsenceReasons) && lineupIntel.away.keyAbsenceReasons[0] && (
+                    <p className="text-[10px] text-amber-300/80 mt-1 leading-snug">{lineupIntel.away.keyAbsenceReasons[0]}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── PHANTOM DECISION STACK ── */}
           {/* Shows script + match outcome probabilities. Always visible when either exists. */}

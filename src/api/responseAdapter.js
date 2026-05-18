@@ -394,6 +394,53 @@ function buildPricePayload(pick) {
   };
 }
 
+function buildLineupPayload(pick, featureVector = null) {
+  const direct = pick?.lineupIntelligence || null;
+  const certaintyScore = safeNum(pick?.lineupCertaintyScore, safeNum(direct?.certaintyScore, safeNum(featureVector?.lineupCertaintyScore, null)));
+  const homeConfidence = safeNum(pick?.homeLineupConfidence, safeNum(direct?.home?.confidence, safeNum(featureVector?.homeLineupConfidence, null)));
+  const awayConfidence = safeNum(pick?.awayLineupConfidence, safeNum(direct?.away?.confidence, safeNum(featureVector?.awayLineupConfidence, null)));
+  const homeStatus = pick?.homeLineupStatus || direct?.home?.status || featureVector?.homeLineupStatus || null;
+  const awayStatus = pick?.awayLineupStatus || direct?.away?.status || featureVector?.awayLineupStatus || null;
+  const homeReasons = pick?.homeKeyAbsenceReasons || direct?.home?.keyAbsenceReasons || featureVector?.homeKeyAbsenceReasons || [];
+  const awayReasons = pick?.awayKeyAbsenceReasons || direct?.away?.keyAbsenceReasons || featureVector?.awayKeyAbsenceReasons || [];
+
+  if (certaintyScore == null && !homeStatus && !awayStatus && homeReasons.length === 0 && awayReasons.length === 0) {
+    return null;
+  }
+
+  return {
+    certaintyScore: certaintyScore != null ? parseFloat(certaintyScore.toFixed(4)) : null,
+    certaintyLabel: direct?.certaintyLabel || (
+      certaintyScore == null
+        ? null
+        : certaintyScore >= 0.82
+          ? 'confirmed'
+          : certaintyScore >= 0.62
+            ? 'predicted'
+            : 'waiting'
+    ),
+    note: direct?.note || (
+      certaintyScore == null
+        ? null
+        : certaintyScore >= 0.82
+          ? 'Confirmed XIs available'
+          : certaintyScore >= 0.62
+            ? 'Predicted lineups available'
+            : 'Waiting for stronger lineup confirmation'
+    ),
+    home: {
+      status: homeStatus,
+      confidence: homeConfidence != null ? parseFloat(homeConfidence.toFixed(4)) : null,
+      keyAbsenceReasons: homeReasons.slice(0, 3),
+    },
+    away: {
+      status: awayStatus,
+      confidence: awayConfidence != null ? parseFloat(awayConfidence.toFixed(4)) : null,
+      keyAbsenceReasons: awayReasons.slice(0, 3),
+    },
+  };
+}
+
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engineConfidenceModel = null) {
   if (!pick) return null;
   const isModelOnly = !!(pick.modelOnly || pick.isModelOnly);
@@ -459,6 +506,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
     isAccaEligible: pick.isAccaEligible || false,
     riskReward: pick.riskReward || null,
     priceIntelligence: buildPricePayload(pick),
+    lineupIntelligence: buildLineupPayload(pick),
   };
 }
 
@@ -630,6 +678,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       riskReward: isSkipInNormalBranch ? null : (bestPick.riskReward || null),
       analystSummary: reasonChain?.analystSummary || null,
       priceIntelligence: buildPricePayload(bestPick),
+      lineupIntelligence: buildLineupPayload(bestPick, featureVector),
     };
   } else {
     // ── No safe pick path (including AVOID-badge smart abstention) ─────────
@@ -675,6 +724,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
         riskReward: null,
         analystSummary: engineResult?.reasonChain?.analystSummary || avoidReason || null,
         priceIntelligence: buildPricePayload(avoidedPick),
+        lineupIntelligence: buildLineupPayload(avoidedPick, featureVector),
       };
     } else {
       // Classic no-safe-pick — engine abstained before even finding a candidate
@@ -693,6 +743,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
         advisor_status: "SKIP",
         no_edge: true,
         analystSummary: engineResult?.reasonChain?.analystSummary || noSafePickReason || null,
+        lineupIntelligence: buildLineupPayload(null, featureVector),
       };
     }
   }

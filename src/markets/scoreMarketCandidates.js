@@ -255,6 +255,54 @@ function extractWorthContext(featureVector) {
   };
 }
 
+function computeLineupMarketAdjustment(candidate, fv) {
+  const marketKey = candidate.marketKey || '';
+  const homeAttack = safeNum(fv.homeAttackAbsenceScore, 0);
+  const awayAttack = safeNum(fv.awayAttackAbsenceScore, 0);
+  const homeDefense = safeNum(fv.homeDefenseAbsenceScore, 0);
+  const awayDefense = safeNum(fv.awayDefenseAbsenceScore, 0);
+  const homeKeeper = safeNum(fv.homeGoalkeeperAbsenceScore, 0);
+  const awayKeeper = safeNum(fv.awayGoalkeeperAbsenceScore, 0);
+  const homeCertainty = safeNum(fv.homeLineupConfidence, safeNum(fv.lineupCertaintyScore, 0.6));
+  const awayCertainty = safeNum(fv.awayLineupConfidence, safeNum(fv.lineupCertaintyScore, 0.6));
+
+  let adjustment = 0;
+  let signal = 'neutral';
+
+  const homeSidePick = marketKey === 'home_win' || marketKey === 'double_chance_home' || marketKey === 'dnb_home' || marketKey === 'handicap_home_minus1' || marketKey === 'home_over_05' || marketKey === 'home_over_15' || marketKey === 'home_over_25' || marketKey === 'win_either_half_home';
+  const awaySidePick = marketKey === 'away_win' || marketKey === 'double_chance_away' || marketKey === 'dnb_away' || marketKey === 'handicap_away_minus1' || marketKey === 'away_over_05' || marketKey === 'away_over_15' || marketKey === 'away_over_25' || marketKey === 'win_either_half_away';
+  const isOverPick = marketKey.includes('over');
+  const isUnderPick = marketKey.includes('under');
+  const isBttsYes = marketKey === 'btts_yes';
+  const isBttsNo = marketKey === 'btts_no';
+
+  if (homeSidePick) {
+    adjustment -= (homeAttack * 0.09) + (homeDefense * 0.04) + (homeKeeper * 0.05);
+    adjustment -= Math.max(0, 0.62 - homeCertainty) * 0.10;
+    adjustment += (awayDefense * 0.05) + (awayKeeper * 0.06);
+  } else if (awaySidePick) {
+    adjustment -= (awayAttack * 0.09) + (awayDefense * 0.04) + (awayKeeper * 0.05);
+    adjustment -= Math.max(0, 0.62 - awayCertainty) * 0.10;
+    adjustment += (homeDefense * 0.05) + (homeKeeper * 0.06);
+  } else if (isOverPick || isBttsYes) {
+    adjustment += ((homeDefense + awayDefense + homeKeeper + awayKeeper) * 0.045);
+    adjustment -= ((homeAttack + awayAttack) * 0.055);
+    adjustment -= Math.max(0, 0.58 - Math.min(homeCertainty, awayCertainty)) * 0.08;
+  } else if (isUnderPick || isBttsNo) {
+    adjustment += ((homeAttack + awayAttack) * 0.055);
+    adjustment -= ((homeDefense + awayDefense + homeKeeper + awayKeeper) * 0.04);
+    adjustment += Math.max(0, 0.65 - Math.min(homeCertainty, awayCertainty)) * 0.03;
+  }
+
+  if (adjustment > 0.025) signal = 'supportive';
+  else if (adjustment < -0.025) signal = 'risky';
+
+  return {
+    adjustment: clamp(adjustment, -0.16, 0.12),
+    signal,
+  };
+}
+
 export function scoreMarketCandidates(candidates, scriptOutput, featureVector, recentMarkets = {}, accuracyCache = null, narrative = null) {
   const fv = featureVector || {};
   const dataSupportScore = clamp(safeNum(fv.dataCompletenessScore, 0.5), 0, 1);
@@ -373,6 +421,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const priceQualityComponent = 0.05 * priceQualityRaw;
     const priceDisagreementComponent = -0.04 * bookmakerDisagreement;
     const priceProfitabilityComponent = 0.07 * clamp(bestPriceLiftPct * 8, 0, 1) * (candidate.edge != null && candidate.edge > 0 ? 1 : 0);
+    const lineupAdjustment = computeLineupMarketAdjustment(candidate, fv);
+    const lineupAdjustmentComponent = lineupAdjustment.adjustment;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;
     const leagueTrustedBonus = leagueSignal.status === 'trusted' ? 0.04 : 0;
@@ -390,6 +440,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       modelScore + marketEdgeScore + smartRiskRewardComponent + marketEfficiencyComponent +
       worthComponent + oddsBandPerformanceComponent +
       priceQualityComponent + priceDisagreementComponent + priceProfitabilityComponent +
+      lineupAdjustmentComponent +
       tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
       formMomentumComponent + diversityBonus + leagueTrustedBonus + priceConfidenceAdjustment +
@@ -397,16 +448,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       riskPenaltyScore - productPenaltyScore;
 
     let contextAdjustmentScore = leagueCalibrationComponent + leagueTrustedBonus - leagueRestrictionPenalty;
-    const bsdPred = fv.bsdPrediction || null;
-    if (bsdPred && candidate.marketKey === bsdPred.prediction) {
-      finalScore += 0.10;
-      contextAdjustmentScore += 0.10;
-      candidate.isEnsembleMatch = true;
-    } else if (bsdPred && bsdPred.prediction) {
-      finalScore -= 0.05;
-      contextAdjustmentScore -= 0.05;
-      candidate.isModelConflict = true;
-    }
+    contextAdjustmentScore += lineupAdjustmentComponent;
 
     if (candidate.impliedProbability > 0 && candidate.edge >= 0.05) {
       finalScore += 0.08;
@@ -523,6 +565,20 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       priceDisagreementComponent: parseFloat(priceDisagreementComponent.toFixed(4)),
       priceConfidenceAdjustment: parseFloat(priceConfidenceAdjustment.toFixed(4)),
       priceProfitabilityComponent: parseFloat(priceProfitabilityComponent.toFixed(4)),
+      lineupAdjustmentComponent: parseFloat(lineupAdjustmentComponent.toFixed(4)),
+      lineupSignal: lineupAdjustment.signal,
+      lineupCertaintyScore: parseFloat(safeNum(fv.lineupCertaintyScore, 0).toFixed(4)),
+      homeLineupConfidence: parseFloat(safeNum(fv.homeLineupConfidence, 0).toFixed(4)),
+      awayLineupConfidence: parseFloat(safeNum(fv.awayLineupConfidence, 0).toFixed(4)),
+      homeLineupStatus: fv.homeLineupStatus || 'unknown',
+      awayLineupStatus: fv.awayLineupStatus || 'unknown',
+      homeKeyAbsenceReasons: fv.homeKeyAbsenceReasons || [],
+      awayKeyAbsenceReasons: fv.awayKeyAbsenceReasons || [],
+      homeAttackAbsenceScore: parseFloat(safeNum(fv.homeAttackAbsenceScore, 0).toFixed(4)),
+      awayAttackAbsenceScore: parseFloat(safeNum(fv.awayAttackAbsenceScore, 0).toFixed(4)),
+      homeDefenseAbsenceScore: parseFloat(safeNum(fv.homeDefenseAbsenceScore, 0).toFixed(4)),
+      awayDefenseAbsenceScore: parseFloat(safeNum(fv.awayDefenseAbsenceScore, 0).toFixed(4)),
+      lineupIntelligence: fv.lineupIntelligence || null,
       finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
       advisor_status: advisorStatus,
       advisor_reason: advisorReason,

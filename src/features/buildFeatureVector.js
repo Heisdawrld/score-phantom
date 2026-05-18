@@ -31,6 +31,7 @@ import { computeMarketFeatures } from './computeMarketFeatures.js';
 import { computeBsdIntelligenceFeatures } from './computeBsdIntelligenceFeatures.js';
 import { computeLeagueContext } from './computeLeagueContext.js';
 import { resolveFixtureMeta } from './resolveFixtureMeta.js';
+import { buildLineupIntelligence } from '../utils/lineupIntelligence.js';
 
 async function getMatches(fixtureId, type) {
   const result = await db.execute({
@@ -158,6 +159,11 @@ function extractLineupModifiers(lineupModifier) {
       hasLineup: false,
       homeLineupComplete: null,
       awayLineupComplete: null,
+      homeLineupStatus: 'unknown',
+      awayLineupStatus: 'unknown',
+      homeLineupConfidence: null,
+      awayLineupConfidence: null,
+      lineupCertaintyScore: null,
       homeAttackers: null,
       awayAttackers: null,
       homeHasKeeper: null,
@@ -168,6 +174,11 @@ function extractLineupModifiers(lineupModifier) {
     hasLineup: true,
     homeLineupComplete: lineupModifier.homeLineupConfirmed || false,
     awayLineupComplete: lineupModifier.awayLineupConfirmed || false,
+    homeLineupStatus: lineupModifier.homeLineupStatus || 'unknown',
+    awayLineupStatus: lineupModifier.awayLineupStatus || 'unknown',
+    homeLineupConfidence: safeNum(lineupModifier.homeLineupConfidence, null),
+    awayLineupConfidence: safeNum(lineupModifier.awayLineupConfidence, null),
+    lineupCertaintyScore: safeNum(lineupModifier.lineupCertaintyScore, null),
     homeAttackers: lineupModifier.homeAttackers || null,
     awayAttackers: lineupModifier.awayAttackers || null,
     homeHasKeeper: lineupModifier.homeHasKeeper ?? true,
@@ -223,7 +234,6 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const polymarketOdds = meta?.polymarket_odds || null;
   const homeManager = meta?.home_manager || null;
   const awayManager = meta?.away_manager || null;
-  const bsdPrediction = meta?.bsd_prediction || null;
   const bestOdds = meta?.best_odds || null;
   const priceIntelligence = meta?.price_intelligence || (bestOdds?.markets
     ? { source: bestOdds.source || 'bsd_consensus', summary: bestOdds.summary || null, markets: bestOdds.markets }
@@ -242,6 +252,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const bsdAwayFormStats = meta?.bsd_away_form_stats || null;
   const actualHomeXg = safeNum(meta?.actualHomeXg, null);
   const actualAwayXg = safeNum(meta?.actualAwayXg, null);
+  const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
+  const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
+  const lineupIntelligence = meta?.lineupIntelligence || buildLineupIntelligence(predictedLineups || meta?.lineups || null, missingPlayers) || null;
 
   const bsdIntelligenceFeatures = computeBsdIntelligenceFeatures({
     standings,
@@ -260,18 +273,53 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     console.log(`[LeagueContext] ${fixtureContext?.tournament_name || 'unknown'}: avgGPG=${leagueContext.leagueAvgGoalsPerGame} BTTS=${(leagueContext.leagueBttsRate*100).toFixed(0)}% O2.5=${(leagueContext.leagueOver25Rate*100).toFixed(0)}% O3.5=${(leagueContext.leagueOver35Rate*100).toFixed(0)}% source=${leagueContext._source}`);
   }
 
-  const missingPlayers = meta?.unavailable_players || meta?.injuries || null;
-  const predictedLineups = meta?.predicted_lineup || meta?.lineups || null;
-
   const injuryFeatures = {
     homeKeyMissing: 0,
     awayKeyMissing: 0,
     homeMissingCount: 0,
     awayMissingCount: 0,
-    missingPlayersDetails: missingPlayers
+    homeWeightedAbsenceScore: 0,
+    awayWeightedAbsenceScore: 0,
+    homeAttackAbsenceScore: 0,
+    awayAttackAbsenceScore: 0,
+    homeDefenseAbsenceScore: 0,
+    awayDefenseAbsenceScore: 0,
+    homeGoalkeeperAbsenceScore: 0,
+    awayGoalkeeperAbsenceScore: 0,
+    homeMissingXgImpact: 0,
+    awayMissingXgImpact: 0,
+    homeLineupCertainty: safeNum(lineupIntelligence?.home?.confidence, lineupFeatures.homeLineupConfidence),
+    awayLineupCertainty: safeNum(lineupIntelligence?.away?.confidence, lineupFeatures.awayLineupConfidence),
+    lineupCertaintyScore: safeNum(lineupIntelligence?.certaintyScore, lineupFeatures.lineupCertaintyScore),
+    homeDependenceScore: safeNum(lineupIntelligence?.home?.dependenceScore, 0),
+    awayDependenceScore: safeNum(lineupIntelligence?.away?.dependenceScore, 0),
+    homeKeyAbsenceReasons: lineupIntelligence?.home?.keyAbsenceReasons || [],
+    awayKeyAbsenceReasons: lineupIntelligence?.away?.keyAbsenceReasons || [],
+    missingPlayersDetails: missingPlayers,
   };
 
-  if (missingPlayers) {
+  if (lineupIntelligence) {
+    injuryFeatures.homeMissingCount = lineupIntelligence.home?.unavailableCount ?? 0;
+    injuryFeatures.awayMissingCount = lineupIntelligence.away?.unavailableCount ?? 0;
+    injuryFeatures.homeKeyMissing = lineupIntelligence.home?.keyAbsences?.length ?? 0;
+    injuryFeatures.awayKeyMissing = lineupIntelligence.away?.keyAbsences?.length ?? 0;
+    injuryFeatures.homeWeightedAbsenceScore = safeNum(lineupIntelligence.home?.weightedAbsenceScore, 0);
+    injuryFeatures.awayWeightedAbsenceScore = safeNum(lineupIntelligence.away?.weightedAbsenceScore, 0);
+    injuryFeatures.homeAttackAbsenceScore = safeNum(lineupIntelligence.home?.attackAbsenceScore, 0);
+    injuryFeatures.awayAttackAbsenceScore = safeNum(lineupIntelligence.away?.attackAbsenceScore, 0);
+    injuryFeatures.homeDefenseAbsenceScore = safeNum(lineupIntelligence.home?.defenseAbsenceScore, 0);
+    injuryFeatures.awayDefenseAbsenceScore = safeNum(lineupIntelligence.away?.defenseAbsenceScore, 0);
+    injuryFeatures.homeGoalkeeperAbsenceScore = safeNum(lineupIntelligence.home?.goalkeeperAbsenceScore, 0);
+    injuryFeatures.awayGoalkeeperAbsenceScore = safeNum(lineupIntelligence.away?.goalkeeperAbsenceScore, 0);
+    injuryFeatures.homeMissingXgImpact = parseFloat((
+      (safeNum(lineupIntelligence.home?.attackAbsenceScore, 0) * 0.65) +
+      (safeNum(lineupIntelligence.home?.creatorAbsenceScore, 0) * 0.45)
+    ).toFixed(4));
+    injuryFeatures.awayMissingXgImpact = parseFloat((
+      (safeNum(lineupIntelligence.away?.attackAbsenceScore, 0) * 0.65) +
+      (safeNum(lineupIntelligence.away?.creatorAbsenceScore, 0) * 0.45)
+    ).toFixed(4));
+  } else if (missingPlayers) {
     const homeMissing = missingPlayers.home || [];
     const awayMissing = missingPlayers.away || [];
     injuryFeatures.homeMissingCount = missingPlayers.homeMissingCount ?? homeMissing.length;
@@ -290,14 +338,22 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   }
 
   const bsdLineupFeatures = {
-    hasPredictedLineups: !!predictedLineups,
+    hasPredictedLineups: !!predictedLineups || !!lineupIntelligence,
     homePredictedStrength: 1.0,
-    awayPredictedStrength: 1.0
+    awayPredictedStrength: 1.0,
+    lineupCertaintyScore: safeNum(lineupIntelligence?.certaintyScore, lineupFeatures.lineupCertaintyScore),
+    homeLineupStatus: lineupIntelligence?.home?.status || lineupFeatures.homeLineupStatus || 'unknown',
+    awayLineupStatus: lineupIntelligence?.away?.status || lineupFeatures.awayLineupStatus || 'unknown',
+    homeLineupConfidence: safeNum(lineupIntelligence?.home?.confidence, lineupFeatures.homeLineupConfidence),
+    awayLineupConfidence: safeNum(lineupIntelligence?.away?.confidence, lineupFeatures.awayLineupConfidence),
+    bothConfirmed: lineupIntelligence?.bothConfirmed === true,
   };
 
-  if (predictedLineups) {
-    if (injuryFeatures.homeKeyMissing > 0) bsdLineupFeatures.homePredictedStrength = 0.9;
-    if (injuryFeatures.awayKeyMissing > 0) bsdLineupFeatures.awayPredictedStrength = 0.9;
+  if (predictedLineups || lineupIntelligence) {
+    const homePenalty = (safeNum(injuryFeatures.homeAttackAbsenceScore, 0) * 0.18) + (safeNum(injuryFeatures.homeDefenseAbsenceScore, 0) * 0.08) + (Math.max(0, 0.7 - safeNum(injuryFeatures.homeLineupCertainty, 0.7)) * 0.12);
+    const awayPenalty = (safeNum(injuryFeatures.awayAttackAbsenceScore, 0) * 0.18) + (safeNum(injuryFeatures.awayDefenseAbsenceScore, 0) * 0.08) + (Math.max(0, 0.7 - safeNum(injuryFeatures.awayLineupCertainty, 0.7)) * 0.12);
+    bsdLineupFeatures.homePredictedStrength = parseFloat(Math.max(0.68, Math.min(1, 1 - homePenalty)).toFixed(4));
+    bsdLineupFeatures.awayPredictedStrength = parseFloat(Math.max(0.68, Math.min(1, 1 - awayPenalty)).toFixed(4));
   }
 
   const completeness = meta?.completeness || null;
@@ -409,9 +465,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     polymarketOdds,
     homeManager,
     awayManager,
-    bsdPrediction,
     bestOdds,
     priceIntelligence,
+    lineupIntelligence,
     eventContext,
     refereeData,
     refereeVolatility,

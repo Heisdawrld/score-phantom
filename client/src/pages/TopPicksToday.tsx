@@ -38,6 +38,10 @@ interface Pick {
   valueTier?: string | null;
   ev?: number | null;
   isAccaEligible?: boolean;
+  lineupIntelligence?: {
+    note?: string | null;
+    certaintyLabel?: string | null;
+  } | null;
   factors?: {
     form?: boolean;
     h2h?: boolean;
@@ -391,6 +395,12 @@ export default function TopPicksToday() {
                         <FactorTag icon={<Shield className="w-2 h-2" />} label="Referee" active={!!pick.factors?.referee} tone="amber" />
                         <FactorTag icon={<Sparkles className="w-2 h-2" />} label="Sharp" active={!!pick.factors?.sharp} tone="green" />
                       </div>
+
+                      {pick.lineupIntelligence?.note && (
+                        <p className="mt-2 text-[10px] text-white/35">
+                          {pick.lineupIntelligence.note}
+                        </p>
+                      )}
 
                       {/* Composite score bar */}
                       <div className="mt-2.5 flex items-center gap-2">

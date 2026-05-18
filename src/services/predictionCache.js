@@ -15,8 +15,9 @@ import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
-import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds } from './bsd.js';
+import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds, normaliseBsdLineup } from './bsd.js';
 import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
+import { buildLineupIntelligence } from '../utils/lineupIntelligence.js';
 // Odds are now sourced from fixture_odds table and live BSD v2 odds as fallback.
 
 // Cache is valid for 6 hours — predictions refresh each morning via automation
@@ -30,7 +31,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '3.3.0'; // v3.3.0: Bookmaker odds blending, rotation/fatigue/rest/cup/season-stage, implied odds fix
+const CURRENT_ENGINE_VERSION = '3.4.0'; // v3.4.0: Lineup certainty + role-weighted absences, no third-party prediction endpoint blending
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -340,6 +341,14 @@ export async function ensureFixtureData(fixtureId) {
           home: await attachMissingPlayerStats(lineupData.unavailable_players.home || []),
           away: await attachMissingPlayerStats(lineupData.unavailable_players.away || []),
         };
+      }
+      const normalizedLineup = normaliseBsdLineup(lineupData);
+      if (normalizedLineup) {
+        const lineupIntelligence = buildLineupIntelligence(normalizedLineup, meta.unavailable_players || lineupData?.unavailable_players || null);
+        if (lineupIntelligence) meta.lineupIntelligence = lineupIntelligence;
+      } else if (!meta.lineupIntelligence && (meta.predicted_lineup || meta.lineups || meta.unavailable_players)) {
+        const lineupIntelligence = buildLineupIntelligence(meta.predicted_lineup || meta.lineups || null, meta.unavailable_players || null);
+        if (lineupIntelligence) meta.lineupIntelligence = lineupIntelligence;
       }
 
       const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
