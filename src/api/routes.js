@@ -1,5 +1,6 @@
 import { getBudgetStatus } from '../services/requestBudget.js';
 import { Router } from "express";
+import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { requirePremiumAccess, computeAccessStatus } from "../auth/authRoutes.js";
 import { adaptResponseFormat } from "./responseAdapter.js";
@@ -31,6 +32,7 @@ import { generateSimulationTimeline } from "../engine/generateSimulationTimeline
 import { requireAdminAccess } from '../middlewares/adminGuard.js';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET;
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
 
 // ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
