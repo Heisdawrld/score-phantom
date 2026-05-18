@@ -1,4 +1,5 @@
 import { safeNum } from '../utils/math.js';
+import { getCandidatePriceIntelligence } from '../utils/priceIntelligence.js';
 
 /**
  * Maps market keys to odds field names in various possible odds formats.
@@ -57,6 +58,34 @@ function lookupOdds(marketKey, oddsSnapshot) {
  */
 export function computeImpliedProbabilities(candidates, oddsSnapshot, features) {
   return candidates.map((candidate) => {
+    const priceIntel = getCandidatePriceIntelligence(candidate.marketKey, features);
+    const bestPriceOdds = safeNum(priceIntel?.odds, 0);
+
+    if (bestPriceOdds > 1.0) {
+      const impliedProbability = parseFloat((1 / bestPriceOdds).toFixed(4));
+      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
+
+      return {
+        ...candidate,
+        impliedProbability,
+        edge,
+        bookmakerOdds: bestPriceOdds,
+        bestPriceBookmakerSlug: priceIntel.bookmakerSlug || null,
+        bestPriceBookmakerName: priceIntel.bookmakerName || null,
+        averageMarketOdds: safeNum(priceIntel.averageOdds, null),
+        worstPriceOdds: safeNum(priceIntel.worstOdds, null),
+        priceSpread: safeNum(priceIntel.spread, null),
+        bookmakerDisagreement: safeNum(priceIntel.disagreementScore, 0),
+        priceQualityScore: safeNum(priceIntel.priceQualityScore, 0.35),
+        priceConfidenceAdjustment: safeNum(priceIntel.confidenceAdjustment, 0),
+        priceQuoteCount: safeNum(priceIntel.quoteCount, 0),
+        priceBookmakerCount: safeNum(priceIntel.bookmakerCount, 0),
+        priceRelativeSpreadPct: safeNum(priceIntel.relativeSpreadPct, 0),
+        priceBestVsAveragePct: safeNum(priceIntel.bestVsAveragePct, 0),
+        priceSource: priceIntel.source || features?.priceIntelligence?.source || features?.bestOdds?.source || 'bsd_consensus',
+      };
+    }
+
     const decimalOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
 
     if (decimalOdds && decimalOdds > 1.0) {
@@ -68,6 +97,12 @@ export function computeImpliedProbabilities(candidates, oddsSnapshot, features) 
         impliedProbability,
         edge,
         bookmakerOdds: decimalOdds,
+        bookmakerDisagreement: safeNum(features?.priceDisagreementScore, 0),
+        priceQualityScore: safeNum(features?.priceQualityScore, 0.35),
+        priceConfidenceAdjustment: safeNum(features?.priceConfidenceAdjustment, 0),
+        priceQuoteCount: safeNum(features?.priceQuoteCount, 0),
+        priceBookmakerCount: safeNum(features?.priceBookmakerCount, 0),
+        priceSource: 'fixture_odds',
       };
     }
 
@@ -84,9 +119,25 @@ export function computeImpliedProbabilities(candidates, oddsSnapshot, features) 
         impliedProbability,
         edge,
         bookmakerOdds: advOdds,
+        bookmakerDisagreement: safeNum(features?.priceDisagreementScore, 0),
+        priceQualityScore: safeNum(features?.priceQualityScore, 0.35),
+        priceConfidenceAdjustment: safeNum(features?.priceConfidenceAdjustment, 0),
+        priceQuoteCount: safeNum(features?.priceQuoteCount, 0),
+        priceBookmakerCount: safeNum(features?.priceBookmakerCount, 0),
+        priceSource: 'advanced_odds',
       };
     }
 
-    return { ...candidate, impliedProbability: null, edge: null };
+    return {
+      ...candidate,
+      impliedProbability: null,
+      edge: null,
+      bookmakerDisagreement: safeNum(features?.priceDisagreementScore, 0),
+      priceQualityScore: safeNum(features?.priceQualityScore, 0.35),
+      priceConfidenceAdjustment: safeNum(features?.priceConfidenceAdjustment, 0),
+      priceQuoteCount: safeNum(features?.priceQuoteCount, 0),
+      priceBookmakerCount: safeNum(features?.priceBookmakerCount, 0),
+      priceSource: null,
+    };
   });
 }

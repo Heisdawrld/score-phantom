@@ -361,6 +361,39 @@ function capProbabilityPct(marketKey, rawPct) {
   return rawPct;
 }
 
+function buildPricePayload(pick) {
+  if (!pick) return null;
+  const bestOdds = safeNum(pick.bookmakerOdds, 0);
+  const averageOdds = safeNum(pick.averageMarketOdds, null);
+  const worstOdds = safeNum(pick.worstPriceOdds, null);
+  const disagreementScore = safeNum(pick.bookmakerDisagreement, null);
+  const priceQualityScore = safeNum(pick.priceQualityScore, null);
+  const confidenceAdjustment = safeNum(pick.priceConfidenceAdjustment, null);
+  const quoteCount = safeNum(pick.priceQuoteCount, null);
+  const bookmakerCount = safeNum(pick.priceBookmakerCount, null);
+  const bestVsAveragePct = safeNum(pick.priceBestVsAveragePct, null);
+
+  if (
+    !(bestOdds > 1.0) && averageOdds == null && worstOdds == null && disagreementScore == null &&
+    priceQualityScore == null && confidenceAdjustment == null && quoteCount == null
+  ) return null;
+
+  return {
+    source: pick.priceSource || null,
+    bestPrice: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
+    bookmaker: pick.bestPriceBookmakerName || null,
+    bookmakerSlug: pick.bestPriceBookmakerSlug || null,
+    averagePrice: averageOdds != null ? parseFloat(averageOdds.toFixed(2)) : null,
+    worstPrice: worstOdds != null ? parseFloat(worstOdds.toFixed(2)) : null,
+    quoteCount,
+    bookmakerCount,
+    bestVsAveragePct: bestVsAveragePct != null ? parseFloat((bestVsAveragePct * 100).toFixed(2)) : null,
+    disagreementScore: disagreementScore != null ? parseFloat(disagreementScore.toFixed(4)) : null,
+    priceQualityScore: priceQualityScore != null ? parseFloat(priceQualityScore.toFixed(4)) : null,
+    confidenceAdjustment: confidenceAdjustment != null ? parseFloat(confidenceAdjustment.toFixed(4)) : null,
+  };
+}
+
 function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engineConfidenceModel = null) {
   if (!pick) return null;
   const isModelOnly = !!(pick.modelOnly || pick.isModelOnly);
@@ -425,6 +458,7 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
     odds: odds > 1.0 ? parseFloat(odds.toFixed(2)) : null,
     isAccaEligible: pick.isAccaEligible || false,
     riskReward: pick.riskReward || null,
+    priceIntelligence: buildPricePayload(pick),
   };
 }
 
@@ -595,6 +629,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       isAccaEligible: isSkipInNormalBranch ? false : (bestPick.isAccaEligible || false),
       riskReward: isSkipInNormalBranch ? null : (bestPick.riskReward || null),
       analystSummary: reasonChain?.analystSummary || null,
+      priceIntelligence: buildPricePayload(bestPick),
     };
   } else {
     // ── No safe pick path (including AVOID-badge smart abstention) ─────────
@@ -639,6 +674,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
         isAccaEligible: false,
         riskReward: null,
         analystSummary: engineResult?.reasonChain?.analystSummary || avoidReason || null,
+        priceIntelligence: buildPricePayload(avoidedPick),
       };
     } else {
       // Classic no-safe-pick — engine abstained before even finding a candidate

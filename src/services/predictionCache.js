@@ -329,6 +329,11 @@ export async function ensureFixtureData(fixtureId) {
         fetchBestOdds(bsdInternalEventId),
       ]);
 
+      if (bestOdds?.markets) {
+        meta.best_odds = bestOdds;
+        meta.price_intelligence = { source: bestOdds.source || 'bsd_consensus', summary: bestOdds.summary || null, markets: bestOdds.markets };
+      }
+
       if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
       if (lineupData?.unavailable_players) {
         meta.unavailable_players = {
@@ -339,7 +344,6 @@ export async function ensureFixtureData(fixtureId) {
 
       const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
       if (liveOdds) {
-        meta.best_odds = bestOdds;
         if (!hasAnyOdds(odds)) {
           odds = liveOdds;
           console.log(`[predictionCache] Using live BSD odds fallback for fixture ${fixtureId}`);
