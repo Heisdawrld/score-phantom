@@ -19,6 +19,7 @@ const IMG_BASE = 'https://sports.bzzoiro.com/img';
 const _cache = new Map();
 const _leagueCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+let _missingApiKeyWarned = false;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -78,7 +79,10 @@ export async function bsdFetch(path, params = {}, {
   timeoutMs = 15000,
 } = {}) {
   if (!BSD_API_KEY) {
-    console.error('[BSD] BSD_API_KEY is not set — all API calls will fail');
+    if (!_missingApiKeyWarned) {
+      console.error('[BSD] BSD_API_KEY is not set — BSD fetches are disabled until it is configured');
+      _missingApiKeyWarned = true;
+    }
     return null;
   }
 

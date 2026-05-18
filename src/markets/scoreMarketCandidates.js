@@ -1,5 +1,5 @@
 import { safeNum, clamp } from '../utils/math.js';
-import { getHistoricalAccuracyScore, getLeagueMarketAccuracyScore, getLeagueRestrictionSignal, getDynamicMarketBaselines } from '../storage/accuracyCache.js';
+import { getHistoricalAccuracyScore, getLeagueMarketAccuracyScore, getLeagueRestrictionSignal, getDynamicMarketBaselines, getOddsBandPerformance } from '../storage/accuracyCache.js';
 import { classifyValueTier, computeEVScore } from './valueTiers.js';
 import { classifyOddsWorth, isJunkOdds, isAcceptableOdds, isSweetSpotOdds, getMarketWorth, getFlexedMarketWorth } from './marketWorthRanges.js';
 
@@ -331,6 +331,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const historicalAccuracyScore = getHistoricalAccuracyScore(candidate.marketKey, scriptOutput?.primary || null, accuracyCache);
     const leagueMarketScore = getLeagueMarketAccuracyScore(fv.leagueId, fv.tournamentName, candidate.marketKey, accuracyCache);
     const leagueSignal = getLeagueRestrictionSignal(fv.leagueId, fv.tournamentName, candidate.marketKey, accuracyCache);
+    const oddsBandSignal = getOddsBandPerformance(candidate.marketKey, candidate.bookmakerOdds, accuracyCache);
+    const oddsBandPerformanceScore = oddsBandSignal?.score ?? 0.5;
 
     const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
     const matchChaos = safeNum(featureVector?.matchChaosScore, 0.5);
@@ -347,46 +349,39 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const contextFlexedWorth = getFlexedMarketWorth(marketKey, worthContext);
     const worthScore = computeWorthScore(candidate, contextFlexedWorth);
 
-    // ── v5 REBALANCED WEIGHTS — Worth-aware ─────────────────────────────────
-    // Key changes from v4:
-    // - Model confidence: 14% → 13% (probability alone isn't enough)
-    // - EV/edge: 22% → 20% (still important, but worth scoring captures some of this)
-    // - Smart Risk Reward: 10% (unchanged)
-    // - Market Efficiency: 6% (unchanged)
-    // - NEW: Worth Score 7% (per-market odds quality — the punter's instinct)
-    // - Tactical: 14% → 13%
-    // - Predictability: 8% (unchanged)
-    // - Data: 8% (unchanged)
-    // - Historical: 8% (unchanged)
-    // - League: 10% (unchanged)
-    // - Form: 5% → 4%
-    // Total: 13+20+10+6+7+13+8+8+8+10+4 = 107% → normalized
-    const modelScore = 0.13 * modelConfidenceScore;
-    const marketEdgeScore = 0.20 * combinedEdgeScore;
+    // ── v6 REBALANCED WEIGHTS — Profitability-aware ─────────────────────────
+    // Use historical profitability, not just hit-rate, to stop comfort picks
+    // such as low-odds Under 3.5 from dominating the board.
+    const modelScore = 0.12 * modelConfidenceScore;
+    const marketEdgeScore = 0.19 * combinedEdgeScore;
     const smartRiskRewardScore = computeSmartRiskReward(candidate);
     const smartRiskRewardComponent = 0.10 * smartRiskRewardScore;
     const marketEfficiencyScore = computeMarketEfficiency(candidate);
-    const marketEfficiencyComponent = 0.06 * marketEfficiencyScore;
-    const worthComponent = 0.07 * worthScore; // v5: Worth baked into scoring
-    const tacticalFitComponent = 0.13 * tacticalFitScore;
+    const marketEfficiencyComponent = 0.05 * marketEfficiencyScore;
+    const worthComponent = 0.08 * worthScore;
+    const tacticalFitComponent = 0.12 * tacticalFitScore;
     const predictabilityScore = 0.08 * predScore;
-    const dataSupportComponent = 0.08 * dataSupportScore;
-    const historicalAccuracyComponent = 0.08 * historicalAccuracyScore;
-    const leagueCalibrationComponent = 0.10 * leagueMarketScore;
-    const formMomentumComponent = 0.04 * formMomentumScore;
+    const dataSupportComponent = 0.07 * dataSupportScore;
+    const historicalAccuracyComponent = 0.07 * historicalAccuracyScore;
+    const leagueCalibrationComponent = 0.08 * leagueMarketScore;
+    const oddsBandPerformanceComponent = 0.07 * oddsBandPerformanceScore;
+    const formMomentumComponent = 0.03 * formMomentumScore;
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;
     const leagueTrustedBonus = leagueSignal.status === 'trusted' ? 0.04 : 0;
+    const oddsBandRestrictionPenalty = oddsBandSignal && oddsBandSignal.samples >= 10 && Number.isFinite(oddsBandSignal.weightedYield) && oddsBandSignal.weightedYield <= -0.08
+      ? 0.05
+      : 0;
 
     const volatilityCoefficient = marketKey.includes('over') || marketKey === 'btts_yes'
       ? 0.08
       : 0.14;
-    const riskPenaltyScore = (volatilityCoefficient * volatilityPenalty) + (0.12 * scriptMismatchPenalty) + starvationPenalty + leagueRestrictionPenalty;
+    const riskPenaltyScore = (volatilityCoefficient * volatilityPenalty) + (0.12 * scriptMismatchPenalty) + starvationPenalty + leagueRestrictionPenalty + oddsBandRestrictionPenalty;
     const productPenaltyScore = (0.14 * badMarketPenalty) + (0.08 * repetitionPenalty) + diversityPenalty;
 
     let finalScore =
       modelScore + marketEdgeScore + smartRiskRewardComponent + marketEfficiencyComponent +
-      worthComponent + // v5: Worth baked into scoring
+      worthComponent + oddsBandPerformanceComponent +
       tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
       formMomentumComponent + diversityBonus + leagueTrustedBonus +
@@ -511,6 +506,9 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       historicalAccuracyScore: parseFloat(historicalAccuracyScore.toFixed(3)),
       leagueMarketAccuracyScore: parseFloat(leagueMarketScore.toFixed(3)),
       leagueSignal,
+      oddsBandSignal,
+      oddsBandPerformanceScore: parseFloat(oddsBandPerformanceScore.toFixed(3)),
+      oddsBandPerformanceComponent: parseFloat(oddsBandPerformanceComponent.toFixed(4)),
       finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
       advisor_status: advisorStatus,
       advisor_reason: advisorReason,

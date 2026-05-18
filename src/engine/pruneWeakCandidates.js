@@ -1,5 +1,5 @@
 import { safeNum } from '../utils/math.js';
-import { getDynamicMarketFloor } from '../storage/accuracyCache.js';
+import { getDynamicMarketFloor, getOddsBandPerformance } from '../storage/accuracyCache.js';
 import { checkOddsGate } from '../markets/valueTiers.js';
 
 /**
@@ -128,6 +128,9 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     const edge     = safeNum(c.edge, 0);
     const tactical = safeNum(c.tacticalFitScore, 0);
     const score    = safeNum(c.finalScore, 0);
+    const odds     = safeNum(c.bookmakerOdds, 0);
+    const ev       = odds > 1.0 ? (prob * odds) - 1 : 0;
+    const oddsBandPerformance = accuracyCache ? getOddsBandPerformance(c.marketKey, odds, accuracyCache) : null;
     const marketFloor = (function() {
       if (accuracyCache) {
         const dynamic = getDynamicMarketFloor(c.marketKey, accuracyCache);
@@ -154,8 +157,6 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     // Don't prune a market below floor if it has genuine value.
     // ALL five conditions must be true — this is NOT a general loosening.
     if (prob < marketFloor) {
-      const odds = safeNum(c.bookmakerOdds, 0);
-      const ev = odds > 1.0 ? (prob * odds) - 1 : 0;
       const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
       const isComfortMarket = [
         'under_35', 'over_15', 'double_chance_home', 'double_chance_away',
@@ -186,6 +187,28 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     if (isOver15ComfortPick(c, options)) {
       removed.push(c.marketKey + '(over15_comfort_guard odds=' + safeNum(c.bookmakerOdds,0).toFixed(2) + ', prob=' + (prob*100).toFixed(1) + '%, score=' + score.toFixed(2) + ')');
       continue;
+    }
+
+    // ── Phase 1C: Historical odds-band trap ──────────────────────────────
+    // If this exact market/odds bucket has been unprofitable over a meaningful
+    // sample, suppress it unless the current setup is exceptionally strong.
+    if (
+      oddsBandPerformance &&
+      oddsBandPerformance.samples >= 10 &&
+      Number.isFinite(oddsBandPerformance.weightedYield) &&
+      oddsBandPerformance.weightedYield <= -0.08
+    ) {
+      const eliteOverride = ev >= 0.05 && tactical >= 0.75 && prob >= Math.max(marketFloor, 0.68);
+      if (!eliteOverride) {
+        removed.push(c.marketKey + '(odds_band_trap=' + oddsBandPerformance.oddsBand + ', yield=' + (oddsBandPerformance.weightedYield * 100).toFixed(1) + '%, n=' + oddsBandPerformance.samples + ')');
+        continue;
+      }
+      c.oddsBandOverride = {
+        oddsBand: oddsBandPerformance.oddsBand,
+        weightedYield: oddsBandPerformance.weightedYield,
+        samples: oddsBandPerformance.samples,
+        reason: 'Elite current setup overrode negative historical odds-band performance',
+      };
     }
 
     if (edge < minEdge) { removed.push(c.marketKey + '(edge=' + (edge*100).toFixed(1) + 'pp)'); continue; }

@@ -53,6 +53,33 @@ function addWeightedRateEntry(target, key, row, minSamples) {
   target[key] = { winRate: wins / total, weightedWinRate, samples: total };
 }
 
+function addWeightedPerformanceEntry(target, key, row, minSamples) {
+  const total = Number(row.total || 0);
+  const wins = Number(row.wins || 0);
+  const weightedTotal = Number(row.weighted_total || 0);
+  const weightedWins = Number(row.weighted_wins || 0);
+  const stakeTotal = Number(row.stake_total || 0);
+  const profitTotal = Number(row.profit_total || 0);
+  const weightedStakeTotal = Number(row.weighted_stake_total || 0);
+  const weightedProfitTotal = Number(row.weighted_profit_total || 0);
+  const pricedSamples = Number(row.priced_samples || 0);
+  if (!key || total < minSamples) return;
+
+  const winRate = total > 0 ? wins / total : 0;
+  const weightedWinRate = weightedTotal > 0 ? weightedWins / weightedTotal : winRate;
+  const yieldRate = stakeTotal > 0 ? profitTotal / stakeTotal : null;
+  const weightedYield = weightedStakeTotal > 0 ? weightedProfitTotal / weightedStakeTotal : yieldRate;
+
+  target[key] = {
+    winRate,
+    weightedWinRate,
+    yieldRate,
+    weightedYield,
+    samples: total,
+    pricedSamples,
+  };
+}
+
 function bandOdds(odds) {
   const o = Number(odds);
   if (!Number.isFinite(o)) return null;
@@ -74,6 +101,14 @@ const TIME_DECAY_SQL = `
   END
 `;
 
+const PERFORMANCE_FIELDS_SQL = `
+  SUM(CASE WHEN po.stake_units IS NOT NULL AND po.profit_units IS NOT NULL THEN po.stake_units ELSE 0 END) AS stake_total,
+  SUM(CASE WHEN po.stake_units IS NOT NULL AND po.profit_units IS NOT NULL THEN po.profit_units ELSE 0 END) AS profit_total,
+  SUM(CASE WHEN po.stake_units IS NOT NULL AND po.profit_units IS NOT NULL THEN po.stake_units * (${TIME_DECAY_SQL}) ELSE 0 END) AS weighted_stake_total,
+  SUM(CASE WHEN po.stake_units IS NOT NULL AND po.profit_units IS NOT NULL THEN po.profit_units * (${TIME_DECAY_SQL}) ELSE 0 END) AS weighted_profit_total,
+  SUM(CASE WHEN po.stake_units IS NOT NULL AND po.profit_units IS NOT NULL THEN 1 ELSE 0 END) AS priced_samples
+`;
+
 // Source filter: only use live predictions for accuracy calculations (not backtest/retroactive)
 const SOURCE_FILTER = `(po.prediction_source IN ('live', 'ws_live') OR po.prediction_source IS NULL) AND (po.is_retroactive = 0 OR po.is_retroactive IS NULL)`;
 
@@ -87,7 +122,8 @@ async function buildAccuracyMaps() {
       COUNT(*) AS total,
       SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
       SUM(${TIME_DECAY_SQL}) AS weighted_total,
-      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+      ${PERFORMANCE_FIELDS_SQL}
     FROM prediction_outcomes po
     WHERE po.outcome IN ('win','loss')
       AND ${SOURCE_FILTER}
@@ -104,7 +140,8 @@ async function buildAccuracyMaps() {
         COUNT(*) AS total,
         SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
         SUM(${TIME_DECAY_SQL}) AS weighted_total,
-        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+        ${PERFORMANCE_FIELDS_SQL}
       FROM prediction_outcomes po
       JOIN predictions_v2 p ON p.fixture_id = po.fixture_id
       WHERE po.outcome IN ('win','loss')
@@ -127,7 +164,8 @@ async function buildAccuracyMaps() {
         COUNT(*) AS total,
         SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
         SUM(${TIME_DECAY_SQL}) AS weighted_total,
-        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+        ${PERFORMANCE_FIELDS_SQL}
       FROM prediction_outcomes po
       JOIN fixtures f ON f.id = po.fixture_id
       WHERE po.outcome IN ('win','loss')
@@ -146,7 +184,8 @@ async function buildAccuracyMaps() {
       COUNT(*) AS total,
       SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
       SUM(${TIME_DECAY_SQL}) AS weighted_total,
-      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+      SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+      ${PERFORMANCE_FIELDS_SQL}
     FROM prediction_outcomes po
     WHERE po.outcome IN ('win','loss')
       AND ${SOURCE_FILTER}
@@ -169,7 +208,8 @@ async function buildAccuracyMaps() {
         COUNT(*) AS total,
         SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
         SUM(${TIME_DECAY_SQL}) AS weighted_total,
-        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+        ${PERFORMANCE_FIELDS_SQL}
       FROM prediction_outcomes po
       WHERE po.outcome IN ('win','loss')
         AND po.best_pick_odds IS NOT NULL
@@ -184,13 +224,13 @@ async function buildAccuracyMaps() {
   // ── Build lookup maps ──────────────────────────────────────────────────────
   const byMarket = {};
   for (const row of rowsOf(perMarket)) {
-    addWeightedRateEntry(byMarket, row.predicted_market, row, MIN_SAMPLES);
+    addWeightedPerformanceEntry(byMarket, row.predicted_market, row, MIN_SAMPLES);
   }
 
   const byMarketScript = {};
   for (const row of rowsOf(perMarketScript)) {
     if (!row.predicted_market || !row.script_primary) continue;
-    addWeightedRateEntry(byMarketScript, `${row.predicted_market}::${row.script_primary}`, row, MIN_SAMPLES);
+    addWeightedPerformanceEntry(byMarketScript, `${row.predicted_market}::${row.script_primary}`, row, MIN_SAMPLES);
   }
 
   const byLeagueMarket = {};
@@ -199,20 +239,20 @@ async function buildAccuracyMaps() {
     const leagueKey = normalizeLeagueKey(row.league_key || row.tournament_name);
     if (!leagueKey || !row.predicted_market) continue;
     const key = `${leagueKey}::${row.predicted_market}`;
-    addWeightedRateEntry(byLeagueMarket, key, row, LEAGUE_MIN_SAMPLES);
+    addWeightedPerformanceEntry(byLeagueMarket, key, row, LEAGUE_MIN_SAMPLES);
     if (row.tournament_name) leagueNames[leagueKey] = row.tournament_name;
   }
 
   const byConfidence = {};
   for (const row of rowsOf(perConfidence)) {
-    addWeightedRateEntry(byConfidence, row.model_confidence, row, MIN_SAMPLES);
+    addWeightedPerformanceEntry(byConfidence, row.model_confidence, row, MIN_SAMPLES);
   }
 
   const byOddsBand = {};
   for (const row of rowsOf(perOddsBand)) {
     if (!row.predicted_market || !row.odds_band) continue;
     const key = `${row.predicted_market}::${row.odds_band}`;
-    addWeightedRateEntry(byOddsBand, key, row, MIN_SAMPLES);
+    addWeightedPerformanceEntry(byOddsBand, key, row, MIN_SAMPLES);
   }
 
   const totalOutcomes = rowsOf(perMarket).reduce((s, r) => s + Number(r.total || 0), 0);
@@ -240,16 +280,33 @@ export async function refreshAccuracyCache() {
   return getAccuracyCache();
 }
 
+function yieldToScore(yieldRate) {
+  if (!Number.isFinite(yieldRate)) return 0.5;
+  const clamped = Math.max(-0.20, Math.min(0.20, yieldRate));
+  return (clamped + 0.20) / 0.40;
+}
+
+function performanceScoreFromEntry(entry) {
+  if (!entry) return 0.5;
+  const winRateScore = winRateToScore(entry.weightedWinRate || entry.winRate || 0.5);
+  const yieldRate = Number.isFinite(entry.weightedYield) ? entry.weightedYield : entry.yieldRate;
+  if (!Number.isFinite(yieldRate) || Number(entry.pricedSamples || 0) < MIN_SAMPLES) {
+    return winRateScore;
+  }
+  const yieldScore = yieldToScore(yieldRate);
+  return (winRateScore * 0.55) + (yieldScore * 0.45);
+}
+
 export function getHistoricalAccuracyScore(marketKey, scriptPrimary, cache) {
   if (!cache) return 0.5;
   const { byMarketScript = {}, byMarket = {} } = cache;
-  // Prefer time-weighted win rate when available
+  // Prefer time-weighted market+script performance when available.
   if (scriptPrimary) {
     const entry = byMarketScript[`${marketKey}::${scriptPrimary}`];
-    if (entry && entry.samples >= MIN_SAMPLES) return winRateToScore(entry.weightedWinRate || entry.winRate);
+    if (entry && entry.samples >= MIN_SAMPLES) return performanceScoreFromEntry(entry);
   }
   const marketEntry = byMarket[marketKey];
-  if (marketEntry && marketEntry.samples >= MIN_SAMPLES) return winRateToScore(marketEntry.weightedWinRate || marketEntry.winRate);
+  if (marketEntry && marketEntry.samples >= MIN_SAMPLES) return performanceScoreFromEntry(marketEntry);
   return 0.5;
 }
 
@@ -259,7 +316,7 @@ export function getLeagueMarketAccuracyScore(leagueId, tournamentName, marketKey
   const keys = [normalizeLeagueKey(leagueId), normalizeLeagueKey(tournamentName)].filter(Boolean);
   for (const leagueKey of keys) {
     const entry = byLeagueMarket[`${leagueKey}::${marketKey}`];
-    if (entry && entry.samples >= LEAGUE_MIN_SAMPLES) return winRateToScore(entry.weightedWinRate || entry.winRate);
+    if (entry && entry.samples >= LEAGUE_MIN_SAMPLES) return performanceScoreFromEntry(entry);
   }
   return 0.5;
 }
@@ -272,10 +329,15 @@ export function getLeagueRestrictionSignal(leagueId, tournamentName, marketKey, 
     const entry = byLeagueMarket[`${leagueKey}::${marketKey}`];
     if (!entry || entry.samples < LEAGUE_MIN_SAMPLES) continue;
     const wr = entry.weightedWinRate || entry.winRate;
-    const score = winRateToScore(wr);
-    if (wr <= 0.42 && entry.samples >= 20) return { status: 'restricted', score, samples: entry.samples, winRate: wr };
-    if (wr >= 0.62 && entry.samples >= 20) return { status: 'trusted', score, samples: entry.samples, winRate: wr };
-    return { status: 'neutral', score, samples: entry.samples, winRate: wr };
+    const weightedYield = Number.isFinite(entry.weightedYield) ? entry.weightedYield : entry.yieldRate;
+    const score = performanceScoreFromEntry(entry);
+    if ((wr <= 0.42 || (Number.isFinite(weightedYield) && weightedYield <= -0.08)) && entry.samples >= 20) {
+      return { status: 'restricted', score, samples: entry.samples, winRate: wr, weightedYield };
+    }
+    if (wr >= 0.62 && (!Number.isFinite(weightedYield) || weightedYield >= 0.05) && entry.samples >= 20) {
+      return { status: 'trusted', score, samples: entry.samples, winRate: wr, weightedYield };
+    }
+    return { status: 'neutral', score, samples: entry.samples, winRate: wr, weightedYield };
   }
   return { status: 'neutral', score: 0.5, samples: 0 };
 }
@@ -294,6 +356,23 @@ export function getOddsBandAccuracy(marketKey, decimalOdds, cache) {
   const entry = byOddsBand[`${marketKey}::${oddsBand}`];
   if (!entry || entry.samples < MIN_SAMPLES) return null;
   return { winRate: entry.weightedWinRate || entry.winRate, samples: entry.samples };
+}
+
+export function getOddsBandPerformance(marketKey, decimalOdds, cache) {
+  if (!cache || !marketKey || !decimalOdds) return null;
+  const oddsBand = bandOdds(decimalOdds);
+  if (!oddsBand) return null;
+  const byOddsBand = cache.byOddsBand || {};
+  const entry = byOddsBand[`${marketKey}::${oddsBand}`];
+  if (!entry || entry.samples < MIN_SAMPLES) return null;
+  return {
+    oddsBand,
+    winRate: entry.weightedWinRate || entry.winRate,
+    weightedYield: Number.isFinite(entry.weightedYield) ? entry.weightedYield : entry.yieldRate,
+    samples: entry.samples,
+    pricedSamples: entry.pricedSamples || 0,
+    score: performanceScoreFromEntry(entry),
+  };
 }
 
 /**
@@ -372,12 +451,19 @@ export function getDynamicMarketFloor(marketKey, cache) {
   if (totalOutcomes > 0 && (entry.samples / totalOutcomes) < 0.01) return null;
 
   const observedWinRate = entry.weightedWinRate || entry.winRate;
+  const observedYield = Number.isFinite(entry.weightedYield) ? entry.weightedYield : entry.yieldRate;
 
-  // Floor = observed win rate - 8% margin (v2: increased from 5% to 8%)
-  // But never go below 0.50 (must be better than a coin flip)
-  // And never above 0.75 (v2: lowered from 0.80 — 80% floors were too restrictive)
-  const floor = Math.max(0.50, Math.min(0.75, observedWinRate - 0.08));
-  return { floor, winRate: observedWinRate, samples: entry.samples };
+  let floor = observedWinRate - 0.08;
+
+  // If a market wins often but still loses money, demand more edge before keeping it.
+  if (Number.isFinite(observedYield)) {
+    if (observedYield <= -0.08) floor = Math.max(floor, observedWinRate + 0.02);
+    else if (observedYield <= -0.03) floor = Math.max(floor, observedWinRate - 0.01);
+    else if (observedYield >= 0.08) floor = Math.min(floor, observedWinRate - 0.10);
+  }
+
+  floor = Math.max(0.50, Math.min(0.78, floor));
+  return { floor, winRate: observedWinRate, weightedYield: observedYield, samples: entry.samples };
 }
 
 function winRateToScore(winRate) {
@@ -430,6 +516,7 @@ export async function getAccuracySummary() {
     market,
     winRate: parseFloat((data.winRate * 100).toFixed(1)),
     weightedWinRate: data.weightedWinRate != null ? parseFloat((data.weightedWinRate * 100).toFixed(1)) : null,
+    weightedYield: Number.isFinite(data.weightedYield) ? parseFloat((data.weightedYield * 100).toFixed(1)) : null,
     samples: data.samples,
     score: parseFloat(getHistoricalAccuracyScore(market, null, cache).toFixed(3)),
   })).sort((a, b) => b.samples - a.samples);
@@ -446,14 +533,15 @@ export async function getAccuracySummary() {
       market,
       winRate: parseFloat((data.winRate * 100).toFixed(1)),
       weightedWinRate: data.weightedWinRate != null ? parseFloat((data.weightedWinRate * 100).toFixed(1)) : null,
+      weightedYield: Number.isFinite(data.weightedYield) ? parseFloat((data.weightedYield * 100).toFixed(1)) : null,
       samples: data.samples,
-      score: parseFloat(winRateToScore(data.weightedWinRate || data.winRate).toFixed(3)),
+      score: parseFloat(performanceScoreFromEntry(data).toFixed(3)),
     };
   }).sort((a, b) => b.samples - a.samples || b.winRate - a.winRate);
 
   const oddsBands = Object.entries(byOddsBand).map(([key, data]) => {
     const [market, band] = key.split('::');
-    return { market, oddsBand: band, winRate: parseFloat((data.winRate * 100).toFixed(1)), weightedWinRate: data.weightedWinRate != null ? parseFloat((data.weightedWinRate * 100).toFixed(1)) : null, samples: data.samples };
+    return { market, oddsBand: band, winRate: parseFloat((data.winRate * 100).toFixed(1)), weightedWinRate: data.weightedWinRate != null ? parseFloat((data.weightedWinRate * 100).toFixed(1)) : null, weightedYield: Number.isFinite(data.weightedYield) ? parseFloat((data.weightedYield * 100).toFixed(1)) : null, samples: data.samples };
   }).sort((a, b) => b.samples - a.samples);
 
   return {
