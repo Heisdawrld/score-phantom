@@ -1,6 +1,5 @@
 import { getBudgetStatus } from '../services/requestBudget.js';
 import { Router } from "express";
-import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { requirePremiumAccess, computeAccessStatus } from "../auth/authRoutes.js";
 import { adaptResponseFormat } from "./responseAdapter.js";
@@ -29,6 +28,7 @@ import { scoreMarketCandidates } from "../markets/scoreMarketCandidates.js";
 import { assessMatchPredictability } from "../engine/assessMatchPredictability.js";
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 import { generateSimulationTimeline } from "../engine/generateSimulationTimeline.js";
+import { requireAdminAccess } from '../middlewares/adminGuard.js';
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
@@ -63,13 +63,6 @@ setInterval(() => {
     if (!timestamps.length) chatRateMap.delete(userId);
   }
 }, 600000);
-// Must match authRoutes.js fallback exactly
-const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET not set in routes.js');
-  process.exit(1);
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -335,36 +328,6 @@ async function decrementDailyCount(userId, today) {
   }
 }
 
-// ─── Middleware: requireAdmin ──────────────────────────────────────────────────
-// Verifies JWT and checks if user is admin (by email).
-
-async function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
-  try {
-    const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    
-    // Explicit Database Lock: Verify token creator is still in DB, not deleted, AND token not revoked
-    const result = await db.execute({ sql: "SELECT id, status, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] });
-    const dbUser = result.rows?.[0];
-    if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
-    
-    // BUG FIX: Check token_version to ensure token wasn't revoked (e.g. password change).
-    // Without this, a revoked JWT retains admin access until it expires.
-    if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
-      return res.status(401).json({ error: "Token revoked" });
-    }
-    
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-}
-
 // ─── Middleware: requireTrialOrPremium ────────────────────────────────────────
 // Requires at least an active trial OR subscription.
 
@@ -398,15 +361,15 @@ router.get("/health", (req, res) => {
 });
 
 // ─── GET /budget — API request budget status (admin only) ──────────────────
-router.get("/budget", requireAdmin, (req, res) => {
+router.get("/budget", requireAdminAccess, (req, res) => {
   res.json({ budget: getBudgetStatus() });
 });
-router.delete("/admin/clear-outcomes", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
-router.post("/admin/clear-track-record", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected, message: "Track record cleared" }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.delete("/admin/clear-outcomes", requireAdminAccess, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-track-record", requireAdminAccess, async (req, res) => { try { const r = await db.execute("DELETE FROM prediction_outcomes"); res.json({ ok: true, deleted: r.rowsAffected, message: "Track record cleared" }); } catch (e) { res.status(500).json({ error: e.message }); } });
 // NOTE: /admin/run-enrichment is handled in adminRoutes.js (with rate limiting)
-router.post("/admin/reseed", requireAdmin, async (req, res) => { try { res.json({ ok: true, message: "Reseed triggered" }); seedFixtures({ days: 8, clearFirst: false }).catch(e => console.error("[AdminReseed]", e.message)); } catch (e) { res.status(500).json({ error: e.message }); } });
-router.post("/admin/clear-prediction-cache", requireAdmin, async (req, res) => { try { const r = await db.execute("DELETE FROM predictions_v2"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
-router.post("/admin/clear-odds-cache", requireAdmin, async (req, res) => { res.json({ ok: true, message: "Cache cleared" }); });
+router.post("/admin/reseed", requireAdminAccess, async (req, res) => { try { res.json({ ok: true, message: "Reseed triggered" }); seedFixtures({ days: 8, clearFirst: false }).catch(e => console.error("[AdminReseed]", e.message)); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-prediction-cache", requireAdminAccess, async (req, res) => { try { const r = await db.execute("DELETE FROM predictions_v2"); res.json({ ok: true, deleted: r.rowsAffected }); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post("/admin/clear-odds-cache", requireAdminAccess, async (req, res) => { res.json({ ok: true, message: "Cache cleared" }); });
 // ─── GET /live — live matches (auth required) ────────────────────────────────
 router.get("/live", requireAuth, async (req, res) => {
   try {

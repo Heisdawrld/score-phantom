@@ -1,7 +1,11 @@
 import express from "express";
 import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
 import { createReferralCommission } from "../auth/authRoutes.js";
+import { PLAN_DURATION_DAYS, TRIAL_DURATION_DAYS, getFutureIsoFromNow } from '../config/accessPlans.js';
+import { requireAdminAccess } from '../middlewares/adminGuard.js';
 import rateLimit from "express-rate-limit";
+import db from "../config/database.js";
+import { computeAccessStatus } from "../auth/authRoutes.js";
 
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -10,47 +14,11 @@ const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-import db from "../config/database.js";
-import jwt from "jsonwebtoken";
-import { computeAccessStatus } from "../auth/authRoutes.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET not set in adminRoutes.js');
-  process.exit(1);
-}
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-if (!ADMIN_EMAIL) console.warn('[Admin] ADMIN_EMAIL not set');
-const PLAN_DURATION_DAYS = 30;
-
-function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
-  try {
-    const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL)
-      return res.status(403).json({ error: "Forbidden" });
-    // BUG FIX: Verify admin exists in DB and token not revoked (matches routes.js fix).
-    // Without this, a revoked admin JWT retains access until expiry.
-    db.execute({ sql: "SELECT id, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] })
-      .then(result => {
-        const dbUser = result.rows?.[0];
-        if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
-        if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
-          return res.status(401).json({ error: "Token revoked" });
-        }
-        req.user = decoded;
-        next();
-      })
-      .catch(() => res.status(401).json({ error: "Unauthorized" }));
-  } catch {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-}
 
 // ── GET /stats — user counts, revenue, payments today ────────────────────────
-router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/stats", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const now = new Date();
     const todayStart = now.toISOString().slice(0, 10);
@@ -128,7 +96,7 @@ router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── GET /users — paginated users with access status ──────────────────────────
-router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/users", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
@@ -179,7 +147,7 @@ router.get("/users", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── GET /payments — paginated payments with user email ───────────────────────
-router.get("/payments", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/payments", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "20", 10)));
@@ -216,7 +184,7 @@ router.get("/payments", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /users/:id/grant — grant 30-day premium ────────────────────────────
-router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/users/:id/grant", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     const days = parseInt(req.body?.days || PLAN_DURATION_DAYS, 10);
@@ -265,15 +233,14 @@ router.post("/users/:id/grant", adminLimiter, requireAdmin, async (req, res) => 
 });
 
 // ── POST /users/:id/verify-email — manually verify a user's email ─────────────
-router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/users/:id/verify-email", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     const result = await db.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE id = ? LIMIT 1', args: [userId] });
     const user = result.rows?.[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     // Reset trial to now so it starts fresh from verification (not signup)
-    const TRIAL_DAYS = 3;
-    const freshTrialEnd = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const freshTrialEnd = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
     await db.execute({
       sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
       args: [freshTrialEnd, userId],
@@ -287,7 +254,7 @@ router.post("/users/:id/verify-email", adminLimiter, requireAdmin, async (req, r
 });
 
 // ── POST /users/:id/revoke — revoke premium ─────────────────────────────────
-router.post("/users/:id/revoke", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/users/:id/revoke", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
 
@@ -316,7 +283,7 @@ router.post("/users/:id/revoke", adminLimiter, requireAdmin, async (req, res) =>
 });
 
 // ── DELETE /users/:id — delete a user and their data ─────────────────────────
-router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
+router.delete("/users/:id", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
 
@@ -346,7 +313,7 @@ router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /run-enrichment — trigger enrichment for today's pending fixtures ────
-router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/run-enrichment", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const limit = parseInt(req.body?.limit || req.query?.limit || "50", 10);
     const dateFilter = req.body?.date || req.query?.date || null;
@@ -373,7 +340,7 @@ router.post("/run-enrichment", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /run-predictions — pre-generate predictions for all enriched fixtures ─
-router.post("/run-predictions", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/run-predictions", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const limit = Number(req.body?.limit) || 100;
     console.log(`[Admin] Manual prediction pre-generation triggered. Limit: ${limit}`);
@@ -390,12 +357,12 @@ router.post("/run-predictions", adminLimiter, requireAdmin, async (req, res) => 
 });
 
 // ── Backtesting routes ──────────────────────────────────────────────────────
-router.get("/backtest/stats", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/backtest/stats", adminLimiter, requireAdminAccess, async (req, res) => {
   const stats = await getAccuracyStats();
   return res.json(stats);
 });
 
-router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/backtest/run", adminLimiter, requireAdminAccess, async (req, res) => {
   const { fixtureId, homeScore, awayScore } = req.body || {};
   if (fixtureId && homeScore !== undefined && awayScore !== undefined) {
     const pred = await db.execute({ sql: 'SELECT * FROM predictions_v2 WHERE fixture_id=? LIMIT 1', args:[String(fixtureId)] });
@@ -408,7 +375,7 @@ router.post("/backtest/run", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /clear-odds-cache — wipe fixture odds so they re-fetch on next seed ────
-router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/clear-odds-cache", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     await db.execute("DELETE FROM fixture_odds");
     console.log('[Admin] Fixture odds cache cleared');
@@ -419,7 +386,7 @@ router.post("/clear-odds-cache", adminLimiter, requireAdmin, async (req, res) =>
 });
 
 // POST /full-reset -- clear fixtures/enrichment/predictions, keep users/payments
-router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/full-reset", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const tables = ["predictions_v2","historical_matches","fixture_odds","fixtures","teams","tournaments"];
     let cleared = [];
@@ -434,7 +401,7 @@ router.post("/full-reset", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /clear-prediction-cache — wipe predictions so engine re-runs ─────────
-router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/clear-prediction-cache", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     await db.execute("DELETE FROM predictions_v2");
     console.log('[Admin] Prediction cache cleared');
@@ -445,7 +412,7 @@ router.post("/clear-prediction-cache", adminLimiter, requireAdmin, async (req, r
 });
 
 // ── POST /reseed — re-seed today's fixtures from BSD ──────────────────────────────────
-router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/reseed", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const date = req.body?.date || new Date().toISOString().slice(0, 10);
     const { seedFixtures } = await import("../services/fixtureSeeder.js");
@@ -477,7 +444,7 @@ router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── GET /fixture-stats — count fixtures, enriched, with odds ─────────────────
-router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/fixture-stats", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const [total, enriched, withOdds, predictions, fixtureOdds] = await Promise.all([
@@ -499,7 +466,7 @@ router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /verify-payment/:ref — manually verify a pending payment ─────────────
-router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/verify-payment/:ref", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const ref = req.params.ref;
     const payResult = await db.execute({ sql: "SELECT * FROM payments WHERE reference = ? LIMIT 1", args: [ref] });
@@ -519,7 +486,7 @@ router.post("/verify-payment/:ref", adminLimiter, requireAdmin, async (req, res)
 });
 
 // ── POST /push-broadcast — send manual push notification to all users
-router.post("/push-broadcast", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/push-broadcast", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { title, message, url } = req.body;
     if (!title || !message) return res.status(400).json({ error: "Title and message are required" });
@@ -535,7 +502,7 @@ router.post("/push-broadcast", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── GET /system-health — check all integrations ───────────────────────────────
-router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/system-health", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const checks = {};
     // DB
@@ -565,7 +532,7 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // ── POST /clean-ghost-voids — remove void prediction_outcomes that have no scores
-router.post("/clean-ghost-voids", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/clean-ghost-voids", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const r = await db.execute("DELETE FROM prediction_outcomes WHERE outcome = 'void' AND home_score IS NULL");
     return res.json({ success: true, deleted: r.rowsAffected });
@@ -576,7 +543,7 @@ router.post("/clean-ghost-voids", adminLimiter, requireAdmin, async (req, res) =
 
 // ── POST /reevaluate-voids — re-evaluate void outcomes that have scores using fixed evaluatePrediction
 // This fixes the bug where home_win, away_win, btts_yes, btts_no markets were incorrectly evaluated as void
-router.post("/reevaluate-voids", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/reevaluate-voids", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { evaluatePrediction } = await import('../services/resultChecker.js');
     const { computeProfitUnits } = await import('../storage/profitUnits.js');
@@ -639,7 +606,7 @@ router.post("/reevaluate-voids", adminLimiter, requireAdmin, async (req, res) =>
 // ── POST /tag-backtest-outcomes — tag existing prediction_outcomes rows that came from backtesting
 // Existing rows with prediction_source NULL need to be tagged based on whether they have
 // a corresponding entry in prediction_picks with generated_at < kickoff_at (real) or not (backtest)
-router.post("/tag-backtest-outcomes", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/tag-backtest-outcomes", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     // Tag outcomes that have no corresponding pre-match prediction_pick as 'backtest'
     const result = await db.execute(`
@@ -674,7 +641,7 @@ router.post("/tag-backtest-outcomes", adminLimiter, requireAdmin, async (req, re
 });
 
 // ── GET /engine-stats — Admin dashboard metrics for prediction engine
-router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/engine-stats", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const stats = await db.execute(`
       SELECT
@@ -720,7 +687,7 @@ router.get("/engine-stats", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // FAST: Get all BSD leagues
-router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/odds-leagues", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { fetchLeagues } = await import('../services/bsd.js');
     const leagues = await fetchLeagues();
@@ -729,7 +696,7 @@ router.get("/odds-leagues", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // BSD health check — replaces the old slug audit
-router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/audit-all-slugs", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { fetchLeagues, fetchFixturesByDate } = await import('../services/bsd.js');
     const leagues = await fetchLeagues();
@@ -747,7 +714,7 @@ router.get("/audit-all-slugs", adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // Debug odds for a specific fixture (reads from fixture_odds table, seeded by BSD)
-router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/debug-odds/:fixtureId", adminLimiter, requireAdminAccess, async (req, res) => {
   const { fixtureId } = req.params;
   try {
     const f = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id=? LIMIT 1', args:[fixtureId] });
@@ -773,7 +740,7 @@ router.get("/debug-odds/:fixtureId", adminLimiter, requireAdmin, async (req, res
 // (duplicate verify-email route removed — first definition at line ~249 is used)
 
 // POST /api/admin/check-results — manually run result checker for a date
-router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
+router.post('/check-results', adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { date, backfill_days } = req.body;
     const { checkResults, backfillResults } = await import('../services/resultChecker.js');
@@ -789,7 +756,7 @@ router.post('/check-results', adminLimiter, requireAdmin, async (req, res) => {
 });
 
 // POST /api/admin/rebuild-track-record — build missing predictions then evaluate all past results
-router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/rebuild-track-record", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const days = parseInt(req.body?.days || 30, 10);
     console.log("[Admin] rebuild-track-record started, days=", days);
@@ -809,7 +776,7 @@ router.post("/rebuild-track-record", adminLimiter, requireAdmin, async (req, res
 });
 
 // GET /api/admin/diagnose-results — diagnostic endpoint to check score sources
-router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/diagnose-results", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const date = req.query.date || new Date(Date.now()-86400000).toLocaleString("en-CA",{timeZone:"Africa/Lagos"}).split(",")[0].trim();
     const bsdKey = process.env.BSD_API_KEY || "";
@@ -834,7 +801,7 @@ router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => 
 });
 
 // ── POST /users/:id/referral-code — generate or set referral code for a user ─
-router.post("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/users/:id/referral-code", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     const customCode = (req.body?.code || "").trim();
@@ -890,7 +857,7 @@ router.post("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, 
 });
 
 // ── DELETE /users/:id/referral-code — remove referral code from a user ───────
-router.delete("/users/:id/referral-code", adminLimiter, requireAdmin, async (req, res) => {
+router.delete("/users/:id/referral-code", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     await db.execute({
@@ -908,7 +875,7 @@ router.delete("/users/:id/referral-code", adminLimiter, requireAdmin, async (req
 // ── Partner / Referral endpoints ─────────────────────────────────────────────
 
 // POST /api/admin/partners — create standalone partner (no user account needed)
-router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/partners", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { name, email, code, status, notes } = req.body || {};
     if (!name?.trim()) return res.status(400).json({ error: "Name required" });
@@ -927,7 +894,7 @@ router.post("/partners", adminLimiter, requireAdmin, async (req, res) => {
   } catch (err) { console.error("[Admin/create-partner]", err); return res.status(500).json({ error: err.message }); }
 });
 // GET /api/admin/partners — list all partners with full metrics
-router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/partners", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const appOrigin = (process.env.APP_URL || "https://score-phantom.onrender.com").replace(/[/]$/,"");
     const result = await db.execute(
@@ -949,7 +916,7 @@ router.get("/partners", adminLimiter, requireAdmin, async (req, res) => {
   } catch (err) { console.error("[Admin/partners]", err); return res.status(500).json({ error: err.message }); }
 });
 // GET /api/admin/standard-commissions — list all standard user referrals with pending payouts
-router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/standard-commissions", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const result = await db.execute(
       "SELECT u.id as user_id, u.email, u.own_referral_code, " +
@@ -967,7 +934,7 @@ router.get("/standard-commissions", adminLimiter, requireAdmin, async (req, res)
 });
 
 // GET /api/admin/standard-commissions/:id/ledger — list specific standard user ledger entries
-router.get("/standard-commissions/:id/ledger", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/standard-commissions/:id/ledger", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     const result = await db.execute({
@@ -979,7 +946,7 @@ router.get("/standard-commissions/:id/ledger", adminLimiter, requireAdmin, async
 });
 
 // POST /api/admin/standard-commissions/:id/settle — mark all pending standard commissions as paid
-router.post("/standard-commissions/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/standard-commissions/:id/settle", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const userId = req.params.id;
     const notes = req.body?.notes || 'Manual settlement by Admin';
@@ -993,7 +960,7 @@ router.post("/standard-commissions/:id/settle", adminLimiter, requireAdmin, asyn
 });
 
 // PATCH /api/admin/partners/:id — update partner details
-router.patch("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
+router.patch("/partners/:id", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { name, email, code, notes, commissionRate } = req.body || {};
     const updates = [];
@@ -1015,7 +982,7 @@ router.patch("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // POST /api/admin/partners/:id/status — change partner status
-router.post("/partners/:id/status", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/partners/:id/status", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { status } = req.body || {};
     if (!["active","paused","suspended"].includes(status)) return res.status(400).json({ error: "status must be active, paused, or suspended" });
@@ -1024,14 +991,14 @@ router.post("/partners/:id/status", adminLimiter, requireAdmin, async (req, res)
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // DELETE /api/admin/partners/:id
-router.delete("/partners/:id", adminLimiter, requireAdmin, async (req, res) => {
+router.delete("/partners/:id", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     await db.execute({ sql: "DELETE FROM partners WHERE id = ?", args: [req.params.id] });
     return res.json({ success: true });
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // GET /api/admin/partners/:id/commissions — full ledger
-router.get("/partners/:id/commissions", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/partners/:id/commissions", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const result = await db.execute({
       sql: "SELECT pc.id, pc.referred_user_id, pc.payment_id, pc.payment_reference, pc.gross_amount, pc.commission_rate, pc.commission_amount, pc.status, pc.created_at, pc.paid_at, pc.settled_at, pc.notes," +
@@ -1048,7 +1015,7 @@ router.get("/partners/:id/commissions", adminLimiter, requireAdmin, async (req, 
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // POST /api/admin/partners/:id/settle — mark ALL pending as paid
-router.post("/partners/:id/settle", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/partners/:id/settle", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const now = new Date().toISOString();
     const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'paid', paid_at = ?, settled_at = ? WHERE partner_id = ? AND status = 'pending'", args: [now, now, req.params.id] });
@@ -1057,7 +1024,7 @@ router.post("/partners/:id/settle", adminLimiter, requireAdmin, async (req, res)
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // POST /api/admin/partners/:id/settle-selected — mark selected pending as paid
-router.post("/partners/:id/settle-selected", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/partners/:id/settle-selected", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { ids } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
@@ -1072,7 +1039,7 @@ router.post("/partners/:id/settle-selected", adminLimiter, requireAdmin, async (
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 // POST /api/admin/commissions/:commId/reverse — reverse a commission entry
-router.post("/commissions/:commId/reverse", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/commissions/:commId/reverse", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { notes } = req.body || {};
     const r = await db.execute({ sql: "UPDATE partner_commissions SET status = 'reversed', notes = ? WHERE id = ? AND status != 'reversed'", args: [notes||null, req.params.commId] });
@@ -1083,7 +1050,7 @@ router.post("/commissions/:commId/reverse", adminLimiter, requireAdmin, async (r
 
 
 // Clear prediction outcomes (reset track record)
-router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) => {
+router.post('/clear-track-record', adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { before } = req.body;
     if (before) {
@@ -1098,7 +1065,7 @@ router.post('/clear-track-record', adminLimiter, requireAdmin, async (req, res) 
 // ── GET /debug/enrich/:fixtureId — force re-enrich + show stat profile ──────
 // MOVED from /api/debug/enrich/:fixtureId to /api/admin/ namespace for proper auth.
 // Now inherits requireAdminSecret guard from app.js route registration.
-router.get("/debug/enrich/:fixtureId", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/debug/enrich/:fixtureId", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { fixtureId } = req.params;
 
@@ -1162,7 +1129,7 @@ router.get("/debug/enrich/:fixtureId", adminLimiter, requireAdmin, async (req, r
 });
 
 // ── GET /basketball-fixtures — list basketball fixtures for admin ──────────────
-router.get("/basketball-fixtures", adminLimiter, requireAdmin, async (req, res) => {
+router.get("/basketball-fixtures", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const result = await db.execute({
@@ -1181,7 +1148,7 @@ router.get("/basketball-fixtures", adminLimiter, requireAdmin, async (req, res) 
 });
 
 // ── POST /sync-basketball — manually trigger basketball ESPN sync ────────────
-router.post("/sync-basketball", adminLimiter, requireAdmin, async (req, res) => {
+router.post("/sync-basketball", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     console.log('[Admin] Manual basketball sync triggered');
     // Try to import the basketball auto-sync module

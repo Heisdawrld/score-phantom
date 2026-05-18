@@ -50,19 +50,38 @@ Each prediction includes 3 confidence dimensions:
 ## 🚀 Setup
 
 ```bash
-# Install dependencies
+# Install server dependencies
 npm install
+
+# Install client dependencies
+npm --prefix client install
 
 # Copy environment variables
 cp .env.example .env
 # Edit .env with your actual values
 
-# Seed the database
+# Validate required backend env vars
+npm run env:check
+
+# Optional: seed fixtures after env is configured
 npm run seed
 
-# Start
+# Start backend
 npm start
+
+# Build frontend
+npm run build
 ```
+
+### Local runtime requirements
+
+The backend will not start unless these variables are set:
+
+- `TURSO_DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+- `JWT_SECRET`
+
+Use `npm run env:check` to verify startup-critical variables before running the app.
 
 ## 📁 Project Structure
 
@@ -87,16 +106,19 @@ npm start
 1. Push to GitHub
 2. Connect repo to Render
 3. Set environment variables in Render dashboard
-4. Build command: `npm install && npm run build`
+4. Build command: `npm install && npm --prefix client install && npm run build`
 5. Start command: `npm start`
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Postgres connection string |
+| `TURSO_DATABASE_URL` | Turso / libSQL database URL |
+| `TURSO_AUTH_TOKEN` | Turso auth token |
 | `BSD_API_KEY` | BSD/Bzzoiro API key |
 | `JWT_SECRET` | Secret for JWT tokens |
+| `ADMIN_EMAIL` | Admin account email |
+| `ADMIN_SECRET` | Shared admin secret header value |
 | `APP_URL` | Public app URL (used for links + CORS) |
 | `GROQ_API_KEY` | Groq API key for AI explanations |
 | `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave public key |
