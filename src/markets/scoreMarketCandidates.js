@@ -366,6 +366,13 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     const leagueCalibrationComponent = 0.08 * leagueMarketScore;
     const oddsBandPerformanceComponent = 0.07 * oddsBandPerformanceScore;
     const formMomentumComponent = 0.03 * formMomentumScore;
+    const priceQualityRaw = clamp(safeNum(candidate.priceQualityScore, safeNum(fv.priceQualityScore, 0.35)), 0, 1);
+    const bookmakerDisagreement = clamp(safeNum(candidate.bookmakerDisagreement, safeNum(fv.priceDisagreementScore, 0)), 0, 1);
+    const priceConfidenceAdjustment = clamp(safeNum(candidate.priceConfidenceAdjustment, safeNum(fv.priceConfidenceAdjustment, 0)), -0.08, 0.08);
+    const bestPriceLiftPct = Math.max(0, safeNum(candidate.priceBestVsAveragePct, 0));
+    const priceQualityComponent = 0.05 * priceQualityRaw;
+    const priceDisagreementComponent = -0.04 * bookmakerDisagreement;
+    const priceProfitabilityComponent = 0.07 * clamp(bestPriceLiftPct * 8, 0, 1) * (candidate.edge != null && candidate.edge > 0 ? 1 : 0);
 
     const leagueRestrictionPenalty = leagueSignal.status === 'restricted' ? 0.10 : 0;
     const leagueTrustedBonus = leagueSignal.status === 'trusted' ? 0.04 : 0;
@@ -382,9 +389,10 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     let finalScore =
       modelScore + marketEdgeScore + smartRiskRewardComponent + marketEfficiencyComponent +
       worthComponent + oddsBandPerformanceComponent +
+      priceQualityComponent + priceDisagreementComponent + priceProfitabilityComponent +
       tacticalFitComponent + predictabilityScore +
       dataSupportComponent + historicalAccuracyComponent + leagueCalibrationComponent +
-      formMomentumComponent + diversityBonus + leagueTrustedBonus +
+      formMomentumComponent + diversityBonus + leagueTrustedBonus + priceConfidenceAdjustment +
       volatilityAdjustment -
       riskPenaltyScore - productPenaltyScore;
 
@@ -509,6 +517,12 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       oddsBandSignal,
       oddsBandPerformanceScore: parseFloat(oddsBandPerformanceScore.toFixed(3)),
       oddsBandPerformanceComponent: parseFloat(oddsBandPerformanceComponent.toFixed(4)),
+      priceQualityScore: parseFloat(priceQualityRaw.toFixed(4)),
+      priceQualityComponent: parseFloat(priceQualityComponent.toFixed(4)),
+      bookmakerDisagreement: parseFloat(bookmakerDisagreement.toFixed(4)),
+      priceDisagreementComponent: parseFloat(priceDisagreementComponent.toFixed(4)),
+      priceConfidenceAdjustment: parseFloat(priceConfidenceAdjustment.toFixed(4)),
+      priceProfitabilityComponent: parseFloat(priceProfitabilityComponent.toFixed(4)),
       finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
       advisor_status: advisorStatus,
       advisor_reason: advisorReason,

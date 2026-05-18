@@ -10,6 +10,8 @@
  * sourcing core data from v2's split endpoints.
  */
 
+import { buildPriceIntelligenceFromComparison, buildPriceIntelligenceFromOddsPayload } from '../utils/priceIntelligence.js';
+
 const BSD_API_KEY = process.env.BSD_API_KEY || '';
 const BSD_BASE = process.env.BSD_BASE_URL || 'https://sports.bzzoiro.com/api/v2';
 // V1 base removed — all endpoints migrated to v2.
@@ -356,8 +358,20 @@ export async function fetchEventOdds(eventId) {
   return mapOddsPayload(data);
 }
 
+export async function fetchEventOddsComparison(eventId) {
+  if (!eventId) return null;
+  return await bsdFetch(`/events/${eventId}/odds/comparison/`);
+}
+
 export async function fetchBestOdds(eventId) {
-  return fetchEventOdds(eventId);
+  if (!eventId) return null;
+
+  const comparison = await fetchEventOddsComparison(eventId).catch(() => null);
+  const fromComparison = buildPriceIntelligenceFromComparison(comparison);
+  if (fromComparison) return fromComparison;
+
+  const consensusOdds = await fetchEventOdds(eventId);
+  return buildPriceIntelligenceFromOddsPayload(consensusOdds, 'bsd_consensus');
 }
 
 /**

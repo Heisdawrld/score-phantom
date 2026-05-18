@@ -30,10 +30,15 @@ import { assessMatchPredictability } from "../engine/assessMatchPredictability.j
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 import { generateSimulationTimeline } from "../engine/generateSimulationTimeline.js";
 import { requireAdminAccess } from '../middlewares/adminGuard.js';
+import { extractBestPickFromPredictionJson } from '../utils/predictionJson.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
+
+function extractStoredBestPick(predictionJson) {
+  return extractBestPickFromPredictionJson(predictionJson);
+}
 
 // ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
 const CHAT_RATE_LIMIT = 20;       // max messages per user per hour
@@ -507,20 +512,15 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       // Syncs fixture list badges with the EV-aware engine output
       let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
       try {
-        const predJson = typeof f.prediction_json === 'string'
-          ? JSON.parse(f.prediction_json)
-          : f.prediction_json;
-        if (predJson) {
-          const bp = predJson.bestPick || null;
-          if (bp) {
-            v4Fields.valueTier = bp.valueTier || null;
-            v4Fields.ev = bp.ev != null ? bp.ev : null;
-            v4Fields.odds = bp.bookmakerOdds || bp.odds || null;
-            v4Fields.isAccaEligible = bp.isAccaEligible === true;
-            v4Fields.advisor_status = bp.advisor_status || null;
-            v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
-            v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
-          }
+        const bp = extractStoredBestPick(f.prediction_json);
+        if (bp) {
+          v4Fields.valueTier = bp.valueTier || null;
+          v4Fields.ev = bp.ev != null ? bp.ev : null;
+          v4Fields.odds = bp.bookmakerOdds || bp.odds || null;
+          v4Fields.isAccaEligible = bp.isAccaEligible === true;
+          v4Fields.advisor_status = bp.advisor_status || null;
+          v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
+          v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
         }
       } catch (_) {}
 
@@ -1469,21 +1469,25 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // NOT the full prediction. prediction_json stores the full engine result.
       let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
       try {
-        const predJson = typeof row.prediction_json === 'string'
-          ? JSON.parse(row.prediction_json)
-          : row.prediction_json;
-        if (predJson) {
-          // prediction_json stores the raw engine result — bestPick is at top level
-          const bestPick = predJson.bestPick || null;
-          if (bestPick) {
-            v4Fields.valueTier = bestPick.valueTier || null;
-            v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
-            v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
-            v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
-            v4Fields.advisor_status = bestPick.advisor_status || null;
-            v4Fields.isSafeBet = bestPick.isSafeBet != null ? bestPick.isSafeBet : null;
-            v4Fields.isValueBet = bestPick.isValueBet != null ? bestPick.isValueBet : null;
-          }
+        const bestPick = extractStoredBestPick(row.prediction_json);
+        if (bestPick) {
+          v4Fields.valueTier = bestPick.valueTier || null;
+          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
+          v4Fields.advisor_status = bestPick.advisor_status || null;
+          v4Fields.isSafeBet = bestPick.isSafeBet != null ? bestPick.isSafeBet : null;
+          v4Fields.isValueBet = bestPick.isValueBet != null ? bestPick.isValueBet : null;
+
+          v4Fields.bestPrice = bestPick.bookmakerOdds != null ? parseFloat(Number(bestPick.bookmakerOdds).toFixed(2)) : null;
+          v4Fields.bestPriceBookmaker = bestPick.bestPriceBookmakerName || null;
+          v4Fields.bestPriceBookmakerSlug = bestPick.bestPriceBookmakerSlug || null;
+          v4Fields.averageMarketOdds = bestPick.averageMarketOdds != null ? parseFloat(Number(bestPick.averageMarketOdds).toFixed(2)) : null;
+          v4Fields.worstPriceOdds = bestPick.worstPriceOdds != null ? parseFloat(Number(bestPick.worstPriceOdds).toFixed(2)) : null;
+          v4Fields.priceQualityScore = bestPick.priceQualityScore != null ? parseFloat(Number(bestPick.priceQualityScore).toFixed(4)) : null;
+          v4Fields.bookmakerDisagreement = bestPick.bookmakerDisagreement != null ? parseFloat(Number(bestPick.bookmakerDisagreement).toFixed(4)) : null;
+          v4Fields.priceConfidenceAdjustment = bestPick.priceConfidenceAdjustment != null ? parseFloat(Number(bestPick.priceConfidenceAdjustment).toFixed(4)) : null;
+          v4Fields.priceQuoteCount = bestPick.priceQuoteCount ?? null;
         }
       } catch (_) {}
 
@@ -1550,6 +1554,15 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         ev:             v4Fields.ev != null ? parseFloat(v4Fields.ev.toFixed(4)) : null,
         odds:           v4Fields.odds != null ? parseFloat(v4Fields.odds.toFixed(2)) : null,
         isAccaEligible: v4Fields.isAccaEligible,
+        bestPrice: v4Fields.bestPrice ?? null,
+        bestPriceBookmaker: v4Fields.bestPriceBookmaker || null,
+        bestPriceBookmakerSlug: v4Fields.bestPriceBookmakerSlug || null,
+        averageMarketOdds: v4Fields.averageMarketOdds ?? null,
+        worstPriceOdds: v4Fields.worstPriceOdds ?? null,
+        priceQualityScore: v4Fields.priceQualityScore ?? null,
+        bookmakerDisagreement: v4Fields.bookmakerDisagreement ?? null,
+        priceConfidenceAdjustment: v4Fields.priceConfidenceAdjustment ?? null,
+        priceQuoteCount: v4Fields.priceQuoteCount ?? null,
         factors,
       };
     });
@@ -1666,17 +1679,12 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     // NOT the full prediction. prediction_json stores the full engine result.
     let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false };
     try {
-      const predJson = typeof row.prediction_json === 'string'
-        ? JSON.parse(row.prediction_json)
-        : row.prediction_json;
-      if (predJson) {
-        const bestPick = predJson.bestPick || null;
-        if (bestPick) {
-          v4Fields.valueTier = bestPick.valueTier || null;
-          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
-          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
-          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
-        }
+      const bestPick = extractStoredBestPick(row.prediction_json);
+      if (bestPick) {
+        v4Fields.valueTier = bestPick.valueTier || null;
+        v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+        v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+        v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
       }
     } catch (_) {}
 
@@ -1937,7 +1945,17 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
       }
     }
 
-    return res.json({ fixture, meta, h2h, homeForm, awayForm, standings, odds: oddsRow, access: buildAccessPayload(req.access) });
+    return res.json({
+      fixture,
+      meta,
+      h2h,
+      homeForm,
+      awayForm,
+      standings,
+      odds: oddsRow,
+      priceIntelligence: meta?.price_intelligence || null,
+      access: buildAccessPayload(req.access),
+    });
   } catch(err) {
     console.error("[MatchCenter]", err.message);
     res.status(500).json({ error: "Failed to load match data" });

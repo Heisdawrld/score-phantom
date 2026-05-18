@@ -25,6 +25,8 @@ function flattenFeatureVector(fv) {
   const bsdHomeFormStats = fv.bsdHomeFormStats || {};
   const bsdAwayFormStats = fv.bsdAwayFormStats || {};
   const lc = fv.leagueContext || {};
+  const priceIntel = fv.priceIntelligence || {};
+  const priceSummary = priceIntel.summary || {};
 
   const homeBaseRating = safeNum(ts.homeBaseRating, 1.2);
   const awayBaseRating = safeNum(ts.awayBaseRating, 1.2);
@@ -258,6 +260,12 @@ function flattenFeatureVector(fv) {
     awayManager: fv.awayManager || null,
     bsdPrediction: fv.bsdPrediction || null,
     bestOdds: fv.bestOdds || null,
+    priceIntelligence: fv.priceIntelligence || null,
+    priceBookmakerCount: safeNum(priceSummary.bookmakerCount, 0),
+    priceQuoteCount: safeNum(priceSummary.quoteCount, 0),
+    priceDisagreementScore: safeNum(priceSummary.disagreementScore, 0),
+    priceQualityScore: safeNum(priceSummary.priceQualityScore, 0.35),
+    priceConfidenceAdjustment: safeNum(priceSummary.confidenceAdjustment, 0),
     eventContext: fv.eventContext || null,
     refereeData: fv.refereeData || null,
     refereeVolatility: fv.refereeVolatility || null,

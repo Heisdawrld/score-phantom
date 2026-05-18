@@ -225,6 +225,9 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const awayManager = meta?.away_manager || null;
   const bsdPrediction = meta?.bsd_prediction || null;
   const bestOdds = meta?.best_odds || null;
+  const priceIntelligence = meta?.price_intelligence || (bestOdds?.markets
+    ? { source: bestOdds.source || 'bsd_consensus', summary: bestOdds.summary || null, markets: bestOdds.markets }
+    : null);
 
   const eventContext = meta?.eventContext || null;
   const refereeData = meta?.refereeData || null;
@@ -408,6 +411,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     awayManager,
     bsdPrediction,
     bestOdds,
+    priceIntelligence,
     eventContext,
     refereeData,
     refereeVolatility,
