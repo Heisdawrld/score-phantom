@@ -321,11 +321,6 @@ export default function MatchCenter() {
                           {lineupIntel.certaintyLabel} lineups
                         </span>
                       )}
-                      {verdict?.ladderSummary && (
-                        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-                          {verdict.ladderSummary}
-                        </span>
-                      )}
                     </div>
 
                     {cautionLine && (
@@ -354,7 +349,7 @@ export default function MatchCenter() {
                       <Lock className="h-3.5 w-3.5" /> Premium verdict
                     </div>
                     <p className="mt-4 text-2xl font-black text-white">Unlock the model thesis</p>
-                    <p className="mt-2 text-sm leading-relaxed text-white/58">See the exact market angle, confidence, ranked ladder, and trust notes that drive the pick on this match.</p>
+                    <p className="mt-2 text-sm leading-relaxed text-white/58">See the exact market angle, confidence, and trust notes that drive the pick on this match.</p>
                   </div>
                   <button
                     onClick={() => setLocation("/paywall")}

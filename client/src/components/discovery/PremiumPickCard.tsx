@@ -98,7 +98,7 @@ export function PremiumPickCard({
     <button
       onClick={onClick}
       className={cn(
-        "group relative w-full overflow-hidden rounded-[28px] border text-left transition-all",
+        "group relative w-full overflow-hidden rounded-[22px] border text-left transition-all",
         highlight ? "border-primary/16 bg-[linear-gradient(145deg,rgba(16,231,116,0.08),rgba(255,255,255,0.02))]" : "border-white/[0.08] bg-white/[0.025]",
         "hover:border-primary/18 hover:bg-white/[0.035] active:scale-[0.99]"
       )}
@@ -111,12 +111,12 @@ export function PremiumPickCard({
         {highlight && <div className="absolute -top-10 right-0 h-56 w-56 rounded-full bg-primary/8 blur-[80px]" />}
       </div>
 
-      <div className="relative z-10 p-4 sm:p-5">
+      <div className="relative z-10 p-3.5 sm:p-4">
         <div className="flex items-start gap-3">
           {rankLabel && (
-            <div className="shrink-0 rounded-2xl border border-white/[0.08] bg-black/10 px-2.5 py-2 text-center min-w-[44px]">
+            <div className="shrink-0 rounded-[18px] border border-white/[0.08] bg-black/10 px-2 py-1.5 text-center min-w-[40px]">
               <p className="text-[9px] uppercase tracking-[0.18em] text-white/30">Rank</p>
-              <p className="mt-1 text-lg font-black leading-none text-white">{rankLabel}</p>
+              <p className="mt-1 text-base font-black leading-none text-white">{rankLabel}</p>
             </div>
           )}
 
@@ -124,7 +124,7 @@ export function PremiumPickCard({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-primary">
                     <BarChart2 className="w-3 h-3" /> {eyebrow}
                   </span>
                   {advisorStatus && <ModelAdvisorBadge status={normalizeStatus(advisorStatus) as AdvisorStatus} showLabel={false} />}
@@ -137,7 +137,7 @@ export function PremiumPickCard({
 
                 <div className="mt-3 flex items-center gap-2 min-w-0">
                   <TeamLogo src={homeLogo || undefined} name={homeTeam} size="sm" />
-                  <p className="text-base font-black leading-tight text-white truncate">{homeTeam} vs {awayTeam}</p>
+                  <p className="text-[15px] font-black leading-tight text-white truncate">{homeTeam} vs {awayTeam}</p>
                   <TeamLogo src={awayLogo || undefined} name={awayTeam} size="sm" />
                 </div>
 
@@ -161,14 +161,14 @@ export function PremiumPickCard({
               </div>
 
               <div className="shrink-0 text-center">
-                <ConfidenceRing value={ringValue} size={60} strokeWidth={4} />
+                <ConfidenceRing value={ringValue} size={52} strokeWidth={4} />
                 <p className="mt-1 text-[9px] uppercase tracking-[0.18em] text-white/28">Model</p>
               </div>
             </div>
 
-            <div className="mt-4 rounded-[22px] border border-white/[0.06] bg-black/10 p-3.5">
+            <div className="mt-3 rounded-[18px] border border-white/[0.06] bg-black/10 p-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-primary">
                   <Target className="w-3 h-3" /> {marketLabel || 'Market angle'}
                 </span>
                 {isSafeBet && <span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em]", chipTone('green'))}>Safe</span>}
@@ -176,17 +176,13 @@ export function PremiumPickCard({
                 {isAccaEligible && <span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em]", chipTone('cyan'))}>ACCA</span>}
               </div>
 
-              <p className="mt-3 text-[18px] font-black leading-tight text-white sm:text-[20px]">{pickLabel}</p>
-              <p className="mt-2 text-[12px] leading-relaxed text-white/62">{thesisLine}</p>
+              <p className="mt-2.5 text-[16px] font-black leading-tight text-white sm:text-[18px]">{pickLabel}</p>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-white/62">{thesisLine}</p>
 
               {supportLines.length > 0 && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {supportLines.map((item, index) => (
-                    <div key={`${item}-${index}`} className="flex items-start gap-2 rounded-2xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                      <p className="text-[11px] leading-relaxed text-white/55">{item}</p>
-                    </div>
-                  ))}
+                <div className="mt-2.5 flex items-start gap-2 rounded-2xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                  <p className="text-[11px] leading-relaxed text-white/55">{supportLines[0]}</p>
                 </div>
               )}
 

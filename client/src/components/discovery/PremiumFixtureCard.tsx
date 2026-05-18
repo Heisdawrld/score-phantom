@@ -39,6 +39,7 @@ interface PremiumFixtureCardProps {
   lineupIntelligence?: CompactLineup | null;
   verdict?: CompactVerdict | null;
   isPremium?: boolean;
+  showPrediction?: boolean;
   onClick?: () => void;
 }
 
@@ -69,10 +70,12 @@ export function PremiumFixtureCard({
   lineupIntelligence,
   verdict,
   isPremium = false,
+  showPrediction = true,
   onClick,
 }: PremiumFixtureCardProps) {
   const hasScore = homeScore != null && awayScore != null;
   const hasPrediction = isPremium && !!pickLabel;
+  const canShowPrediction = hasPrediction && showPrediction;
   const live = String(statusLabel || '').toUpperCase() === 'LIVE';
   const finished = String(statusLabel || '').toUpperCase() === 'FT';
   const statusPill = live
@@ -132,7 +135,7 @@ export function PremiumFixtureCard({
                 <p className="text-lg font-black text-white tabular-nums leading-none">{homeScore}</p>
                 <p className="text-lg font-black text-white/70 tabular-nums leading-none">{awayScore}</p>
               </div>
-            ) : hasPrediction ? (
+            ) : canShowPrediction ? (
               <div className="space-y-1.5">
                 <ModelAdvisorBadge status={normalizeStatus(advisorStatus || 'ACCA') as AdvisorStatus} showLabel={false} />
                 {probabilityPct != null && <p className="text-sm font-black text-white tabular-nums">{probabilityPct.toFixed(0)}%</p>}
@@ -147,7 +150,7 @@ export function PremiumFixtureCard({
         </div>
 
         <div className="mt-4 rounded-[20px] border border-white/[0.05] bg-black/10 px-3.5 py-3">
-          {hasPrediction ? (
+          {canShowPrediction ? (
             <>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
@@ -180,7 +183,9 @@ export function PremiumFixtureCard({
                 <p className="text-[12px] font-semibold text-white/70">{isPremium ? 'Model still ranking this fixture' : 'Premium angle locked'}</p>
                 <p className="mt-1 text-[11px] leading-relaxed text-white/35">
                   {isPremium
-                    ? 'Open match center to inspect stats, lineups, and the live thesis as data settles.'
+                    ? showPrediction
+                      ? 'Open match center to inspect stats, lineups, and the live thesis as data settles.'
+                      : 'Open the match to view the prediction panel, price edge, and full match thesis.'
                     : 'Upgrade to unlock the verdict, ranked market angle, and the model thesis for this fixture.'}
                 </p>
               </div>

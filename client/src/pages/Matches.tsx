@@ -61,6 +61,7 @@ export default function Matches() {
       <div className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5 relative z-10">
         <div className="px-4 pt-4 pb-2">
           <h1 className="text-xl font-black text-white tracking-wide mb-3">Matches</h1>
+          <p className="mb-3 text-xs text-white/35">Open any match to view its prediction panel and full match read.</p>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x overscroll-x-contain">
             {dates.map(d => (
               <button

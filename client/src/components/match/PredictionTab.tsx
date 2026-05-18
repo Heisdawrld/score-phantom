@@ -5,7 +5,6 @@ import {
   Activity,
   AlertCircle,
   ArrowUpRight,
-  BarChart2,
   DollarSign,
   Lock,
   ShieldCheck,
@@ -104,19 +103,19 @@ function uniqueStrings(items: any[]) {
 
 function Section({ eyebrow, title, icon: Icon, description, tone = "default", aside, children, className }: SectionProps) {
   return (
-    <div className={cn("rounded-[28px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-5", sectionTone(tone), className)}>
+    <div className={cn("rounded-[22px] border p-3.5 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-4", sectionTone(tone), className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             <Icon className="h-3.5 w-3.5 text-primary" />
             {eyebrow}
           </div>
-          <h3 className="mt-3 text-xl font-black text-white">{title}</h3>
+          <h3 className="mt-2.5 text-lg font-black text-white sm:text-xl">{title}</h3>
           {description && <p className="mt-1 text-sm leading-relaxed text-white/55">{description}</p>}
         </div>
         {aside}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-3.5">{children}</div>
     </div>
   );
 }
@@ -130,9 +129,9 @@ function MetricTile({ label, value, note, accent = "default" }: { label: string;
   }[accent];
 
   return (
-    <div className={cn("rounded-2xl border px-3.5 py-3", tone)}>
+    <div className={cn("rounded-[18px] border px-3 py-2.5", tone)}>
       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-2 text-2xl font-black leading-none">{value}</p>
+      <p className="mt-1.5 text-xl font-black leading-none sm:text-2xl">{value}</p>
       {note && <p className="mt-1.5 text-xs leading-relaxed text-white/52">{note}</p>}
     </div>
   );
@@ -157,13 +156,13 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           </div>
           <h3 className="mt-4 text-2xl font-black text-white">Unlock the thesis, not just the pick</h3>
           <p className="mt-2 text-sm leading-relaxed text-white/58">
-            See the exact market angle, confidence, ranked ladder, and trust notes that explain why the model likes — or skips — this match.
+            See the exact market angle, confidence, and trust notes that explain why the model likes — or skips — this match.
           </p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <MetricTile label="Verdict" value="Locked" note="Single, acca, or pass" />
             <MetricTile label="Trust" value="Lineups" note="Confirmation and absences" />
-            <MetricTile label="Board" value="Ladder" note="Ranked market options" />
+            <MetricTile label="Alternate" value="1 backup" note="One secondary route only" />
           </div>
 
           <button
@@ -211,7 +210,6 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const gameScript = (data as any)?.gameScript;
   const narrative = (data as any)?.narrative || null;
   const verdict = rec.verdict || null;
-  const marketLadder = Array.isArray((data as any)?.predictions?.market_ladder) ? (data as any).predictions.market_ladder : [];
   const lineupIntel = rec.lineupIntelligence || (data as any)?.features?.lineupIntelligence || null;
   const homeTeam = matchData?.fixture?.home_team_name || (data as any)?.fixture?.homeTeam || "Home";
   const awayTeam = matchData?.fixture?.away_team_name || (data as any)?.fixture?.awayTeam || "Away";
@@ -251,17 +249,20 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   );
   const metaStatus = advisorMeta(advisorStatusRaw);
   const consistencyLabel = RISK_LABELS[riskLabel] || riskLabel;
+  const secondaryPick = backups.find((pick: any) => (pick?.pick || pick?.market) && (pick.pick || pick.market) !== (rec.pick || rec.market)) || backups[0] || null;
+  const secondaryConfidence = secondaryPick ? secondaryPick.probability_pct ?? Math.round((secondaryPick.probability || 0) * 100) : null;
+  const secondaryTier = secondaryPick ? getConfidenceTier(secondaryConfidence || 0) : null;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_320px]">
-      <div className="space-y-4">
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_280px] xl:grid-cols-[minmax(0,1.28fr)_300px]">
+      <div className="space-y-3">
         <Section
           eyebrow="Phantom verdict"
           title={isNoPick ? "No active bet on this board" : (rec.pick || "No clear pick")}
           description={verdictHeadline}
           icon={Target}
           tone={isNoPick ? "amber" : "primary"}
-          aside={<ConfidenceRing value={displayConfidence || 0} size={88} strokeWidth={4.5} showLabel label="Model" />}
+          aside={<ConfidenceRing value={displayConfidence || 0} size={72} strokeWidth={4} showLabel label="Model" />}
         >
           <div className="flex flex-wrap gap-2">
             <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", metaStatus.className)}>{metaStatus.chip}</span>
@@ -280,7 +281,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             )}
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
             <MetricTile label="Model probability" value={formatPct(displayConfidence, 0) || "—"} note={`${confidenceTier.label} confidence`} accent="primary" />
             <MetricTile label="Book price" value={priceLabel || "Model only"} note={priceLabel ? "Best available read" : "No live bookmaker quote"} />
             <MetricTile label="Edge" value={edgePct != null ? `${edgePct >= 0 ? "+" : ""}${edgePct.toFixed(1)}pp` : "No board"} note={hasValue ? "Model above the market" : "No clean value gap"} accent={hasValue ? "primary" : "default"} />
@@ -302,15 +303,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           ) : (
             <>
               {Array.isArray(supportLines) && supportLines.length > 0 && (
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {supportLines.slice(0, 2).map((item, index) => (
-                    <div key={`${item}-${index}`} className="rounded-2xl border border-emerald-400/14 bg-emerald-400/[0.06] px-4 py-3">
-                      <div className="flex items-start gap-2.5">
-                        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                        <p className="text-sm leading-relaxed text-emerald-100/78">{item}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="mt-3 rounded-[18px] border border-emerald-400/14 bg-emerald-400/[0.06] px-3.5 py-3">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                    <p className="text-sm leading-relaxed text-emerald-100/78">{supportLines[0]}</p>
+                  </div>
                 </div>
               )}
 
@@ -333,8 +330,8 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             description="The support case is separated from the watchouts so the thesis stays clear instead of noisy."
             icon={ShieldCheck}
           >
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_0.9fr]">
-              <div className="rounded-[24px] border border-white/[0.06] bg-black/20 p-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.08fr)_0.92fr]">
+              <div className="rounded-[20px] border border-white/[0.06] bg-black/20 p-3.5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Support</p>
                 <div className="mt-3 space-y-3">
                   {supportLines.length > 0 ? supportLines.slice(0, 4).map((item, index) => (
@@ -349,7 +346,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-[24px] border border-amber-400/14 bg-amber-400/[0.05] p-4">
+                <div className="rounded-[20px] border border-amber-400/14 bg-amber-400/[0.05] p-3.5">
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/70">Watchouts</p>
                   <div className="mt-3 space-y-3">
                     {cautionLines.length > 0 ? cautionLines.slice(0, 3).map((item, index) => (
@@ -364,7 +361,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                 </div>
 
                 {reasonLines.length > 0 && (
-                  <div className="rounded-[24px] border border-white/[0.06] bg-black/20 p-4">
+                  <div className="rounded-[20px] border border-white/[0.06] bg-black/20 p-3.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Extra signals</p>
                     <div className="mt-3 space-y-2.5">
                       {reasonLines.slice(0, 4).map((line, index) => (
@@ -381,85 +378,28 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           </Section>
         )}
 
-        {marketLadder.length > 0 && !isNoPick && (
+        {secondaryPick && !isNoPick && (
           <Section
-            eyebrow="Board view"
-            title="Ranked market ladder"
-            description={verdict?.ladderSummary || "The top of the board is ranked by model probability, fit, and value context."}
-            icon={BarChart2}
-          >
-            <div className="space-y-3">
-              {marketLadder.slice(0, 5).map((entry: any) => {
-                const ladderStatus = advisorMeta(entry.advisor_status || advisorStatusRaw);
-                return (
-                  <div
-                    key={`${entry.marketKey || entry.pick}-${entry.rank}`}
-                    className={cn(
-                      "rounded-[24px] border p-4",
-                      entry.isPrimary ? "border-primary/16 bg-primary/[0.07]" : "border-white/[0.06] bg-black/20"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn(
-                            "inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-black",
-                            entry.isPrimary ? "bg-primary text-black" : "bg-white/[0.06] text-white/55"
-                          )}>
-                            {entry.rank}
-                          </span>
-                          <p className="text-base font-black text-white">{entry.pick}</p>
-                          <span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em]", ladderStatus.className)}>{ladderStatus.chip}</span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
-                          {entry.marketFamilyLabel && <span>{entry.marketFamilyLabel}</span>}
-                          {entry.rationaleTag && <span className="text-primary/85">• {entry.rationaleTag}</span>}
-                          {entry.cautionTag && <span className="text-amber-300/75">• {entry.cautionTag}</span>}
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <p className="text-lg font-black text-white">{formatPct(entry.probability_pct, 0) || "—"}</p>
-                        <p className="text-[11px] text-white/35">{entry.odds ? `${Number(entry.odds).toFixed(2)} odds` : "model only"}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
-        {backups.length > 0 && !isNoPick && (
-          <Section
-            eyebrow="Secondary angles"
-            title="Other liveable options"
-            description="These sit behind the primary pick on the ladder, but they are still viable if you want an alternate route."
+            eyebrow="Secondary angle"
+            title="One alternate route"
+            description="The panel stays focused on the main recommendation and one fallback option only."
             icon={Sparkles}
           >
-            <div className="space-y-3">
-              {backups.slice(0, 3).map((pick: any, index: number) => {
-                const backupConf = pick.probability_pct ?? Math.round((pick.probability || 0) * 100);
-                const tier = getConfidenceTier(backupConf);
-                return (
-                  <div key={`${pick.pick || pick.market}-${index}`} className="flex items-center justify-between gap-3 rounded-[24px] border border-white/[0.06] bg-black/20 px-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="text-base font-bold text-white">{pick.pick || pick.market}</p>
-                      <p className="mt-1 text-[11px] text-white/40">{(pick.marketLabel || pick.market || "").replace(/_/g, " ")}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-lg font-black text-white">{formatPct(backupConf, 0)}</p>
-                      <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]", tier.cls)}>{tier.label}</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center justify-between gap-3 rounded-[20px] border border-white/[0.06] bg-black/20 px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-bold text-white">{secondaryPick.pick || secondaryPick.market}</p>
+                <p className="mt-1 text-[11px] text-white/40">{(secondaryPick.marketLabel || secondaryPick.market || "").replace(/_/g, " ")}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-base font-black text-white">{formatPct(secondaryConfidence, 0)}</p>
+                {secondaryTier && <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]", secondaryTier.cls)}>{secondaryTier.label}</span>}
+              </div>
             </div>
           </Section>
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {lineupIntel && (
           <Section
             eyebrow="Trust input"

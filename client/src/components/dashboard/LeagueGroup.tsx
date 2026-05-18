@@ -96,6 +96,7 @@ export function LeagueGroup({
                 lineupIntelligence={fixture.lineup_intelligence}
                 verdict={fixture.verdict}
                 isPremium={isPremium}
+                showPrediction={false}
               />
             );
           })}

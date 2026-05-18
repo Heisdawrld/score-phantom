@@ -3,11 +3,7 @@ import { format, addDays, isSameDay } from "date-fns";
 import { useAccess } from "@/hooks/use-access";
 import { useFixtures } from "@/hooks/use-fixtures";
 import { Header } from "@/components/layout/Header";
-import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
-import { CountdownTimer } from "@/components/ui/CountdownTimer";
 import {
   ChevronRight, ChevronDown, Search, Trophy, Crown, Zap, Lock, Flame, TrendingUp
 } from "lucide-react";
@@ -18,10 +14,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
-import { TeamLogo } from "@/components/TeamLogo";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
-import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
-import { PremiumPickCard } from "@/components/discovery/PremiumPickCard";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,17 +55,6 @@ function fifaToEmoji(fifaCode: string): string {
     'HUN': '🇭🇺', 'ISR': '🇮🇱', 'SAU': '🇸🇦', 'ARE': '🇦🇪', 'IND': '🇮🇳',
   };
   return FIFA_EMOJI[code] || '⚽';
-}
-
-function extractPickSignals(pick: any) {
-  const factors = pick?.factors || {};
-  const signals: string[] = [];
-  if (factors.form) signals.push('Form');
-  if (factors.xg) signals.push('xG');
-  if (factors.tactical) signals.push('Tactical');
-  if (factors.lineup || factors.injury) signals.push('Lineups');
-  if (factors.sharp) signals.push('Price');
-  return [...new Set(signals)].slice(0, 3);
 }
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────
@@ -127,7 +109,6 @@ export default function Dashboard() {
   const [showPayBanner, setShowPayBanner] = useState(() => new URLSearchParams(window.location.search).get("payment") === "success");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeGroupTab, setActiveGroupTab] = useState<"all" | "favorites" | "live">("all");
-  const [selectedFixtureId, setSelectedFixtureId] = useState<string | null>(null);
   const [dailyLimitHit, setDailyLimitHit] = useState(false);
 
   const formattedDate = format(selectedDate, "yyyy-MM-dd");
@@ -136,12 +117,6 @@ export default function Dashboard() {
 
   useScrollRestoration("dashboard", !fixturesLoading && !authLoading);
 
-  const { data: heroData } = useQuery({ queryKey: ["/api/hero-pick"], queryFn: () => fetchApi("/top-picks-today?limit=1"), enabled: !authLoading, staleTime: 5 * 60 * 1000 });
-  // BUG FIX: Don't show hero card if the top pick is AVOID — showing an AVOID pick
-  // as "Top Pick" with green glow is contradictory and confuses users.
-  const rawHeroPick = (heroData as any)?.picks?.[0] || null;
-  const heroPick = rawHeroPick && rawHeroPick.advisor_status !== 'AVOID' && rawHeroPick.advisor_status !== 'SKIP' && rawHeroPick.valueTier !== 'JUNK' && rawHeroPick.valueTier !== 'NEGATIVE_EV'
-    ? rawHeroPick : null;
   const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30&sport=football"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
   const trackStats = (trackData as any)?.overallStats || null;
 
@@ -208,10 +183,6 @@ export default function Dashboard() {
   const handleSelectFixture = (id: string) => {
     setLocation("/matches/" + id);
   };
-  const handlePredictionError = (code: string) => {
-    if (code === "daily_limit_reached") setDailyLimitHit(true);
-  };
-
   const leagues = Object.entries(groupedFixtures).sort(([, a]: any, [, b]: any) => a.label.localeCompare(b.label));
   const allFixtures = data?.fixtures || [];
   const displayName = (user as any)?.username || (user?.email ? user.email.split('@')[0] : 'User');
@@ -290,42 +261,6 @@ export default function Dashboard() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* ── Today's Top Pick — Premium Glow Card ── */}
-        {heroPick && (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="w-full"
-          >
-            <PremiumPickCard
-              onClick={() => setLocation(`/matches/${heroPick.fixtureId}`)}
-              eyebrow="Today's premium angle"
-              homeTeam={heroPick.homeTeam}
-              awayTeam={heroPick.awayTeam}
-              homeLogo={heroPick.homeLogo}
-              awayLogo={heroPick.awayLogo}
-              tournament={heroPick.tournament}
-              tournamentId={heroPick.tournamentId}
-              timeLabel={heroPick.time}
-              pickLabel={heroPick.pick}
-              marketLabel={String(heroPick.market || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-              probabilityPct={heroPick.probability}
-              compositeScore={heroPick.composite ?? heroPick.confidence}
-              advisorStatus={heroPick.advisor_status}
-              valueTier={heroPick.valueTier}
-              ev={heroPick.ev}
-              isSafeBet={heroPick.isSafeBet}
-              isValueBet={heroPick.isValueBet}
-              isAccaEligible={heroPick.isAccaEligible}
-              verdict={heroPick.verdict}
-              lineupIntelligence={heroPick.lineupIntelligence}
-              signals={extractPickSignals(heroPick)}
-              highlight
-            />
-          </motion.div>
-        )}
 
         {/* ── Date Strip ── */}
         <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain -mx-1 px-1">
@@ -444,12 +379,6 @@ export default function Dashboard() {
         )}
       </main>
 
-      <PredictionPanel
-        fixtureId={selectedFixtureId}
-        onClose={() => setSelectedFixtureId(null)}
-        onError={handlePredictionError}
-        limitReached={isDailyLimitHit}
-      />
     </div>
   );
 }
