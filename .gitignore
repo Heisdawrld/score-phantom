@@ -6,6 +6,12 @@ client/dist/
 *.db-shm
 *.db-wal
 *.sqlite
+upload/
+download/
+worklog.md
+api-docs.json
+health-check.json
+live-site.json
 user_emails_export.csv
 .claude/
 .claude-flow/

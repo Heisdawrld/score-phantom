@@ -119,7 +119,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }
 
   // Check admin status — user must be authenticated AND be admin
-  const isAdmin = (user as any)?.is_admin || (user as any)?.email === 'davidadiele7@gmail.com';
+  const isAdmin = (user as any)?.is_admin === true;
   if (!isAdmin) {
     return <RedirectTo path="/" />;
   }

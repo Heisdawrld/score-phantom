@@ -4,6 +4,15 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
+import { requireAdminSecret } from '../middlewares/adminGuard.js';
+import {
+  PLAN_AMOUNT_NGN,
+  PLAN_DURATION_DAYS,
+  WEEKLY_PLAN_AMOUNT_NGN,
+  WEEKLY_PLAN_DURATION_DAYS,
+  TRIAL_DURATION_DAYS,
+  getFutureIsoFromNow,
+} from '../config/accessPlans.js';
 
 import disposableDomains from 'disposable-email-domains' with { type: "json" };
 
@@ -20,17 +29,10 @@ if (!JWT_SECRET) {
 }
 
 const ADMIN_EMAIL     = (process.env.ADMIN_EMAIL     || "").trim().toLowerCase();
-const ADMIN_SECRET    = process.env.ADMIN_SECRET || "";
 const APP_URL         = process.env.APP_URL          || "";
 const FLW_SECRET      = process.env.FLUTTERWAVE_SECRET_KEY || "";
 const FLW_PUBLIC      = process.env.FLUTTERWAVE_PUBLIC_KEY  || "";
 const FLW_ENCRYPTION  = process.env.FLUTTERWAVE_ENCRYPTION_KEY || "";
-
-const PLAN_AMOUNT_NGN  = 3000;       // ₦3,000 — always store in naira
-const PLAN_DURATION_DAYS = 30;
-const WEEKLY_PLAN_AMOUNT_NGN = 1000; // ₦1,000 — 1 week package
-const WEEKLY_PLAN_DURATION_DAYS = 7;
-const TRIAL_DURATION_DAYS = 7;       // 7-day free trial
 
 // ── Rate Limiters ────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
@@ -537,7 +539,7 @@ router.post("/google", authLimiter, async (req, res) => {
 
     if (!user) {
       // Brand-new user — create with trial starting NOW
-      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const trialEnds = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
       await db.execute({
         sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [email, firebaseUid, trialEnds],
@@ -629,7 +631,7 @@ router.post("/email", authLimiter, async (req, res) => {
 
     if (!user) {
       // Brand-new user — create with trial starting NOW
-      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const trialEnds = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
       await db.execute({
         sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
         args: [normalizedEmail, firebaseUid, trialEnds],
@@ -750,12 +752,11 @@ router.post("/signup", authLimiter, async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
-    const trialEnds      = new Date();
-    trialEnds.setDate(trialEnds.getDate() + TRIAL_DURATION_DAYS);
+    const trialEnds = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
 
     await db.execute({
       sql: `INSERT INTO users (email, password_hash, status, trial_ends_at, email_verified) VALUES (?, ?, ?, ?, 1)`,
-      args: [normalizedEmail, hashedPassword, "trial", trialEnds.toISOString()],
+      args: [normalizedEmail, hashedPassword, "trial", trialEnds],
     });
 
     const created = await db.execute({
@@ -850,7 +851,7 @@ router.get("/verify-email", async (req, res) => {
     }
 
     // Reset trial so it starts NOW (not at signup time) — prevents trial expiring during email gate
-    const freshTrialEnd = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const freshTrialEnd = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
     await db.execute({
       sql: `UPDATE users SET email_verified = 1, email_verification_token = NULL, trial_ends_at = ? WHERE id = ?`,
       args: [freshTrialEnd, user.id],
@@ -1311,13 +1312,6 @@ router.get("/referral-stats", requireAuth, async (req, res) => {
 });
 
 // ── Admin routes ──────────────────────────────────────────────────────────────
-
-function requireAdminSecret(req, res, next) {
-  const secret = req.headers["x-admin-secret"];
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
-}
 
 // POST /api/auth/admin/verify-payment
 router.post("/admin/verify-payment", adminLimiter, requireAdminSecret, async (req, res) => {
