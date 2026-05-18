@@ -511,6 +511,17 @@ async function pollLiveScores() {
     console.warn('[Live] BSD poll error:', err.message);
   }
 }
-export function startLiveScoreWatcher() { if (pollTimer) return; console.log('[Live] Starting BSD live polling (60s)'); pollLiveScores(); pollTimer = setInterval(pollLiveScores, 60000); isConnected = true; }
+export function startLiveScoreWatcher() {
+  if (pollTimer) return;
+  if (!process.env.BSD_API_KEY) {
+    console.warn('[Live] BSD_API_KEY missing — live score watcher disabled');
+    isConnected = false;
+    return;
+  }
+  console.log('[Live] Starting BSD live polling (60s)');
+  pollLiveScores();
+  pollTimer = setInterval(pollLiveScores, 60000);
+  isConnected = true;
+}
 export function getLiveStatus() { return { connected: isConnected, sseClients: sseClients.size }; }
 export function stopLiveScoreWatcher() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } isConnected = false; }

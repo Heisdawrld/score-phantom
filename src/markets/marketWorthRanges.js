@@ -100,10 +100,10 @@ const MARKET_WORTH = {
   },
   under_35: {
     label: 'Under 3.5 Goals',
-    junkMax: 1.22,        // Under 3.5 at 1.15-1.20 is comfort junk
-    acceptableMin: 1.25,
-    sweetMin: 1.30,       // Sweet spot: 1.30-1.50 — fair return for high-prob market
-    sweetMax: 1.50,
+    junkMax: 1.32,        // Historical ROI is poor below ~1.35 despite the hit rate
+    acceptableMin: 1.38,
+    sweetMin: 1.45,
+    sweetMax: 1.65,
     escalations: ['under_25', 'btts_no'],
     escalationReason: 'Under 3.5 odds too cheap — checking Under 2.5 or BTTS No for better value',
   },
@@ -120,10 +120,10 @@ const MARKET_WORTH = {
   },
   btts_no: {
     label: 'BTTS No',
-    junkMax: 1.30,        // BTTS No at 1.25 is too cheap
-    acceptableMin: 1.35,
-    sweetMin: 1.40,       // Sweet spot: 1.40-1.70
-    sweetMax: 1.70,
+    junkMax: 1.42,        // Sub-1.45 has been a weak long-run return band
+    acceptableMin: 1.50,
+    sweetMin: 1.65,
+    sweetMax: 1.95,
     escalations: ['under_25', 'under_35'],
     escalationReason: 'BTTS No odds too low — checking Under 2.5 for similar exposure',
   },

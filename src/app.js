@@ -53,12 +53,16 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
 ].filter(Boolean);
+const allowedOriginSuffixes = [
+  '.onrender.com',
+  '.e2b.app',
+];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (origin.endsWith('.onrender.com')) return callback(null, true);
+    if (allowedOriginSuffixes.some((suffix) => origin.endsWith(suffix))) return callback(null, true);
     return callback(new Error('CORS blocked'), false);
   },
   credentials: true,
@@ -326,9 +330,14 @@ export { autoEnrich };
 app.use(errorHandler);
 
 app.listen(PORT, async () => {
+  const hasBsdKey = Boolean(process.env.BSD_API_KEY);
+  const selfUrl = String(process.env.APP_URL || '').trim();
+
   console.log("ScorePhantom running on port " + PORT);
   startLiveScoreWatcher();
-  console.log("[Live] BSD live score watcher started");
+  if (hasBsdKey) {
+    console.log("[Live] BSD live score watcher started");
+  }
   await initUsersTable();
   await initPredictionsTable();
   await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
@@ -341,7 +350,11 @@ app.listen(PORT, async () => {
     runMaintenanceJobs().catch(err => console.error("[Maintenance] Scheduled run failed:", err.message));
   }, 24 * 60 * 60 * 1000);
 
-  await autoSeed();
+  if (hasBsdKey) {
+    await autoSeed();
+  } else {
+    console.warn('[Startup] BSD_API_KEY missing — skipping auto-seed and BSD-dependent startup jobs');
+  }
 
   // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
   // This ensures all fixtures for the week get enriched on startup
@@ -359,20 +372,22 @@ app.listen(PORT, async () => {
       console.error('[AutoEnrich/PredRunner] startup error:', err.message);
     });
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
-  setTimeout(async () => {
-    const backfillStart = Date.now();
-    try {
-      const { autoBuildPredictions } = await import("./services/predictionRunner.js");
-      await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
-      const { backfillResults } = await import("./services/resultChecker.js");
-      const res = await backfillResults(30);
-      recordJobRun('startup_backfill', { success: true, durationMs: Date.now() - backfillStart, meta: { days: 30, results: res.length } });
-      console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
-    } catch (err) {
-      recordJobRun('startup_backfill', { success: false, durationMs: Date.now() - backfillStart, error: err.message });
-      console.error("[ResultChecker] Startup backfill failed:", err.message);
-    }
-  }, 30000);
+  if (hasBsdKey) {
+    setTimeout(async () => {
+      const backfillStart = Date.now();
+      try {
+        const { autoBuildPredictions } = await import("./services/predictionRunner.js");
+        await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
+        const { backfillResults } = await import("./services/resultChecker.js");
+        const res = await backfillResults(30);
+        recordJobRun('startup_backfill', { success: true, durationMs: Date.now() - backfillStart, meta: { days: 30, results: res.length } });
+        console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
+      } catch (err) {
+        recordJobRun('startup_backfill', { success: false, durationMs: Date.now() - backfillStart, error: err.message });
+        console.error("[ResultChecker] Startup backfill failed:", err.message);
+      }
+    }, 30000);
+  }
 
   // Continuous enrichment pipeline: Every 15 minutes, aggressively prefetch data
   setInterval(async () => {
@@ -441,12 +456,16 @@ app.listen(PORT, async () => {
         console.error('[DailySeed] Failed:', err.message);
       }
       scheduleDaily7amDigest();
-  scheduleNextMidnightSeed();
+      scheduleNextMidnightSeed();
     }, msUntilMidnight);
     const hrs = Math.round(msUntilMidnight / 3600000);
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');
   }
-  scheduleNextMidnightSeed();
+  if (hasBsdKey) {
+    scheduleNextMidnightSeed();
+  } else {
+    console.warn('[DailySeed] BSD_API_KEY missing — midnight re-seed scheduler disabled');
+  }
 
   // ── Daily result checker: runs at 2 AM Lagos time to evaluate yesterday's picks ──
   function scheduleNextResultCheck() {
@@ -472,36 +491,45 @@ app.listen(PORT, async () => {
     const hrs = Math.round(ms / 3600000);
     console.log(`[ResultChecker] Next check in ~${hrs}h`);
   }
-  scheduleNextResultCheck();
+  if (hasBsdKey) {
+    scheduleNextResultCheck();
+  } else {
+    console.warn('[ResultChecker] BSD_API_KEY missing — scheduled result checks disabled');
+  }
 
   // Team logos now served via BSD URL template — no scheduled fill needed.
 
   // Run result checker every 3h during the day to catch todays results as they finish
-  setInterval(async () => {
-    try {
-      const today     = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
-      const yesterday = new Date(Date.now() - 86400000).toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
-      const r1 = await checkResults(today);
-      console.log("[ResultChecker] 3h check (today):", r1.outcomes);
-      const r2 = await checkResults(yesterday);
-      if (r2.outcomes?.updated > 0) {
-        console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
-        // New results came in — refresh accuracy cache
-        await refreshAccuracyCache().catch(() => {});
-      }
-    } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
-  }, 3 * 60 * 60 * 1000);
+  if (hasBsdKey) {
+    setInterval(async () => {
+      try {
+        const today     = new Date().toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+        const yesterday = new Date(Date.now() - 86400000).toLocaleString("en-CA", { timeZone: "Africa/Lagos" }).split(",")[0].trim();
+        const r1 = await checkResults(today);
+        console.log("[ResultChecker] 3h check (today):", r1.outcomes);
+        const r2 = await checkResults(yesterday);
+        if (r2.outcomes?.updated > 0) {
+          console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
+          // New results came in — refresh accuracy cache
+          await refreshAccuracyCache().catch(() => {});
+        }
+      } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
+    }, 3 * 60 * 60 * 1000);
+  }
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing
   // the server to cold-start on the next request, which makes /auth/me
   // fail and logs users out on browser refresh.
-  const SELF_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
-  setInterval(() => {
-    fetch(SELF_URL + '/api/version')
-      .then(() => console.log('[KeepAlive] ping ok'))
-      .catch((e) => console.warn('[KeepAlive] ping failed:', e.message));
-  }, 10 * 60 * 1000); // every 10 minutes
-  console.log('[KeepAlive] Self-ping started — pinging every 10 min');
+  if (process.env.NODE_ENV === 'production' && selfUrl) {
+    setInterval(() => {
+      fetch(selfUrl + '/api/version')
+        .then(() => console.log('[KeepAlive] ping ok'))
+        .catch((e) => console.warn('[KeepAlive] ping failed:', e.message));
+    }, 10 * 60 * 1000); // every 10 minutes
+    console.log('[KeepAlive] Self-ping started — pinging every 10 min');
+  } else {
+    console.log('[KeepAlive] Skipped outside production or without APP_URL');
+  }
 
 });
 
