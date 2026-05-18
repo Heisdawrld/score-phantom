@@ -1,35 +1,180 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
-import { Users, AlertCircle } from "lucide-react";
+import { AlertCircle, ShieldCheck, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 
-function getPlayerName(p: any) {
-  return p?.name || p?.player_name || p?.player?.name || p?.short_name || 'Unknown player';
+function getPlayerName(player: any) {
+  return player?.name || player?.player_name || player?.player?.name || player?.short_name || "Unknown player";
 }
 
-function getMissingReason(p: any) {
-  return p?.reason || p?.status || p?.type || 'Unavailable';
+function getMissingReason(player: any) {
+  return player?.reason || player?.status || player?.type || "Unavailable";
 }
 
-function formatConfidence(value: any) {
-  const num = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(num)) return null;
-  return `${Math.round(num * 100)}%`;
+function certaintyTone(status?: string | null) {
+  const low = String(status || "").toLowerCase();
+  if (low === "confirmed") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+  if (low === "predicted") return "border-amber-400/20 bg-amber-400/10 text-amber-300";
+  return "border-white/[0.08] bg-white/[0.03] text-white/45";
 }
 
-function statusTone(status: any) {
-  const low = String(status || '').toLowerCase();
-  if (low === 'confirmed') return 'bg-primary/15 text-primary border-primary/25';
-  if (low === 'predicted') return 'bg-amber-400/10 text-amber-300 border-amber-400/20';
-  return 'bg-white/5 text-white/40 border-white/10';
+function absenceTone(score?: number | null) {
+  const value = Number(score || 0);
+  if (value >= 0.55) return "border-red-500/18 bg-red-500/10 text-red-300";
+  if (value >= 0.25) return "border-amber-400/18 bg-amber-400/10 text-amber-300";
+  return "border-emerald-400/18 bg-emerald-400/10 text-emerald-300";
 }
 
-export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureId?: string }) {
+function MetricTile({ label, value, note, tone = "default" }: { label: string; value: string; note?: string | null; tone?: "default" | "primary" | "amber" | "red"; }) {
+  const classes = {
+    default: "border-white/[0.08] bg-black/20 text-white",
+    primary: "border-primary/16 bg-primary/10 text-primary",
+    amber: "border-amber-400/18 bg-amber-400/10 text-amber-300",
+    red: "border-red-500/18 bg-red-500/10 text-red-300",
+  }[tone];
+
+  return (
+    <div className={cn("rounded-2xl border px-3.5 py-3", classes)}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{label}</p>
+      <p className="mt-2 text-2xl font-black leading-none">{value}</p>
+      {note && <p className="mt-1.5 text-xs leading-relaxed text-white/52">{note}</p>}
+    </div>
+  );
+}
+
+function TeamLineupPanel({
+  teamName,
+  formation,
+  starters,
+  substitutes,
+  unavailable,
+  intelligence,
+}: {
+  teamName: string;
+  formation?: string | null;
+  starters: any[];
+  substitutes: any[];
+  unavailable: any[];
+  intelligence?: any;
+}) {
+  const confidencePct = intelligence?.confidence != null ? Math.round(Number(intelligence.confidence) * 100) : null;
+  const absenceScorePct = intelligence?.weightedAbsenceScore != null ? Math.round(Number(intelligence.weightedAbsenceScore) * 100) : null;
+  const startersList = starters.slice(0, 11);
+  const keyReasons = Array.isArray(intelligence?.keyAbsenceReasons) ? intelligence.keyAbsenceReasons.slice(0, 2) : [];
+  const missingList = unavailable.slice(0, 4);
+
+  return (
+    <div className="rounded-[28px] border border-white/[0.08] bg-[linear-gradient(155deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-lg font-black text-white">{teamName}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {formation && (
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/42">
+                {formation}
+              </span>
+            )}
+            {intelligence?.status && (
+              <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", certaintyTone(intelligence.status))}>
+                {intelligence.status}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {confidencePct != null ? (
+          <ConfidenceRing value={confidencePct} size={72} strokeWidth={4} showLabel label="Trust" />
+        ) : (
+          <div className="rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Status</p>
+            <p className="mt-2 text-lg font-black text-white/65">Waiting</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MetricTile label="Starters" value={String(starters.length)} note="Expected XI count" />
+        <MetricTile label="Bench" value={String(substitutes.length)} note="Listed substitutes" />
+        <MetricTile
+          label="Absence load"
+          value={absenceScorePct != null ? `${absenceScorePct}%` : `${unavailable.length}`}
+          note={absenceScorePct != null ? "Weighted impact score" : "Unavailable players listed"}
+          tone={absenceScorePct != null ? (absenceScorePct >= 55 ? "red" : absenceScorePct >= 25 ? "amber" : "primary") : unavailable.length > 2 ? "amber" : "default"}
+        />
+      </div>
+
+      <div className="mt-4 rounded-[24px] border border-white/[0.06] bg-black/20 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Projected XI</p>
+          {confidencePct != null && <p className="text-[11px] text-white/42">{confidencePct}% confidence</p>}
+        </div>
+
+        {startersList.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {startersList.map((player: any, index: number) => (
+              <div key={`${getPlayerName(player)}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white/88">{getPlayerName(player)}</p>
+                  <p className="mt-0.5 text-[11px] text-white/38">#{player.jersey_number || "—"}</p>
+                </div>
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
+                  {player.position || "Role"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-sm text-white/48">
+            The full starting XI has not been published yet.
+          </div>
+        )}
+      </div>
+
+      {(missingList.length > 0 || keyReasons.length > 0) && (
+        <div className="mt-4 rounded-[24px] border border-white/[0.06] bg-black/20 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Absence watch</p>
+            {absenceScorePct != null && (
+              <span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em]", absenceTone(intelligence?.weightedAbsenceScore))}>
+                {absenceScorePct}% impact
+              </span>
+            )}
+          </div>
+
+          {keyReasons.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {keyReasons.map((reason: string, index: number) => (
+                <div key={`${reason}-${index}`} className="flex items-start gap-2.5 rounded-2xl border border-amber-400/16 bg-amber-400/[0.05] px-3 py-2.5">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                  <p className="text-sm leading-relaxed text-amber-100/78">{reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {missingList.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {missingList.map((player: any, index: number) => (
+                <div key={`${getPlayerName(player)}-${index}`} className="rounded-2xl border border-red-500/14 bg-red-500/[0.05] px-3 py-2.5">
+                  <p className="text-sm font-semibold text-white/85">{getPlayerName(player)}</p>
+                  <p className="mt-1 text-[11px] text-red-200/72">{getMissingReason(player)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function LineupsTab({ matchData, fixtureId }: { matchData?: any; fixtureId?: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['predicted-lineup', fixtureId],
+    queryKey: ["predicted-lineup", fixtureId],
     queryFn: async () => {
       if (!fixtureId) return null;
-      const res = await fetchApi(`/predicted-lineup/${fixtureId}/`);
-      return res;
+      return fetchApi(`/predicted-lineup/${fixtureId}/`);
     },
     enabled: !!fixtureId,
   });
@@ -48,8 +193,8 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
 
   if (isLiveFormat) {
     const allPlayers = matchData.meta.lineups || [];
-    homeLineup = allPlayers.filter((p: any) => p.is_home);
-    awayLineup = allPlayers.filter((p: any) => !p.is_home);
+    homeLineup = allPlayers.filter((player: any) => player.is_home);
+    awayLineup = allPlayers.filter((player: any) => !player.is_home);
   } else if (data && data.lineups) {
     homeLineup = data.lineups.home?.starters || data.lineups.home?.players || data.lineups.home?.lineup || [];
     awayLineup = data.lineups.away?.starters || data.lineups.away?.players || data.lineups.away?.lineup || [];
@@ -68,161 +213,83 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
     awayFormation = matchData?.meta?.lineups?.away?.formation || null;
   }
 
-  // BSD v2 enrichment stores unavailable players in meta.injuries. Use it as a
-  // safe fallback when the fresh lineup endpoint has no unavailable block yet.
   if (homeUnavailable.length === 0) homeUnavailable = matchData?.meta?.injuries?.home || [];
   if (awayUnavailable.length === 0) awayUnavailable = matchData?.meta?.injuries?.away || [];
 
   const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
-  const hasMissingPlayers = homeUnavailable.length > 0 || awayUnavailable.length > 0;
+  const certaintyPct = lineupIntel?.certaintyScore != null ? Math.round(Number(lineupIntel.certaintyScore) * 100) : null;
+  const homeConfidencePct = lineupIntel?.home?.confidence != null ? Math.round(Number(lineupIntel.home.confidence) * 100) : null;
+  const awayConfidencePct = lineupIntel?.away?.confidence != null ? Math.round(Number(lineupIntel.away.confidence) * 100) : null;
 
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+        <div className="h-10 w-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative rounded-2xl overflow-hidden mb-4">
-        {/* Cinematic green glow backdrop */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
-          <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)' }} />
-          <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
-          <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
-        </div>
-        <div className="relative z-10 border border-primary/15 p-4 backdrop-blur-sm h-full">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Starting XIs & Formations</p>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {lineupIntel?.certaintyLabel && (
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.certaintyLabel)}`}>
-                {lineupIntel.certaintyLabel}
-              </span>
-            )}
-            {data?.beta && (
-              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 uppercase">
-                AI PREDICTED
-              </span>
-            )}
-          </div>
-        </div>
-
-        {lineupIntel?.note && (
-          <div className="mb-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-[11px] text-white/65">{lineupIntel.note}</p>
-              {lineupIntel?.certaintyScore != null && (
-                <span className="text-[10px] font-bold text-white/40">{formatConfidence(lineupIntel.certaintyScore)} certainty</span>
-              )}
+    <div className="space-y-4">
+      <div className="rounded-[28px] border border-white/[0.08] bg-[linear-gradient(155deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+              <Users className="h-3.5 w-3.5 text-primary" /> Lineup trust
             </div>
-          </div>
-        )}
-
-        {hasLineups ? (
-          <div className="space-y-6">
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="flex flex-col items-center mb-3 pb-2 border-b border-white/10">
-                    <h3 className="text-sm font-bold text-white text-center leading-tight mb-1">{matchData?.fixture?.home_team_name}</h3>
-                    {homeFormation && <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">{homeFormation}</span>}
-                    {lineupIntel?.home && (
-                      <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.home.status)}`}>{lineupIntel.home.status || 'unknown'}</span>
-                        {formatConfidence(lineupIntel.home.confidence) && <span className="text-[10px] text-white/35">{formatConfidence(lineupIntel.home.confidence)}</span>}
-                      </div>
-                    )}
-                  </div>
-                  <ul className="space-y-1.5">
-                    {homeLineup.map((l: any, i: number) => (
-                      <li key={i} className="text-xs text-white/80 flex items-center justify-between bg-white/[0.02] p-1.5 rounded-lg border border-white/[0.03]">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono text-white/30 w-4 text-right">{l.jersey_number || "-"}</span>
-                          <span>{l.player_name || l.name}</span>
-                        </div>
-                        <span className="text-[9px] font-bold text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{l.position}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <div className="flex flex-col items-center mb-3 pb-2 border-b border-white/10">
-                    <h3 className="text-sm font-bold text-white text-center leading-tight mb-1">{matchData?.fixture?.away_team_name}</h3>
-                    {awayFormation && <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">{awayFormation}</span>}
-                    {lineupIntel?.away && (
-                      <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${statusTone(lineupIntel.away.status)}`}>{lineupIntel.away.status || 'unknown'}</span>
-                        {formatConfidence(lineupIntel.away.confidence) && <span className="text-[10px] text-white/35">{formatConfidence(lineupIntel.away.confidence)}</span>}
-                      </div>
-                    )}
-                  </div>
-                  <ul className="space-y-1.5">
-                    {awayLineup.map((l: any, i: number) => (
-                      <li key={i} className="text-xs text-white/80 flex items-center justify-between bg-white/[0.02] p-1.5 rounded-lg border border-white/[0.03]">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono text-white/30 w-4 text-right">{l.jersey_number || "-"}</span>
-                          <span>{l.player_name || l.name}</span>
-                        </div>
-                        <span className="text-[9px] font-bold text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{l.position}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center text-center p-8 bg-black/20 rounded-xl">
-             <Users className="w-8 h-8 text-white/10 mb-2" />
-             <p className="text-xs text-white/30 font-medium">Lineups will be available closer to kick-off</p>
-          </div>
-        )}
-
-        {hasMissingPlayers && (
-          <div className="mt-4 pt-4 border-t border-white/[0.05]">
-            <p className="text-[10px] font-black text-red-400/80 uppercase tracking-wider mb-3 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Missing Players
+            <h3 className="mt-3 text-xl font-black text-white">Starting XIs and absence pressure</h3>
+            <p className="mt-1 text-sm leading-relaxed text-white/55">
+              {lineupIntel?.note || (hasLineups ? "Projected lineups are available for both sides." : "Waiting for lineup publication closer to kick-off.")}
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.home_team_name || 'Home'}</p>
-                {!!lineupIntel?.home?.keyAbsenceReasons?.length && (
-                  <div className="mb-2 space-y-1">
-                    {lineupIntel.home.keyAbsenceReasons.slice(0, 2).map((reason: string, idx: number) => (
-                      <p key={idx} className="text-[10px] text-amber-300/80">• {reason}</p>
-                    ))}
-                  </div>
-                )}
-                {homeUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : homeUnavailable.map((p: any, i: number) => (
-                  <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
-                    <span className="text-white/70 font-medium">{getPlayerName(p)}</span>
-                    <span className="text-red-400/60">{getMissingReason(p)}</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <p className="text-[9px] text-white/30 uppercase mb-2">{matchData?.fixture?.away_team_name || 'Away'}</p>
-                {!!lineupIntel?.away?.keyAbsenceReasons?.length && (
-                  <div className="mb-2 space-y-1">
-                    {lineupIntel.away.keyAbsenceReasons.slice(0, 2).map((reason: string, idx: number) => (
-                      <p key={idx} className="text-[10px] text-amber-300/80">• {reason}</p>
-                    ))}
-                  </div>
-                )}
-                {awayUnavailable.length === 0 ? <p className="text-[10px] text-white/25">No major absences listed</p> : awayUnavailable.map((p: any, i: number) => (
-                  <div key={i} className="text-[10px] mb-1 flex flex-col bg-red-500/5 p-1.5 rounded border border-red-500/10">
-                    <span className="text-white/70 font-medium">{getPlayerName(p)}</span>
-                    <span className="text-red-400/60">{getMissingReason(p)}</span>
-                  </div>
-                ))}
-              </div>
+          </div>
+
+          {certaintyPct != null ? (
+            <ConfidenceRing value={certaintyPct} size={84} strokeWidth={4.5} showLabel label="Certainty" />
+          ) : (
+            <div className="rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Status</p>
+              <p className="mt-2 text-lg font-black text-white/65">Waiting</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <MetricTile label="Certainty" value={certaintyPct != null ? `${certaintyPct}%` : "—"} note={lineupIntel?.certaintyLabel || "No read yet"} tone={certaintyPct != null ? "primary" : "default"} />
+          <MetricTile label="Home trust" value={homeConfidencePct != null ? `${homeConfidencePct}%` : "—"} note={lineupIntel?.home?.status || "Waiting"} tone={homeConfidencePct != null ? "primary" : "default"} />
+          <MetricTile label="Away trust" value={awayConfidencePct != null ? `${awayConfidencePct}%` : "—"} note={lineupIntel?.away?.status || "Waiting"} tone={awayConfidencePct != null ? "primary" : "default"} />
+        </div>
+
+        {!hasLineups && (
+          <div className="mt-4 rounded-[24px] border border-white/[0.06] bg-black/20 p-4">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-sm leading-relaxed text-white/58">
+                We will keep showing absence and certainty signals here even before the final XI is published, so the trust level is still explicit.
+              </p>
             </div>
           </div>
         )}
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <TeamLineupPanel
+          teamName={matchData?.fixture?.home_team_name || "Home"}
+          formation={homeFormation}
+          starters={homeLineup}
+          substitutes={homeSubs}
+          unavailable={homeUnavailable}
+          intelligence={lineupIntel?.home}
+        />
+
+        <TeamLineupPanel
+          teamName={matchData?.fixture?.away_team_name || "Away"}
+          formation={awayFormation}
+          starters={awayLineup}
+          substitutes={awaySubs}
+          unavailable={awayUnavailable}
+          intelligence={lineupIntel?.away}
+        />
+      </div>
     </div>
-  </div>
   );
 }

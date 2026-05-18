@@ -89,10 +89,14 @@ export async function initUsersTable() {
     ["referred_by_user_id",       "ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER"],
     ["referred_by_code",          "ALTER TABLE users ADD COLUMN referred_by_code TEXT"],
     ["partner_id",                "ALTER TABLE users ADD COLUMN partner_id INTEGER"],
-    ["username",                  "ALTER TABLE users ADD COLUMN username TEXT UNIQUE"],
+    ["username",                  "ALTER TABLE users ADD COLUMN username TEXT"],
     ["token_version",             "ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1"],
   ];
   for (const [col, sql] of cols) await ensureColumn("users", col, sql);
+
+  try {
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique_idx ON users(username) WHERE username IS NOT NULL");
+  } catch (e) {}
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (
