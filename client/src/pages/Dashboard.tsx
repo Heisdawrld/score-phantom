@@ -21,6 +21,7 @@ import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
 import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
+import { PremiumPickCard } from "@/components/discovery/PremiumPickCard";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,17 @@ function fifaToEmoji(fifaCode: string): string {
     'HUN': '🇭🇺', 'ISR': '🇮🇱', 'SAU': '🇸🇦', 'ARE': '🇦🇪', 'IND': '🇮🇳',
   };
   return FIFA_EMOJI[code] || '⚽';
+}
+
+function extractPickSignals(pick: any) {
+  const factors = pick?.factors || {};
+  const signals: string[] = [];
+  if (factors.form) signals.push('Form');
+  if (factors.xg) signals.push('xG');
+  if (factors.tactical) signals.push('Tactical');
+  if (factors.lineup || factors.injury) signals.push('Lineups');
+  if (factors.sharp) signals.push('Price');
+  return [...new Set(signals)].slice(0, 3);
 }
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────
@@ -285,73 +297,33 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="relative w-full rounded-2xl overflow-hidden"
+            className="w-full"
           >
-            {/* Cinematic green glow backdrop */}
-            <div className="absolute inset-0 z-0">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
-              {/* Diagonal light streaks */}
-              <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
-                background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
-              }} />
-              <div className="absolute bottom-0 left-0 w-[60%] h-[80%] bg-primary/10 blur-[60px] rounded-full" />
-              <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
-            </div>
-
-            <button
-              onClick={() => setLocation("/matches/" + heroPick.fixtureId)}
-              className="relative z-10 w-full text-left p-5 border border-primary/15 rounded-2xl backdrop-blur-sm"
-            >
-              {/* Top bar: label + dismiss */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-primary" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Top Pick</span>
-                </div>
-                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-white/20 text-xs hover:bg-white/10 transition-colors" onClick={(e) => { e.stopPropagation(); }}>
-                  ×
-                </div>
-              </div>
-
-              {/* Content: match info + confidence ring */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0 flex-1 space-y-3">
-                  <p className="text-base font-black text-white leading-tight">{heroPick.homeTeam} vs {heroPick.awayTeam}</p>
-                  <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-sm font-bold text-white/90 hover:bg-white/[0.1] transition-colors" onClick={(e) => { e.stopPropagation(); setLocation("/matches/" + heroPick.fixtureId); }}>
-                    {heroPick.pick}
-                    <ChevronRight className="w-3.5 h-3.5 text-white/40" />
-                  </button>
-                </div>
-
-                {/* Large circular confidence gauge */}
-                <div className="shrink-0 flex flex-col items-center">
-                  <div className="relative w-[72px] h-[72px]">
-                    {/* Background ring */}
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
-                      <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
-                      <circle
-                        cx="36" cy="36" r="30" fill="none"
-                        stroke="url(#confGrad)"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeDasharray={`${(heroPick.confidence / 100) * 188.5} 188.5`}
-                      />
-                      <defs>
-                        <linearGradient id="confGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#10e774" />
-                          <stop offset="100%" stopColor="#0bc95f" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    {/* Center text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-lg font-black text-white leading-none">{heroPick.confidence}%</span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">Conf.</span>
-                </div>
-              </div>
-            </button>
+            <PremiumPickCard
+              onClick={() => setLocation(`/matches/${heroPick.fixtureId}`)}
+              eyebrow="Today's premium angle"
+              homeTeam={heroPick.homeTeam}
+              awayTeam={heroPick.awayTeam}
+              homeLogo={heroPick.homeLogo}
+              awayLogo={heroPick.awayLogo}
+              tournament={heroPick.tournament}
+              tournamentId={heroPick.tournamentId}
+              timeLabel={heroPick.time}
+              pickLabel={heroPick.pick}
+              marketLabel={String(heroPick.market || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              probabilityPct={heroPick.probability}
+              compositeScore={heroPick.composite ?? heroPick.confidence}
+              advisorStatus={heroPick.advisor_status}
+              valueTier={heroPick.valueTier}
+              ev={heroPick.ev}
+              isSafeBet={heroPick.isSafeBet}
+              isValueBet={heroPick.isValueBet}
+              isAccaEligible={heroPick.isAccaEligible}
+              verdict={heroPick.verdict}
+              lineupIntelligence={heroPick.lineupIntelligence}
+              signals={extractPickSignals(heroPick)}
+              highlight
+            />
           </motion.div>
         )}
 

@@ -30,7 +30,7 @@ import { assessMatchPredictability } from "../engine/assessMatchPredictability.j
 import { runPredictionEngine } from "../engine/runPredictionEngine.js";
 import { generateSimulationTimeline } from "../engine/generateSimulationTimeline.js";
 import { requireAdminAccess } from '../middlewares/adminGuard.js';
-import { extractBestPickFromPredictionJson } from '../utils/predictionJson.js';
+import { extractBestPickFromPredictionJson, extractEngineResultFromPredictionJson } from '../utils/predictionJson.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -57,6 +57,35 @@ function compactLineupPayload(lineupIntelligence) {
       keyAbsenceReasons: (lineupIntelligence.away?.keyAbsenceReasons || []).slice(0, 2),
     },
   };
+}
+
+function compactVerdictPayload(phantomVerdict) {
+  if (!phantomVerdict) return null;
+  return {
+    status: phantomVerdict.status || null,
+    headline: phantomVerdict.headline || null,
+    thesis: phantomVerdict.thesis || null,
+    ladderSummary: phantomVerdict.ladderSummary || null,
+    marketFamilyLabel: phantomVerdict.marketFamilyLabel || null,
+    support: (phantomVerdict.support || []).slice(0, 3),
+    cautions: (phantomVerdict.cautions || []).slice(0, 2),
+    leader: phantomVerdict.leader ? {
+      pickLabel: phantomVerdict.leader.pickLabel || null,
+      advisorStatus: phantomVerdict.leader.advisorStatus || null,
+      valueTier: phantomVerdict.leader.valueTier || null,
+      probabilityPct: phantomVerdict.leader.probabilityPct ?? null,
+    } : null,
+  };
+}
+
+function normalizeAdvisorStatus(status) {
+  const s = String(status || '').toUpperCase();
+  if (!s) return null;
+  if (s === 'BET' || s === 'ACCA' || s === 'SKIP') return s;
+  if (s === 'GO' || s === 'FIRE' || s === 'RECOMMENDED') return 'BET';
+  if (s === 'CAREFUL' || s === 'CAUTIOUS' || s === 'GAMBLE') return 'ACCA';
+  if (s === 'AVOID') return 'SKIP';
+  return null;
 }
 
 // ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
@@ -529,9 +558,10 @@ router.get("/fixtures", requireAuth, async (req, res) => {
 
       // ── Extract v4 fields from prediction_json ──────────────────────────
       // Syncs fixture list badges with the EV-aware engine output
-      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
+      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null, lineupIntelligence: null, verdict: null };
       try {
-        const bp = extractStoredBestPick(f.prediction_json);
+        const engineResult = extractEngineResultFromPredictionJson(f.prediction_json);
+        const bp = engineResult?.bestPick || extractStoredBestPick(f.prediction_json);
         if (bp) {
           v4Fields.valueTier = bp.valueTier || null;
           v4Fields.ev = bp.ev != null ? bp.ev : null;
@@ -540,7 +570,9 @@ router.get("/fixtures", requireAuth, async (req, res) => {
           v4Fields.advisor_status = bp.advisor_status || null;
           v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
           v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
+          v4Fields.lineupIntelligence = compactLineupPayload(bp.lineupIntelligence || engineResult?.features?.lineupIntelligence || null);
         }
+        v4Fields.verdict = compactVerdictPayload(engineResult?.phantomVerdict || null);
       } catch (_) {}
 
       // ── is_safe_bet: prefer engine-computed value, fallback to derived ──
@@ -554,9 +586,9 @@ router.get("/fixtures", requireAuth, async (req, res) => {
         : (edge >= 0.08);
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
-      if (v4Fields.advisor_status && ['FIRE', 'RECOMMENDED', 'GAMBLE', 'CAUTIOUS', 'AVOID'].includes(v4Fields.advisor_status)) {
-        // Use engine-computed status (most accurate)
-        f.advisor_status = v4Fields.advisor_status;
+      const normalizedAdvisorStatus = normalizeAdvisorStatus(v4Fields.advisor_status);
+      if (normalizedAdvisorStatus) {
+        f.advisor_status = normalizedAdvisorStatus;
       } else if (prob > 0) {
         // Fallback: EV-aware probability logic (matches responseAdapter fallback path)
         const ev = v4Fields.ev;
@@ -594,6 +626,8 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       f.ev = v4Fields.ev != null ? parseFloat(v4Fields.ev.toFixed(4)) : null;
       f.engine_odds = v4Fields.odds != null ? parseFloat(v4Fields.odds.toFixed(2)) : null;
       f.is_acca_eligible = v4Fields.isAccaEligible;
+      f.lineup_intelligence = v4Fields.lineupIntelligence;
+      f.verdict = v4Fields.verdict;
 
       // ── BUG FIX: Suppress is_safe_bet/is_value_bet for AVOID picks ──
       // Showing "Safe Bet" or "Value Bet" badges alongside an AVOID advisor status
@@ -1488,9 +1522,10 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // ── Extract v4 fields from prediction_json ────────────────────────────
       // BUG FIX: Previously used explanation_json which stores explanation lines (array),
       // NOT the full prediction. prediction_json stores the full engine result.
-      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null, lineupIntelligence: null };
+      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null, lineupIntelligence: null, verdict: null };
       try {
-        const bestPick = extractStoredBestPick(row.prediction_json);
+        const engineResult = extractEngineResultFromPredictionJson(row.prediction_json);
+        const bestPick = engineResult?.bestPick || extractStoredBestPick(row.prediction_json);
         if (bestPick) {
           v4Fields.valueTier = bestPick.valueTier || null;
           v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
@@ -1516,13 +1551,14 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
             factors.injury = (bestPick.homeKeyAbsenceReasons || []).length > 0 || (bestPick.awayKeyAbsenceReasons || []).length > 0;
           }
         }
+        v4Fields.verdict = compactVerdictPayload(engineResult?.phantomVerdict || null);
       } catch (_) {}
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
       let advisorStatus;
-      if (v4Fields.advisor_status && ['FIRE', 'RECOMMENDED', 'GAMBLE', 'CAUTIOUS', 'AVOID'].includes(v4Fields.advisor_status)) {
-        // Use engine-computed status (most accurate — comes from scoreMarketCandidates/finalizePredictionResult)
-        advisorStatus = v4Fields.advisor_status;
+      const normalizedAdvisorStatus = normalizeAdvisorStatus(v4Fields.advisor_status);
+      if (normalizedAdvisorStatus) {
+        advisorStatus = normalizedAdvisorStatus;
       } else {
         // Fallback: EV-aware probability logic (synced with responseAdapter fallback path)
         const dataQ = parseFloat(row.data_quality || 0.5);
@@ -1591,6 +1627,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         priceConfidenceAdjustment: v4Fields.priceConfidenceAdjustment ?? null,
         priceQuoteCount: v4Fields.priceQuoteCount ?? null,
         lineupIntelligence: v4Fields.lineupIntelligence || null,
+        verdict: v4Fields.verdict || null,
         factors,
       };
     });
