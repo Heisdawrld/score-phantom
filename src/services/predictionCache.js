@@ -32,6 +32,8 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
 const CURRENT_ENGINE_VERSION = '3.4.0'; // v3.4.0: Lineup certainty + role-weighted absences, no third-party prediction endpoint blending
+const MAX_UNAVAILABLE_PLAYER_STATS = Math.max(0, Number(process.env.MAX_UNAVAILABLE_PLAYER_STATS || 4));
+const inFlightFixtureData = new Map();
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -288,6 +290,20 @@ async function isCacheFresh(fixtureId) {
  * This is the single source of truth for all routes.
  */
 export async function ensureFixtureData(fixtureId) {
+  const cacheKey = String(fixtureId);
+  if (inFlightFixtureData.has(cacheKey)) return inFlightFixtureData.get(cacheKey);
+
+  const promise = ensureFixtureDataInner(fixtureId);
+  inFlightFixtureData.set(cacheKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    inFlightFixtureData.delete(cacheKey);
+  }
+}
+
+async function ensureFixtureDataInner(fixtureId) {
   let fixture = await getFixtureById(fixtureId);
   if (!fixture) return null;
 
@@ -316,19 +332,23 @@ export async function ensureFixtureData(fixtureId) {
 
     if (bsdInternalEventId) {
       async function attachMissingPlayerStats(players = []) {
-        return Promise.all(
-          players.map(async (p) => {
+        const cappedPlayers = players.slice(0, MAX_UNAVAILABLE_PLAYER_STATS);
+        const enriched = await Promise.all(
+          cappedPlayers.map(async (p) => {
             const playerId = p?.player?.id || p?.player_id || p?.id || null;
             const stats = playerId ? await fetchPlayerStats(playerId) : null;
             return { ...p, stats };
           })
         );
+        return [...enriched, ...players.slice(MAX_UNAVAILABLE_PLAYER_STATS)];
       }
 
-      const [lineupData, bestOdds] = await Promise.all([
+      const [lineupResult, bestOddsResult] = await Promise.allSettled([
         fetchPredictedLineup(bsdInternalEventId),
         fetchBestOdds(bsdInternalEventId),
       ]);
+      const lineupData = lineupResult.status === 'fulfilled' ? lineupResult.value : null;
+      const bestOdds = bestOddsResult.status === 'fulfilled' ? bestOddsResult.value : null;
 
       if (bestOdds?.markets) {
         meta.best_odds = bestOdds;

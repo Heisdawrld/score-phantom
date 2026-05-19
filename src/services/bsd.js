@@ -311,27 +311,27 @@ export async function fetchFixturesBySeason(seasonId, { status, leagueId } = {})
 
 export async function fetchEventStats(eventId) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/stats/`);
+  return await bsdFetch(`/events/${eventId}/stats/`, {}, { retries: 1, timeoutMs: 10000 });
 }
 
 export async function fetchEventIncidents(eventId) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/incidents/`);
+  return await bsdFetch(`/events/${eventId}/incidents/`, {}, { retries: 1, timeoutMs: 8000 });
 }
 
 export async function fetchEventMetadata(eventId) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/metadata/`);
+  return await bsdFetch(`/events/${eventId}/metadata/`, {}, { retries: 1, timeoutMs: 8000 });
 }
 
 export async function fetchEventLineups(eventId) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/lineups/`);
+  return await bsdFetch(`/events/${eventId}/lineups/`, {}, { retries: 1, timeoutMs: 8000 });
 }
 
 export async function fetchEventPlayerStats(eventId) {
   if (!eventId) return null;
-  return await bsdFetch(`/events/${eventId}/player-stats/`);
+  return await bsdFetch(`/events/${eventId}/player-stats/`, {}, { retries: 1, timeoutMs: 8000 });
 }
 
 function mapOddsPayload(data) {
@@ -353,7 +353,7 @@ function mapOddsPayload(data) {
 
 export async function fetchEventOdds(eventId) {
   if (!eventId) return null;
-  const data = await bsdFetch(`/events/${eventId}/odds/`);
+  const data = await bsdFetch(`/events/${eventId}/odds/`, {}, { retries: 1, timeoutMs: 8000 });
   if (!data?.odds) return null;
   return mapOddsPayload(data);
 }
@@ -389,16 +389,26 @@ export async function fetchEventDetail(eventId, full = false) {
 
   if (!full) return core;
 
-  const [statsData, incidentsData, oddsData, metadata, lineupData, playerStatsData, referee, venue] = await Promise.all([
-    fetchEventStats(eventId).catch(() => null),
-    fetchEventIncidents(eventId).catch(() => null),
-    fetchEventOdds(eventId).catch(() => null),
-    fetchEventMetadata(eventId).catch(() => null),
-    fetchEventLineups(eventId).catch(() => null),
-    fetchEventPlayerStats(eventId).catch(() => null),
+  const settled = await Promise.allSettled([
+    fetchEventStats(eventId),
+    fetchEventIncidents(eventId),
+    fetchEventOdds(eventId),
+    fetchEventMetadata(eventId),
+    fetchEventLineups(eventId),
+    fetchEventPlayerStats(eventId),
     event.referee_id ? fetchRefereeDetail(event.referee_id).catch(() => null) : Promise.resolve(null),
     event.venue_id ? fetchVenueDetail(event.venue_id).catch(() => null) : Promise.resolve(null),
   ]);
+
+  const [statsRes, incidentsRes, oddsRes, metadataRes, lineupRes, playerStatsRes, refereeRes, venueRes] = settled;
+  const statsData = statsRes.status === 'fulfilled' ? statsRes.value : null;
+  const incidentsData = incidentsRes.status === 'fulfilled' ? incidentsRes.value : null;
+  const oddsData = oddsRes.status === 'fulfilled' ? oddsRes.value : null;
+  const metadata = metadataRes.status === 'fulfilled' ? metadataRes.value : null;
+  const lineupData = lineupRes.status === 'fulfilled' ? lineupRes.value : null;
+  const playerStatsData = playerStatsRes.status === 'fulfilled' ? playerStatsRes.value : null;
+  const referee = refereeRes.status === 'fulfilled' ? refereeRes.value : null;
+  const venue = venueRes.status === 'fulfilled' ? venueRes.value : null;
 
   const stats = statsData?.stats || null;
   const homeStats = stats?.home || null;

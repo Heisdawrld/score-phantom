@@ -541,8 +541,8 @@ router.post("/google", authLimiter, async (req, res) => {
       // Brand-new user — create with trial starting NOW
       const trialEnds = getFutureIsoFromNow(TRIAL_DURATION_DAYS);
       await db.execute({
-        sql: `INSERT INTO users (email, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, 'trial', ?, 1)`,
-        args: [email, firebaseUid, trialEnds],
+        sql: `INSERT INTO users (email, password_hash, firebase_uid, status, trial_ends_at, email_verified) VALUES (?, ?, ?, 'trial', ?, 1)`,
+        args: [email, '', firebaseUid, trialEnds],
       });
       const created = await db.execute({ sql: "SELECT * FROM users WHERE email = ? LIMIT 1", args: [email] });
       user = created.rows?.[0];

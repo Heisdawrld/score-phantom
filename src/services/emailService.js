@@ -1,7 +1,7 @@
 // emailService.js — Resend API email delivery + daily digest
 // Firebase handles: verification + password reset
 
-const FROM = process.env.RESEND_FROM_EMAIL || 'ScorePhantom <noreply@score-phantom.onrender.com>';
+const FROM = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'ScorePhantom <noreply@score-phantom.onrender.com>';
 const APP_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
 
 export async function sendEmail({ to, subject, html, text }) {
