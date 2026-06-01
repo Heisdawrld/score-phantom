@@ -1,131 +1,133 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { fetchApi } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
-import { ChevronRight, ChevronDown, ChevronUp, Trophy, Zap, Lock, AlertCircle, Flame, BarChart2, Activity, Star, Target } from "lucide-react";
+import { motion } from "framer-motion";
+import { ChevronRight, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
+import { getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
-
-function toWAT(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false });
-  } catch { return ''; }
-}
 
 export function TodaysBestBet({ pick, onView }: { pick: any; onView: () => void }) {
   const prob = pick.probability ?? 0;
   const composite = pick.composite ?? pick.confidence ?? 0;
   const tier = getConfidenceTier(composite);
-  const [homeTeam, awayTeam] = String(pick.match || "").split(/\s+vs\s+/i);
+  const homeTeam = pick.homeTeam || String(pick.match || "").split(/\s+vs\s+/i)[0] || "Home";
+  const awayTeam = pick.awayTeam || String(pick.match || "").split(/\s+vs\s+/i)[1] || "Away";
+
+  const probColor =
+    prob >= 72 ? "text-primary" : prob >= 58 ? "text-amber-400" : "text-white/70";
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="premium-surface relative rounded-[30px] overflow-hidden"
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="relative rounded-[20px] border border-primary/14 overflow-hidden bg-[linear-gradient(135deg,rgba(16,231,116,0.06)_0%,rgba(255,255,255,0.02)_100%)]"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(16,231,116,0.08),transparent_60%)]" />
-      <div className="absolute -right-10 -top-8 h-32 w-32 rounded-full bg-primary/12 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,231,116,0.1),transparent_50%)] pointer-events-none" />
 
-      <div className="relative z-10 p-5">
-        <div className="flex items-center justify-between mb-4">
+      <div className="relative z-10 p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="premium-chip text-primary border-primary/20 bg-primary/10">Today's Top Pick</span>
+            <TrendingUp className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[10px] font-black text-primary uppercase tracking-[0.18em]">
+              Today&apos;s Top Pick
+            </span>
           </div>
-          {pick.time && (
-            <CountdownTimer
-              matchDate={(() => {
-                // Build date from today + time
-                const today = new Date();
-                const [h, m] = (pick.time || "00:00").split(":");
-                today.setHours(parseInt(h) || 0, parseInt(m) || 0, 0, 0);
-                return today.toISOString();
-              })()}
-            />
-          )}
+          <div className="flex items-center gap-3">
+            {pick.time && (
+              <CountdownTimer
+                matchDate={(() => {
+                  const today = new Date();
+                  const [h, m] = (pick.time || "00:00").split(":");
+                  today.setHours(parseInt(h) || 0, parseInt(m) || 0, 0, 0);
+                  return today.toISOString();
+                })()}
+              />
+            )}
+          </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/40 font-black">
-              {pick.tournament && <span>{pick.tournament}</span>}
-              {pick.time && <span>{pick.time}</span>}
+        {/* Match info */}
+        <div className="flex items-center gap-4 mb-3">
+          {/* Teams column */}
+          <div className="flex-1 min-w-0">
+            {pick.tournament && (
+              <p className="text-[9px] font-bold text-white/30 uppercase tracking-[0.16em] mb-1.5 truncate">
+                {pick.tournament}{pick.time ? ` · ${pick.time}` : ""}
+              </p>
+            )}
+            <div className="flex items-center gap-2 mb-1">
+              <TeamLogo
+                src={pick.homeLogo || undefined}
+                name={homeTeam}
+                size="sm"
+                className="w-5 h-5 shrink-0"
+              />
+              <span className="text-[13px] font-bold text-white truncate">{homeTeam}</span>
             </div>
-
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <div className="text-center min-w-0">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-primary/15 bg-primary/10 text-sm font-black text-primary">
-                  {homeTeam ? homeTeam.slice(0, 3).toUpperCase() : "HME"}
-                </div>
-                <p className="mt-3 text-sm font-black text-white truncate">{homeTeam || pick.match}</p>
-              </div>
-              <div className="text-white/25 font-black">VS</div>
-              <div className="text-center min-w-0">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/[0.08] bg-black/25 text-sm font-black text-white/80">
-                  {awayTeam ? awayTeam.slice(0, 3).toUpperCase() : "AWY"}
-                </div>
-                <p className="mt-3 text-sm font-black text-white truncate">{awayTeam || ""}</p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Recommended Market</p>
-              <h3 className="mt-2 text-3xl font-black text-white leading-tight">{pick.pick}</h3>
-              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/12 border border-primary/25 px-3 py-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <span className="text-[11px] font-black text-primary uppercase tracking-[0.14em]">{tier.label}</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <TeamLogo
+                src={pick.awayLogo || undefined}
+                name={awayTeam}
+                size="sm"
+                className="w-5 h-5 shrink-0 opacity-70"
+              />
+              <span className="text-[13px] font-bold text-white/60 truncate">{awayTeam}</span>
             </div>
           </div>
 
-          <div className="rounded-[26px] border border-white/[0.08] bg-black/25 p-4">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Odds Desk</p>
-                <p className="mt-2 text-4xl font-black text-primary">
-                  {pick.odds ? Number(pick.odds).toFixed(2).replace(/\.00$/, "") : "—"}
-                </p>
-              </div>
+          {/* Stats column */}
+          <div className="shrink-0 flex items-center gap-3">
+            <div className="text-center">
               <ConfidenceRing
                 value={composite}
-                size={72}
+                size={56}
                 strokeWidth={4}
                 showLabel
                 label="CONF"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="premium-stat text-center">
-                <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-0.5">Model</p>
-                <p className="text-lg font-black text-white/90 tabular-nums">{prob.toFixed(0)}%</p>
+            <div className="flex flex-col gap-2">
+              <div className="text-center">
+                <p className={cn("text-[18px] font-black tabular-nums leading-none", probColor)}>
+                  {prob.toFixed(0)}%
+                </p>
+                <p className="text-[9px] text-white/30 uppercase tracking-wider mt-0.5">Model</p>
               </div>
-              <div className="premium-stat text-center border-primary/20 bg-primary/[0.06]">
-                <p className="text-[9px] text-primary/60 font-bold uppercase tracking-wider mb-0.5">Edge</p>
-                <p className="text-lg font-black text-primary tabular-nums">+{Math.max(0, composite - 50).toFixed(0)}%</p>
-              </div>
-              <div className="premium-stat text-center">
-                <p className="text-[9px] text-white/35 font-bold uppercase tracking-wider mb-0.5">Score</p>
-                <p className="text-lg font-black text-primary tabular-nums">{composite.toFixed(0)}</p>
-              </div>
+              {pick.odds && (
+                <div className="text-center">
+                  <p className="text-[14px] font-black text-white tabular-nums leading-none">
+                    {Number(pick.odds).toFixed(2).replace(/\.00$/, "")}
+                  </p>
+                  <p className="text-[9px] text-white/30 uppercase tracking-wider mt-0.5">Odds</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
+        {/* Pick */}
+        <div className="mb-3 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.16em]">
+              Recommended
+            </span>
+            <span className={cn("text-[9px] font-black uppercase tracking-wider rounded-full px-1.5 py-0.5 border", tier.label === "Strong" ? "text-primary border-primary/20 bg-primary/10" : "text-amber-400 border-amber-400/20 bg-amber-400/10")}>
+              {tier.label}
+            </span>
+          </div>
+          <p className="text-[16px] font-black text-white leading-tight">{pick.pick}</p>
+        </div>
+
+        {/* CTA */}
         <motion.button
-          whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           onClick={onView}
-          className="w-full py-3 rounded-xl bg-primary text-black font-black text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_0_24px_rgba(16,231,116,0.25)] hover:shadow-[0_0_32px_rgba(16,231,116,0.4)] transition-shadow"
+          className="w-full py-2.5 rounded-xl bg-primary text-black font-black text-xs tracking-wide flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,231,116,0.2)] hover:shadow-[0_0_28px_rgba(16,231,116,0.35)] transition-shadow"
         >
-          View Full Analysis <ChevronRight className="w-4 h-4" />
+          View Full Analysis
+          <ChevronRight className="w-3.5 h-3.5" />
         </motion.button>
       </div>
     </motion.div>

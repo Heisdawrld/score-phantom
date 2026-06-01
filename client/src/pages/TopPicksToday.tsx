@@ -93,7 +93,7 @@ function extractSignals(pick: Pick) {
 }
 
 type FilterMode = "all" | "elite" | "safe" | "value";
-const RANK_MEDALS = ["🥇", "🥈", "🥉"];
+const RANK_MEDALS = ["1", "2", "3"];
 
 export default function TopPicksToday() {
   const [, setLocation] = useLocation();

@@ -230,7 +230,7 @@ export default function Dashboard() {
           {showPayBanner && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
               className="flex items-center gap-3 p-3 rounded-2xl bg-primary/8 border border-primary/20">
-              <span className="text-lg">🎉</span>
+              <Crown className="w-5 h-5 text-primary shrink-0" />
               <p className="text-xs font-bold text-primary flex-1">Premium activated!</p>
               <button onClick={() => setShowPayBanner(false)} className="text-white/20 hover:text-white/50 text-sm">×</button>
             </motion.div>
@@ -330,13 +330,14 @@ export default function Dashboard() {
         )}
 
         {/* ── Fixtures by League ── */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {fixturesLoading ? (
             Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="space-y-3">
-                <Skeleton className="h-5 w-36" />
-                <Skeleton className="h-16 w-full rounded-2xl" />
-                <Skeleton className="h-16 w-full rounded-2xl" />
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-10 w-full rounded-xl" />
+                <Skeleton className="h-10 w-full rounded-xl" />
+                <Skeleton className="h-10 w-full rounded-xl" />
               </div>
             ))
           ) : leagues.length === 0 ? (

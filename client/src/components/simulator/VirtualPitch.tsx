@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Trophy, Clock, AlertCircle, Maximize, Minimize } from "lucide-react";
+import { Trophy, Clock, AlertCircle, Maximize, Minimize, SkipForward } from "lucide-react";
 import { TeamLogo } from '@/components/TeamLogo';
 import { MatchEngine } from "./engine/MatchEngine";
 
@@ -346,9 +346,9 @@ export function VirtualPitch({ homeTeamName, awayTeamName, homeTeamId, awayTeamI
             setCurrentPhase('stats');
             setScore(simulationScript.finalScore);
           }}
-          className="absolute bottom-2 left-2 md:bottom-4 md:left-4 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all border border-white/10"
+          className="absolute bottom-2 left-2 md:bottom-4 md:left-4 z-20 bg-white/10 hover:bg-white/20 backdrop-blur-md px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all border border-white/10 flex items-center gap-1"
         >
-          Skip to End ⏭️
+          Skip to End <SkipForward className="w-3 h-3" />
         </button>
       )}
     </div>

@@ -188,7 +188,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
     const errorMsg = error instanceof Error ? error.message : "Prediction not available";
     return (
       <div className="rounded-[28px] border border-white/[0.08] bg-white/[0.025] p-6 text-center shadow-[0_18px_40px_rgba(0,0,0,0.2)]">
-        <p className="text-4xl">🔮</p>
+        <AlertCircle className="w-10 h-10 mx-auto mb-3 text-white/20" />
         <p className="mt-3 text-sm font-medium text-white/58">{errorMsg}</p>
         {errorMsg.toLowerCase().includes("trial") && (
           <button

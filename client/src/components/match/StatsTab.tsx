@@ -1,4 +1,5 @@
 import { cn, fuzzyTeamMatch, sortMatchesByDateDesc } from "@/lib/utils";
+import { BarChart2 } from "lucide-react";
 
 export function StatsTab({ d }: any) {
   const rawH2h =
@@ -151,7 +152,10 @@ export function StatsTab({ d }: any) {
       )}
 
       {h2h.length === 0 && hf.length === 0 && (
-        <div className="text-center py-12 text-white/25"><p className="text-4xl mb-3">📊</p><p>Stats loading — check back soon</p></div>
+        <div className="text-center py-12 text-white/25">
+          <BarChart2 className="w-10 h-10 mb-3 mx-auto opacity-50" />
+          <p>Stats loading — check back soon</p>
+        </div>
       )}
     </div>
   );
