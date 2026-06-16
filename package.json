@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/app.js",
     "build": "npm run build:client",
-    "build:client": "npm --prefix client run build",
+    "build:client": "cd client && npm install && npm run build",
     "env:check": "node src/scripts/checkEnv.js",
     "seed": "node src/services/fixtureSeeder.js",
     "enrich": "node src/scripts/enrichFixtures.js"
