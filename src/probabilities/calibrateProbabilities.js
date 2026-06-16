@@ -5,11 +5,7 @@ import { clamp } from '../utils/math.js';
  *
  * Calibrate Poisson probabilities with market anchors and script-based micro-adjustments.
  *
- * v2: ADDS BOOKMAKER ODDS BLENDING — the single most impactful fix.
- *
- * The old version only blended with Polymarket (70/30 for 1X2, 60/40 for BTTS).
- * But Polymarket doesn't cover all fixtures, and the model was producing wildly
- * wrong probabilities (e.g., homeWin=16% when bookmaker says 55%).
+ * v2: Uses bookmaker odds blending as the only external calibration anchor.
  *
  * The bookmaker's implied probabilities are the sharpest baseline available.
  * They aggregate millions of dollars of sharp money and sophisticated models.
@@ -19,17 +15,15 @@ import { clamp } from '../utils/math.js';
  * 1. Bookmaker 1X2 blending (55% model / 45% bookmaker)
  * 2. Bookmaker O/U blending (65% model / 35% bookmaker for over lines)
  * 3. Bookmaker BTTS blending (60% model / 40% bookmaker)
- * 4. Polymarket 1X2 blending (if available, further 70/30 blend)
- * 5. Polymarket BTTS blending (if available, further 60/40 blend)
- * 6. Script-based micro-adjustments (±0.02-0.04)
- * 7. Complement enforcement, monotonic ordering
+ * 4. Script-based micro-adjustments (±0.02-0.04)
+ * 5. Complement enforcement, monotonic ordering
  *
  * Rules (non-negotiable):
  * 1. NO shrink() — probabilities come from real Poisson math, don't cap them.
  * 2. After any adjustment, enforce: under_X = 1 - over_X for each line.
  * 3. Enforce monotonic ordering: over15 >= over25 >= over35.
  */
-export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = null, impliedOdds = null) {
+export function calibrateProbabilities(rawProbs, scriptOutput, _unusedMarketContext = null, impliedOdds = null) {
   const script = scriptOutput || {};
   const primary = script.primary || '';
 
@@ -100,23 +94,7 @@ export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = 
     }
   }
 
-  // ── LAYER 2: Polymarket Blending (Sharp Supplement) ──────────────────────
-  // Polymarket provides additional sharp money signal. Blend on TOP of the
-  // bookmaker blend for an even sharper estimate.
-  if (polymarketOdds && polymarketOdds.odds) {
-     const pOdds = polymarketOdds.odds;
-     if (pOdds['1x2']) {
-       if (cal.homeWin && pOdds['1x2'].home) cal.homeWin = parseFloat(((cal.homeWin * 0.70) + (pOdds['1x2'].home * 0.30)).toFixed(4));
-       if (cal.draw && pOdds['1x2'].draw) cal.draw = parseFloat(((cal.draw * 0.70) + (pOdds['1x2'].draw * 0.30)).toFixed(4));
-       if (cal.awayWin && pOdds['1x2'].away) cal.awayWin = parseFloat(((cal.awayWin * 0.70) + (pOdds['1x2'].away * 0.30)).toFixed(4));
-     }
-     if (pOdds.btts) {
-       if (cal.bttsYes && pOdds.btts.yes) cal.bttsYes = parseFloat(((cal.bttsYes * 0.60) + (pOdds.btts.yes * 0.40)).toFixed(4));
-       if (cal.bttsNo && pOdds.btts.no) cal.bttsNo = parseFloat(((cal.bttsNo * 0.60) + (pOdds.btts.no * 0.40)).toFixed(4));
-     }
-  }
-
-  // ── LAYER 3: Script-based micro-adjustments (tiny — ≤ 0.04 per field) ────
+  // ── LAYER 2: Script-based micro-adjustments (tiny — ≤ 0.04 per field) ────
   if (primary === 'dominant_home_pressure') {
     adj('homeWin', +0.03);
     adj('awayWin', -0.02);

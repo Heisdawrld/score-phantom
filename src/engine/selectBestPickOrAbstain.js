@@ -15,6 +15,16 @@ function phantomScoreOf(candidate) {
   return (prob * 0.55) + (finalScore * 0.45);
 }
 
+function marketFamilyOf(candidate) {
+  const key = String(candidate?.marketKey || '').toLowerCase();
+  if (key.includes('btts')) return 'btts';
+  if (key.startsWith('home_over_') || key.startsWith('home_under_') || key.startsWith('away_over_') || key.startsWith('away_under_')) return 'team_goals';
+  if (key.includes('double_chance') || key.includes('dnb') || key.includes('either_half')) return 'safety';
+  if (key.includes('over') || key.includes('under')) return 'goals';
+  if (key.includes('win') || key === 'draw') return 'result';
+  return 'other';
+}
+
 function isPricedCandidate(candidate) {
   if (!candidate) return false;
   // BUG FIX: Removed isHeadlineEligibleMarket check here. That check belongs in
@@ -210,6 +220,32 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
   const hasAnyOdds = qualityPricedRanked.some(c => c.edge != null && c.edge !== 0);
   if (hasAnyOdds && annotatedTop.edgeLabel === 'NO EDGE') {
     return abstain('Best pick has NO EDGE — bookmaker implied probability too high vs model', 'NO_EDGE');
+  }
+
+  const topFinalScore = safeNum(top.finalScore, 0);
+  const topEdge = safeNum(top.edge, 0);
+  const dataScore = safeNum(fv.dataCompletenessScore, 0.5);
+  const volatilityScore = safeNum(script.volatilityScore, 0.5);
+  const chaos = safeNum(fv.matchChaosScore, 0.5);
+  const lineupCertainty = safeNum(fv.lineupCertaintyScore, 0.5);
+
+  if (
+    topFinalScore < 0.48 &&
+    topEdge < 0.02 &&
+    (dataScore < 0.45 || lineupCertainty < 0.55) &&
+    (volatilityScore > 0.62 || chaos > 0.60)
+  ) {
+    return abstain('Thesis too thin — weak edge with shaky evidence quality', 'THIN_THESIS');
+  }
+
+  if (qualityPricedRanked.length >= 3) {
+    const cluster = qualityPricedRanked.slice(0, 3);
+    const topGap = topFinalScore - safeNum(cluster[1]?.finalScore, 0);
+    const thirdGap = topFinalScore - safeNum(cluster[2]?.finalScore, 0);
+    const familyCount = new Set(cluster.map(marketFamilyOf)).size;
+    if (topGap < 0.018 && thirdGap < 0.032 && familyCount >= 3 && topEdge < 0.03) {
+      return abstain('Evidence is split across multiple market angles — no single thesis is clear enough', 'CONFLICTING_EVIDENCE');
+    }
   }
 
   // All gates passed — commit to this pick

@@ -36,8 +36,9 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
     impliedBttsYes: features.impliedBttsYes || null,
   };
 
-  // L1: Bookmaker + Polymarket + Script calibration
-  const calibratedProbs = calibrateProbabilities(rawProbs, script, features.polymarketOdds, impliedOdds);
+  // L1: Bookmaker + Script calibration.
+  // External market feeds are intentionally not allowed to steer ScorePhantom's core probabilities.
+  const calibratedProbs = calibrateProbabilities(rawProbs, script, null, impliedOdds);
 
   // L2: Historical accuracy calibration (regress toward observed reality)
   // Now includes leagueId and tournamentName for league-market probability regression

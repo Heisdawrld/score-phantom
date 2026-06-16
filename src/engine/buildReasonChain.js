@@ -272,6 +272,10 @@ function getAbstentionExplanation(code, engineReason, narrative) {
       return 'No edge detected — bookmaker odds match or exceed model prediction';
     case 'WEAK_SEPARATION':
       return 'Multiple markets tied — no clear best pick';
+    case 'THIN_THESIS':
+      return 'The top angle is too thin — edge and evidence quality are not strong enough together';
+    case 'CONFLICTING_EVIDENCE':
+      return 'The market board points in too many directions — no single betting thesis is clear enough';
     case 'CHAOTIC_SCRIPT':
       return 'Match classified as chaotic — too unpredictable for reliable analysis';
     case 'HIGH_CHAOS':
@@ -301,9 +305,12 @@ function getAbstentionImprovement(code, narrative, fv) {
       }
       return 'Better odds or stronger model confidence would be needed';
     case 'WEAK_SEPARATION':
+    case 'CONFLICTING_EVIDENCE':
       return 'A clearer tactical angle would help separate the markets';
     case 'LOW_PROBABILITY':
       return 'More data or a clearer quality gap between teams would increase confidence';
+    case 'THIN_THESIS':
+      return 'Better lineup certainty, cleaner pricing, or stronger model edge would be needed';
     case 'LOW_DATA':
       return 'More historical match data would allow a proper analysis';
     default:
@@ -327,6 +334,10 @@ function buildAbstentionSummary(code, narrative, fv) {
 
   if (code === 'NO_EDGE' || code === 'LOW_HEADLINE_QUALITY') {
     return 'No value at current odds — bookmaker pricing matches model.';
+  }
+
+  if (code === 'THIN_THESIS' || code === 'CONFLICTING_EVIDENCE') {
+    return 'The board is too mixed pre-match — no single angle deserves the spotlight.';
   }
 
   return 'No confident recommendation available for this match.';
