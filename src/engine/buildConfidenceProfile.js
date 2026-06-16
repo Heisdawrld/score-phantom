@@ -211,11 +211,24 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Lineup missing = unpredictable team composition = lower confidence
   const hasLineupData = fv.hasLineupData || false;
   const lineupComplete = fv.homeLineupComplete && fv.awayLineupComplete;
+  const lineupCertaintyScore = safeNum(fv.lineupCertaintyScore, null);
+  const homeAbsence = safeNum(fv.homeWeightedAbsenceScore, 0);
+  const awayAbsence = safeNum(fv.awayWeightedAbsenceScore, 0);
   if (!hasLineupData) {
     if (model === "high") model = "medium";
+    if (!dataQualityNote) dataQualityNote = 'Waiting for lineups — confidence reduced';
   } else if (!lineupComplete) {
     // Partial lineup — small downgrade
     if (model === "high") model = "medium";
+  }
+  if (lineupCertaintyScore != null && lineupCertaintyScore < 0.55) {
+    if (model === 'high') model = 'medium';
+    else if (model === 'medium') model = 'lean';
+    if (!dataQualityNote) dataQualityNote = 'Lineup certainty is still weak';
+  }
+  if (Math.max(homeAbsence, awayAbsence) >= 0.45 && model === 'high') {
+    model = 'medium';
+    if (!dataQualityNote) dataQualityNote = 'Key absences materially reduce certainty';
   }
   // High rotation risk (motivationScore < 0.4 = unmotivated) — flag in note
   const homeMotivation = safeNum(fv.homeMotivationScore, 0.5);

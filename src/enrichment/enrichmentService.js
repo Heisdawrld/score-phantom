@@ -24,6 +24,7 @@ import {
 import { normalizeEventStatsPayload } from '../services/bsdStatsNormalizer.js';
 import { enrichTopPlayerCareers, buildRefereeVolatilityProfile, extractMetadataInsights } from '../services/bsdDeepIntel.js';
 import { buildTeamProfile } from '../services/teamProfileBuilder.js';
+import { buildLineupIntelligence } from '../utils/lineupIntelligence.js';
 import db from '../config/database.js';
 
 async function fetchLocalTeamForm(teamName) {
@@ -171,12 +172,40 @@ function parseLineupModifier(rawLineup) {
     const awayPlayers = away?.players || away?.lineup || away?.starting || [];
     if (!homePlayers.length && !awayPlayers.length) return null;
 
+    const normalizeConfidence = (value, fallback = null) => {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      if (num > 1.01) return Math.max(0, Math.min(1, num / 100));
+      return Math.max(0, Math.min(1, num));
+    };
+
+    const deriveStatus = (side, players) => {
+      const confirmed = side?.confirmed ?? side?.is_confirmed ?? side?.confirmed_lineup ?? side?.lineup_confirmed ?? null;
+      const status = String(side?.status || side?.lineup_status || '').toLowerCase();
+      const predicted = side?.predicted ?? side?.is_predicted ?? side?.ai_predicted ?? null;
+      if (confirmed === true || status.includes('confirm')) return 'confirmed';
+      if (predicted === true || status.includes('predict') || status.includes('project')) return 'predicted';
+      if (players.length >= 10) return 'predicted';
+      if (players.length >= 7) return 'partial';
+      return 'unknown';
+    };
+
     const countPos = (players, pos) =>
       players.filter(p => String(p?.position || p?.pos || '').toLowerCase().includes(pos)).length;
 
+    const homeStatus = deriveStatus(home, homePlayers);
+    const awayStatus = deriveStatus(away, awayPlayers);
+    const homeConfidence = normalizeConfidence(home?.confidence ?? home?.lineup_confidence ?? home?.prediction_confidence ?? home?.ai_confidence, homeStatus === 'confirmed' ? 0.96 : homeStatus === 'predicted' ? 0.68 : 0.4);
+    const awayConfidence = normalizeConfidence(away?.confidence ?? away?.lineup_confidence ?? away?.prediction_confidence ?? away?.ai_confidence, awayStatus === 'confirmed' ? 0.96 : awayStatus === 'predicted' ? 0.68 : 0.4);
+
     return {
-      homeLineupConfirmed: homePlayers.length >= 10,
-      awayLineupConfirmed: awayPlayers.length >= 10,
+      homeLineupConfirmed: homeStatus === 'confirmed',
+      awayLineupConfirmed: awayStatus === 'confirmed',
+      homeLineupStatus: homeStatus,
+      awayLineupStatus: awayStatus,
+      homeLineupConfidence: Number(homeConfidence.toFixed(4)),
+      awayLineupConfidence: Number(awayConfidence.toFixed(4)),
+      lineupCertaintyScore: Number((((homeConfidence + awayConfidence) / 2)).toFixed(4)),
       homeOutfieldCount: homePlayers.length,
       awayOutfieldCount: awayPlayers.length,
       homeHasKeeper: countPos(homePlayers, 'g') > 0 || countPos(homePlayers, 'keeper') > 0,
@@ -260,7 +289,7 @@ export async function fetchAndStoreEnrichment(fixture) {
       completeness: { score: 0, tier: 'thin', checks: {} },
       homeStats: null, awayStats: null, matchStats: null, matchEvents: null,
       actualHomeXg: null, actualAwayXg: null, shotmap: null, refereeData: null,
-      injuries: null, metadata: null, metadataInsights: null, eventContext: null, venue: null, playerStats: [], deepPlayerIntel: null, refereeVolatility: null, odds: null,
+      injuries: null, metadata: null, metadataInsights: null, eventContext: null, venue: null, playerStats: [], deepPlayerIntel: null, refereeVolatility: null, odds: null, lineupIntelligence: null,
     };
   }
 
@@ -269,6 +298,7 @@ export async function fetchAndStoreEnrichment(fixture) {
   let actualHomeXg = null, actualAwayXg = null, matchStats = null, matchEvents = null;
   let shotmap = null, refereeData = null, injuries = null;
   let lineups = null, average_positions = null, momentum = null, xg_per_minute = null;
+  let lineupIntelligence = null;
   let metadata = null, metadataInsights = null, eventContext = null, venue = null, playerStats = [];
   let deepPlayerIntel = null, refereeVolatility = null;
   let basicOdds = null;
@@ -412,6 +442,8 @@ export async function fetchAndStoreEnrichment(fixture) {
     if (!lineups && normalisedLineup) lineups = normalisedLineup;
   } catch (_) {}
 
+  lineupIntelligence = buildLineupIntelligence(lineups, injuries);
+
   try { oddsData = await fetchEventOdds(fixture.id); } catch (_) {}
   try { polymarketOdds = await fetchPolymarketOdds(fixture.id); } catch (_) {}
 
@@ -438,7 +470,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     console.warn('[enrichmentService] Referee volatility failed:', err.message);
   }
 
-  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, matchEvents, lineupModifier, eventContext, refereeData, venue, shotmap, momentum, matchStats, deepPlayerIntel, refereeVolatility, metadataInsights });
+  const completeness = computeDataCompleteness({ homeForm: homeFormFinal, awayForm: awayFormFinal, h2h: h2hMerged, standings, lineupModifier, matchEvents, eventContext, refereeData, venue, shotmap, momentum, matchStats, deepPlayerIntel, refereeVolatility, metadataInsights });
   if (bsdHomeFormStats && bsdAwayFormStats && completeness.score < 0.80) {
     completeness.score = Math.min(0.80, completeness.score + 0.15);
     completeness.tier = completeness.score >= 0.75 ? 'rich' : completeness.score >= 0.50 ? 'good' : 'partial';
@@ -454,6 +486,7 @@ export async function fetchAndStoreEnrichment(fixture) {
     homeStats: homeProfile, awayStats: awayProfile, homeProfile, awayProfile,
     matchStats, matchEvents, actualHomeXg, actualAwayXg, shotmap, lineups,
     average_positions, momentum, xg_per_minute, bsdHomeFormStats, bsdAwayFormStats,
+    lineupIntelligence,
     refereeData, refereeVolatility, injuries, metadata, metadataInsights, eventContext, venue, playerStats, deepPlayerIntel,
     oddsData, polymarketOdds, homeManager, awayManager, odds: basicOdds,
   };
