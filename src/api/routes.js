@@ -149,7 +149,20 @@ function needsCoreMemoryRefresh({ fixture, meta, homeForm, awayForm, h2h }) {
 
   return (fixtureTs - latestHome.getTime()) > maxStalenessMs
     || (fixtureTs - latestAway.getTime()) > maxStalenessMs;
-}
+    }
+    
+    // ── C6: Input validation for fixture IDs ─────────────────────────────────────
+    function validateFixtureId(id) {
+    return typeof id === 'string' && /^\d+$/.test(id);
+    }
+    
+    // ── M17: Pagination helper ──────────────────────────────────────────────────
+    function getPagination(query) {
+    const page = Math.max(1, parseInt(query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    return { page, limit, offset };
+    }
 
 // ─── Auth / Access helpers ────────────────────────────────────────────────────
 
@@ -467,7 +480,11 @@ router.get("/payments/history", requireAuth, async (req, res) => {
 // ─── GET /fixtures — auth required ──────────────────────────────────────────
 router.get("/fixtures", requireAuth, async (req, res) => {
   try {
-    const { date, tournament, enriched, limit = 200, offset = 0 } = req.query;
+    // ── M17: Apply pagination ─────────────────────────────────────────
+    const { page: _page, limit: _limit, offset: _offset } = getPagination(req.query);
+    const { date, tournament, enriched } = req.query;
+    const limit = _limit;
+    const offset = _offset;
 
     let query = `SELECT f.id, f.home_team_id, f.away_team_id, f.home_team_name, f.away_team_name,
          f.tournament_id, f.tournament_name, f.category_name, f.match_date, f.match_url,
@@ -638,10 +655,15 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     // Cache fixtures for 60s client-side — reduces redundant full-list loads
     res.set('Cache-Control', 'private, max-age=60');
     res.json({
-      total: fixtures.length,
-      enrichedDeepCount,
-      fixtures,
-      access: buildAccessPayload(req.access),
+      data: fixtures,
+      pagination: {
+      page: _page,
+      limit,
+    hasMore: fixtures.length > limit,
+    },
+    enrichedDeepCount,
+    fixtures,
+    access: buildAccessPayload(req.access),
     });
   } catch (err) {
     console.error(err);
@@ -690,7 +712,12 @@ router.get("/fixtures/:id", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId — trial (5/day cap) or premium ───────────────────
 router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
   try {
-    // Trial users: enforce daily predictions cap (TRIAL_DAILY_LIMIT)
+    // ── C6: Validate fixture ID format ─────────────────────────────────
+      if (!validateFixtureId(req.params.fixtureId)) {
+      return res.status(400).json({ error: 'Invalid fixture ID' });
+      }
+      
+      // Trial users: enforce daily predictions cap (TRIAL_DAILY_LIMIT)
       let trialToday = null; // declared here so it's in scope for increment below
       if (!req.access.subscription_active) {
         if (!req.access.has_full_access) {
@@ -743,6 +770,11 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 // ─── GET /predict/:fixtureId/explain — requires premium access ──────────────
 router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res) => {
   try {
+    // ── C6: Validate fixture ID format ─────────────────────────────────
+    if (!validateFixtureId(req.params.fixtureId)) {
+    return res.status(400).json({ error: 'Invalid fixture ID' });
+    }
+    
     // Trial users: enforce daily cap
     let predictionsRemaining = null;
     let trialToday = null;
@@ -802,6 +834,11 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
 // ─── POST /predict/:fixtureId/chat — requires premium access ────────────────
 router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) => {
   try {
+    // ── C6: Validate fixture ID format ─────────────────────────────────
+    if (!validateFixtureId(req.params.fixtureId)) {
+    return res.status(400).json({ error: 'Invalid fixture ID' });
+    }
+    
     // AI chat is a premium-only feature — block trial users
     if (!req.access.subscription_active) {
       return res.status(403).json({

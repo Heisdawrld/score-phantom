@@ -35,22 +35,40 @@ const PRE_FILTER_MIN_PROB = {
 };
 const PRE_FILTER_DEFAULT = 0.48; // default floor (0.60) - 0.08 exception margin - buffer
 
+// ── M25: Valid market key pattern ────────────────────────────────────────────
+const VALID_MARKET_KEYS = new Set([
+'home_win', 'away_win', 'draw', 'over_25', 'under_25',
+'over_15', 'over_35', 'under_35', 'btts_yes', 'btts_no',
+'double_chance_home', 'double_chance_away', 'dnb_home', 'dnb_away',
+]);
+
+function isValidMarketKey(key) {
+return typeof key === 'string' && VALID_MARKET_KEYS.has(key);
+}
+
 function preFilterCandidates(candidates) {
   const kept = [];
   const removed = [];
   for (const c of candidates || []) {
-    const prob = safeNum(c.modelProbability, 0);
-    const minProb = PRE_FILTER_MIN_PROB[c.marketKey] ?? PRE_FILTER_DEFAULT;
+    // ── M25: Skip candidates with invalid marketKey ─────────────────
+    const mk = String(c.marketKey || '');
+    if (!isValidMarketKey(mk)) {
+      removed.push(mk + '(invalid key)');
+    continue;
+      }
+    
+  const prob = safeNum(c.modelProbability, 0);
+  const minProb = PRE_FILTER_MIN_PROB[c.marketKey] ?? PRE_FILTER_DEFAULT;
     if (prob < minProb) {
-      removed.push(c.marketKey + '(' + (prob * 100).toFixed(1) + '%<' + (minProb * 100).toFixed(0) + '%)');
-    } else {
-      kept.push(c);
-    }
-  }
-  if (removed.length > 0) {
-    console.log('[runMarketSelection] Pre-filter removed ' + removed.length + ' low-prob candidates: ' + removed.join(', '));
-  }
-  return kept;
+  removed.push(c.marketKey + '(' + (prob * 100).toFixed(1) + '%<' + (minProb * 100).toFixed(0) + '%)');
+  } else {
+kept.push(c);
+}
+}
+if (removed.length > 0) {
+console.log('[runMarketSelection] Pre-filter removed ' + removed.length + ' low-prob candidates: ' + removed.join(', '));
+}
+return kept;
 }
 
 function applyMarketRestrictions(candidates, restrictions = {}) {

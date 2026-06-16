@@ -29,9 +29,10 @@ export function buildScoreMatrix(homeLambda, awayLambda, maxGoals = 7) {
   // Rho (correlation factor). Positive rho increases draw probability.
   // Standard Dixon-Coles rho is typically around -0.15 to -0.05, 
   // but we adjust dynamically based on lambda sum to prevent negative probs
-  let rho = -0.10; 
-  if (homeLambda * awayLambda < Math.abs(rho)) {
-    rho = -(homeLambda * awayLambda) + 0.01; // Safety bound
+  let rho = -0.10;
+  // Guard: prevent rho from going below -0.15 to avoid numerical instability
+    if (homeLambda * awayLambda < Math.abs(rho)) {
+  rho = Math.max(-(homeLambda * awayLambda) + 0.01, -0.15); // Safety bound with floor
   }
 
   for (let h = 0; h <= maxGoals; h++) {

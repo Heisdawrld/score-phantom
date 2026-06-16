@@ -139,46 +139,26 @@ async function updateLiveFixtureMeta(fixtureId, finalOrLiveEvent, partialLiveSta
 }
 
 async function saveFinishedMatchMemory({ fixtureId, matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap }) {
-  const update = await db.execute({
-    sql: `UPDATE historical_matches
-          SET type = 'h2h',
-              date = ?,
-              home_team = ?,
-              away_team = ?,
-              home_goals = ?,
-              away_goals = ?,
-              home_xg = ?,
-              away_xg = ?,
-              momentum = ?,
-              shotmap = ?
-          WHERE fixture_id = ?`,
-    args: [matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap, fixtureId],
-  });
-
-  if ((update.rowsAffected || 0) > 0) return { action: 'updated', rowsAffected: update.rowsAffected || 0 };
-
-  try {
+  // Use UPSERT (ON CONFLICT DO UPDATE) to atomically insert or update, eliminating race conditions
     await db.execute({
-      sql: `INSERT INTO historical_matches
-             (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap)
-            VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [fixtureId, matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap],
-    });
-    return { action: 'inserted', rowsAffected: 1 };
-  } catch (err) {
-    // If another live poll inserted it first, update once more. This keeps the path safe without requiring a UNIQUE constraint.
-    if (String(err.message || '').toLowerCase().includes('unique')) {
-      const retry = await db.execute({
-        sql: `UPDATE historical_matches
-              SET type = 'h2h', date = ?, home_team = ?, away_team = ?, home_goals = ?, away_goals = ?, home_xg = ?, away_xg = ?, momentum = ?, shotmap = ?
-              WHERE fixture_id = ?`,
-        args: [matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap, fixtureId],
-      });
-      return { action: 'updated_after_race', rowsAffected: retry.rowsAffected || 0 };
+          sql: `INSERT INTO historical_matches
+              (fixture_id, type, date, home_team, away_team, home_goals, away_goals, home_xg, away_xg, momentum, shotmap)
+              VALUES (?, 'h2h', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(fixture_id) DO UPDATE SET
+              type = 'h2h',
+              date = excluded.date,
+              home_team = excluded.home_team,
+              away_team = excluded.away_team,
+              home_goals = excluded.home_goals,
+              away_goals = excluded.away_goals,
+          home_xg = excluded.home_xg,
+    away_xg = excluded.away_xg,
+  momentum = excluded.momentum,
+shotmap = excluded.shotmap`,
+  args: [fixtureId, matchDate, homeTeam, awayTeam, homeScore, awayScore, homeXg, awayXg, momentum, shotmap],
+});
+  return { action: 'upserted', rowsAffected: 1 };
     }
-    throw err;
-  }
-}
 
 async function notifyMatchSubscribers(fixtureId, homeTeam, awayTeam, homeScore, awayScore, minute) {
   try {

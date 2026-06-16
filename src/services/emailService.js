@@ -26,5 +26,36 @@ export async function sendDailyDigest({ to, picks, date }) {
   return sendEmail({ to, subject: 'ScorePhantom: Your Top Picks for ' + date, html, text });
 }
 
-export async function sendPasswordResetEmail() { return { success: false, reason: 'handled_by_firebase' }; }
-export async function sendVerificationEmail() { return { success: false, reason: 'handled_by_firebase' }; }
+export async function sendPasswordResetEmail({ to, resetLink }) {
+  // Firebase handles client-side password reset via sendPasswordResetEmail on the client.
+  // This backend handler is a fallback for server-triggered resets (e.g. admin-initiated).
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn('[Email] sendPasswordResetEmail: RESEND_API_KEY not set — cannot send server-side reset. Firebase handles this on the client.');
+    return { success: false, reason: 'not_configured' };
+  }
+  const html = `<div style="max-width:480px;margin:40px auto;padding:24px;background:#0f1923;border-radius:16px;font-family:sans-serif;">
+    <h2 style="color:#fff;margin:0 0 16px;">Reset Your Password</h2>
+    <p style="color:#8892a4;margin:0 0 24px;">Click the button below to reset your ScorePhantom password. This link expires in 1 hour.</p>
+    <a href="${resetLink}" style="display:inline-block;background:#10e774;color:#000;font-weight:700;padding:12px 28px;border-radius:8px;text-decoration:none;">Reset Password</a>
+    <p style="color:#64748b;font-size:12px;margin-top:24px;">If you didn't request this, you can safely ignore this email.</p>
+  </div>`;
+  return sendEmail({ to, subject: 'ScorePhantom — Password Reset', html });
+}
+
+export async function sendVerificationEmail({ to, verificationLink }) {
+  // Firebase handles client-side email verification via sendEmailVerification on the client.
+  // This backend handler is a fallback for server-triggered verifications.
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn('[Email] sendVerificationEmail: RESEND_API_KEY not set — cannot send server-side verification. Firebase handles this on the client.');
+    return { success: false, reason: 'not_configured' };
+  }
+  const html = `<div style="max-width:480px;margin:40px auto;padding:24px;background:#0f1923;border-radius:16px;font-family:sans-serif;">
+    <h2 style="color:#fff;margin:0 0 16px;">Verify Your Email</h2>
+    <p style="color:#8892a4;margin:0 0 24px;">Thanks for signing up! Click the button below to verify your email address and start using ScorePhantom.</p>
+    <a href="${verificationLink}" style="display:inline-block;background:#10e774;color:#000;font-weight:700;padding:12px 28px;border-radius:8px;text-decoration:none;">Verify Email</a>
+    <p style="color:#64748b;font-size:12px;margin-top:24px;">If you didn't create this account, you can safely ignore this email.</p>
+  </div>`;
+  return sendEmail({ to, subject: 'ScorePhantom — Verify Your Email', html });
+}

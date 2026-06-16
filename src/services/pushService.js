@@ -34,18 +34,27 @@ async function sendToTokens({ title, body, data, tokens, app }) {
 
 export async function broadcastPush({ title, body, data = {}, url = '/' }) {
   const app = getApp(); if (!app) return { sent: 0, failed: 0 };
+  let tokens = [];
+  try {
   const r = await db.execute({ sql: 'SELECT DISTINCT token FROM push_tokens LIMIT 500', args: [] });
-  const tokens = (r.rows || []).map(x => x.token).filter(Boolean);
-  if (!tokens.length) { console.log('[Push] No tokens'); return { sent: 0, failed: 0, total: 0 }; }
-  return sendToTokens({ title, body, data: { ...data, url }, tokens, app });
+  tokens = (r.rows || []).map(x => x.token).filter(Boolean);
+} catch (e) {
+console.error('[Push] broadcastPush db.execute error:', e.message);
+return { sent: 0, failed: 0, total: 0 };
+}
+if (!tokens.length) { console.log('[Push] No tokens'); return { sent: 0, failed: 0, total: 0 }; }
+return sendToTokens({ title, body, data: { ...data, url }, tokens, app });
 }
 
 export async function sendToUsers({ userIds, title, body, data = {}, url = '/' }) {
   const app = getApp(); if (!app) return { sent: 0, failed: 0 };
   // Empty array = send to nobody, NOT broadcast to all users
   if (!userIds || !userIds.length) return { sent: 0, failed: 0, total: 0 };
-  const ph = userIds.map(() => '?').join(',');
-  const r = await db.execute({ sql: 'SELECT DISTINCT token FROM push_tokens WHERE user_id IN (' + ph + ') LIMIT 500', args: userIds });
+  // Sanitize userIds to integers to prevent SQL injection
+  const safeUserIds = userIds.map(id => parseInt(id, 10)).filter(n => !isNaN(n));
+  if (!safeUserIds.length) return { sent: 0, failed: 0, total: 0 };
+  const ph = safeUserIds.map(() => '?').join(',');
+  const r = await db.execute({ sql: 'SELECT DISTINCT token FROM push_tokens WHERE user_id IN (' + ph + ') LIMIT 500', args: safeUserIds });
   const tokens = (r.rows || []).map(x => x.token).filter(Boolean);
   if (!tokens.length) return { sent: 0, failed: 0, total: 0 };
   return sendToTokens({ title, body, data: { ...data, url }, tokens, app });

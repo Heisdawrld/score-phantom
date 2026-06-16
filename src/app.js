@@ -29,6 +29,11 @@ import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
 
 dotenv.config();
 
+// ── C7: Global unhandled rejection handler ────────────────────────────────────
+process.on('unhandledRejection', (err) => {
+console.error('Unhandled Rejection:', err);
+});
+
 // ── Startup checks ────────────────────────────────────────────────────────────
 if (!process.env.TURSO_DATABASE_URL) {
   console.error("❌ FATAL: TURSO_DATABASE_URL environment variable is required.");
@@ -47,8 +52,10 @@ const PORT = process.env.PORT || 3000;
 
 // CORS - allow APP_URL and onrender.com
 const APP_ORIGIN = (process.env.APP_URL || '').trim();
-const allowedOrigins = [
+const VITE_APP_ORIGIN = (process.env.VITE_APP_URL || '').trim();
+  const allowedOrigins = [
   APP_ORIGIN,
+  VITE_APP_ORIGIN,
   'https://score-phantom.onrender.com',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -67,7 +74,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 app.use("/api", routes);
 app.use("/api/basketball", basketballRoutes);

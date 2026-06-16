@@ -306,10 +306,10 @@ export async function requireAuth(req, res, next) {
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   try {
     const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
     // Security: Check token version
-    const result = await db.execute({ 
+    const result = await db.execute({
       sql: "SELECT id, email, token_version FROM users WHERE id = ? LIMIT 1", 
       args: [decoded.id] 
     });
@@ -332,7 +332,7 @@ export async function requirePremiumAccess(req, res, next) {
   if (parts.length !== 2 || parts[0] !== "Bearer")
     return res.status(401).json({ error: "Not authenticated" });
   try {
-    const decoded = jwt.verify(parts[1], JWT_SECRET);
+    const decoded = jwt.verify(parts[1], JWT_SECRET, { algorithms: ['HS256'] });
     const result  = await db.execute({ sql: "SELECT * FROM users WHERE id = ? LIMIT 1", args: [decoded.id] });
     const user    = result.rows?.[0];
     
@@ -1199,6 +1199,20 @@ router.post("/webhook/flutterwave", async (req, res) => {
     if (!verifyWebhookSignature(req)) {
       console.warn('[FLW Webhook] Invalid signature — rejecting');
       return res.sendStatus(401);
+    }
+
+    // ── C12: Replay attack prevention — tx_ref idempotency check ──
+    const rawBody = req.body;
+    const txRefEarly = rawBody?.data?.tx_ref;
+    if (txRefEarly) {
+      const existingTx = await db.execute({
+        sql: 'SELECT id FROM payments WHERE reference = ? AND status = \'verified\' LIMIT 1',
+        args: [String(txRefEarly).trim()],
+      });
+      if (existingTx.rows?.[0]) {
+        console.log('[FLW Webhook] Already processed tx_ref=' + txRefEarly + ' — ignoring replay');
+        return res.sendStatus(200);
+      }
     }
 
     const event = req.body;

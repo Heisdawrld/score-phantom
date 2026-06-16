@@ -103,13 +103,14 @@ export async function seedFixtures({ days = 7, startOffset = 0, clearFirst = fal
   startDate.setDate(now.getDate() + startOffset);
   const endDate = new Date(now);
   endDate.setDate(now.getDate() + startOffset + days);
-  const startDateStr = startDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-  const endDateStr = endDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  const TZ = process.env.TIMEZONE || 'Africa/Lagos';
+  const startDateStr = startDate.toLocaleDateString('en-CA', { timeZone: TZ });
+  const endDateStr = endDate.toLocaleDateString('en-CA', { timeZone: TZ });
 
   for (let i = startOffset; i <= startOffset + days; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
-    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: TZ });
     const events = await fetchFixturesByDate(dateStr);
     for (const e of events) {
       const eid = String(e.id || '');
