@@ -84,6 +84,49 @@ function safeJsonParse(value, fallback = {}) {
   }
 }
 
+const DATA_QUALITY_SCORE_MAP = {
+  excellent: 0.9,
+  good: 0.7,
+  moderate: 0.5,
+  poor: 0.25,
+  deep: 0.85,
+  basic: 0.6,
+  limited: 0.4,
+  none: 0.2,
+  no_data: 0.1,
+};
+
+const KNOWN_ADVISOR_STATUSES = new Set([
+  'BET',
+  'ACCA',
+  'SKIP',
+  'FIRE',
+  'RECOMMENDED',
+  'GAMBLE',
+  'CAUTIOUS',
+  'AVOID',
+]);
+
+function mapDataQualityScore(rawValue, fallback = 0.5) {
+  const raw = String(rawValue || '').toLowerCase().trim();
+  if (!raw) return fallback;
+  if (Object.prototype.hasOwnProperty.call(DATA_QUALITY_SCORE_MAP, raw)) {
+    return DATA_QUALITY_SCORE_MAP[raw];
+  }
+  const parsed = parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getStoredEngineResult(predictionJson) {
+  const parsed = safeJsonParse(predictionJson, null);
+  if (!parsed) return null;
+  return parsed.engineResult || parsed;
+}
+
+function getStoredBestPick(predictionJson) {
+  return getStoredEngineResult(predictionJson)?.bestPick || null;
+}
+
 function mapHistoryRow(row) {
   return {
     home: row.home_team,
@@ -534,28 +577,21 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       // BUG FIX: data_quality is stored as TEXT ('excellent','good','moderate','poor'),
       // not a number. parseFloat('excellent') = NaN → always fell through to 0.5 default.
       // Now properly map text quality tiers to numeric scores.
-      const dqRaw = (f.data_quality || '').toLowerCase().trim();
-      const DATA_QUALITY_MAP = { excellent: 0.9, good: 0.7, moderate: 0.5, poor: 0.25, deep: 0.85, basic: 0.6, limited: 0.4, none: 0.2, no_data: 0.1 };
-      const dataQ = DATA_QUALITY_MAP[dqRaw] ?? (dqRaw && !isNaN(parseFloat(dqRaw)) ? parseFloat(dqRaw) : 0.5);
+      const dataQ = mapDataQualityScore(f.data_quality, 0.5);
 
       // ── Extract v4 fields from prediction_json ──────────────────────────
       // Syncs fixture list badges with the EV-aware engine output
       let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
       try {
-        const predJson = typeof f.prediction_json === 'string'
-          ? JSON.parse(f.prediction_json)
-          : f.prediction_json;
-        if (predJson) {
-          const bp = predJson.bestPick || null;
-          if (bp) {
-            v4Fields.valueTier = bp.valueTier || null;
-            v4Fields.ev = bp.ev != null ? bp.ev : null;
-            v4Fields.odds = bp.bookmakerOdds || bp.odds || null;
-            v4Fields.isAccaEligible = bp.isAccaEligible === true;
-            v4Fields.advisor_status = bp.advisor_status || null;
-            v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
-            v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
-          }
+        const bp = getStoredBestPick(f.prediction_json);
+        if (bp) {
+          v4Fields.valueTier = bp.valueTier || null;
+          v4Fields.ev = bp.ev != null ? bp.ev : null;
+          v4Fields.odds = bp.bookmakerOdds || bp.odds || null;
+          v4Fields.isAccaEligible = bp.isAccaEligible === true;
+          v4Fields.advisor_status = bp.advisor_status || null;
+          v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
+          v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
         }
       } catch (_) {}
 
@@ -570,8 +606,8 @@ router.get("/fixtures", requireAuth, async (req, res) => {
         : (edge >= 0.08);
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
-      if (v4Fields.advisor_status && ['FIRE', 'RECOMMENDED', 'GAMBLE', 'CAUTIOUS', 'AVOID'].includes(v4Fields.advisor_status)) {
-        // Use engine-computed status (most accurate)
+      if (v4Fields.advisor_status && KNOWN_ADVISOR_STATUSES.has(String(v4Fields.advisor_status).toUpperCase())) {
+        // Use engine-computed status when present, including the current BET/ACCA/SKIP system.
         f.advisor_status = v4Fields.advisor_status;
       } else if (prob > 0) {
         // Fallback: EV-aware probability logic (matches responseAdapter fallback path)
@@ -614,7 +650,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       // ── BUG FIX: Suppress is_safe_bet/is_value_bet for AVOID picks ──
       // Showing "Safe Bet" or "Value Bet" badges alongside an AVOID advisor status
       // is contradictory and confuses users. AVOID overrides these flags.
-      if (f.advisor_status === 'AVOID' || v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
+      if (f.advisor_status === 'AVOID' || f.advisor_status === 'SKIP' || v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
         f.is_safe_bet = false;
         f.is_value_bet = false;
         f.is_acca_eligible = false;
@@ -1504,32 +1540,26 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // NOT the full prediction. prediction_json stores the full engine result.
       let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
       try {
-        const predJson = typeof row.prediction_json === 'string'
-          ? JSON.parse(row.prediction_json)
-          : row.prediction_json;
-        if (predJson) {
-          // prediction_json stores the raw engine result — bestPick is at top level
-          const bestPick = predJson.bestPick || null;
-          if (bestPick) {
-            v4Fields.valueTier = bestPick.valueTier || null;
-            v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
-            v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
-            v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
-            v4Fields.advisor_status = bestPick.advisor_status || null;
-            v4Fields.isSafeBet = bestPick.isSafeBet != null ? bestPick.isSafeBet : null;
-            v4Fields.isValueBet = bestPick.isValueBet != null ? bestPick.isValueBet : null;
-          }
+        const bestPick = getStoredBestPick(row.prediction_json);
+        if (bestPick) {
+          v4Fields.valueTier = bestPick.valueTier || null;
+          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
+          v4Fields.advisor_status = bestPick.advisor_status || null;
+          v4Fields.isSafeBet = bestPick.isSafeBet != null ? bestPick.isSafeBet : null;
+          v4Fields.isValueBet = bestPick.isValueBet != null ? bestPick.isValueBet : null;
         }
       } catch (_) {}
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
       let advisorStatus;
-      if (v4Fields.advisor_status && ['FIRE', 'RECOMMENDED', 'GAMBLE', 'CAUTIOUS', 'AVOID'].includes(v4Fields.advisor_status)) {
-        // Use engine-computed status (most accurate — comes from scoreMarketCandidates/finalizePredictionResult)
+      if (v4Fields.advisor_status && KNOWN_ADVISOR_STATUSES.has(String(v4Fields.advisor_status).toUpperCase())) {
+        // Use engine-computed status, including current BET/ACCA/SKIP badges.
         advisorStatus = v4Fields.advisor_status;
       } else {
         // Fallback: EV-aware probability logic (synced with responseAdapter fallback path)
-        const dataQ = parseFloat(row.data_quality || 0.5);
+        const dataQ = mapDataQualityScore(row.data_quality, 0.5);
         const ev = v4Fields.ev;
         const odds = v4Fields.odds;
         const isPositiveEV = ev != null && ev >= 0;
@@ -1595,6 +1625,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     // they have a bestPick with probability > 50%. Filter them here.
     const filteredPicks = picks.filter(p =>
       p.advisor_status !== 'AVOID' &&
+      p.advisor_status !== 'SKIP' &&
       p.valueTier !== 'JUNK' &&
       p.valueTier !== 'NEGATIVE_EV'
     );
@@ -1699,19 +1730,15 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     // ── Extract v4 fields from prediction_json ────────────────────────────
     // BUG FIX: Previously used explanation_json which stores explanation lines (array),
     // NOT the full prediction. prediction_json stores the full engine result.
-    let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false };
+    let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null };
     try {
-      const predJson = typeof row.prediction_json === 'string'
-        ? JSON.parse(row.prediction_json)
-        : row.prediction_json;
-      if (predJson) {
-        const bestPick = predJson.bestPick || null;
-        if (bestPick) {
-          v4Fields.valueTier = bestPick.valueTier || null;
-          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
-          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
-          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
-        }
+      const bestPick = getStoredBestPick(row.prediction_json);
+      if (bestPick) {
+        v4Fields.valueTier = bestPick.valueTier || null;
+        v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
+        v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
+        v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
+        v4Fields.advisor_status = bestPick.advisor_status || null;
       }
     } catch (_) {}
 
@@ -1722,7 +1749,12 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     // ── BUG FIX: Don't return AVOID/junk picks as the "value bet of the day" ──
     // Even with the SQL no_safe_pick filter, an AVOID-badge pick (junk odds, negative EV)
     // could still be the top result by edge. These should never be promoted.
-    if (v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
+    if (
+      v4Fields.advisor_status === 'SKIP' ||
+      v4Fields.advisor_status === 'AVOID' ||
+      v4Fields.valueTier === 'JUNK' ||
+      v4Fields.valueTier === 'NEGATIVE_EV'
+    ) {
       return res.json({ found: false, access: buildAccessPayload(req.access) });
     }
 

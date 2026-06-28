@@ -665,10 +665,13 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
   // or all_candidates. Showing "Other Good Options" alongside a SKIP
   // verdict is contradictory.
   const isSkipResponse = recommendation?.advisor_status === 'SKIP' || recommendation?.no_edge === true || recommendation?.isAvoidedPick === true;
+  const candidateSource = Array.isArray(allCandidates) && allCandidates.length > 0
+    ? allCandidates
+    : (rankedMarkets || []);
   const backup_picks = isSkipResponse ? [] : (backupPicks || []).slice(0, 5)
     .map((bp) => buildPickObject(bp, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
-  const all_candidates = isSkipResponse ? [] : (allCandidates || rankedMarkets || []).slice(0, 10)
+  const all_candidates = isSkipResponse ? [] : candidateSource.slice(0, 10)
     .map((c) => buildPickObject(c, homeTeam, awayTeam, dataCompletenessScore, engineConfidence?.model))
     .filter(Boolean);
   const correct_score = (correctScoreProbs || []).slice(0, 10).map((cs) => ({

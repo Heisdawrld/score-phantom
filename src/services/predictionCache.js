@@ -30,7 +30,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '3.3.0'; // v3.3.0: Bookmaker odds blending, rotation/fatigue/rest/cup/season-stage, implied odds fix
+const CURRENT_ENGINE_VERSION = '5.1.0'; // v5.1.0: engine transplant + verdict ladder contract fixes
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
