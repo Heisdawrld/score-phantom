@@ -58,6 +58,7 @@ import MatchCenter from "@/pages/MatchCenter";
 import Profile from "@/pages/Profile";
 import PaymentBilling from "@/pages/PaymentBilling";
 import BillingHistory from "@/pages/BillingHistory";
+import { Footer } from "@/components/layout/Footer";
 import Settings from "@/pages/Settings";
 import Simulator from "@/pages/Simulator";
 import Landing from "@/pages/Landing";
@@ -222,7 +223,13 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <GlassBubbles />
             <ReferralCapture />
-            <Router />
+            {/* Flex-col min-h-screen wrapper enables sticky footer (mt-auto on Footer) */}
+            <div className="relative z-10 min-h-screen flex flex-col">
+              <div className="flex-1">
+                <Router />
+              </div>
+              <Footer />
+            </div>
             <BottomNav />
           </WouterRouter>
           <Toaster />

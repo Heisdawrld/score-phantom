@@ -42,6 +42,42 @@
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --radius-2xl: 1.5rem;
+
+  /* ── TYPE SCALE — 7 steps, 1.250 (major third) ratio ──
+     Use these tokens for ALL text. Eliminates ad-hoc font sizes.
+     Apply via: text-[var(--text-xl)] or the utility classes below. */
+  --text-2xs: 0.625rem;   /* 10px — micro labels, badges, captions */
+  --text-xs:  0.75rem;    /* 12px — secondary text, meta */
+  --text-sm:  0.875rem;   /* 14px — body small, form labels */
+  --text-base: 1rem;      /* 16px — body default */
+  --text-lg:  1.25rem;    /* 20px — card titles, emphasis */
+  --text-xl:  1.5rem;     /* 24px — section headings */
+  --text-2xl: 1.875rem;   /* 30px — page sub-headings */
+  --text-3xl: 2.5rem;     /* 40px — hero stats, page titles */
+  --text-4xl: 3.5rem;     /* 56px — display numbers, ROI */
+
+  /* line-height companions */
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ── SEMANTIC SURFACES — for consistent card hierarchy ── */
+  --surface-1: hsl(215 30% 7%);      /* base panel (cards) */
+  --surface-2: hsl(216 28% 9%);      /* raised panel (hover, popovers) */
+  --surface-3: hsl(218 26% 12%);     /* highest panel (modals, dropdowns) */
+  --surface-inset: hsl(220 30% 5%);  /* inset/recessed (inputs, wells) */
+
+  /* ── ACCENT SEMANTIC TOKENS — discipline color usage ──
+     primary (green)  → CTAs + confidence indicators ONLY
+     accent-blue      → navigation, active states, informational
+     accent-amber     → trial status, warnings, "free" badges
+     accent-orange    → basketball sport, secondary highlights
+     destructive      → losses, errors, destructive actions      */
+  --color-nav-active: hsl(220 100% 65%);        /* blue for active nav */
+  --color-confidence-high: hsl(148 86% 48%);    /* green: 75%+ confidence */
+  --color-confidence-medium: hsl(42 100% 55%);  /* amber: 60-75% */
+  --color-confidence-low: hsl(220 15% 55%);     /* gray: <60% */
 }
 
 @layer base {
@@ -92,6 +128,47 @@
 }
 
 @layer utilities {
+  /* ── TYPE SCALE UTILITIES — use these instead of ad-hoc text-[Npx] ── */
+  .text-2xs   { font-size: var(--text-2xs);  line-height: var(--leading-normal); }
+  .text-xs    { font-size: var(--text-xs);   line-height: var(--leading-normal); }
+  .text-sm    { font-size: var(--text-sm);   line-height: var(--leading-normal); }
+  .text-base  { font-size: var(--text-base); line-height: var(--leading-normal); }
+  .text-lg    { font-size: var(--text-lg);   line-height: var(--leading-snug); }
+  .text-xl    { font-size: var(--text-xl);   line-height: var(--leading-snug); }
+  .text-2xl   { font-size: var(--text-2xl);  line-height: var(--leading-tight); }
+  .text-3xl   { font-size: var(--text-3xl);  line-height: var(--leading-tight); }
+  .text-4xl   { font-size: var(--text-4xl);  line-height: var(--leading-tight); }
+
+  /* Display font helper (Bebas Neue) */
+  .font-display { font-family: var(--font-display); }
+
+  /* ── CARD SURFACE UTILITIES — consistent depth hierarchy ── */
+  .surface-1 { background-color: var(--surface-1); }
+  .surface-2 { background-color: var(--surface-2); }
+  .surface-3 { background-color: var(--surface-3); }
+  .surface-inset { background-color: var(--surface-inset); }
+
+  /* ── INTERACTION UTILITIES — consistent micro-interactions ── */
+  .interactive {
+    @apply transition-all duration-200 ease-out;
+  }
+  .interactive:hover {
+    transform: translateY(-1px);
+  }
+  .interactive-card {
+    @apply transition-all duration-200 ease-out cursor-pointer;
+  }
+  .interactive-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.12) !important;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  }
+
+  /* Focus ring for accessibility */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
   .glass-panel {
     @apply bg-panel/80 backdrop-blur-xl border border-white/5 shadow-2xl shadow-black/50;
   }

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { motion } from "framer-motion";
-import { Search, ChevronRight, Zap } from "lucide-react";
+import { Search, ChevronRight, Zap, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -26,7 +26,7 @@ function getDates() {
 
 export default function Matches() {
   const [, setLocation] = useLocation();
-  const { user, isPremium } = useAccess();
+  const { isPremium } = useAccess();
   const todayIso = new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"});
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [search, setSearch] = useState("");
@@ -37,7 +37,6 @@ export default function Matches() {
     staleTime: 3 * 60 * 1000,
   });
 
-  // We are ready to restore scroll position once the fixtures load
   useScrollRestoration("matches_list", !isLoading);
   const allFixtures: any[] = (data as any)?.fixtures || [];
   const filtered = search.trim()
@@ -49,58 +48,75 @@ export default function Matches() {
     if (!grouped[k]) grouped[k] = [];
     grouped[k].push(f);
   });
+
   return (
     <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
-      <div className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5 relative z-10">
-        <div className="px-4 pt-4 pb-2">
-          <h1 className="text-xl font-black text-white tracking-wide mb-3">Matches</h1>
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x overscroll-x-contain">
+
+      {/* ── Sticky header: title · date pills · search ── */}
+      <header className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5">
+        <div className="px-4 md:px-6 pt-4 pb-2 max-w-3xl mx-auto">
+          <h1 className="text-2xl font-black text-white tracking-wide mb-3">Matches</h1>
+          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x overscroll-x-contain -mx-1 px-1">
             {dates.map(d => (
               <button key={d.iso} onClick={()=>setSelectedDate(d.iso)}
-                className={cn("shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-                  selectedDate===d.iso?"bg-primary text-black shadow-[0_0_12px_rgba(16,231,116,0.4)]":"bg-white/6 text-white/50 hover:text-white/80")}>
+                aria-pressed={selectedDate===d.iso}
+                className={cn("shrink-0 min-w-[44px] min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold transition-all",
+                  selectedDate===d.iso
+                    ? "bg-accent-blue text-white border border-accent-blue/60 shadow-[0_0_18px_rgba(48,128,255,0.35)]"
+                    : "bg-white/6 text-white/55 border border-white/5 hover:text-white/85 hover:bg-white/8")}>
                 {d.label}
               </button>
             ))}
           </div>
         </div>
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2">
-            <Search size={14} className="text-white/30 shrink-0"/>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search team or league..." className="flex-1 bg-transparent text-sm text-white placeholder:text-white/25 outline-none"/>
+        <div className="px-4 md:px-6 pb-3 max-w-3xl mx-auto">
+          <div className="flex items-center gap-2.5 bg-white/5 border border-white/8 rounded-xl px-3.5 py-2.5 transition-colors focus-within:border-accent-blue/40">
+            <Search size={16} className="text-white/40 shrink-0"/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search teams or leagues"
+              className="flex-1 bg-transparent text-base text-white placeholder:text-white/30 outline-none"/>
+            {search && (
+              <button onClick={()=>setSearch("")} aria-label="Clear search"
+                className="text-white/30 hover:text-white/70 transition-colors shrink-0 p-1 -mr-1">
+                <X size={14}/>
+              </button>
+            )}
           </div>
         </div>
-      </div>
-      <div className="flex-1 w-full max-w-lg mx-auto px-3 py-3 flex flex-col gap-3 relative z-10">
+      </header>
+
+      {/* ── Match list, grouped by league ── */}
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 py-4 flex flex-col gap-5 relative z-10">
         {isLoading && Array.from({length:6}).map((_,i)=>(
-          <div key={i} className="h-16 rounded-2xl bg-white/4 animate-pulse"/>
+          <div key={i} className="h-[68px] rounded-2xl bg-white/4 sp-shimmer"/>
         ))}
+
         {!isLoading && filtered.length===0 && (
-          <div className="text-center py-16 text-white/30">
-            <p className="text-4xl mb-3">📅</p>
-            <p className="font-semibold">No matches found</p>
-            <p className="text-xs mt-1">{search?"Try a different search":"Check another date"}</p>
+          <div className="text-center py-20 text-white/35">
+            <p className="text-5xl mb-4">📅</p>
+            <p className="font-bold text-white/55">No matches found</p>
+            <p className="text-sm mt-1">{search ? "Try a different search" : "Check another date"}</p>
           </div>
         )}
-        {!isLoading && Object.entries(grouped).map(([tourneyId, fixtures]) => {
+
+        {!isLoading && Object.entries(grouped).map(([tourneyId, fixtures], groupIdx) => {
           const first = fixtures[0];
           const leagueName = first?.tournament_name || "Unknown League";
-          const flag = first?.country_flag;
           return (
-            <div key={tourneyId} className="mb-1">
-              <div className="flex items-center gap-2 px-1 mb-1.5">
+            <section key={tourneyId} className={cn(groupIdx > 0 && "pt-5 border-t border-white/6")}>
+              <header className="flex items-center gap-2 px-1 mb-2.5">
                 <img
                   src={`https://sports.bzzoiro.com/img/league/${tourneyId}/`}
                   className="w-4 h-4 rounded-sm object-contain"
                   onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
                   alt={leagueName}
                 />
-                <span className="text-[11px] font-black text-white/50 uppercase tracking-wider truncate">{leagueName}</span>
-              </div>
-              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-white/40 uppercase tracking-wider truncate flex-1">{leagueName}</span>
+                <span className="text-2xs font-semibold text-white/25 tabular-nums">{fixtures.length}</span>
+              </header>
+              <div className="flex flex-col gap-2">
                 {fixtures.map((f: any) => {
                   const isLive = f.match_status==="LIVE";
                   const isFT = f.match_status==="FT";
@@ -108,43 +124,49 @@ export default function Matches() {
                   return (
                     <motion.button key={f.id} whileTap={{scale:0.98}}
                       onClick={()=>setLocation("/matches/"+f.id)}
-                      className={cn("w-full flex items-center gap-3 px-3 py-3 rounded-2xl border transition-all text-left",
-                        isLive?"border-red-500/30 bg-red-500/5":"border-white/6 bg-white/3 hover:bg-white/6")}>
-                      <div className="w-12 shrink-0 text-center">
+                      className={cn("interactive-card w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left",
+                        isLive ? "border-red-500/30 bg-red-500/5" : "border-white/6 bg-white/3")}>
+                      <div className="w-14 shrink-0 text-center">
                         {isLive
-                          ? <span className="text-[10px] font-black text-red-400 animate-pulse block leading-tight">LIVE<br/>{f.live_minute||""}</span>
+                          ? <span className="text-2xs font-black text-red-400 animate-pulse block leading-tight">LIVE<br/>{f.live_minute||""}</span>
                           : isFT
-                          ? <span className="text-[10px] font-bold text-white/40">FT</span>
-                          : <span className="text-[11px] font-bold text-white/60">{toWAT(f.match_date)}</span>}
+                          ? <span className="text-xs font-bold text-white/40">FT</span>
+                          : <span className="text-sm font-bold text-white/60 tabular-nums">{toWAT(f.match_date)}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <TeamLogo src={f.home_team_logo} name={f.home_team_name}/>
+                          <TeamLogo src={f.home_team_logo} name={f.home_team_name} size="sm"/>
                           <span className="text-sm font-semibold text-white truncate flex-1">{f.home_team_name}</span>
-                          {(isLive||isFT) && <span className="text-base font-black text-white w-5 text-right">{f.home_score??0}</span>}
+                          {(isLive||isFT) && <span className="text-base font-black text-white w-5 text-right tabular-nums">{f.home_score??0}</span>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <TeamLogo src={f.away_team_logo} name={f.away_team_name}/>
-                          <span className="text-sm font-semibold text-white/60 truncate flex-1">{f.away_team_name}</span>
-                          {(isLive||isFT) && <span className="text-base font-black text-white/70 w-5 text-right">{f.away_score??0}</span>}
+                          <TeamLogo src={f.away_team_logo} name={f.away_team_name} size="sm"/>
+                          <span className="text-sm font-semibold text-white/70 truncate flex-1">{f.away_team_name}</span>
+                          {(isLive||isFT) && <span className="text-base font-black text-white/80 w-5 text-right tabular-nums">{f.away_score??0}</span>}
                         </div>
-                        {hasPred && (
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <Zap size={9} className="text-primary"/>
-                            <span className="text-[10px] font-bold text-primary">{f.best_pick_selection}</span>
-                            {f.best_pick_probability && <span className="text-[10px] text-white/35">{Math.round(f.best_pick_probability*100)}%</span>}
-                          </div>
-                        )}
+                        <div className="mt-1.5 flex items-center gap-1.5 min-h-[14px]">
+                          {hasPred ? (
+                            <>
+                              <Zap size={10} className="text-primary"/>
+                              <span className="text-2xs font-bold text-primary">{f.best_pick_selection}</span>
+                              {f.best_pick_probability && (
+                                <span className="text-2xs font-semibold text-white/40 tabular-nums">{Math.round(f.best_pick_probability*100)}%</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-2xs font-medium text-white/25">— No pick</span>
+                          )}
+                        </div>
                       </div>
-                      <ChevronRight size={14} className="text-white/20 shrink-0"/>
+                      <ChevronRight size={16} className="text-white/25 shrink-0"/>
                     </motion.button>
                   );
                 })}
               </div>
-            </div>
+            </section>
           );
         })}
-      </div>
+      </main>
     </div>
   );
 }
