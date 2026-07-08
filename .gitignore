@@ -12,3 +12,10 @@ user_emails_export.csv
 .swarm/
 .zed/
 .mcp.json
+
+# Local-only — never commit (secrets + noise)
+MEMORY.md
+dev.log
+scripts/diagnose-track-record.mjs
+.zscripts/
+agent-ctx/
