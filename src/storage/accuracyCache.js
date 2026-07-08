@@ -297,6 +297,30 @@ export function getOddsBandAccuracy(marketKey, decimalOdds, cache) {
 }
 
 /**
+ * Richer odds-band lookup used by the pruning layer to detect "odds band traps"
+ * (markets that win often but yield negatively due to short odds).
+ * Returns the band label, weighted yield and sample count so callers can both
+ * branch on yield and surface a human-readable reason.
+ *
+ * Companion to getOddsBandAccuracy (which is the slim view used by calibration).
+ */
+export function getOddsBandPerformance(marketKey, decimalOdds, cache) {
+  if (!cache || !marketKey || !decimalOdds) return null;
+  const oddsBand = bandOdds(decimalOdds);
+  if (!oddsBand) return null;
+  const byOddsBand = cache.byOddsBand || {};
+  const entry = byOddsBand[`${marketKey}::${oddsBand}`];
+  if (!entry || entry.samples < MIN_SAMPLES) return null;
+  return {
+    oddsBand,
+    winRate: entry.weightedWinRate || entry.winRate,
+    weightedYield: Number.isFinite(entry.weightedYield) ? entry.weightedYield : entry.yieldRate,
+    samples: entry.samples,
+    pricedSamples: entry.pricedSamples || 0,
+  };
+}
+
+/**
  * NEW: Get confidence band win rate — e.g., how often do FIRE picks actually win?
  * Used to validate and adjust confidence assignments.
  */
