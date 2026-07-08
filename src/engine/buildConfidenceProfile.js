@@ -245,5 +245,11 @@ export function buildConfidenceProfile(bestPick, featureVector) {
     console.log(`[confidence] ${marketKey}: prob=${(modelProbability*100).toFixed(1)}% adjProb=${(adjustedProbability*100).toFixed(1)}% baseline=${(baseline*100).toFixed(0)}% edgeAboveBaseline=${(edgeAboveBaseline*100).toFixed(1)}pp → ${model}`);
   }
 
-  return { model, value, volatility, dataQualityNote, restrictMarkets: !!restrictMarkets, edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)), marketBaseline: parseFloat(baseline.toFixed(4)) };
+  // Normalize to UPPERCASE for consistent storage/querying.
+  // Internal logic uses lowercase, but all downstream consumers (DB, API, UI)
+  // expect uppercase. This single normalization point prevents the
+  // high/HIGH case inconsistency that fragmented historical analysis.
+  const modelUpper = (model || 'low').toUpperCase();
+
+  return { model: modelUpper, value: (value || 'low').toUpperCase(), volatility: (volatility || 'medium').toUpperCase(), dataQualityNote, restrictMarkets: !!restrictMarkets, edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)), marketBaseline: parseFloat(baseline.toFixed(4)) };
 }

@@ -494,6 +494,39 @@ async function runSchema() {
     // Don't crash — the app can still run
   }
 
+  // ── One-time migration: normalize model_confidence to UPPERCASE ───────────
+  // Historically, buildConfidenceProfile emitted lowercase ('high','medium',...)
+  // while mapModelConfidence (responseAdapter) emitted UPPERCASE. Both got
+  // stored in different tables, creating case-inconsistent data that broke
+  // GROUP BY queries and fragmented confidence analysis.
+  // This migration uppercases all existing values; the engine now also emits
+  // uppercase (buildConfidenceProfile.js return point normalized).
+  try {
+    const confCaseFix = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['normalize_confidence_case_v1'] });
+    if ((confCaseFix.rows || []).length === 0) {
+      console.log('[Migration] Running normalize_confidence_case_v1 — uppercasing all confidence labels...');
+
+      const poResult = await db.execute(`UPDATE prediction_outcomes SET model_confidence = UPPER(model_confidence) WHERE model_confidence IS NOT NULL AND model_confidence != ''`);
+      console.log(`[Migration] prediction_outcomes: ${poResult.rowsAffected} rows uppercased`);
+
+      const ppResult = await db.execute(`UPDATE prediction_picks SET model_confidence = UPPER(model_confidence) WHERE model_confidence IS NOT NULL AND model_confidence != ''`);
+      console.log(`[Migration] prediction_picks: ${ppResult.rowsAffected} rows uppercased`);
+
+      try {
+        const pvResult = await db.execute(`UPDATE predictions_v2 SET confidence_model = UPPER(confidence_model) WHERE confidence_model IS NOT NULL AND confidence_model != ''`);
+        console.log(`[Migration] predictions_v2: ${pvResult.rowsAffected} rows uppercased`);
+      } catch (e) {
+        // predictions_v2.confidence_model might not exist in very old snapshots — skip
+        console.log('[Migration] predictions_v2.confidence_model skip:', e.message);
+      }
+
+      await db.execute({ sql: `INSERT INTO _migrations (name) VALUES (?)`, args: ['normalize_confidence_case_v1'] });
+      console.log('[Migration] normalize_confidence_case_v1 completed');
+    }
+  } catch (confCaseErr) {
+    console.error('[Migration] normalize_confidence_case_v1 error:', confCaseErr.message);
+  }
+
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 

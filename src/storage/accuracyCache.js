@@ -142,7 +142,7 @@ async function buildAccuracyMaps() {
   // ── 4. Per-confidence band ─────────────────────────────────────────────────
   const perConfidence = await db.execute(`
     SELECT
-      po.model_confidence,
+      UPPER(po.model_confidence) AS model_confidence,
       COUNT(*) AS total,
       SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
       SUM(${TIME_DECAY_SQL}) AS weighted_total,
@@ -150,7 +150,7 @@ async function buildAccuracyMaps() {
     FROM prediction_outcomes po
     WHERE po.outcome IN ('win','loss')
       AND ${SOURCE_FILTER}
-    GROUP BY po.model_confidence
+    GROUP BY UPPER(po.model_confidence)
   `);
 
   // ── 5. Per-odds-band (NEW — crucial for probability calibration) ───────────

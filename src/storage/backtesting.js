@@ -194,12 +194,12 @@ export async function getAccuracyStats() {
         GROUP BY predicted_market ORDER BY total DESC
       `),
       db.execute(`
-        SELECT model_confidence,
+        SELECT UPPER(model_confidence) as model_confidence,
           COUNT(*) as total,
           SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) as correct,
           ROUND(100.0 * SUM(CASE WHEN outcome IN ('correct','win') THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 1) as win_rate
         FROM prediction_outcomes WHERE outcome NOT IN ('void') AND ${sourceFilter}
-        GROUP BY model_confidence ORDER BY win_rate DESC
+        GROUP BY UPPER(model_confidence) ORDER BY win_rate DESC
       `),
       db.execute(`
         SELECT fixture_id, home_team, away_team, predicted_market,

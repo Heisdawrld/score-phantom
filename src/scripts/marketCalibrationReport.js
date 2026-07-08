@@ -76,14 +76,14 @@ async function main() {
 
   const byConfidence = await queryBuckets(`
     SELECT
-      COALESCE(NULLIF(po.model_confidence,''), 'unknown') AS confidence_band,
+      COALESCE(NULLIF(UPPER(po.model_confidence),''), 'UNKNOWN') AS confidence_band,
       CAST(COUNT(*) AS INTEGER) AS total_picks,
       ROUND(100.0 * SUM(CASE WHEN po.result_status='win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0), 2) AS win_rate_pct,
       ROUND(AVG(po.best_pick_odds), 3) AS avg_odds,
       ROUND(SUM(po.profit_units), 3) AS total_profit_units,
       ROUND(100.0 * SUM(po.profit_units) / NULLIF(SUM(po.stake_units),0), 2) AS yield_pct
     ${baseWhere}
-    GROUP BY COALESCE(NULLIF(po.model_confidence,''), 'unknown')
+    GROUP BY COALESCE(NULLIF(UPPER(po.model_confidence),''), 'UNKNOWN')
     ORDER BY total_picks DESC
   `, []);
 

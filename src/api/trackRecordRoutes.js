@@ -51,7 +51,7 @@ router.get("/stats", async (req, res) => {
 
     const liveByConfidence = await db.execute(`
       SELECT
-        model_confidence as confidence,
+        UPPER(model_confidence) as confidence,
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
       FROM prediction_outcomes
@@ -59,7 +59,7 @@ router.get("/stats", async (req, res) => {
         AND model_confidence IS NOT NULL
         AND ${liveSportFilter}
         AND ${sourceFilter}
-      GROUP BY model_confidence
+      GROUP BY UPPER(model_confidence)
       ORDER BY total DESC
     `);
 
