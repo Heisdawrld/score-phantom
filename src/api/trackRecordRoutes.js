@@ -16,29 +16,35 @@ router.get("/stats", async (req, res) => {
       : `sport_key = 'basketball'`;
 
     // Source filter: exclude backtest and retroactive predictions from user-facing stats
-    // prediction_source: 'live' = real-time prediction, 'backtest' = historical simulation, 'ws_live' = live score resolution
-    // is_retroactive: 1 = prediction was built AFTER the match ended (not a real prediction)
     const sourceFilter = `(prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
 
-    // 1. Live prediction outcomes only (what the engine actually predicted before the match)
+    // 1. Overall — now with ROI, profit, odds coverage
     const liveOverall = await db.execute(`
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
         SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost,
-        SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided
+        SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided,
+        SUM(stake_units) as total_staked,
+        SUM(profit_units) as total_profit,
+        AVG(best_pick_odds) as avg_odds,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL THEN 1 ELSE 0 END) as picks_with_odds
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong','void')
         AND ${liveSportFilter}
         AND ${sourceFilter}
     `);
 
+    // 2. By market — now with ROI, profit, avg odds
     const liveByMarket = await db.execute(`
       SELECT
         predicted_market as market,
         COUNT(*) as total,
         SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
-        SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost
+        SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost,
+        SUM(stake_units) as staked,
+        SUM(profit_units) as profit,
+        AVG(best_pick_odds) as avg_odds
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND predicted_market IS NOT NULL
@@ -49,11 +55,14 @@ router.get("/stats", async (req, res) => {
       LIMIT 12
     `);
 
+    // 3. By confidence — now with ROI, profit
     const liveByConfidence = await db.execute(`
       SELECT
         UPPER(model_confidence) as confidence,
         COUNT(*) as total,
-        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
+        SUM(stake_units) as staked,
+        SUM(profit_units) as profit
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND model_confidence IS NOT NULL
@@ -63,34 +72,74 @@ router.get("/stats", async (req, res) => {
       ORDER BY total DESC
     `);
 
-    const liveRow = liveOverall.rows[0] || {};
-    const totalMatches = Number(liveRow.total || 0);
-    const totalWon = Number(liveRow.won || 0);
-    const totalLost = Number(liveRow.lost || 0);
-    const settled = totalWon + totalLost;
-    const overallHitRate = settled > 0 ? totalWon / settled : 0;
+    // 4. By odds band (NEW — shows where the engine actually makes/loses money)
+    const liveByOddsBand = await db.execute(`
+      SELECT
+        CASE
+          WHEN best_pick_odds < 1.50 THEN '1. <1.50'
+          WHEN best_pick_odds < 2.00 THEN '2. 1.50-1.99'
+          WHEN best_pick_odds < 2.50 THEN '3. 2.00-2.49'
+          WHEN best_pick_odds < 3.00 THEN '4. 2.50-2.99'
+          WHEN best_pick_odds >= 3.00 THEN '5. 3.00+'
+        END as band,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
+        SUM(stake_units) as staked,
+        SUM(profit_units) as profit
+      FROM prediction_outcomes
+      WHERE outcome IN ('win','correct','loss','wrong')
+        AND best_pick_odds IS NOT NULL
+        AND ${liveSportFilter}
+        AND ${sourceFilter}
+      GROUP BY band
+      ORDER BY band
+    `).catch(() => ({ rows: [] }));
 
-    const byMarket = (liveByMarket.rows || []).map(m => ({
-      market: m.market,
-      total: Number(m.total),
-      won: Number(m.won),
-      lost: Number(m.lost),
-      hitRate: Number(m.total) > 0 ? Number(m.won) / Number(m.total) : 0,
-    }));
+    // 5. By sharp value flag (NEW — shows the elite subsystem vs everything else)
+    const liveBySharp = await db.execute(`
+      SELECT
+        CASE WHEN is_sharp_value = 1 THEN 'SHARP' ELSE 'STANDARD' END as kind,
+        COUNT(*) as total,
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
+        SUM(stake_units) as staked,
+        SUM(profit_units) as profit
+      FROM prediction_outcomes
+      WHERE outcome IN ('win','correct','loss','wrong')
+        AND ${liveSportFilter}
+        AND ${sourceFilter}
+      GROUP BY kind
+      ORDER BY total DESC
+    `).catch(() => ({ rows: [] }));
 
-    const byConfidence = (liveByConfidence.rows || []).map(r => ({
-      confidence: r.confidence,
-      total: Number(r.total),
-      won: Number(r.won),
-      hitRate: Number(r.total) > 0 ? Number(r.won) / Number(r.total) : 0,
-    }));
+    // 6. Calibration (NEW — predicted probability vs actual win rate)
+    const calibration = await db.execute(`
+      SELECT
+        CASE
+          WHEN predicted_probability < 0.55 THEN '1. <55%'
+          WHEN predicted_probability < 0.65 THEN '2. 55-65%'
+          WHEN predicted_probability < 0.75 THEN '3. 65-75%'
+          WHEN predicted_probability >= 0.75 THEN '4. 75%+'
+        END as band,
+        COUNT(*) as total,
+        ROUND(AVG(predicted_probability), 3) as avg_predicted,
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
+      FROM prediction_outcomes
+      WHERE outcome IN ('win','correct','loss','wrong')
+        AND predicted_probability IS NOT NULL
+        AND ${liveSportFilter}
+        AND ${sourceFilter}
+      GROUP BY band
+      ORDER BY band
+    `).catch(() => ({ rows: [] }));
 
-    // Monthly breakdown (last 3 months from live outcomes)
+    // 7. Monthly — now with ROI
     const monthlyRes = await db.execute(`
       SELECT
         strftime('%Y-%m', evaluated_at) as month,
         COUNT(*) as total,
-        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
+        SUM(stake_units) as staked,
+        SUM(profit_units) as profit
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong')
         AND evaluated_at >= datetime('now', '-90 days')
@@ -101,12 +150,66 @@ router.get("/stats", async (req, res) => {
       LIMIT 6
     `).catch(() => ({ rows: [] }));
 
-    const monthly = (monthlyRes.rows || []).map(r => ({
-      month: r.month,
-      total: Number(r.total),
-      won: Number(r.won),
-      hitRate: Number(r.total) > 0 ? Number(r.won) / Number(r.total) : 0,
-    }));
+    // ── Build response ──────────────────────────────────────────────────────
+    const liveRow = liveOverall.rows[0] || {};
+    const totalMatches = Number(liveRow.total || 0);
+    const totalWon = Number(liveRow.won || 0);
+    const totalLost = Number(liveRow.lost || 0);
+    const settled = totalWon + totalLost;
+    const overallHitRate = settled > 0 ? totalWon / settled : 0;
+    const totalStaked = Number(liveRow.total_staked || 0);
+    const totalProfit = Number(liveRow.total_profit || 0);
+    const roi = totalStaked > 0 ? totalProfit / totalStaked : 0;
+    const picksWithOdds = Number(liveRow.picks_with_odds || 0);
+
+    const mapWithRoi = (rows, opts = {}) => (rows || []).map(r => {
+      const staked = Number(r.staked || 0);
+      const profit = Number(r.profit || 0);
+      const total = Number(r.total || 0);
+      const won = Number(r.won || 0);
+      const base = {
+        total, won,
+        hitRate: total > 0 ? won / total : 0,
+        staked, profit,
+        roi: staked > 0 ? profit / staked : 0,
+      };
+      if (opts.marketKey) return { market: r.market, ...base, lost: Number(r.lost || 0), avgOdds: Number(r.avg_odds || 0) };
+      if (opts.confKey) return { confidence: r.confidence, ...base };
+      if (opts.bandKey) return { band: r.band, ...base };
+      if (opts.kindKey) return { kind: r.kind, ...base };
+      return base;
+    });
+
+    const byMarket = mapWithRoi(liveByMarket.rows, { marketKey: true });
+    const byConfidence = mapWithRoi(liveByConfidence.rows, { confKey: true });
+    const byOddsBand = mapWithRoi(liveByOddsBand.rows, { bandKey: true });
+    const bySharp = mapWithRoi(liveBySharp.rows, { kindKey: true });
+
+    const calibrationData = (calibration.rows || []).map(r => {
+      const total = Number(r.total || 0);
+      const won = Number(r.won || 0);
+      const avgPred = Number(r.avg_predicted || 0);
+      const actual = total > 0 ? won / total : 0;
+      return {
+        band: r.band,
+        total, avgPredicted: avgPred, won,
+        actualWinRate: actual,
+        gap: actual - avgPred, // negative = overconfident
+      };
+    });
+
+    const monthly = (monthlyRes.rows || []).map(r => {
+      const staked = Number(r.staked || 0);
+      const profit = Number(r.profit || 0);
+      const total = Number(r.total || 0);
+      const won = Number(r.won || 0);
+      return {
+        month: r.month, total, won,
+        hitRate: total > 0 ? won / total : 0,
+        staked, profit,
+        roi: staked > 0 ? profit / staked : 0,
+      };
+    });
 
     // Backtest stats (kept separate — for engine calibration, not user display)
     let backtestTotal = 0;
@@ -124,11 +227,21 @@ router.get("/stats", async (req, res) => {
 
     res.json({
       sport: sportKey,
-      overall: { total: settled, won: totalWon, lost: totalLost, voided: Number(liveRow.voided || 0), hitRate: overallHitRate },
+      overall: {
+        total: settled, won: totalWon, lost: totalLost,
+        voided: Number(liveRow.voided || 0), hitRate: overallHitRate,
+        // ROI fields (NEW)
+        totalStaked, totalProfit, roi,
+        avgOdds: Number(liveRow.avg_odds || 0),
+        picksWithOdds, oddsCoverage: totalMatches > 0 ? picksWithOdds / totalMatches : 0,
+      },
       live: { total: totalMatches, won: totalWon },
       backtest: { total: backtestTotal, won: backtestWon, note: 'Historical simulation data — not shown to users' },
       byMarket,
       byConfidence,
+      byOddsBand,
+      bySharp,
+      calibration: calibrationData,
       monthly,
     });
   } catch (error) {
@@ -177,6 +290,8 @@ router.get("/recent", async (req, res) => {
                 model_confidence,
                 home_score as home_goals, away_score as away_goals,
                 full_score, outcome as actual_result,
+                best_pick_odds, stake_units, profit_units,
+                is_sharp_value,
                 prediction_source,
                 evaluated_at as created_at
               FROM prediction_outcomes

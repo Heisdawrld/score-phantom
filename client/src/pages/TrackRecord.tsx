@@ -25,6 +25,13 @@ interface OverallStats {
   lost: number;
   voided: number;
   hitRate: number;
+  // ROI fields (from engine upgrade)
+  totalStaked?: number;
+  totalProfit?: number;
+  roi?: number;
+  avgOdds?: number;
+  picksWithOdds?: number;
+  oddsCoverage?: number;
 }
 
 interface MarketStat {
@@ -33,6 +40,10 @@ interface MarketStat {
   won: number;
   lost: number;
   hitRate: number;
+  staked?: number;
+  profit?: number;
+  roi?: number;
+  avgOdds?: number;
 }
 
 interface ConfidenceStat {
@@ -40,6 +51,9 @@ interface ConfidenceStat {
   total: number;
   won: number;
   hitRate: number;
+  staked?: number;
+  profit?: number;
+  roi?: number;
 }
 
 interface MonthlyStat {
@@ -47,6 +61,38 @@ interface MonthlyStat {
   total: number;
   won: number;
   hitRate: number;
+  staked?: number;
+  profit?: number;
+  roi?: number;
+}
+
+interface OddsBandStat {
+  band: string;
+  total: number;
+  won: number;
+  hitRate: number;
+  staked: number;
+  profit: number;
+  roi: number;
+}
+
+interface SharpStat {
+  kind: string;
+  total: number;
+  won: number;
+  hitRate: number;
+  staked: number;
+  profit: number;
+  roi: number;
+}
+
+interface CalibrationStat {
+  band: string;
+  total: number;
+  avgPredicted: number;
+  won: number;
+  actualWinRate: number;
+  gap: number; // negative = overconfident
 }
 
 interface TrackRecordStats {
@@ -57,6 +103,9 @@ interface TrackRecordStats {
   byMarket: MarketStat[];
   byConfidence: ConfidenceStat[];
   monthly: MonthlyStat[];
+  byOddsBand?: OddsBandStat[];
+  bySharp?: SharpStat[];
+  calibration?: CalibrationStat[];
 }
 
 type ActualResult = 'WON' | 'LOST' | 'VOID';
@@ -76,6 +125,11 @@ interface RecentResult {
   full_score?: string;
   actual_result: ActualResult;
   _source: string;
+  // ROI fields (from engine upgrade)
+  best_pick_odds?: number | null;
+  stake_units?: number | null;
+  profit_units?: number | null;
+  is_sharp_value?: number | null;
 }
 
 interface RecentResponse {
@@ -158,12 +212,16 @@ function computeStreak(results: RecentResult[]): StreakInfo {
   return { count, type };
 }
 
-// Projected ROI proxy: assumes average bookmaker odds of 1.85 on winning picks.
-// ROI = (won * 0.85 - lost * 1.0) / total. Display only; tooltip explains methodology.
-function projectedRoi(won: number, lost: number): number {
-  const total = won + lost;
-  if (total === 0) return 0;
-  return (won * 0.85 - lost) / total;
+// Format ROI as a signed percentage (e.g. +2.1% or -0.5%)
+function formatRoi(roi: number): string {
+  return `${roi >= 0 ? '+' : ''}${(roi * 100).toFixed(1)}%`;
+}
+
+// ROI text color: green for positive, red for negative, muted for zero
+function roiTextColor(roi: number): string {
+  if (roi > 0.001) return 'text-primary';
+  if (roi < -0.001) return 'text-red-400';
+  return 'text-white/40';
 }
 
 function groupResultsByDate(results: RecentResult[]): DateGroup[] {
@@ -278,6 +336,9 @@ export default function TrackRecord() {
 
   const overall = stats?.overall || { total: 0, won: 0, lost: 0, voided: 0, hitRate: 0 };
   const hasData = overall.total > 0;
+  const realRoi = overall.roi ?? null;
+  const totalProfit = overall.totalProfit ?? null;
+  const oddsCoverage = overall.oddsCoverage ?? 0;
   const accentText = isBasketball ? 'text-orange-200' : 'text-primary';
 
   const streak = useMemo<StreakInfo>(
@@ -295,7 +356,7 @@ export default function TrackRecord() {
     [visibleResults]
   );
 
-  const projRoi = projectedRoi(overall.won, overall.lost);
+
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#060a0e] pb-24">
@@ -395,20 +456,24 @@ export default function TrackRecord() {
               </p>
             </div>
 
-            {/* ROI */}
+            {/* ROI — now showing REAL ROI from bookmaker odds */}
             <div className="interactive-card relative overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-2 p-4 lg:p-5">
               <div className="flex items-start justify-between">
                 <p className="text-2xs font-bold uppercase tracking-[0.18em] text-white/40">ROI</p>
                 <div className="group relative">
                   <Info className="h-4 w-4 cursor-help text-white/20" />
                   <div className="pointer-events-none absolute right-0 top-6 z-30 hidden w-56 rounded-lg border border-white/10 bg-surface-3 p-3 text-2xs leading-relaxed text-white/70 shadow-2xl group-hover:block">
-                    <p className="mb-1 font-bold text-white/90">Why no ROI?</p>
-                    <p>Real ROI needs bookmaker odds, available with priced picks. Projection at avg 1.85 odds: <span className={projRoi >= 0 ? 'font-bold text-primary' : 'font-bold text-red-400'}>{(projRoi * 100).toFixed(1)}%</span></p>
+                    <p className="mb-1 font-bold text-white/90">ROI (Yield)</p>
+                    <p>Return on investment from flat-staking 1 unit on every pick. Based on {overall.picksWithOdds ?? 0} picks with recorded bookmaker odds ({(oddsCoverage * 100).toFixed(0)}% coverage). Net profit: <span className={totalProfit != null && totalProfit >= 0 ? 'font-bold text-primary' : 'font-bold text-red-400'}>{totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u` : '—'}</span></p>
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-4xl font-display leading-none text-white/40">—</p>
-              <p className="mt-2 text-2xs text-white/30">Priced picks required</p>
+              <p className={cn('mt-3 text-4xl font-display leading-none', realRoi != null ? roiTextColor(realRoi) : 'text-white/40')}>
+                {realRoi != null ? formatRoi(realRoi) : '—'}
+              </p>
+              <p className="mt-2 text-2xs text-white/40">
+                {totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u profit` : 'No odds data'}
+              </p>
             </div>
 
             {/* Total Picks */}
