@@ -527,6 +527,59 @@ async function runSchema() {
     console.error('[Migration] normalize_confidence_case_v1 error:', confCaseErr.message);
   }
 
+  // ── One-time migration: backfill best_pick_odds from predictions_v2 ────────
+  // 72% of prediction_outcomes had NULL best_pick_odds because the odds were
+  // never recorded at pick time. This migration recovers what we can by deriving
+  // odds from predictions_v2.best_pick_implied_probability (odds = 1/implied_prob).
+  // Also recomputes profit_units for newly-backfilled rows.
+  try {
+    const oddsBackfill = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['backfill_odds_v1'] });
+    if ((oddsBackfill.rows || []).length === 0) {
+      console.log('[Migration] Running backfill_odds_v1 — recovering odds from predictions_v2...');
+
+      // Step 1: Backfill best_pick_odds from 1 / implied_probability
+      const oddsResult = await db.execute(`
+        UPDATE prediction_outcomes
+        SET best_pick_odds = (
+          SELECT 1.0 / p.best_pick_implied_probability
+          FROM predictions_v2 p
+          WHERE p.fixture_id = prediction_outcomes.fixture_id
+            AND p.best_pick_implied_probability IS NOT NULL
+            AND p.best_pick_implied_probability > 0
+          LIMIT 1
+        )
+        WHERE best_pick_odds IS NULL
+          AND (prediction_source IN ('live','ws_live') OR prediction_source IS NULL)
+          AND fixture_id IN (
+            SELECT fixture_id FROM predictions_v2
+            WHERE best_pick_implied_probability IS NOT NULL AND best_pick_implied_probability > 0
+          )
+      `);
+      console.log(`[Migration] Backfilled best_pick_odds: ${oddsResult.rowsAffected} rows`);
+
+      // Step 2: Recompute profit_units for rows that now have odds but NULL profit
+      const profitResult = await db.execute(`
+        UPDATE prediction_outcomes
+        SET profit_units = CASE
+          WHEN outcome IN ('win','correct') THEN (best_pick_odds - 1.0) * stake_units
+          WHEN outcome IN ('loss','wrong') THEN -stake_units
+          WHEN outcome = 'void' THEN 0
+          ELSE NULL
+        END
+        WHERE best_pick_odds IS NOT NULL
+          AND profit_units IS NULL
+          AND outcome IN ('win','correct','loss','wrong','void')
+          AND (prediction_source IN ('live','ws_live') OR prediction_source IS NULL)
+      `);
+      console.log(`[Migration] Backfilled profit_units: ${profitResult.rowsAffected} rows`);
+
+      await db.execute({ sql: `INSERT INTO _migrations (name) VALUES (?)`, args: ['backfill_odds_v1'] });
+      console.log('[Migration] backfill_odds_v1 completed');
+    }
+  } catch (oddsBackfillErr) {
+    console.error('[Migration] backfill_odds_v1 error:', oddsBackfillErr.message);
+  }
+
   // Push Tokens
   await addColumnIfNotExists("push_tokens", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 

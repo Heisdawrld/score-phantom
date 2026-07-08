@@ -292,7 +292,12 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const market = pick?.market_key || row.best_pick_market;
   const selection = pick?.selection || row.best_pick_selection;
   const probability = pick?.model_probability ?? row.best_pick_probability ?? 0;
-  const odds = pick?.bookmaker_odds ?? null;
+  // Odds fallback chain: pick.bookmaker_odds → derive from predictions_v2.best_pick_implied_probability → null
+  // This matches resultChecker.js:266-271 and prevents 72% of outcomes from having NULL odds.
+  const impliedProb = row.best_pick_implied_probability != null ? parseFloat(row.best_pick_implied_probability) : 0;
+  const odds = pick?.bookmaker_odds != null
+    ? parseFloat(pick.bookmaker_odds)
+    : (impliedProb > 0 ? (1 / impliedProb) : null);
   const modelConfidence = pick ? pick.model_confidence : row.confidence_model;
 
   const outcome = evaluatePrediction(market, selection, homeScore, awayScore, f.home_team_name, f.away_team_name);

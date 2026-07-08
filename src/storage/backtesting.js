@@ -101,7 +101,12 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   const market = snapshot?.market_key || prediction.best_pick_market;
   const selection = snapshot?.selection || prediction.best_pick_selection;
   const probability = snapshot?.model_probability ?? prediction.best_pick_probability ?? 0;
-  const odds = snapshot?.bookmaker_odds ?? null;
+  // Odds fallback chain: snapshot.bookmaker_odds → derive from predictions_v2.best_pick_implied_probability → null
+  // Matches resultChecker.js:266-271 and wsLiveScores.js odds fallback.
+  const impliedProb = prediction.best_pick_implied_probability != null ? parseFloat(prediction.best_pick_implied_probability) : 0;
+  const odds = snapshot?.bookmaker_odds != null
+    ? parseFloat(snapshot.bookmaker_odds)
+    : (impliedProb > 0 ? (1 / impliedProb) : null);
   const modelConfidence = snapshot ? snapshot.model_confidence : prediction.confidence_model;
 
   const outcome = evaluatePrediction(
