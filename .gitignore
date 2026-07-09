@@ -74,6 +74,11 @@ api-docs.json
 # Empty nested dir
 score-phantom/
 
+# ── Dev / E2E harness scripts (prefixed with underscore) ────────────────────
+# Local-only test harnesses and dry-run scripts — never ship to prod.
+_*.mjs
+_*.js
+
 # ── Misc ────────────────────────────────────────────────────────────────────
 *.tmp
 *.bak

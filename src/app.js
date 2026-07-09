@@ -16,7 +16,7 @@ import { initPredictionsTable } from "./storage/savePrediction.js";
 import db from "./config/database.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import { requireAdminSecret, requireAdminAccess } from "./middlewares/adminGuard.js";
-import { seedFixtures } from './services/fixtureSeeder.js';
+import { seedFixtures, seedAllActiveLeagues } from './services/fixtureSeeder.js';
 import { startLiveScoreWatcher, getLiveStatus } from './services/wsLiveScores.js';
 import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
@@ -470,6 +470,19 @@ app.listen(PORT, async () => {
           console.log(`[DailySeed] Seeded ${result2.inserted} fixtures.`);
         } else {
           console.log('[DailySeed] All days have fixtures — skipping seed.');
+        }
+        // ── League-by-league backfill (v1.0.3) ────────────────────────────────
+        // Catches competitions the date-based seed misses (cups, qualifiers,
+        // sparse-schedule leagues like NPL Queensland). Idempotent + upcomingOnly
+        // so it only adds new fixtures, never touches existing rows.
+        try {
+          console.log('[DailySeed] Running league-by-league backfill (upcomingOnly)...');
+          const leagueResult = await seedAllActiveLeagues({ upcomingOnly: true, log: console.log });
+          console.log(`[DailySeed] League backfill: ${leagueResult.seeded} leagues, ${leagueResult.fixturesUpserted} fixtures upserted, ${leagueResult.skipped} skipped`);
+          recordJobRun('daily_league_backfill', { success: true, durationMs: 0, meta: leagueResult });
+        } catch (err) {
+          console.error('[DailySeed] League backfill failed:', err.message);
+          recordJobRun('daily_league_backfill', { success: false, durationMs: 0, error: err.message });
         }
         // Cleanup fixtures older than 3 days to keep DB tidy (but NEVER wipe predictions)
         const cutoff = new Date();

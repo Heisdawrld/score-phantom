@@ -1213,4 +1213,135 @@ router.post("/sync-basketball", adminLimiter, requireAdmin, async (req, res) => 
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// LEAGUE COVERAGE & BACKFILL (v1.0.3)
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /leagues/coverage — read-only audit of every BSD league vs your DB.
+// Returns: total leagues, in-season healthy, in-season missing (urgent gaps),
+// offseason, and a per-league breakdown with fixture counts + upcoming matches.
+router.get("/leagues/coverage", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { fetchLeagues, fetchFixturesByRange } = await import("../services/bsd.js");
+
+    // 1. All BSD leagues
+    const leagues = await fetchLeagues();
+    const now = new Date();
+
+    // 2. One batch call: all events today → +14 days, grouped by league_id locally
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const future = new Date(); future.setDate(future.getDate() + 14);
+    const futureStr = future.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    let allUpcoming = [];
+    try {
+      allUpcoming = await fetchFixturesByRange(todayStr, futureStr);
+    } catch (e) { /* non-fatal — coverage still works without upcoming counts */ }
+    const upcomingByLeague = {};
+    for (const e of allUpcoming) upcomingByLeague[e.league_id] = (upcomingByLeague[e.league_id] || 0) + 1;
+
+    // 3. DB side: tournament rows + fixture counts by tournament_name
+    const tRows = await db.execute({ sql: `SELECT name FROM tournaments`, args: [] });
+    const dbNames = new Set(tRows.rows.map(r => String(r.name || '').toLowerCase().trim()));
+    const fCounts = await db.execute({ sql: `SELECT tournament_name, COUNT(*) n FROM fixtures GROUP BY tournament_name`, args: [] });
+    const dbFixtureByName = {};
+    for (const r of fCounts.rows) dbFixtureByName[String(r.tournament_name || '').toLowerCase().trim()] = Number(r.n);
+
+    // 4. Classify each league
+    const report = leagues.map(L => {
+      const nameLow = String(L.name || '').toLowerCase().trim();
+      const fixtureCount = dbFixtureByName[nameLow] || 0;
+      const upcoming = upcomingByLeague[L.id] || 0;
+      const seasonActive = !!(L.is_active && L.current_season && new Date(L.current_season.end_date) >= now);
+      let status;
+      if (!seasonActive) status = 'offseason';
+      else if (fixtureCount === 0 && upcoming > 0) status = 'urgent_gap';
+      else if (fixtureCount === 0) status = 'missing_no_upcoming';
+      else status = 'healthy';
+      return {
+        id: L.id,
+        name: L.name,
+        country: L.country,
+        active: L.is_active,
+        season: L.current_season?.name || null,
+        seasonEnd: L.current_season?.end_date || null,
+        inDB: dbNames.has(nameLow),
+        fixturesInDB: fixtureCount,
+        upcoming14d: upcoming,
+        seasonActive,
+        status,
+      };
+    });
+
+    const summary = {
+      totalLeagues: leagues.length,
+      healthy: report.filter(r => r.status === 'healthy').length,
+      urgentGaps: report.filter(r => r.status === 'urgent_gap').length,
+      missingNoUpcoming: report.filter(r => r.status === 'missing_no_upcoming').length,
+      offseason: report.filter(r => r.status === 'offseason').length,
+      upcomingMatches14d: allUpcoming.length,
+      upcomingInUrgentGaps: report.filter(r => r.status === 'urgent_gap').reduce((s, r) => s + r.upcoming14d, 0),
+    };
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      window: { from: todayStr, to: futureStr },
+      summary,
+      leagues: report.sort((a, b) => {
+        // urgent gaps first, then by upcoming desc
+        const order = { urgent_gap: 0, missing_no_upcoming: 1, healthy: 2, offseason: 3 };
+        if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+        return b.upcoming14d - a.upcoming14d;
+      }),
+    });
+  } catch (err) {
+    console.error("[Admin/coverage] error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /leagues/backfill — trigger league-by-league seeding.
+// Body: { leagueId?: number|string, allActive?: boolean, upcomingOnly?: boolean }
+//   - leagueId: backfill a single league by its current season
+//   - allActive: backfill ALL active BSD leagues (default if neither set)
+//   - upcomingOnly: only seed events from today forward (default true for allActive, false for single)
+// Runs in background — returns immediately with a job-started acknowledgment.
+router.post("/leagues/backfill", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const { seedByLeague, seedAllActiveLeagues } = await import("../services/fixtureSeeder.js");
+    const leagueId = req.body?.leagueId;
+    const allActive = req.body?.allActive ?? (leagueId == null);
+    const upcomingOnly = req.body?.upcomingOnly ?? allActive;
+
+    const jobId = `backfill-${Date.now()}`;
+    console.log(`[Admin/backfill] job ${jobId} started | leagueId=${leagueId ?? '(all)'} | allActive=${allActive} | upcomingOnly=${upcomingOnly}`);
+
+    // Fire and forget — runs in background, logs to server console
+    (async () => {
+      try {
+        if (allActive) {
+          const result = await seedAllActiveLeagues({ upcomingOnly, log: console.log });
+          console.log(`[Admin/backfill] job ${jobId} complete:`, result);
+        } else {
+          const result = await seedByLeague(leagueId, { upcomingOnly, log: console.log });
+          console.log(`[Admin/backfill] job ${jobId} complete:`, result);
+        }
+      } catch (err) {
+        console.error(`[Admin/backfill] job ${jobId} failed:`, err.message);
+      }
+    })();
+
+    return res.json({
+      success: true,
+      jobId,
+      message: allActive
+        ? `Backfilling all active BSD leagues (upcomingOnly=${upcomingOnly}) in background. Check server logs for progress.`
+        : `Backfilling league ${leagueId} (upcomingOnly=${upcomingOnly}) in background.`,
+    });
+  } catch (err) {
+    console.error("[Admin/backfill] error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
