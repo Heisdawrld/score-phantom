@@ -15,7 +15,7 @@ import { buildMarketLadder, buildPhantomVerdictPayload } from './buildPhantomVer
  * v5: Intelligent Analyst — 3-tier badge (BET/ACCA/SKIP), per-market worth,
  *     3-pass punter-style SKIP cascade, context-aware escalation.
  */
-export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix, narrative, contextMods, reasonChain }) {
+export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix, narrative, contextMods, reasonChain, ensembleMeta = null }) {
   const { backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
   let bestPick = selection.bestPick; // let — may be replaced by SKIP cascade
   let confidence = buildConfidenceProfile(bestPick, features);
@@ -401,6 +401,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     narrative: narrative || null,
     contextMods: contextMods || null,
     reasonChain: reasonChain || null,
+    ensembleMeta,  // NEW — ensemble agreement signal for UI
     updatedAt: new Date().toISOString(),
   };
   await savePrediction(result).catch(e => console.error("[finalize] save failed:", e.message));

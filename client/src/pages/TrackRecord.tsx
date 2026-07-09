@@ -12,6 +12,7 @@ import {
   Shield,
   Target,
   TrendingUp,
+  Zap,
   XCircle,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
@@ -628,6 +629,105 @@ export default function TrackRecord() {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* ── Model Calibration + Sharp Money Performance ── */}
+        {/* Surfaces the `calibration` and `bySharp` data that was previously
+            fetched but never rendered. Shows whether predicted probabilities
+            match actual outcomes, and whether sharp money signals predict wins. */}
+        {hasData && (
+          <section className="grid gap-6 lg:grid-cols-2">
+            {/* Calibration curve */}
+            {stats?.calibration && stats.calibration.length > 0 && (
+              <div className="glass-panel rounded-2xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart2 className="h-4 w-4 text-primary" />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-white/50">Model Calibration</h3>
+                </div>
+                <p className="text-2xs text-white/40 mb-4 leading-relaxed">
+                  Predicted probability vs actual win rate. Perfect calibration = bars align with the diagonal.
+                </p>
+                <div className="space-y-2">
+                  {stats.calibration.filter((c) => c.total >= 3).map((c) => {
+                    const gap = c.gap;
+                    const isOverconfident = gap < -0.05;
+                    const isUnderconfident = gap > 0.05;
+                    const isCalibrated = Math.abs(gap) <= 0.05;
+                    return (
+                      <div key={c.band} className="flex items-center gap-3">
+                        <span className="w-16 text-2xs font-mono text-white/40 shrink-0">{c.band}</span>
+                        <div className="flex-1 relative h-6 rounded bg-white/[0.03] overflow-hidden">
+                          {/* Predicted bar (outline) */}
+                          <div
+                            className="absolute inset-y-0 left-0 border border-white/15"
+                            style={{ width: `${Math.min(100, c.avgPredicted * 100)}%` }}
+                          />
+                          {/* Actual bar (filled) */}
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, c.actualWinRate * 100)}%` }}
+                            transition={{ duration: 0.8, ease: 'easeOut' }}
+                            className={cn(
+                              'absolute inset-y-0 left-0 rounded',
+                              isCalibrated ? 'bg-primary/30' : isOverconfident ? 'bg-red-400/30' : 'bg-blue-400/30'
+                            )}
+                          />
+                          <span className="absolute inset-y-0 right-2 flex items-center text-2xs font-bold text-white/60">
+                            {(c.actualWinRate * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <span className={cn(
+                          'w-12 text-2xs font-bold text-right shrink-0',
+                          isCalibrated ? 'text-primary' : isOverconfident ? 'text-red-400' : 'text-blue-400'
+                        )}>
+                          {gap >= 0 ? '+' : ''}{(gap * 100).toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex items-center gap-4 text-2xs text-white/30">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-primary/40" /> Calibrated</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-400/40" /> Overconfident</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-400/40" /> Underconfident</span>
+                </div>
+              </div>
+            )}
+
+            {/* Sharp money performance */}
+            {stats?.bySharp && stats.bySharp.length > 0 && (
+              <div className="glass-panel rounded-2xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="h-4 w-4 text-[#E5F522]" />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-white/50">Sharp Money Performance</h3>
+                </div>
+                <p className="text-2xs text-white/40 mb-4 leading-relaxed">
+                  How picks perform when sharp money signals (Pinnacle movement) are present vs absent.
+                </p>
+                <div className="space-y-2">
+                  {stats.bySharp.filter((s) => s.total >= 3).map((s) => {
+                    const isPositive = s.profit >= 0;
+                    return (
+                      <div key={s.kind} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div>
+                          <p className="text-xs font-bold text-white/70 capitalize">{s.kind.replace(/_/g, ' ')}</p>
+                          <p className="text-2xs text-white/30">{s.won}W · {s.total - s.won}L · n={s.total}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={cn('text-lg font-display', rateTextColor(s.hitRate, isBasketball))}>
+                            {(s.hitRate * 100).toFixed(1)}<span className="text-sm text-white/30">%</span>
+                          </p>
+                          <p className={cn('text-2xs font-bold', isPositive ? 'text-primary' : 'text-red-400')}>
+                            ROI {isPositive ? '+' : ''}{(s.roi * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
         )}
 

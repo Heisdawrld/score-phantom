@@ -22,8 +22,31 @@ export async function runPredictionEngine(fixtureId, rawData) {
 
     const ctx = await preparePredictionContext(fixtureId, rawData);
     const probs = runProbabilityPipeline(ctx.features, ctx.script, accuracyCache);
+
+    // v3: Thread ensemble metadata through to the final result so the UI can
+    // surface "models agree" / "models diverge" signals to users.
+    // ensembleMeta is populated by ensembleProbabilities() in the pipeline.
+    if (probs.ensembleMeta && probs.ensembleMeta.active) {
+      ctx.features.ensembleMeta = probs.ensembleMeta;
+    }
+
     const selection = await runMarketSelection({ calibratedProbs: probs.calibratedProbs, odds: ctx.odds, script: ctx.script, features: ctx.features, fixtureId, shiftMap: probs.shiftMap, maxShift: probs.maxShift, maxShiftMarket: probs.maxShiftMarket });
-    return finalizePredictionResult({ fixtureId, homeTeamName: ctx.homeTeamName, awayTeamName: ctx.awayTeamName, script: ctx.script, xg: probs.xg, calibratedProbs: probs.calibratedProbs, features: ctx.features, selection, tacticalMatchup: ctx.tacticalMatchup, scoreMatrix: probs.scoreMatrix, narrative: selection.narrative, contextMods: selection.contextMods, reasonChain: selection.reasonChain });
+    return finalizePredictionResult({
+      fixtureId,
+      homeTeamName: ctx.homeTeamName,
+      awayTeamName: ctx.awayTeamName,
+      script: ctx.script,
+      xg: probs.xg,
+      calibratedProbs: probs.calibratedProbs,
+      features: ctx.features,
+      selection,
+      tacticalMatchup: ctx.tacticalMatchup,
+      scoreMatrix: probs.scoreMatrix,
+      narrative: selection.narrative,
+      contextMods: selection.contextMods,
+      reasonChain: selection.reasonChain,
+      ensembleMeta: probs.ensembleMeta || null,  // NEW — exposed for UI
+    });
   } catch (err) {
     console.error("[runPredictionEngine] Error:", err.message, err.stack);
     return {

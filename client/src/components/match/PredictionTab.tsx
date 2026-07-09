@@ -8,6 +8,7 @@ import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { ModelAdvisorBadge, AdvisorStatus, normalizeStatus } from "@/components/ui/ModelAdvisorBadge";
 import { TeamLogo } from "@/components/TeamLogo";
+import { SignalStack } from "@/components/ui/SignalStack";
 import { SpiralWatermark } from "@/pages/MatchCenter";
 
 // UNIFIED risk labels — matches PredictionPanel's RiskBadge exactly.
@@ -186,6 +187,12 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskReward = rec.riskReward || null;          // Risk/reward data object
   const analystSummary = rec.analystSummary || null;  // Analyst reasoning summary
   const narrative = (data as any)?.narrative || null;  // Match narrative from engine
+
+  // ── v5 Intelligence Signals (ensemble + sharp money) ───────────────────
+  // ensembleMeta: { active, weights, agreement, agreementSignal, catboostConfidence }
+  // sharpMoneySignal: { alignment, strength, signal, pinnacle, shortening, drifting }
+  const ensembleMeta = (data as any)?.ensembleMeta || null;
+  const sharpMoneySignal = (data as any)?.sharpMoneySignal || null;
 
   // Value tier display config
   const VALUE_TIER_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -424,6 +431,15 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               )}
             </div>
           )}
+
+          {/* ── INTELLIGENCE SIGNALS (ensemble + sharp money) ── */}
+          {/* Surfaces whether BSD CatBoost agrees with our model, and whether
+              Pinnacle (sharpest book) is shortening on our pick. */}
+          <SignalStack
+            ensembleMeta={ensembleMeta}
+            sharpMoneySignal={sharpMoneySignal}
+            className="mt-3"
+          />
 
           {/* ── POLYMARKET SHARP ODDS ── */}
           {hasSharpMoney1x2 && (

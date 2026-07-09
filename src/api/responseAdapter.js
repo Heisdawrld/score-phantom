@@ -704,5 +704,58 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
     // ── v4: Intelligent Analyst context ────────────────────────────────
     narrative: engineResult?.narrative || null,
     reasonChain: engineResult?.reasonChain || null,
+    // ── v5: Ensemble + Sharp Money signals (for UI) ────────────────────
+    // ensembleMeta: { active, weights, agreement, agreementSignal, catboostConfidence }
+    // — surfaces whether BSD CatBoost + Polymarket agree with our Poisson model
+    ensembleMeta: engineResult?.ensembleMeta || null,
+    // sharpMoneySignal: computed from oddsComparison if available
+    // — surfaces whether Pinnacle (sharpest book) is shortening on our pick
+    sharpMoneySignal: (() => {
+      const oddsComparison = featureVector?.oddsComparison || null;
+      if (!oddsComparison || !recommendation?.market) return null;
+      try {
+        // Lazy import to avoid circular deps
+        // We inline the signal computation here for simplicity
+        const ms = oddsComparison.movementSummary || {};
+        // Map our market key to BSD outcome codes
+        const marketKey = String(recommendation.market || '').toLowerCase();
+        let outcomeId = null;
+        if (marketKey === 'home_win' || (marketKey === 'match_result' && recommendation.selection?.toLowerCase() === 'home')) outcomeId = 'match_result:HOME';
+        else if (marketKey === 'away_win' || (marketKey === 'match_result' && recommendation.selection?.toLowerCase() === 'away')) outcomeId = 'match_result:AWAY';
+        else if (marketKey === 'draw') outcomeId = 'match_result:DRAW';
+        else if (marketKey === 'over_15') outcomeId = 'over_under:over_15';
+        else if (marketKey === 'over_25') outcomeId = 'over_under:over_25';
+        else if (marketKey === 'over_35') outcomeId = 'over_under:over_35';
+        else if (marketKey === 'under_15') outcomeId = 'over_under:under_15';
+        else if (marketKey === 'under_25') outcomeId = 'over_under:under_25';
+        else if (marketKey === 'under_35') outcomeId = 'over_under:under_35';
+        else if (marketKey === 'btts_yes') outcomeId = 'btts:yes';
+        else if (marketKey === 'btts_no') outcomeId = 'btts:no';
+        if (!outcomeId) return null;
+        const om = ms.perOutcome?.[outcomeId];
+        if (!om) return null;
+        let alignment = 'neutral', strength = 'none', signal = 0;
+        if (om.pinnacle === 'SHORTENING') { alignment = 'confirms'; strength = 'strong'; signal = 0.04; }
+        else if (om.pinnacle === 'DRIFTING') { alignment = 'contradicts'; strength = 'strong'; signal = -0.05; }
+        else if (om.shortening >= 3 && om.shortening > om.drifting + 1) { alignment = 'confirms'; strength = 'medium'; signal = 0.025; }
+        else if (om.drifting >= 3 && om.drifting > om.shortening + 1) { alignment = 'contradicts'; strength = 'medium'; signal = -0.03; }
+        else if (om.shortening === 2 && om.drifting === 0) { alignment = 'confirms'; strength = 'weak'; signal = 0.01; }
+        else if (om.drifting === 2 && om.shortening === 0) { alignment = 'contradicts'; strength = 'weak'; signal = -0.015; }
+        return {
+          alignment,
+          strength,
+          signal,
+          outcomeId,
+          shortening: om.shortening,
+          drifting: om.drifting,
+          pinnacle: om.pinnacle,
+          bestOdds: om.bestOdds || null,
+          bestBookmaker: om.bestBookmaker || null,
+          bookmakersCount: oddsComparison.bookmakersCount || 0,
+        };
+      } catch (e) {
+        return null;
+      }
+    })(),
   };
 }
