@@ -37,11 +37,31 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
       // Only force-logout on definitive token rejection, not transient errors
       const msg = (errorData.error || '').toLowerCase();
       if (msg.includes('invalid token') || msg.includes('not authenticated') || msg.includes('unauthorized')) {
+        // Only force-redirect to /login when a REAL session just expired (had a token).
+        // Guests (no token) must NOT be redirected — they should see the Landing page
+        // at / (via SmartRoot) and access public routes (/home, /terms, /privacy).
+        //
+        // The old logic hard-redirected ANY 401 to /login, which:
+        //   1. Broke public routes for unauthenticated visitors (/, /home, /terms,
+        //      /privacy all redirected to /login — conversion killer, legal pages
+        //      inaccessible to guests).
+        //   2. Interrupted the signup/login onSuccess handler when the /auth/me
+        //      probe (fired by multiple components calling useAuth() simultaneously)
+        //      returned 401 mid-flow, causing the token to never be saved to
+        //      localStorage — signup/login appeared to silently fail.
+        //
+        // Fix: check `hadToken`. If the user HAD a token that was just rejected,
+        // that's a real session expiry → redirect to /login. If the user had NO
+        // token (guest), don't redirect — let the SPA router handle it via
+        // SmartRoot (shows Landing) or the public route table.
+        const hadToken = !!token;
         removeAuthToken();
-        // Only redirect if not already on an auth page (prevents reload loops)
-        const currentPath = window.location.pathname;
-        if (!currentPath.startsWith('/login') && !currentPath.startsWith('/signup') && !currentPath.startsWith('/reset-password')) {
-          window.location.href = '/login';
+        if (hadToken) {
+          // Only redirect if not already on an auth page (prevents reload loops)
+          const currentPath = window.location.pathname;
+          if (!currentPath.startsWith('/login') && !currentPath.startsWith('/signup') && !currentPath.startsWith('/reset-password')) {
+            window.location.href = '/login';
+          }
         }
       }
     }

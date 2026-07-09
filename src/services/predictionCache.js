@@ -280,6 +280,65 @@ async function isCacheFresh(fixtureId) {
   }
 }
 
+// ── Enrichment in-flight dedup + failure cooldown ─────────────────────────────
+//
+// Problem (observed in production logs):
+//   1. When enrichFixture() throws (e.g., DB batch HeadersTimeoutError), storeEnrichment()
+//      never runs, so the refreshedAt timestamp in fixtures.meta is never bumped. Every
+//      subsequent request re-triggers enrichment → fail → re-trigger. A fixture stuck
+//      for 575.8h was observed in production logs.
+//   2. No in-flight deduplication: two concurrent requests for the same fixture both
+//      pass needsEnrichmentRefresh() (neither has bumped the timestamp yet) and both
+//      call enrichFixture() → 2× the 40+ BSD API calls (duplicate "Enriching X vs Y"
+//      log lines observed in production).
+//
+// Solution:
+//   - enrichmentInFlight: Map<fixtureId, Promise> — concurrent calls share the same
+//     Promise, so enrichment runs at most once per fixture at a time.
+//   - enrichmentFailureCooldown: Map<fixtureId, timestamp> — after a failed enrichment,
+//     skip re-enrichment for ENRICHMENT_FAILURE_COOLDOWN_MS (30 min) to break the
+//     stale-loop vicious cycle and save Render compute + BSD API budget.
+const enrichmentInFlight = new Map();
+const enrichmentFailureCooldown = new Map();
+const ENRICHMENT_FAILURE_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+
+async function enrichFixtureDedup(fixture) {
+  const fixtureId = String(fixture.id);
+
+  // Cooldown check — if enrichment recently failed, skip to break the stale-loop.
+  const lastFail = enrichmentFailureCooldown.get(fixtureId);
+  if (lastFail && Date.now() - lastFail < ENRICHMENT_FAILURE_COOLDOWN_MS) {
+    const minsAgo = ((Date.now() - lastFail) / 60000).toFixed(1);
+    console.log(`[predictionCache] Enrichment cooldown for fixture ${fixtureId} (failed ${minsAgo}min ago, cooldown 30min) — skipping re-enrichment, engine will use existing history`);
+    return null;
+  }
+
+  // In-flight dedup — if enrichment is already running for this fixture, await the same Promise.
+  if (enrichmentInFlight.has(fixtureId)) {
+    console.log(`[predictionCache] Enrichment already in-flight for fixture ${fixtureId} — awaiting shared Promise`);
+    return enrichmentInFlight.get(fixtureId);
+  }
+
+  // Start enrichment, store the Promise for dedup, and set cooldown on failure.
+  const promise = enrichFixture(fixture)
+    .finally(() => {
+      enrichmentInFlight.delete(fixtureId);
+    })
+    .then(result => {
+      // Success — clear any stale cooldown from a previous failure.
+      enrichmentFailureCooldown.delete(fixtureId);
+      return result;
+    })
+    .catch(err => {
+      // Failure — set cooldown to prevent the stale-loop vicious cycle.
+      enrichmentFailureCooldown.set(fixtureId, Date.now());
+      throw err;
+    });
+
+  enrichmentInFlight.set(fixtureId, promise);
+  return promise;
+}
+
 // ── Core data assembly (used by all routes) ───────────────────────────────────
 
 /**
@@ -294,7 +353,7 @@ export async function ensureFixtureData(fixtureId) {
 
   if (!fixture.enriched || !hasUsableHistory(historyRows) || needsEnrichmentRefresh(fixture, historyRows)) {
     try {
-      await enrichFixture(fixture);
+      await enrichFixtureDedup(fixture);
       fixture = await getFixtureById(fixtureId);
       historyRows = await getHistoryRows(fixtureId);
     } catch (e) {

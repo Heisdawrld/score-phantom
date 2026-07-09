@@ -13,6 +13,79 @@ const client = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
+// ── Transient-error retry wrapper for Turso/libSQL ────────────────────────────
+//
+// Problem (observed in production logs):
+//   DB Batch Error TypeError: fetch failed
+//     [cause]: HeadersTimeoutError: Headers Timeout Error
+//     code: 'UND_ERR_HEADERS_TIMEOUT'
+//
+//   The Turso client uses undici under the hood. Under load (or network blips),
+//   undici's default headersTimeout fires and the batch fails PERMANENTLY —
+//   even though a retry 300ms later would likely succeed. This caused enrichment
+//   failures that fed the stale-loop vicious cycle (see predictionCache.js).
+//
+// Solution:
+//   Wrap execute() and batch() with withRetry(). Only retry TRANSIENT errors
+//   (timeouts, connection resets, fetch failures). Never retry SQL syntax errors,
+//   constraint violations, or auth errors — those will fail every time.
+const TRANSIENT_ERROR_CODES = new Set([
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+function isTransientError(err) {
+  if (!err) return false;
+  // Check error code (undici sets this on the error or its cause)
+  const code = err.code || err.cause?.code;
+  if (code && TRANSIENT_ERROR_CODES.has(code)) return true;
+  // Fallback: check message text for known transient patterns
+  const msg = String(err.message || err.cause?.message || '').toLowerCase();
+  return (
+    msg.includes('headers timeout') ||
+    msg.includes('headers timeout error') ||
+    msg.includes('fetch failed') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('socket hang up') ||
+    msg.includes('network error')
+  );
+}
+
+const DB_MAX_RETRIES = 2; // 3 total attempts (initial + 2 retries)
+const DB_RETRY_BASE_MS = 300;
+
+async function withRetry(fn, label) {
+  let lastErr;
+  for (let attempt = 0; attempt <= DB_MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < DB_MAX_RETRIES && isTransientError(err)) {
+        const delay = DB_RETRY_BASE_MS * Math.pow(2, attempt) + Math.random() * 150;
+        const code = err.code || err.cause?.code || 'unknown';
+        console.warn(
+          `[db] ${label} transient error (attempt ${attempt + 1}/${DB_MAX_RETRIES + 1}, code=${code}), ` +
+          `retrying in ${delay.toFixed(0)}ms: ${err.message || err.cause?.message || code}`
+        );
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        // Non-transient error or out of retries — propagate immediately
+        throw err;
+      }
+    }
+  }
+  throw lastErr;
+}
+
 const db = {
   execute: async (queryOrObj, ...argsObj) => {
     let sql = typeof queryOrObj === 'string' ? queryOrObj : queryOrObj.sql;
@@ -22,7 +95,7 @@ const db = {
     sql = sql.replace(/\$\d+/g, '?');
 
     try {
-      const res = await client.execute({ sql, args });
+      const res = await withRetry(() => client.execute({ sql, args }), 'execute');
       return { rows: res.rows, rowsAffected: res.rowsAffected };
     } catch (err) {
       console.error(`DB Execute Error: ${sql}`, err);
@@ -38,7 +111,7 @@ const db = {
     });
     
     try {
-      const results = await client.batch(stmts, "write");
+      const results = await withRetry(() => client.batch(stmts, "write"), 'batch');
       return results.map(res => ({ rows: res.rows, rowsAffected: res.rowsAffected }));
     } catch (err) {
       console.error(`DB Batch Error`, err);
