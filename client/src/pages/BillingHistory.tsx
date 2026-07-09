@@ -5,6 +5,7 @@ import { fetchApi } from '@/lib/api';
 import { ChevronLeft, Receipt, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 function fmtDate(d: string) {
   try { return new Date(d).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -21,7 +22,7 @@ export default function BillingHistory() {
     enabled: !authLoading,
   });
 
-  if (authLoading || isLoading) return <div className='min-h-screen bg-background' />;
+  if (authLoading || isLoading) return <PageLoader variant="list" count={4} />;
 
   const history: any[] = data?.history || [];
 

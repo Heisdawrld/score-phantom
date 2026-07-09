@@ -459,3 +459,329 @@ html { scroll-behavior: smooth; }
   pointer-events: none;
   z-index: 5;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   v2 PREMIUM DESIGN SYSTEM — Motion, Skeletons, Animation Presets
+   The "missing 30%" for $10B-tier polish.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── MOTION DESIGN TOKENS ───────────────────────────────────────
+   Consistent easing + duration scale. Use these everywhere instead
+   of ad-hoc "duration-200 ease-out" values.
+   Apply via: style or inline in motion props:
+     transition={{ duration: 'var(--dur-normal)', ease: 'var(--ease-out-expo)' }}
+   Or in CSS: transition: all var(--dur-fast) var(--ease-out-expo);              */
+:root {
+  /* Duration scale (4 steps — keeps things tight) */
+  --dur-instant: 80ms;     /* tap feedback, active scale */
+  --dur-fast: 150ms;       /* hover states, small UI */
+  --dur-normal: 250ms;     /* standard transitions */
+  --dur-slow: 400ms;       /* page transitions, reveals */
+  --dur-cinematic: 700ms;  /* signature moments, hero animations */
+
+  /* Easing curves (curated — not just ease-out) */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);       /* decelerate — premium feel */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);      /* softer decelerate */
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);  /* symmetric */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);     /* slight overshoot — playful */
+  --ease-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55); /* bouncy */
+
+  /* Z-index scale (no more guessing z-[100]) */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-sticky: 30;
+  --z-dropdown: 40;
+  --z-overlay: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-max: 100;
+
+  /* Elevation shadow scale */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.4);
+  --shadow-xl: 0 24px 64px rgba(0,0,0,0.5);
+  --shadow-2xl: 0 32px 80px rgba(0,0,0,0.55);
+  --shadow-glow-primary: 0 0 20px rgba(16,231,116,0.15), 0 0 60px rgba(16,231,116,0.05);
+  --shadow-glow-primary-strong: 0 0 20px rgba(16,231,116,0.25), 0 0 60px rgba(16,231,116,0.10);
+
+  /* Data-viz palette (formalized — no more ad-hoc hex) */
+  --color-viz-win: hsl(148 86% 48%);       /* #10e774 — primary green */
+  --color-viz-loss: hsl(349 100% 65%);     /* red-500 */
+  --color-viz-info: hsl(220 100% 65%);     /* blue-500 */
+  --color-viz-warning: hsl(42 100% 55%);   /* amber-500 */
+  --color-viz-sharp: hsl(68 100% 60%);     /* #E5F522 — sharp money yellow */
+  --color-viz-neutral: hsl(220 15% 55%);   /* gray */
+}
+
+/* ── ANIMATION PRESETS ─────────────────────────────────────────
+   Drop-in animation utilities. Replace per-page <motion> boilerplate
+   for simple cases. Use <motion> only for complex interactions.
+   Usage: <div className="animate-fade-in"> or with delay:
+          <div className="animate-slide-up" style={{ animationDelay: '100ms' }}>     */
+@keyframes sp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sp-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sp-slide-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sp-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes sp-scale-in-spring {
+  0% { opacity: 0; transform: scale(0.92); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes sp-shimmer-fade {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.animate-fade-in {
+  animation: sp-fade-in var(--dur-normal) var(--ease-out-expo) both;
+}
+.animate-slide-up {
+  animation: sp-slide-up var(--dur-slow) var(--ease-out-expo) both;
+}
+.animate-slide-down {
+  animation: sp-slide-down var(--dur-slow) var(--ease-out-expo) both;
+}
+.animate-scale-in {
+  animation: sp-scale-in var(--dur-normal) var(--ease-out-quart) both;
+}
+.animate-scale-in-spring {
+  animation: sp-scale-in-spring var(--dur-cinematic) var(--ease-spring) both;
+}
+
+/* Staggered children — add to parent, children get animation-delay via nth-child */
+.stagger-children > * {
+  animation: sp-slide-up var(--dur-slow) var(--ease-out-expo) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 400ms; }
+
+/* ── BRAND-AWARE SKELETON SHIMMER ───────────────────────────────
+   Context-aware loading states. Green for premium/prediction content,
+   Blue for navigation/info, Red for live content.
+   Usage: <div className="sp-shimmer-primary h-4 w-24 rounded" />           */
+.sp-shimmer-primary {
+  background: linear-gradient(90deg,
+    rgba(16,231,116,0.03) 25%,
+    rgba(16,231,116,0.10) 50%,
+    rgba(16,231,116,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.8s ease-in-out infinite;
+}
+.sp-shimmer-blue {
+  background: linear-gradient(90deg,
+    rgba(30,116,255,0.03) 25%,
+    rgba(30,116,255,0.10) 50%,
+    rgba(30,116,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.8s ease-in-out infinite;
+}
+.sp-shimmer-red {
+  background: linear-gradient(90deg,
+    rgba(248,113,113,0.03) 25%,
+    rgba(248,113,113,0.10) 50%,
+    rgba(248,113,113,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Skeleton component primitives */
+.skeleton {
+  background: rgba(255,255,255,0.04);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  background-size: 200% 100%;
+  animation: sp-shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-text { height: 0.875rem; border-radius: 4px; }
+.skeleton-title { height: 1.5rem; border-radius: 6px; width: 60%; }
+.skeleton-circle { border-radius: 50%; }
+.skeleton-card {
+  border-radius: var(--radius-2xl);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 1rem;
+  background: rgba(255,255,255,0.02);
+}
+
+/* ── PREMIUM CARD GLOW UTILITY ──────────────────────────────────
+   The signature "cinematic green glow backdrop" used on prediction cards,
+   match tabs, and hero sections. Consolidates 10 duplicated inline styles
+   into one utility.
+   Usage: <div className="premium-card-glow">...</div>                       */
+.premium-card-glow {
+  position: relative;
+}
+.premium-card-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at top, rgba(16,231,116,0.08), transparent 60%),
+    repeating-linear-gradient(
+      135deg,
+      transparent,
+      transparent 40px,
+      rgba(16,231,116,0.02) 40px,
+      rgba(16,231,116,0.02) 42px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+.premium-card-glow > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── GRADIENT MESH BACKGROUND ───────────────────────────────────
+   Animated aurora-style background for hero sections and landing.
+   Free (pure CSS, no images), looks premium.
+   Usage: <div className="mesh-bg-primary" /> as a positioned background   */
+.mesh-bg-primary {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(16,231,116,0.08), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(30,116,255,0.06), transparent 50%),
+    radial-gradient(ellipse 70% 60% at 50% 80%, rgba(16,231,116,0.04), transparent 50%);
+}
+.mesh-bg-animated {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(16,231,116,0.08), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(30,116,255,0.06), transparent 50%),
+    radial-gradient(ellipse 70% 60% at 50% 80%, rgba(16,231,116,0.04), transparent 50%);
+  background-size: 200% 200%, 200% 200%, 200% 200%;
+  animation: mesh-drift 20s ease-in-out infinite;
+}
+@keyframes mesh-drift {
+  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  33% { background-position: 100% 50%, 0% 50%, 50% 0%; }
+  66% { background-position: 50% 100%, 50% 0%, 0% 50%; }
+}
+
+/* ── NOISE TEXTURE UTILITY ──────────────────────────────────────
+   Adds film-grain texture for premium depth (references /noise.svg)      */
+.bg-noise {
+  background-image: url('/noise.svg');
+  background-repeat: repeat;
+  background-size: 180px;
+}
+
+/* ── TEXT GRADIENTS ─────────────────────────────────────────────
+   Brand-aware gradient text for hero numbers and headlines.              */
+.text-gradient-primary {
+  background: linear-gradient(135deg, #10e774 0%, #0bc95f 50%, #0aa84f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.text-gradient-premium {
+  background: linear-gradient(135deg, #ffffff 0%, #10e774 50%, #ffffff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: text-shimmer 3s linear infinite;
+}
+@keyframes text-shimmer {
+  to { background-position: 200% center; }
+}
+
+/* ── GLOW PULSE UTILITY ─────────────────────────────────────────
+   Pulsing glow for "live" indicators and signature moments.              */
+.glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(16,231,116,0.15), 0 0 60px rgba(16,231,116,0.05); }
+  50% { box-shadow: 0 0 30px rgba(16,231,116,0.30), 0 0 80px rgba(16,231,116,0.15); }
+}
+
+/* ── SHIMMER OVERLAY (for buttons on loading) ─────────────────── */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  transform: translateX(-100%);
+  animation: btn-sweep 2s ease-in-out infinite;
+}
+@keyframes btn-sweep {
+  to { transform: translateX(100%); }
+}
+
+/* ── REDUCED MOTION SUPPORT (accessibility) ─────────────────────
+   Respects user's OS-level preference for reduced motion.
+   Disables all non-essential animations.                                  */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .sp-shimmer,
+  .sp-shimmer-primary,
+  .sp-shimmer-blue,
+  .sp-shimmer-red,
+  .mesh-bg-animated,
+  .glow-pulse,
+  .text-gradient-premium,
+  .btn-shimmer::after,
+  .animate-logo-glow,
+  .deco-live-scan,
+  .deco-pulse-ring {
+    animation: none !important;
+  }
+}
+
+/* ── SCROLLBAR STYLING (desktop) ──────────────────────────────── */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.15);
+  }
+}

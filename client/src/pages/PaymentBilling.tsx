@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { Header } from '@/components/layout/Header';
 import { ChevronLeft, CreditCard, Crown, Zap, Shield, HelpCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 export default function PaymentBilling() {
   const [, setLocation] = useLocation();
@@ -12,7 +13,7 @@ export default function PaymentBilling() {
   const premEnd = (user as any)?.subscription_expires_at ? new Date((user as any).subscription_expires_at) : null;
   const fmt = (d: Date | null) => d ? d.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : null;
 
-  if (isLoading) return <div className="min-h-screen bg-background" />;
+  if (isLoading) return <PageLoader variant="minimal" />;
 
   return (
     <div className='min-h-screen bg-background pb-20'>

@@ -21,6 +21,8 @@ import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
 import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
+import { PageLoader } from "@/components/ui/PageLoader";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -191,7 +193,7 @@ export default function Dashboard() {
     }, {});
   }, [data?.fixtures, searchQuery, activeGroupTab]);
 
-  if (authLoading) return <div className="min-h-screen bg-background" />;
+  if (authLoading) return <PageLoader variant="dashboard" count={4} />;
 
   const handleSelectFixture = (id: string) => {
     setLocation("/matches/" + id);

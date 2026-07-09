@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
 import { ConfidenceBadge } from '@/components/ui/ConfidenceBadge';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 function formatAccaMarket(key: string): string {
   const m: Record<string, string> = {
@@ -45,7 +46,7 @@ export default function DailyAcca() {
   });
   const accaStats = (trData as any)?.overallStats || null;
 
-  if (authLoading) return <div className='min-h-screen bg-background' />;
+  if (authLoading) return <PageLoader variant="list" count={5} />;
 
   const picks = data?.picks || [];
   const insights = data?.insights || null;

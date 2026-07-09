@@ -7,6 +7,7 @@ import { ChevronLeft, CheckCircle2, XCircle, Clock, Minus, BarChart2, Activity }
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('en-NG',{timeZone:'Africa/Lagos',day:'2-digit',month:'short',year:'numeric'}); } catch{return d;} }
 function fmtMarket(m: string) { return (m||'').replace(/_/g,' ').replace(/\b\w/g, (c:string) => c.toUpperCase()); }
@@ -30,7 +31,7 @@ export default function PredictionResults() {
     enabled: !authLoading,
   });
 
-  if (authLoading) return <div className='min-h-screen bg-background' />;
+  if (authLoading) return <PageLoader variant="list" count={5} />;
 
   const results = data?.results || [];
   const summary = data?.summary || { total:0, wins:0, losses:0, pending:0, voids:0 };

@@ -13,6 +13,7 @@ import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBa
 import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
+import { PageLoader } from "@/components/ui/PageLoader";
 
 interface Pick {
   fixtureId: string;
@@ -137,7 +138,7 @@ export default function TopPicksToday() {
     return true;
   });
 
-  if (authLoading) return <div className="min-h-screen bg-background" />;
+  if (authLoading) return <PageLoader variant="predictions" count={4} />;
 
   if (!isSubscribed) {
     return (
