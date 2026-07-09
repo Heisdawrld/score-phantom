@@ -48,6 +48,34 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// ── GLOBAL RATE LIMITER (Token Bucket) ───────────────────────────────────
+// BSD enforces ~5 requests/second on our plan. Without a global concurrency
+// limit, parallel enrichment (7 endpoints per fixture) triggers HTTP 429
+// storms that waste retries and slow everything down.
+//
+// This token bucket ensures we NEVER exceed MAX_RPS across ALL concurrent
+// bsdFetch calls — including retries, enrichment, live scores, CLV capture.
+//
+// Tuning: if 429s persist, lower MAX_RPS to 3. If throughput is too slow,
+// raise to 6 (but watch for 429s).
+const MAX_RPS = 4;                    // max requests per second to BSD
+const MIN_INTERVAL_MS = 1000 / MAX_RPS; // 250ms between requests
+let _lastRequestTime = 0;
+let _rateLimitQueue = Promise.resolve();
+
+async function acquireRateLimitSlot() {
+  // Serialize on a single promise chain so requests are spaced MIN_INTERVAL_MS apart
+  _rateLimitQueue = _rateLimitQueue.then(async () => {
+    const now = Date.now();
+    const elapsed = now - _lastRequestTime;
+    if (elapsed < MIN_INTERVAL_MS) {
+      await sleep(MIN_INTERVAL_MS - elapsed);
+    }
+    _lastRequestTime = Date.now();
+  });
+  return _rateLimitQueue;
+}
+
 function cleanPath(path = '') {
   return path.startsWith('/') ? path : `/${path}`;
 }
@@ -94,6 +122,11 @@ export async function bsdFetch(path, params = {}, {
   }
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    // Wait for a rate-limit slot before every attempt (including retries).
+    // This is the critical fix — without it, parallel enrichment fires 7+
+    // requests simultaneously and BSD returns 429 for all of them.
+    await acquireRateLimitSlot();
+
     try {
       const res = await fetch(url.toString(), {
         headers: { Authorization: `Token ${BSD_API_KEY}` },
@@ -117,6 +150,7 @@ export async function bsdFetch(path, params = {}, {
         console.error(`[BSD] Fetch failed after ${retries} retries for ${cleanPath(path)}:`, err.message);
         return null;
       }
+      // Exponential backoff: 1500ms → 3000ms → 6000ms
       const wait = backoffMs * Math.pow(2, attempt);
       console.warn(`[BSD] ${err.message} on ${cleanPath(path)}. Retrying in ${wait}ms (${attempt + 1}/${retries})...`);
       await sleep(wait);

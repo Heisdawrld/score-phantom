@@ -210,7 +210,7 @@ export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
 
     const rows = await db.execute({
       sql: `SELECT p.fixture_id, p.best_pick_market, p.opening_odds,
-                   f.bsd_internal_event_id, f.match_date
+                   f.match_date
             FROM predictions_v2 p
             LEFT JOIN fixtures f ON f.id = p.fixture_id
             WHERE p.opening_odds IS NOT NULL
@@ -231,7 +231,8 @@ export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
 
     for (const pred of predictions) {
       try {
-        const bsdEventId = pred.bsd_internal_event_id || pred.fixture_id;
+        // The fixture_id IS the BSD event ID (BSD events are stored directly as fixture IDs)
+        const bsdEventId = pred.fixture_id;
         const odds = await fetchEventOdds(bsdEventId);
 
         if (!odds) {
