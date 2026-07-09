@@ -100,10 +100,16 @@ export default function TopPicksToday() {
   const handleOpenPanel = (id: string) => setLocation(`/matches/${id}`);
   const handleClosePanel = () => {};
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["top-picks-today"],
     queryFn: () => fetchApi("/top-picks-today?limit=15"),
     enabled: !authLoading && !!isSubscribed,
+    // When the backend reports warmingUp=true (background generation in progress),
+    // refetch every 12s so freshly-generated picks appear without manual refresh.
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      return d?.warmingUp ? 12000 : false;
+    },
   });
 
   useScrollRestoration("top_picks", !isLoading);
@@ -118,6 +124,7 @@ export default function TopPicksToday() {
   const weekStats = (resultsData as any)?.overallStats || null;
 
   const allPicks: Pick[] = data?.picks || [];
+  const warmingUp: boolean = (data as any)?.warmingUp === true;
 
   // BUG FIX: Filter out AVOID picks — they should never appear as "Top Picks"
   // Even if the backend misses one (e.g. stale cache), the frontend must not
@@ -182,6 +189,72 @@ export default function TopPicksToday() {
     );
   }
 
+  // Warming-up state: backend is generating predictions in the background.
+  // Show a friendly banner + skeletons instead of blocking the user.
+  if (warmingUp && nonAvoidPicks.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#060a0e] text-white flex flex-col pb-24 selection:bg-primary/30 relative">
+        <div className="fixed inset-0 pointer-events-none z-0">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+        </div>
+        <Header />
+        <div className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card rounded-2xl p-6 border-primary/20 relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
+            <div className="relative flex items-start gap-4">
+              <div className="relative shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-primary/15 flex items-center justify-center">
+                  <Brain className="w-6 h-6 text-primary animate-pulse" />
+                </div>
+                <div className="absolute -inset-1 rounded-2xl border-2 border-primary/30 border-t-transparent animate-spin" style={{ animationDuration: "1.2s" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-black text-white mb-1 flex items-center gap-2">
+                  Warming up the engine
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </h2>
+                <p className="text-white/60 text-sm leading-relaxed mb-3">
+                  We are crunching form, H2H, xG, and tactical data for today is matches.
+                  Picks will appear here automatically in a few moments.
+                </p>
+                <div className="flex items-center gap-2 text-xs text-primary/80">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                  <span>Generating predictions in the background...</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="h-28 rounded-2xl sp-shimmer border border-white/5"
+                style={{ animationDelay: `${i * 0.12}s` }}
+              />
+            ))}
+          </div>
+
+          <p className="text-center text-white/30 text-xs pt-2">
+            Tip: visit{" "}
+            <button onClick={() => setLocation("/matches")} className="text-primary/70 underline underline-offset-2 hover:text-primary">
+              Matches
+            </button>{" "}
+            to browse all games while you wait.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#060a0e] text-white flex flex-col pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -216,6 +289,22 @@ export default function TopPicksToday() {
             )}
           </div>
         </motion.div>
+
+        {/* ── Inline warming-up banner (shown when picks exist but more are being generated) ── */}
+        {warmingUp && nonAvoidPicks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-primary/[0.06] border border-primary/15 text-xs"
+          >
+            <div className="flex gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <span className="text-primary/80 font-medium">More picks are being generated — refreshing automatically…</span>
+          </motion.div>
+        )}
 
         {/* ── Filter + Track Strip ── */}
         <div className="flex items-center gap-2">

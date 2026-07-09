@@ -344,14 +344,22 @@ async function enrichFixtureDedup(fixture) {
 /**
  * Ensure a fixture is enriched and return the complete data bundle.
  * This is the single source of truth for all routes.
+ *
+ * @param {string} fixtureId
+ * @param {object} opts
+ * @param {boolean} opts.skipEnrichment - if true, NEVER call enrichFixtureDedup().
+ *   The engine runs on whatever data is already in the DB (historical_matches,
+ *   stored odds, etc.). Used by the TopPicks background generation fast-pass so
+ *   picks appear in 1-3s instead of 10-30s. The 15-min cron still does full
+ *   enrichment for higher quality.
  */
-export async function ensureFixtureData(fixtureId) {
+export async function ensureFixtureData(fixtureId, { skipEnrichment = false } = {}) {
   let fixture = await getFixtureById(fixtureId);
   if (!fixture) return null;
 
   let historyRows = await getHistoryRows(fixtureId);
 
-  if (!fixture.enriched || !hasUsableHistory(historyRows) || needsEnrichmentRefresh(fixture, historyRows)) {
+  if (!skipEnrichment && (!fixture.enriched || !hasUsableHistory(historyRows) || needsEnrichmentRefresh(fixture, historyRows))) {
     try {
       await enrichFixtureDedup(fixture);
       fixture = await getFixtureById(fixtureId);
@@ -359,6 +367,8 @@ export async function ensureFixtureData(fixtureId) {
     } catch (e) {
       console.error('[predictionCache] Enrichment failed:', e.message);
     }
+  } else if (skipEnrichment) {
+    console.log(`[predictionCache] skipEnrichment=true for fixture ${fixtureId} — using existing DB data (fast-pass)`);
   }
 
   // Read DB odds first, then fall back to live BSD v2 odds below.
@@ -507,11 +517,83 @@ async function loadCachedPrediction(fixtureId) {
  * @param {string} fixtureId
  * @param {object} options
  * @param {boolean} options.forceRefresh - skip cache check
- * @returns {{ prediction, odds, meta, engineResult, fixture, fromCache }}
+ * @param {boolean} options.staleWhileRevalidate - if true, return ANY cached prediction
+ *   immediately (even if stale) and trigger background enrichment+rebuild. This makes
+ *   individual match clicks feel instant. Only blocks if NO cached prediction exists.
+ * @param {boolean} options.skipEnrichment - if true, never call enrichFixtureDedup().
+ *   The engine runs on existing DB data only. Used by TopPicks fast-pass.
+ * @returns {{ prediction, odds, meta, engineResult, fixture, fromCache, stale }}
  */
-export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } = {}) {
+export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, staleWhileRevalidate = false, skipEnrichment = false } = {}) {
+  // ── Stale-while-revalidate fast path ───────────────────────────────────────
+  // PROBLEM: ensureFixtureData() is called BEFORE the cache check, and it may trigger
+  // enrichFixtureDedup() which does 40+ BSD API calls (10-30s). Users clicking into a
+  // match wait this long even when a perfectly good cached prediction exists.
+  //
+  // SOLUTION: When staleWhileRevalidate is true, check the cache FIRST. If any cached
+  // prediction exists (any age), return it immediately with stale=true. Trigger
+  // enrichment + rebuild in the background (fire-and-forget). The next request picks
+  // up the fresh data.
+  if (staleWhileRevalidate && !forceRefresh) {
+    try {
+      const cachedAny = await loadCachedPrediction(fixtureId);
+      if (cachedAny?.prediction) {
+        console.log(`[predictionCache] SWR fast-path HIT for fixture ${fixtureId} — returning cached, triggering background refresh`);
+
+        // Back-fill tier if missing from old cached predictions
+        if (cachedAny.prediction?.dataQuality && cachedAny.prediction.dataQuality.tier == null) {
+          const s = cachedAny.prediction.dataQuality.completenessScore ?? 0.5;
+          if (s >= 0.8)       cachedAny.prediction.dataQuality.tier = 'rich';
+          else if (s >= 0.55) cachedAny.prediction.dataQuality.tier = 'good';
+          else if (s >= 0.35) cachedAny.prediction.dataQuality.tier = 'partial';
+          else                cachedAny.prediction.dataQuality.tier = 'thin';
+        }
+
+        // Fetch fixture + odds + meta WITHOUT triggering enrichment (fast DB reads)
+        const fixture = await getFixtureById(fixtureId);
+        const odds = await getOdds(fixtureId);
+        const historyRows = await getHistoryRows(fixtureId);
+        const meta = fixture ? buildMetaFromFixtureAndHistory(fixture, historyRows) : {};
+
+        // Fire-and-forget background refresh (enrichment + engine rebuild if needed).
+        // Use a self-healing IIFE that never throws to the caller.
+        (async () => {
+          try {
+            // Check if enrichment is actually needed before doing the heavy work
+            if (fixture && (needsEnrichmentRefresh(fixture, historyRows) || !fixture.enriched || !hasUsableHistory(historyRows))) {
+              console.log(`[predictionCache] SWR background enrichment for fixture ${fixtureId}`);
+              await enrichFixtureDedup(fixture).catch(e => console.error(`[predictionCache] SWR enrich failed ${fixtureId}:`, e.message));
+            }
+            // If the cache is stale (> CACHE_VALID_HOURS), rebuild the prediction
+            const cacheFresh = await isCacheFresh(fixtureId);
+            if (!cacheFresh) {
+              console.log(`[predictionCache] SWR background rebuild for fixture ${fixtureId}`);
+              // Recursive call with staleWhileRevalidate=false to do the real rebuild
+              await getOrBuildPrediction(fixtureId, { staleWhileRevalidate: false }).catch(e => console.error(`[predictionCache] SWR rebuild failed ${fixtureId}:`, e.message));
+            }
+          } catch (err) {
+            console.error(`[predictionCache] SWR background error for ${fixtureId}:`, err.message);
+          }
+        })();
+
+        return {
+          prediction: cachedAny.prediction,
+          odds,
+          meta,
+          engineResult: cachedAny.engineResult,
+          fixture,
+          fromCache: true,
+          stale: true,
+        };
+      }
+    } catch (swrErr) {
+      console.error(`[predictionCache] SWR fast-path error for ${fixtureId}:`, swrErr.message);
+      // Fall through to normal path
+    }
+  }
+
   // ── Ensure fixture data (enrichment) ──────────────────────────────────────
-  const bundle = await ensureFixtureData(fixtureId);
+  const bundle = await ensureFixtureData(fixtureId, { skipEnrichment });
   if (!bundle) return null;
 
   const { fixture, odds, meta } = bundle;
@@ -538,6 +620,7 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
         engineResult: cached.engineResult,
         fixture,
         fromCache: true,
+        stale: false,
       };
     }
     console.log(`[predictionCache] Cache stale or empty for fixture ${fixtureId} — rebuilding`);
@@ -590,5 +673,6 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false } =
     engineResult,
     fixture,
     fromCache: false,
+    stale: false,
   };
 }
