@@ -357,6 +357,75 @@ export async function fetchBestOdds(eventId) {
 }
 
 /**
+ * Fetch per-bookmaker odds comparison with movement signals.
+ *
+ * BSD endpoint: /events/{id}/odds/comparison/
+ * Returns: for each market and outcome, the best decimal odds across all bookmakers,
+ *          plus per-bookmaker decimal_odds + movement ('SHORTENING' | 'DRIFTING' | null)
+ *          + updated_at timestamp.
+ *
+ * Movement signals are CRITICAL sharp-money indicators:
+ *   - SHORTENING = odds decreasing → money coming IN on this outcome → sharp action
+ *   - DRIFTING   = odds increasing → money going AWAY → sharp fade
+ *   - Pinnacle is the sharpest book; if Pinnacle SHORTENS, that's the strongest signal.
+ *
+ * @param {string|number} eventId
+ * @returns {Object|null} - { markets: {...}, bookmakersCount, totalOdds, movementSummary }
+ */
+export async function fetchOddsComparison(eventId) {
+  if (!eventId) return null;
+  const data = await bsdFetch(`/events/${eventId}/odds/comparison/`);
+  if (!data || !data.markets) return null;
+
+  // Aggregate movement signals across all markets
+  const movementSummary = {
+    shorteningCount: 0,  // outcomes where most books are shortening
+    driftingCount: 0,    // outcomes where most books are drifting
+    pinnacleShortening: [],  // outcomes where Pinnacle specifically is shortening
+    pinnacleDrifting: [],
+    perOutcome: {},  // { 'home_win': { shortening: 3, drifting: 1, pinnacle: 'SHORTENING' }, ... }
+  };
+
+  for (const [marketKey, outcomes] of Object.entries(data.markets || {})) {
+    for (const [outcomeKey, outcomeData] of Object.entries(outcomes || {})) {
+      if (!outcomeData || typeof outcomeData !== 'object') continue;
+      const bookmakers = outcomeData.bookmakers || {};
+      let shortening = 0, drifting = 0;
+      let pinnacleMovement = null;
+
+      for (const [bookSlug, bookData] of Object.entries(bookmakers)) {
+        const movement = bookData?.movement;
+        if (movement === 'SHORTENING') shortening++;
+        else if (movement === 'DRIFTING') drifting++;
+        if (bookSlug === 'pinnacle' && movement) pinnacleMovement = movement;
+      }
+
+      const outcomeId = `${marketKey}:${outcomeKey}`;
+      movementSummary.perOutcome[outcomeId] = {
+        shortening, drifting,
+        total: shortening + drifting,
+        netSignal: shortening - drifting,  // positive = sharp money IN
+        pinnacle: pinnacleMovement,
+        bestOdds: outcomeData.best_odds || null,
+        bestBookmaker: outcomeData.best_bookmaker_slug || null,
+      };
+
+      if (shortening > drifting) movementSummary.shorteningCount++;
+      else if (drifting > shortening) movementSummary.driftingCount++;
+      if (pinnacleMovement === 'SHORTENING') movementSummary.pinnacleShortening.push(outcomeId);
+      else if (pinnacleMovement === 'DRIFTING') movementSummary.pinnacleDrifting.push(outcomeId);
+    }
+  }
+
+  return {
+    markets: data.markets,
+    bookmakersCount: data.bookmakers_count || 0,
+    totalOdds: data.total_odds || 0,
+    movementSummary,
+  };
+}
+
+/**
  * Fetch a single event.
  * With full=true, builds the legacy rich shape ScorePhantom's enrichment pipeline expects.
  */
@@ -626,14 +695,39 @@ export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
     const mkt = direct.markets || {};
     const mr = mkt.match_result || {};
     const eg = mkt.expected_goals || {};
+    const ou = mkt.over_under || {};
+    const btts = mkt.btts || {};
+    const score = mkt.score || {};
     const rec = direct.recommendations || {};
+    const model = direct.model || {};
     return {
+      // ── 1X2 (match result) ──────────────────────────────────────────────
       prediction: mr.predicted === 'H' ? 'home_win' : mr.predicted === 'A' ? 'away_win' : mr.predicted === 'D' ? 'draw' : null,
       homeWinProb: mr.prob_home != null ? mr.prob_home / 100 : null,
       drawProb: mr.prob_draw != null ? mr.prob_draw / 100 : null,
       awayWinProb: mr.prob_away != null ? mr.prob_away / 100 : null,
+
+      // ── Expected goals (BSD CatBoost xG — high quality signal) ──────────
       expectedHomeGoals: eg.home ?? null,
       expectedAwayGoals: eg.away ?? null,
+
+      // ── Over/Under (NEW — previously dropped) ───────────────────────────
+      over15Prob: ou.prob_over_15 != null ? ou.prob_over_15 / 100 : null,
+      over25Prob: ou.prob_over_25 != null ? ou.prob_over_25 / 100 : null,
+      over35Prob: ou.prob_over_35 != null ? ou.prob_over_35 / 100 : null,
+
+      // ── BTTS (NEW — previously dropped) ─────────────────────────────────
+      bttsYesProb: btts.prob_yes != null ? btts.prob_yes / 100 : null,
+
+      // ── Most likely scoreline (NEW — previously dropped) ────────────────
+      mostLikelyScore: score.most_likely || null,
+
+      // ── Model confidence + version (NEW — critical for ensemble weighting)
+      modelConfidence: model.confidence != null ? model.confidence : null,
+      modelVersion: model.version || null,
+
+      // ── Raw recommendation flags (NEW — useful for agreement signal) ────
+      recommendations: rec || null,
     };
   }
 

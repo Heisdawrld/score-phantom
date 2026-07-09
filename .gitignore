@@ -1,21 +1,81 @@
+# ── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
 client/node_modules/
 client/dist/
+
+# ── Environment & secrets ───────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# ── Databases ───────────────────────────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
-user_emails_export.csv
+*.sqlite3
+
+# ── Build output ────────────────────────────────────────────────────────────
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+*.log
+dev.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS junk ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .claude/
 .claude-flow/
 .swarm/
 .zed/
+.cursor/
 .mcp.json
 
-# Local-only — never commit (secrets + noise)
-MEMORY.md
-dev.log
-scripts/diagnose-track-record.mjs
+# ── Local-only scripts & memory ─────────────────────────────────────────────
 .zscripts/
 agent-ctx/
+MEMORY.md
+scripts/diagnose-track-record.mjs
+
+# ── Data exports ────────────────────────────────────────────────────────────
+user_emails_export.csv
+*.csv.local
+
+# ── Accidentally-committed noise — DO NOT track these ───────────────────────
+# Z.ai skill library (unrelated to ScorePhantom product)
+skills/
+# Screenshots / debug uploads
+upload/
+# Generated debug reports
+download/
+# Agent worklog (internal development noise)
+worklog.md
+# API response / site-scrape dumps (regenerate locally, do not track)
+health-check.json
+live-site.json
+api-docs.json
+# Empty nested dir
+score-phantom/
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+*.tmp
+*.bak
+.cache/
+.temp/

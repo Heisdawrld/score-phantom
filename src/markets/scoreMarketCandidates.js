@@ -285,15 +285,61 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       riskPenaltyScore - productPenaltyScore;
 
     let contextAdjustmentScore = leagueCalibrationComponent + leagueTrustedBonus - leagueRestrictionPenalty;
+
+    // ── BSD CatBoost ensemble signal (v3) ────────────────────────────────────
+    // The ensemble in runProbabilityPipeline.js now blends BSD's probabilities
+    // directly into our calibratedProbs. This scoring block is the SECONDARY
+    // signal — it rewards picks where BSD's top recommendation ALIGNS with our
+    // market, even if the exact marketKey differs.
+    //
+    // Scoring matrix (replaces the old flat ±0.10/−0.05):
+    //   - BSD's predicted winner matches our market's family → +0.06 (confirmation)
+    //   - BSD's predicted winner conflicts with our market's family → −0.04 (caution)
+    //   - BSD has no prediction → 0 (neutral)
+    //
+    // "Family match" examples:
+    //   - BSD predicts home_win + our pick is home_win → match (+0.06)
+    //   - BSD predicts home_win + our pick is over_25 → partial match (+0.03)
+    //   - BSD predicts away_win + our pick is home_win → conflict (−0.04)
     const bsdPred = fv.bsdPrediction || null;
-    if (bsdPred && candidate.marketKey === bsdPred.prediction) {
-      finalScore += 0.10;
-      contextAdjustmentScore += 0.10;
-      candidate.isEnsembleMatch = true;
-    } else if (bsdPred && bsdPred.prediction) {
-      finalScore -= 0.05;
-      contextAdjustmentScore -= 0.05;
-      candidate.isModelConflict = true;
+    if (bsdPred && bsdPred.prediction) {
+      const bsdPick = bsdPred.prediction; // 'home_win' | 'draw' | 'away_win'
+      const candKey = String(candidate.marketKey || '').toLowerCase();
+      const bsdConf = safeNum(bsdPred.modelConfidence, 0.5);
+      const confMultiplier = bsdConf >= 0.6 ? 1.0 : bsdConf >= 0.4 ? 0.7 : 0.4;
+
+      // Direct match: BSD picks home_win and our market is home_win (etc.)
+      const isDirectMatch = candKey === bsdPick;
+      // Family match: BSD picks home_win and our market is double_chance_home or home_over_05 etc.
+      const isFamilyMatch = !isDirectMatch && (
+        (bsdPick === 'home_win' && (candKey.includes('home') || candKey === 'double_chance_home' || candKey === 'dnb_home')) ||
+        (bsdPick === 'away_win' && (candKey.includes('away') || candKey === 'double_chance_away' || candKey === 'dnb_away'))
+      );
+      // Conflict: BSD picks opposite side
+      const isConflict = (
+        (bsdPick === 'home_win' && (candKey === 'away_win' || candKey === 'double_chance_away' || candKey === 'dnb_away')) ||
+        (bsdPick === 'away_win' && (candKey === 'home_win' || candKey === 'double_chance_home' || candKey === 'dnb_home'))
+      );
+
+      if (isDirectMatch) {
+        const bonus = 0.06 * confMultiplier;
+        finalScore += bonus;
+        contextAdjustmentScore += bonus;
+        candidate.isEnsembleMatch = true;
+        candidate.ensembleAlignment = 'direct';
+      } else if (isFamilyMatch) {
+        const bonus = 0.03 * confMultiplier;
+        finalScore += bonus;
+        contextAdjustmentScore += bonus;
+        candidate.isEnsembleMatch = true;
+        candidate.ensembleAlignment = 'family';
+      } else if (isConflict) {
+        const penalty = 0.04 * confMultiplier;
+        finalScore -= penalty;
+        contextAdjustmentScore -= penalty;
+        candidate.isModelConflict = true;
+        candidate.ensembleAlignment = 'conflict';
+      }
     }
 
     if (candidate.impliedProbability > 0 && candidate.edge >= 0.05) {
