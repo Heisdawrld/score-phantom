@@ -45,21 +45,35 @@ app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 
-// CORS - allow APP_URL and onrender.com
-const APP_ORIGIN = (process.env.APP_URL || '').trim();
+// CORS - allow APP_URL and localhost dev only.
+// v2: Tightened — previously allowed ANY *.onrender.com subdomain, which let
+// any other Render app make credentialed requests to us. Now we only allow:
+//   1. The exact APP_ORIGIN from env (production)
+//   2. The canonical production URL (fallback if APP_URL not set)
+//   3. localhost dev origins
+// To add a new allowed origin, set ALLOWED_ORIGINS env var (comma-separated).
+const APP_ORIGIN = (process.env.APP_URL || '').trim().replace(/\/$/, '');
+const extraOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 const allowedOrigins = [
   APP_ORIGIN,
   'https://score-phantom.onrender.com',
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  ...extraOrigins,
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Allow same-origin requests (no Origin header) — e.g., server-side calls
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (origin.endsWith('.onrender.com')) return callback(null, true);
-    return callback(new Error('CORS blocked'), false);
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error(`Origin ${origin} not allowed by CORS`), false);
   },
   credentials: true,
 }));
@@ -161,6 +175,37 @@ app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
 
 app.use("/api/admin", requireAdminSecret, adminRoutes);
 app.use("/api/track-record", trackRecordRoutes);
+
+// ── CLV (Closing Line Value) admin endpoint ──────────────────────────────────
+// Returns aggregate CLV stats — the only honest measure of model edge.
+// Positive avg CLV = we're consistently beating the closing line = real edge.
+// The winRateByClvBucket array proves whether CLV predicts actual results.
+app.get("/api/admin/clv-summary", requireAdminAccess, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days || '30', 10);
+    const groupBy = req.query.groupBy === 'market' ? 'market' : null;
+    const { getClvSummary } = await import('./storage/clvTracker.js');
+    const summary = await getClvSummary({ days, groupBy });
+    return res.json({
+      status: 'ok',
+      generatedAt: new Date().toISOString(),
+      ...summary,
+      interpretation: {
+        avgClv: summary.avgClv != null
+          ? (summary.avgClv > 0
+              ? `Model is beating closing line by ${(summary.avgClv * 100).toFixed(2)}pp on average — REAL EDGE`
+              : `Model is ${(Math.abs(summary.avgClv) * 100).toFixed(2)}pp behind closing line — needs improvement`)
+          : 'Insufficient data',
+        positiveRatio: summary.totalPicks > 0
+          ? `${((summary.positiveClvCount / summary.totalPicks) * 100).toFixed(1)}% of picks beat the closing line`
+          : 'N/A',
+      },
+    });
+  } catch (err) {
+    console.error('[Admin CLV] failed:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // Duplicate /api/admin/seed removed — handled by adminRoutes.js
 
@@ -496,6 +541,30 @@ app.listen(PORT, async () => {
       }
     } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
   }, 3 * 60 * 60 * 1000);
+
+  // ── CLV (Closing Line Value) capture: every 15 min ───────────────────────────
+  // Captures closing odds for predictions whose kickoff is within the next 2 hours.
+  // This is the only honest measure of model edge — if we consistently beat the
+  // closing line, our model has real value. If not, any positive yield is variance.
+  const { captureClosingOdds } = await import('./storage/clvTracker.js');
+  setInterval(async () => {
+    const clvStart = Date.now();
+    try {
+      const result = await captureClosingOdds({ hoursAhead: 2, limit: 50 });
+      recordJobRun('clv_capture', {
+        success: true,
+        durationMs: Date.now() - clvStart,
+        meta: { captured: result.captured, skipped: result.skipped, failed: result.failed },
+      });
+      if (result.captured > 0) {
+        console.log(`[CLV] Captured closing odds for ${result.captured} predictions`);
+      }
+    } catch (err) {
+      recordJobRun('clv_capture', { success: false, durationMs: Date.now() - clvStart, error: err.message });
+      console.error('[CLV] Capture job failed:', err.message);
+    }
+  }, 15 * 60 * 1000); // every 15 minutes
+  console.log('[CLV] Closing odds capture job scheduled (every 15 min)');
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing
   // the server to cold-start on the next request, which makes /auth/me

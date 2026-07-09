@@ -1,4 +1,5 @@
 import db from '../config/database.js';
+import { storeOpeningOdds, initClvColumns } from './clvTracker.js';
 
 const MODEL_VERSION = '5.1.0'; // Keep in sync with CURRENT_ENGINE_VERSION in predictionCache.js
 let predictionsTableReady = false;
@@ -212,6 +213,27 @@ export async function savePrediction(predictionResult) {
         r.updatedAt || now,
       ],
     });
+
+    // ── CLV Tracking: store opening odds for this prediction ────────────────
+    // We capture the bookmaker odds at prediction time as the "opening" line.
+    // Later, a cron job will fetch closing odds ~30-60min before kickoff and
+    // compute CLV = closing_implied - opening_implied.
+    //
+    // This is non-blocking — if it fails, the prediction is still saved.
+    try {
+      await initClvColumns();
+      const bestPickMarket = bp?.market || bp?.marketKey || r.bestPick?.market || null;
+      // The odds at prediction time are in features.advancedOdds or features.marketOdds
+      const openingOdds = r.features?.advancedOdds || r.features?.marketOdds || null;
+      if (bestPickMarket && openingOdds && r.fixtureId) {
+        storeOpeningOdds(r.fixtureId, openingOdds, bestPickMarket).catch((e) => {
+          console.warn('[savePrediction] CLV opening odds capture failed:', e.message);
+        });
+      }
+    } catch (clvErr) {
+      // CLV tracking is best-effort — never fail the prediction save
+      console.warn('[savePrediction] CLV init skipped:', clvErr.message);
+    }
 
     return true;
   } catch (err) {

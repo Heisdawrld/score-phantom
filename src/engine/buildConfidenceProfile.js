@@ -1,4 +1,6 @@
 import { safeNum, clamp } from '../utils/math.js';
+import { computeSharpMoneySignal } from '../probabilities/sharpMoneySignal.js';
+import { getEnsembleConfidenceAdjustment } from '../probabilities/ensemble.js';
 
 /**
  * Build a confidence profile for the best pick.
@@ -144,6 +146,59 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Adjusted probability for confidence classification
   const adjustedProbability = Math.max(0, modelProbability - dataPenalty + leagueBaselineAdjustment + h2hAdjustment);
 
+  // ── Sharp Money Signal (v3) ───────────────────────────────────────────────
+  // If sharp books (Pinnacle) are SHORTENING on our pick, that's confirmation
+  // from sophisticated money. If they're DRIFTING, that's a warning.
+  //
+  // Conservative weights for initial rollout — can be tuned up once we have
+  // 200+ predictions to validate the signal's predictive power.
+  //
+  // The sharp money signal requires the oddsComparison data to be present in
+  // the feature vector. If it's missing (older enrichments), this is a no-op.
+  let sharpMoneyAdjustment = 0;
+  let sharpMoneyNote = null;
+  const oddsComparison = fv.oddsComparison || null;
+  if (oddsComparison && pick.marketKey) {
+    const sharpSignal = computeSharpMoneySignal(oddsComparison, pick);
+    if (sharpSignal.alignment === 'confirms') {
+      sharpMoneyAdjustment = sharpSignal.signal; // positive (max +0.04)
+      if (sharpSignal.strength === 'strong') {
+        sharpMoneyNote = 'Sharp money (Pinnacle) confirming this pick';
+      }
+    } else if (sharpSignal.alignment === 'contradicts') {
+      sharpMoneyAdjustment = sharpSignal.signal; // negative (min -0.05)
+      if (sharpSignal.strength === 'strong') {
+        sharpMoneyNote = 'Sharp money (Pinnacle) fading this pick — confidence reduced';
+      }
+    }
+  }
+
+  // ── Ensemble Agreement Signal (v3) ────────────────────────────────────────
+  // The ensemble in runProbabilityPipeline.js produces an agreement signal:
+  //   - 'strong'/'moderate' agreement → +0.02 to +0.04 (models align → boost)
+  //   - 'divergent' → -0.015 to -0.05 (models disagree → reduce)
+  //   - 'none' → 0 (no external signals available)
+  //
+  // This is a separate signal from sharp money — ensemble measures model
+  // consensus, sharp money measures market consensus. Both can apply.
+  const ensembleMeta = fv.ensembleMeta || null;
+  const ensembleAdjustment = getEnsembleConfidenceAdjustment(ensembleMeta);
+
+  // Total external signal adjustment (capped to prevent runaway confidence)
+  const totalExternalAdjustment = clamp(sharpMoneyAdjustment + ensembleAdjustment, -0.08, 0.06);
+  const finalAdjustedProbability = clamp(adjustedProbability + totalExternalAdjustment, 0, 1);
+
+  if (Math.abs(totalExternalAdjustment) >= 0.005) {
+    const signals = [];
+    if (sharpMoneyAdjustment !== 0) signals.push(`sharp=${sharpMoneyAdjustment >= 0 ? '+' : ''}${(sharpMoneyAdjustment * 100).toFixed(1)}pp`);
+    if (ensembleAdjustment !== 0) signals.push(`ensemble=${ensembleAdjustment >= 0 ? '+' : ''}${(ensembleAdjustment * 100).toFixed(1)}pp`);
+    console.log(`[confidence] External signals for ${marketKey}: ${signals.join(', ')} → adjusted ${(adjustedProbability * 100).toFixed(1)}% → ${(finalAdjustedProbability * 100).toFixed(1)}%`);
+  }
+
+  if (sharpMoneyNote && !dataQualityNote) {
+    dataQualityNote = sharpMoneyNote;
+  }
+
   // ── Model confidence (probability-primary, baseline-informed) ────────────────
   // v3 FIX: The model confidence label MUST respect absolute probability.
   // Previously, edgeAboveBaseline was the primary gate, causing 80% probability
@@ -154,17 +209,20 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Now: absolute probability is the primary driver. edgeAboveBaseline is a
   // SOFT modifier that can boost or nudge, but NEVER downgrade below what
   // the absolute probability warrants.
+  //
+  // v4: Uses finalAdjustedProbability which incorporates sharp money + ensemble
+  // signals. Conservative caps prevent these from causing runaway confidence.
   let model;
-  if (adjustedProbability >= 0.80) {
+  if (finalAdjustedProbability >= 0.80) {
     // Very high absolute probability — always HIGH
     model = 'high';
-  } else if (adjustedProbability >= 0.72) {
+  } else if (finalAdjustedProbability >= 0.72) {
     // High probability — at least MEDIUM; HIGH if strong edge
     model = edgeAboveBaseline >= 0.10 ? 'high' : 'medium';
-  } else if (adjustedProbability >= 0.62) {
+  } else if (finalAdjustedProbability >= 0.62) {
     // Good probability — at least LEAN; MEDIUM if decent edge
     model = edgeAboveBaseline >= 0.06 ? 'medium' : 'lean';
-  } else if (adjustedProbability >= 0.52) {
+  } else if (finalAdjustedProbability >= 0.52) {
     // Marginal probability — LEAN if any edge, else LOW
     model = edgeAboveBaseline >= 0.02 ? 'lean' : 'low';
   } else {
