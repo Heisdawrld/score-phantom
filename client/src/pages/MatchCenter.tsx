@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,25 @@ export default function MatchCenter() {
   const matchTime = fix.match_date
       ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "";
+
+  // ── Track this match in Recently Viewed (localStorage) ────────────────────
+  // Fires when fixture data loads. Dedup + cap handled by the hook.
+  const { addRecentlyViewed } = useRecentlyViewed();
+  const trackedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!fix.id || trackedRef.current === String(fix.id)) return;
+    trackedRef.current = String(fix.id);
+    addRecentlyViewed({
+      fixtureId: String(fix.id),
+      homeTeam: fix.home_team_name || "Home",
+      awayTeam: fix.away_team_name || "Away",
+      homeLogo: fix.home_team_logo,
+      awayLogo: fix.away_team_logo,
+      tournament: fix.tournament_name,
+      pick: (predictionData as any)?.recommendation?.pick || (predictionData as any)?.pick || undefined,
+      probability: (predictionData as any)?.recommendation?.probability ?? (predictionData as any)?.probability ?? undefined,
+    });
+  }, [fix.id, fix.home_team_name, fix.away_team_name, fix.home_team_logo, fix.away_team_logo, fix.tournament_name, predictionData, addRecentlyViewed]);
 
     // Get standings position
     const { homePos, awayPos } = useMemo(() => {

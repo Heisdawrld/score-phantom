@@ -22,6 +22,7 @@ import { TeamLogo } from "@/components/TeamLogo";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
 import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
 import { SmartEdge } from "@/components/dashboard/SmartEdge";
+import { RecentlyViewed } from "@/components/dashboard/RecentlyViewed";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { ErrorState } from "@/components/ui/ErrorState";
 
@@ -384,6 +385,9 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {/* ── Recently Viewed — quick-access strip for matches the user explored ── */}
+        <RecentlyViewed />
 
         {/* ── Search + Filter Bar — type scale + blue for active "all/fav" tab ── */}
         <div className="flex items-center gap-2">

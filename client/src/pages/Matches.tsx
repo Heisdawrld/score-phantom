@@ -50,6 +50,27 @@ function EdgeBadge({ edge }: { edge?: number }) {
   );
 }
 
+// ── Game script tag — compact contextual label for the engine's script ────────
+// Maps the engine's script_primary (e.g., "Dominant Home Pressure") to a short
+// tag with an icon + color. Helps users understand WHY a pick was made at a glance.
+function ScriptTag({ script }: { script?: string }) {
+  if (!script) return null;
+  const s = script.toLowerCase();
+  let icon = "⚔️";
+  let color = "text-white/35 bg-white/5 border-white/8";
+  if (s.includes("dominant") && s.includes("home")) { icon = "🏠"; color = "text-primary/80 bg-primary/8 border-primary/15"; }
+  else if (s.includes("dominant") && s.includes("away")) { icon = "✈️"; color = "text-accent-blue/80 bg-accent-blue/8 border-accent-blue/15"; }
+  else if (s.includes("tight") || s.includes("low event")) { icon = "🛡️"; color = "text-amber-300/80 bg-amber-400/8 border-amber-400/15"; }
+  else if (s.includes("open") || s.includes("end-to-end") || s.includes("high event")) { icon = "⚡"; color = "text-primary/80 bg-primary/8 border-primary/15"; }
+  else if (s.includes("balanced")) { icon = "⚖️"; color = "text-white/50 bg-white/6 border-white/10"; }
+  return (
+    <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border tabular-nums shrink-0", color)} title={script}>
+      <span className="text-[10px] leading-none">{icon}</span>
+      <span className="truncate max-w-[60px]">{script.replace(/^(Dominant|Tight|Open|Balanced)\s/, '').split(' ').slice(0,2).join(' ')}</span>
+    </span>
+  );
+}
+
 export default function Matches() {
   const [, setLocation] = useLocation();
   const { isPremium } = useAccess();
@@ -176,7 +197,7 @@ export default function Matches() {
                           <span className="text-sm font-semibold text-white/70 truncate flex-1">{f.away_team_name}</span>
                           {(isLive||isFT) && <span className="text-base font-black text-white/80 w-5 text-right tabular-nums">{f.away_score??0}</span>}
                         </div>
-                        {/* ── Enhanced pick row: pill + probability bar + edge ── */}
+                        {/* ── Enhanced pick row: pill + probability bar + script + edge ── */}
                         <div className="mt-2 flex items-center gap-2 min-h-[20px]">
                           {hasPred ? (
                             <>
@@ -192,6 +213,7 @@ export default function Matches() {
                                   <span className="text-2xs font-bold text-white/60 tabular-nums shrink-0">{prob}%</span>
                                 </div>
                               )}
+                              <ScriptTag script={f.pick_script} />
                               <EdgeBadge edge={f.best_pick_edge} />
                             </>
                           ) : isPremium ? (
