@@ -8,13 +8,14 @@ interface TeamLogoProps {
   name?: string;
   teamId?: string | number;
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 }
 
 export function TeamLogo({ src, alt, name, teamId, className, size = 'md' }: TeamLogoProps) {
   const [error, setError] = useState(false);
 
   const sizeClasses = {
+    xs: 'w-4 h-4',
     sm: 'w-6 h-6',
     md: 'w-8 h-8',
     lg: 'w-10 h-10',

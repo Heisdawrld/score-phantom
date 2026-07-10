@@ -635,13 +635,22 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                 <div className="flex gap-2 mb-3">
                                   {ev != null && (
                                     <div className={cn(
-                                      "flex-1 rounded-xl p-2.5 text-center border",
+                                      "flex-1 rounded-xl p-2.5 text-center border relative",
                                       ev >= 0 ? "bg-primary/[0.06] border-primary/20" : "bg-red-500/[0.04] border-red-500/15"
                                     )}>
                                       <p className={cn("text-sm font-black tabular-nums", ev >= 0 ? "text-primary" : "text-red-400")}>
                                         {ev >= 0 ? '+' : ''}{(ev * 100).toFixed(1)}%
                                       </p>
                                       <p className="text-[8px] text-white/25 uppercase">EV</p>
+                                      {/* ── EV sanity warning: EVs > 30% are unusually high and may
+                                          indicate stale odds, model overconfidence, or a genuinely
+                                          mispriced market that will correct fast. Flag it so users
+                                          don't blindly trust extreme EVs. ── */}
+                                      {ev > 0.30 && (
+                                        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-400 border border-[#060a0e] flex items-center justify-center" title="Unusually high EV — verify odds before betting">
+                                          <span className="text-[8px] font-black text-black">!</span>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   {riskReward?.edge != null && (

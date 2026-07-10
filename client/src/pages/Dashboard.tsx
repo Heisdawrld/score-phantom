@@ -21,6 +21,7 @@ import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 import { LeagueGroup } from "@/components/dashboard/LeagueGroup";
 import { EnrichmentBadge } from "@/components/dashboard/EnrichmentBadge";
+import { SmartEdge } from "@/components/dashboard/SmartEdge";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { ErrorState } from "@/components/ui/ErrorState";
 
@@ -355,6 +356,11 @@ export default function Dashboard() {
             </button>
           </motion.div>
         )}
+
+        {/* ── Smart Edge — Model vs Market value detector (new feature) ── */}
+        {/* Surfaces the top 5 picks ranked by EDGE (model prob − bookmaker implied),
+            giving users a different lens from TopPicks (which ranks by composite score). */}
+        <SmartEdge />
 
         {/* ── Date Strip — blue for selected/today (color discipline) ── */}
         <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain -mx-1 px-1">

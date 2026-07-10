@@ -8,8 +8,15 @@ if ('scrollRestoration' in window.history) {
 }
 
 // Register Service Worker for Push Notifications (FCM)
+// Guard against duplicate registration logs — navigator.serviceWorker.register()
+// resolves every time it's called (even if already registered), and some browsers
+// re-check on navigation. The module-level flag ensures we only log once per
+// page session, eliminating the "24+ FCM Service Worker registered" console spam.
+let _fcmSwRegistered = false;
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
+    if (_fcmSwRegistered) return;
+    _fcmSwRegistered = true;
     navigator.serviceWorker
       .register("/firebase-messaging-sw.js")
       .then((reg) => console.log("FCM Service Worker registered:", reg.scope))

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { motion } from "framer-motion";
-import { Search, ChevronRight, Zap, X } from "lucide-react";
+import { Search, ChevronRight, Zap, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -22,6 +22,32 @@ function getDates() {
     dates.push({ iso, label });
   }
   return dates;
+}
+
+// ── Confidence color mapping ──────────────────────────────────────────────────
+// Returns tailwind classes for confidence pill + glow based on the engine's
+// confidence_model (HIGH/MEDIUM/LOW/LEAN).
+function getConfidenceStyle(level?: string) {
+  switch ((level || "").toUpperCase()) {
+    case "HIGH":   return { pill: "bg-primary/15 text-primary border-primary/25",  glow: "shadow-[0_0_12px_rgba(16,231,116,0.15)]", bar: "bg-primary" };
+    case "MEDIUM": return { pill: "bg-amber-400/12 text-amber-300 border-amber-400/20", glow: "", bar: "bg-amber-400" };
+    case "LOW":    return { pill: "bg-white/8 text-white/50 border-white/10", glow: "", bar: "bg-white/40" };
+    case "LEAN":   return { pill: "bg-white/5 text-white/35 border-white/8", glow: "", bar: "bg-white/25" };
+    default:       return { pill: "bg-primary/10 text-primary/80 border-primary/15", glow: "", bar: "bg-primary/70" };
+  }
+}
+
+// ── Edge indicator — shows model vs market disagreement ──────────────────────
+function EdgeBadge({ edge }: { edge?: number }) {
+  if (edge == null || isNaN(edge)) return null;
+  const pct = Math.round(edge * 100);
+  if (pct <= 0) return null;
+  const tier = pct >= 15 ? "text-primary" : pct >= 8 ? "text-amber-300" : "text-white/40";
+  return (
+    <span className={cn("text-2xs font-black tabular-nums", tier)}>
+      +{pct}%
+    </span>
+  );
 }
 
 export default function Matches() {
@@ -90,7 +116,7 @@ export default function Matches() {
       {/* ── Match list, grouped by league ── */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 py-4 flex flex-col gap-5 relative z-10">
         {isLoading && Array.from({length:6}).map((_,i)=>(
-          <div key={i} className="h-[68px] rounded-2xl bg-white/4 sp-shimmer"/>
+          <div key={i} className="h-[80px] rounded-2xl bg-white/4 sp-shimmer"/>
         ))}
 
         {!isLoading && filtered.length===0 && (
@@ -121,14 +147,20 @@ export default function Matches() {
                   const isLive = f.match_status==="LIVE";
                   const isFT = f.match_status==="FT";
                   const hasPred = isPremium && f.best_pick_selection;
+                  const prob = f.best_pick_probability ? Math.round(f.best_pick_probability * 100) : null;
+                  const confStyle = getConfidenceStyle(f.pick_confidence_level);
+                  const isHighProb = prob != null && prob >= 70;
                   return (
                     <motion.button key={f.id} whileTap={{scale:0.98}}
                       onClick={()=>setLocation("/matches/"+f.id)}
-                      className={cn("interactive-card w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left",
-                        isLive ? "border-red-500/30 bg-red-500/5" : "border-white/6 bg-white/3")}>
+                      className={cn("interactive-card w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all",
+                        isLive ? "border-red-500/30 bg-red-500/5" : hasPred && isHighProb ? cn("border-primary/15 bg-white/[0.03]", confStyle.glow) : "border-white/6 bg-white/3")}>
                       <div className="w-14 shrink-0 text-center">
                         {isLive
-                          ? <span className="text-2xs font-black text-red-400 animate-pulse block leading-tight">LIVE<br/>{f.live_minute||""}</span>
+                          ? <span className="text-2xs font-black text-red-400 block leading-tight">
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse mr-1 align-middle"/>
+                              LIVE<br/>{f.live_minute||""}
+                            </span>
                           : isFT
                           ? <span className="text-xs font-bold text-white/40">FT</span>
                           : <span className="text-sm font-bold text-white/60 tabular-nums">{toWAT(f.match_date)}</span>}
@@ -144,17 +176,34 @@ export default function Matches() {
                           <span className="text-sm font-semibold text-white/70 truncate flex-1">{f.away_team_name}</span>
                           {(isLive||isFT) && <span className="text-base font-black text-white/80 w-5 text-right tabular-nums">{f.away_score??0}</span>}
                         </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 min-h-[14px]">
+                        {/* ── Enhanced pick row: pill + probability bar + edge ── */}
+                        <div className="mt-2 flex items-center gap-2 min-h-[20px]">
                           {hasPred ? (
                             <>
-                              <Zap size={10} className="text-primary"/>
-                              <span className="text-2xs font-bold text-primary">{f.best_pick_selection}</span>
-                              {f.best_pick_probability && (
-                                <span className="text-2xs font-semibold text-white/40 tabular-nums">{Math.round(f.best_pick_probability*100)}%</span>
+                              <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-2xs font-bold", confStyle.pill)}>
+                                <Zap size={9} className="shrink-0"/>
+                                {f.best_pick_selection}
+                              </span>
+                              {prob != null && (
+                                <div className="flex items-center gap-1 flex-1 min-w-0">
+                                  <div className="flex-1 h-1 rounded-full bg-white/8 overflow-hidden min-w-[24px]">
+                                    <div className={cn("h-full rounded-full transition-all", confStyle.bar)} style={{ width: `${prob}%` }}/>
+                                  </div>
+                                  <span className="text-2xs font-bold text-white/60 tabular-nums shrink-0">{prob}%</span>
+                                </div>
                               )}
+                              <EdgeBadge edge={f.best_pick_edge} />
                             </>
+                          ) : isPremium ? (
+                            <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-white/15"/>
+                              No pick
+                            </span>
                           ) : (
-                            <span className="text-2xs font-medium text-white/25">— No pick</span>
+                            <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
+                              <Sparkles size={9} className="text-white/15"/>
+                              Premium
+                            </span>
                           )}
                         </div>
                       </div>
