@@ -389,6 +389,34 @@ router.post("/run-predictions", adminLimiter, requireAdmin, async (req, res) => 
   }
 });
 
+// ── POST /invalidate-skip-predictions — delete SKIP predictions so they rebuild ─
+// Used after enrichment/data fixes to force regeneration of abstained predictions.
+// Only deletes predictions where no_safe_pick=1 (abstentions). Safe: the engine
+// will rebuild them on the next request or 15-min cron cycle with fresh data.
+router.post("/invalidate-skip-predictions", adminLimiter, requireAdmin, async (req, res) => {
+  try {
+    const dateFilter = req.body?.date || req.query?.date || null;
+    let sql = `DELETE FROM predictions_v2 WHERE no_safe_pick = 1`;
+    const args = [];
+    if (dateFilter) {
+      // Only invalidate SKIP predictions for fixtures on/after the given date
+      sql += ` AND fixture_id IN (SELECT id FROM fixtures WHERE date(match_date) >= date(?))`;
+      args.push(dateFilter);
+    }
+    const result = await db.execute({ sql, args });
+    const deleted = result?.rowsAffected || result?.meta?.changes || 0;
+    console.log(`[Admin] Invalidated ${deleted} SKIP predictions (dateFilter=${dateFilter || 'all'})`);
+    return res.json({
+      success: true,
+      invalidated: deleted,
+      message: `Deleted ${deleted} SKIP predictions. They will regenerate on next request or 15-min cron with fresh enrichment data.`,
+    });
+  } catch (err) {
+    console.error("[Admin] invalidate-skip-predictions error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Backtesting routes ──────────────────────────────────────────────────────
 router.get("/backtest/stats", adminLimiter, requireAdmin, async (req, res) => {
   const stats = await getAccuracyStats();
