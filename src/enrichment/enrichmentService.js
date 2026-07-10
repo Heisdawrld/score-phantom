@@ -362,8 +362,14 @@ export async function fetchAndStoreEnrichment(fixture) {
   const standings = (standingsRaw || []).map(normaliseStandingsRow);
   const homeFormFallback = homeFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
   const awayFormFallback = awayFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
-  const homeFormFinal = filterRelevantForm(homeFormMerged.length >= homeFormFallback.length ? homeFormMerged : homeFormFallback, fixture.home_team_name, 5);
-  const awayFormFinal = filterRelevantForm(awayFormMerged.length >= awayFormFallback.length ? awayFormMerged : awayFormFallback, fixture.away_team_name, 5);
+  // FIX: Increased form cap from 5 → 10. The dataCompletenessScore formula in
+  // computeVolatilityFeatures.js scales form count as Math.min(count, 10) / 10,
+  // so capping at 5 limited dataCompleteness to ~0.30 from form alone. With 10
+  // matches, form contributes up to 0.60, pushing overall dataCompleteness above
+  // the 0.55 abstain threshold. This directly addresses "stats not current" and
+  // reduces mass abstentions on evenly-matched fixtures.
+  const homeFormFinal = filterRelevantForm(homeFormMerged.length >= homeFormFallback.length ? homeFormMerged : homeFormFallback, fixture.home_team_name, 10);
+  const awayFormFinal = filterRelevantForm(awayFormMerged.length >= awayFormFallback.length ? awayFormMerged : awayFormFallback, fixture.away_team_name, 10);
   const homeProfile = buildTeamProfile(fixture.home_team_name, homeFormFinal, []);
   const awayProfile = buildTeamProfile(fixture.away_team_name, awayFormFinal, []);
 

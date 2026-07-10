@@ -768,10 +768,11 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const fixtureId = req.params.fixtureId;
 
-    // staleWhileRevalidate=true: return cached prediction INSTANTLY (even if stale)
-    // and trigger background enrichment+rebuild. This makes match clicks feel instant
-    // instead of waiting 10-30s for BSD enrichment on every click.
-    const result = await getOrBuildPrediction(fixtureId, { staleWhileRevalidate: true });
+    // REVERTED: staleWhileRevalidate caused stale/bad predictions (built with
+    // skipEnrichment) to be served on match clicks, masking data-quality issues.
+    // Using the standard path ensures every click gets a fresh, fully-enriched
+    // prediction (or a fresh cache hit if within CACHE_VALID_HOURS).
+    const result = await getOrBuildPrediction(fixtureId);
     if (!result) {
       // Roll back the count if prediction fails for trial users
       if (trialToday) {
@@ -821,13 +822,9 @@ router.get("/predict/:fixtureId/explain", requirePremiumAccess, async (req, res)
 
     const fixtureId = req.params.fixtureId;
 
-    // staleWhileRevalidate=true: return cached prediction INSTANTLY (even if stale)
-    // and trigger background enrichment+rebuild. Same optimization as the /predict
-    // endpoint — makes match clicks feel instant instead of waiting 10-30s for
-    // enrichment + Groq on every click when a cached prediction already exists.
-    // The Groq explanation runs on the (possibly stale) cached prediction; the
-    // next click picks up the fresh data after background refresh completes.
-    const result = await getOrBuildPrediction(fixtureId, { staleWhileRevalidate: true });
+    // REVERTED: staleWhileRevalidate served stale predictions on explain endpoint.
+    // Using the standard path ensures the Groq explanation runs on fresh data.
+    const result = await getOrBuildPrediction(fixtureId);
     if (!result) {
       // Roll back the count if prediction fails for trial users
       if (trialToday) {
@@ -892,7 +889,8 @@ router.post("/predict/:fixtureId/chat", requirePremiumAccess, async (req, res) =
       return res.status(400).json({ error: "Message required" });
     }
 
-    const chatResult = await getOrBuildPrediction(req.params.fixtureId, { staleWhileRevalidate: true });
+    // REVERTED: staleWhileRevalidate served stale predictions on chat endpoint.
+    const chatResult = await getOrBuildPrediction(req.params.fixtureId);
     if (!chatResult) {
       return res.status(404).json({ error: "Fixture not found" });
     }
@@ -1519,19 +1517,17 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
           // Fire-and-forget — do NOT await. Generation runs in the background.
           // The 15-min cron (autoBuildPredictions) is the long-term backstop.
           //
-          // FAST-PASS: Use skipEnrichment=true so the engine runs on EXISTING
-          // historical_matches data (1-3s per fixture) instead of triggering
-          // fresh BSD enrichment (10-30s per fixture). Picks appear in the
-          // frontend poll within 5-10s instead of 30-60s. The 15-min cron
-          // still does full enrichment later for higher-quality rebuilds.
+          // NOTE: Full enrichment (NOT skipEnrichment) is used here to preserve
+          // prediction quality. The skipEnrichment fast-pass was reverted because
+          // it caused the engine to run on stale/partial DB data, which inflated
+          // upsetRisk and triggered mass abstentions ("all matches skipping").
+          // Full enrichment takes longer per fixture but produces accurate
+          // dataCompleteness + upsetRisk scores. Batch size 3 keeps BSD rate
+          // limits safe (40+ calls per fixture at 4 RPS).
           import('../services/predictionCache.js')
             .then(({ getOrBuildPrediction }) => {
-              console.log(`[TopPicks] Background FAST-PASS generation started for ${unpredicted.length} fixtures (skipEnrichment=true)`);
-              // Process in sequential batches of 5 (up from 3) — skipEnrichment
-              // makes each call 5-10x faster so we can afford more parallelism.
-              // BSD rate limiter only kicks in for the lineup/odds calls in
-              // ensureFixtureData, which are 2 calls per fixture (not 40+).
-              const BATCH = 5;
+              console.log(`[TopPicks] Background generation started for ${unpredicted.length} fixtures (full enrichment)`);
+              const BATCH = 3;
               const batches = [];
               for (let i = 0; i < unpredicted.length; i += BATCH) {
                 batches.push(unpredicted.slice(i, i + BATCH));
@@ -1539,10 +1535,10 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
               (async () => {
                 for (const batch of batches) {
                   await Promise.allSettled(
-                    batch.map(row => getOrBuildPrediction(String(row.id), { skipEnrichment: true }))
+                    batch.map(row => getOrBuildPrediction(String(row.id)))
                   );
                 }
-                console.log('[TopPicks] Background FAST-PASS generation complete');
+                console.log('[TopPicks] Background generation complete');
               })().catch(err => console.error('[TopPicks] Background gen error:', err.message));
             })
             .catch(err => console.error('[TopPicks] Dynamic import failed:', err.message));

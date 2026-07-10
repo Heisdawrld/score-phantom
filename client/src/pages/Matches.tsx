@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { motion } from "framer-motion";
-import { Search, ChevronRight, Zap, X, Sparkles } from "lucide-react";
+import { Search, ChevronRight, Zap, X, Sparkles, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -50,24 +50,92 @@ function EdgeBadge({ edge }: { edge?: number }) {
   );
 }
 
-// ── Game script tag — compact contextual label for the engine's script ────────
-// Maps the engine's script_primary (e.g., "Dominant Home Pressure") to a short
-// tag with an icon + color. Helps users understand WHY a pick was made at a glance.
-function ScriptTag({ script }: { script?: string }) {
+// ── Game script metadata — canonical map of snake_case keys to labels ────────
+// The engine stores script_primary as snake_case (e.g., "tight_low_event").
+// This map converts to a human label + icon + color for both the card tag and
+// the filter chips. Keeping the map in one place ensures the card tag and the
+// filter chips stay in sync.
+type ScriptMeta = { label: string; short: string; icon: string; color: string; chipActive: string };
+const SCRIPT_META: Record<string, ScriptMeta> = {
+  dominant_home_pressure: {
+    label: "Dominant Home Pressure", short: "Home Pressure", icon: "🏠",
+    color: "text-primary/80 bg-primary/8 border-primary/15",
+    chipActive: "bg-primary/20 text-primary border-primary/40",
+  },
+  dominant_away_pressure: {
+    label: "Dominant Away Pressure", short: "Away Pressure", icon: "✈️",
+    color: "text-accent-blue/80 bg-accent-blue/8 border-accent-blue/15",
+    chipActive: "bg-accent-blue/20 text-accent-blue border-accent-blue/40",
+  },
+  open_end_to_end: {
+    label: "Open End-to-End", short: "Open", icon: "⚡",
+    color: "text-primary/80 bg-primary/8 border-primary/15",
+    chipActive: "bg-primary/20 text-primary border-primary/40",
+  },
+  tight_low_event: {
+    label: "Tight Low Event", short: "Tight", icon: "🛡️",
+    color: "text-amber-300/80 bg-amber-400/8 border-amber-400/15",
+    chipActive: "bg-amber-400/20 text-amber-300 border-amber-400/40",
+  },
+  balanced_high_event: {
+    label: "Balanced High Event", short: "Balanced", icon: "⚖️",
+    color: "text-white/50 bg-white/6 border-white/10",
+    chipActive: "bg-white/15 text-white/80 border-white/25",
+  },
+};
+const DEFAULT_SCRIPT_META: ScriptMeta = {
+  label: "Balanced", short: "Balanced", icon: "⚔️",
+  color: "text-white/35 bg-white/5 border-white/8",
+  chipActive: "bg-white/15 text-white/80 border-white/25",
+};
+function getScriptMeta(script?: string | null): ScriptMeta | null {
   if (!script) return null;
-  const s = script.toLowerCase();
-  let icon = "⚔️";
-  let color = "text-white/35 bg-white/5 border-white/8";
-  if (s.includes("dominant") && s.includes("home")) { icon = "🏠"; color = "text-primary/80 bg-primary/8 border-primary/15"; }
-  else if (s.includes("dominant") && s.includes("away")) { icon = "✈️"; color = "text-accent-blue/80 bg-accent-blue/8 border-accent-blue/15"; }
-  else if (s.includes("tight") || s.includes("low event")) { icon = "🛡️"; color = "text-amber-300/80 bg-amber-400/8 border-amber-400/15"; }
-  else if (s.includes("open") || s.includes("end-to-end") || s.includes("high event")) { icon = "⚡"; color = "text-primary/80 bg-primary/8 border-primary/15"; }
-  else if (s.includes("balanced")) { icon = "⚖️"; color = "text-white/50 bg-white/6 border-white/10"; }
+  return SCRIPT_META[script.toLowerCase()] || { ...DEFAULT_SCRIPT_META, label: script };
+}
+
+// ── Game script tag — compact contextual label for the engine's script ────────
+// Maps the engine's script_primary (snake_case from DB) to a short tag with an
+// icon + color. Helps users understand the match profile at a glance — even
+// when no pick has been generated yet.
+function ScriptTag({ script, size = "sm" }: { script?: string | null; size?: "sm" | "xs" }) {
+  const meta = getScriptMeta(script);
+  if (!meta) return null;
+  const pad = size === "xs" ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-2xs";
   return (
-    <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border tabular-nums shrink-0", color)} title={script}>
-      <span className="text-[10px] leading-none">{icon}</span>
-      <span className="truncate max-w-[60px]">{script.replace(/^(Dominant|Tight|Open|Balanced)\s/, '').split(' ').slice(0,2).join(' ')}</span>
+    <span
+      className={cn("inline-flex items-center gap-0.5 rounded border font-bold tabular-nums shrink-0", pad, meta.color)}
+      title={meta.label}
+    >
+      <span className="text-[10px] leading-none">{meta.icon}</span>
+      <span className="truncate max-w-[70px]">{meta.short}</span>
     </span>
+  );
+}
+
+// ── Odds chip trio — compact 1X2 odds display ─────────────────────────────────
+// Shows home/draw/away odds in a tight column on the right of each card. Only
+// renders when at least the home + away odds exist (draw may be null for
+// basketball or markets without a draw).
+function OddsTrio({ home, draw, away }: { home?: number | null; draw?: number | null; away?: number | null }) {
+  if (home == null && away == null) return null;
+  const fmt = (v?: number | null) => (v != null && !isNaN(v)) ? v.toFixed(2) : "—";
+  return (
+    <div className="shrink-0 flex flex-col items-end gap-0.5 mr-1">
+      <div className="flex items-center gap-1">
+        <span className="text-2xs font-bold text-white/40 tabular-nums">{fmt(home)}</span>
+        <span className="text-[8px] font-bold text-white/25 uppercase">1</span>
+      </div>
+      {draw != null && (
+        <div className="flex items-center gap-1">
+          <span className="text-2xs font-bold text-white/40 tabular-nums">{fmt(draw)}</span>
+          <span className="text-[8px] font-bold text-white/25 uppercase">X</span>
+        </div>
+      )}
+      <div className="flex items-center gap-1">
+        <span className="text-2xs font-bold text-white/40 tabular-nums">{fmt(away)}</span>
+        <span className="text-[8px] font-bold text-white/25 uppercase">2</span>
+      </div>
+    </div>
   );
 }
 
@@ -77,6 +145,7 @@ export default function Matches() {
   const todayIso = new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"});
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [search, setSearch] = useState("");
+  const [scriptFilter, setScriptFilter] = useState<string>("all"); // "all" | script key
   const dates = getDates();
   const { data, isLoading } = useQuery({
     queryKey: ["/api/fixtures", selectedDate],
@@ -86,9 +155,28 @@ export default function Matches() {
 
   useScrollRestoration("matches_list", !isLoading);
   const allFixtures: any[] = (data as any)?.fixtures || [];
-  const filtered = search.trim()
-    ? allFixtures.filter(f => (f.home_team_name+f.away_team_name+f.tournament_name).toLowerCase().includes(search.toLowerCase()))
-    : allFixtures;
+
+  // ── Build the list of script filters actually present in today's fixtures ──
+  // Only show filter chips for scripts that exist on the selected date, so the
+  // chip strip stays compact and relevant.
+  const availableScripts = useMemo(() => {
+    const set = new Set<string>();
+    allFixtures.forEach(f => { if (f.pick_script) set.add(f.pick_script.toLowerCase()); });
+    return Array.from(set);
+  }, [allFixtures]);
+
+  const filtered = useMemo(() => {
+    let list = allFixtures;
+    if (scriptFilter !== "all") {
+      list = list.filter(f => (f.pick_script || "").toLowerCase() === scriptFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(f => (f.home_team_name + f.away_team_name + f.tournament_name).toLowerCase().includes(q));
+    }
+    return list;
+  }, [allFixtures, search, scriptFilter]);
+
   const grouped: Record<string,any[]> = {};
   filtered.forEach(f => {
     const k = f.tournament_id || f.tournament_name || "Other";
@@ -96,16 +184,49 @@ export default function Matches() {
     grouped[k].push(f);
   });
 
+  // ── Quick stats for the summary bar ─────────────────────────────────────────
+  const stats = useMemo(() => {
+    let withPick = 0, withEdge = 0, live = 0;
+    allFixtures.forEach(f => {
+      if (isPremium && f.best_pick_selection) withPick++;
+      if (f.best_pick_edge != null && f.best_pick_edge > 0) withEdge++;
+      if (f.match_status === "LIVE") live++;
+    });
+    return { total: allFixtures.length, withPick, withEdge, live };
+  }, [allFixtures, isPremium]);
+
   return (
     <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
 
-      {/* ── Sticky header: title · date pills · search ── */}
+      {/* ── Sticky header: title · date pills · search · script filters ── */}
       <header className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5">
         <div className="px-4 md:px-6 pt-4 pb-2 max-w-3xl mx-auto">
-          <h1 className="text-2xl font-black text-white tracking-wide mb-3">Matches</h1>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-2xl font-black text-white tracking-wide">Matches</h1>
+            {/* ── Summary stats badge ── */}
+            <div className="flex items-center gap-2 text-2xs">
+              {stats.live > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"/>
+                  {stats.live} LIVE
+                </span>
+              )}
+              {stats.withPick > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/8 border border-primary/15 text-primary font-bold">
+                  <Zap size={9}/>
+                  {stats.withPick} picks
+                </span>
+              )}
+              {stats.withEdge > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-400/8 border border-amber-400/15 text-amber-300 font-bold">
+                  +{stats.withEdge} edges
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar touch-pan-x overscroll-x-contain -mx-1 px-1">
             {dates.map(d => (
               <button key={d.iso} onClick={()=>setSelectedDate(d.iso)}
@@ -131,6 +252,39 @@ export default function Matches() {
               </button>
             )}
           </div>
+          {/* ── Script filter chip strip (NEW) ── */}
+          {availableScripts.length > 1 && (
+            <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto hide-scrollbar touch-pan-x -mx-1 px-1">
+              <Filter size={11} className="text-white/30 shrink-0 ml-0.5"/>
+              <button
+                onClick={()=>setScriptFilter("all")}
+                aria-pressed={scriptFilter==="all"}
+                className={cn("shrink-0 min-h-[28px] px-2.5 py-1 rounded-lg text-2xs font-bold border transition-all",
+                  scriptFilter==="all"
+                    ? "bg-white/15 text-white border-white/30"
+                    : "bg-white/4 text-white/45 border-white/6 hover:text-white/70")}
+              >
+                All
+              </button>
+              {availableScripts.map(key => {
+                const meta = getScriptMeta(key);
+                if (!meta) return null;
+                const active = scriptFilter === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={()=>setScriptFilter(active ? "all" : key)}
+                    aria-pressed={active}
+                    className={cn("shrink-0 min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-2xs font-bold border transition-all",
+                      active ? meta.chipActive : "bg-white/4 text-white/45 border-white/6 hover:text-white/70")}
+                  >
+                    <span className="text-[11px] leading-none">{meta.icon}</span>
+                    {meta.short}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </header>
 
@@ -144,13 +298,21 @@ export default function Matches() {
           <div className="text-center py-20 text-white/35">
             <p className="text-5xl mb-4">📅</p>
             <p className="font-bold text-white/55">No matches found</p>
-            <p className="text-sm mt-1">{search ? "Try a different search" : "Check another date"}</p>
+            <p className="text-sm mt-1">
+              {scriptFilter !== "all" ? "No matches with this script — try another filter" : search ? "Try a different search" : "Check another date"}
+            </p>
+            {scriptFilter !== "all" && (
+              <button onClick={()=>setScriptFilter("all")} className="mt-4 px-3 py-1.5 rounded-lg bg-white/8 text-white/70 text-xs font-bold hover:bg-white/12">
+                Clear filter
+              </button>
+            )}
           </div>
         )}
 
         {!isLoading && Object.entries(grouped).map(([tourneyId, fixtures], groupIdx) => {
           const first = fixtures[0];
           const leagueName = first?.tournament_name || "Unknown League";
+          const country = first?.category_name || "";
           return (
             <section key={tourneyId} className={cn(groupIdx > 0 && "pt-5 border-t border-white/6")}>
               <header className="flex items-center gap-2 px-1 mb-2.5">
@@ -160,8 +322,11 @@ export default function Matches() {
                   onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
                   alt={leagueName}
                 />
-                <span className="text-xs font-bold text-white/40 uppercase tracking-wider truncate flex-1">{leagueName}</span>
-                <span className="text-2xs font-semibold text-white/25 tabular-nums">{fixtures.length}</span>
+                <span className="text-xs font-bold text-white/50 uppercase tracking-wider truncate flex-1">{leagueName}</span>
+                {country && (
+                  <span className="text-2xs font-semibold text-white/30 truncate hidden sm:inline">· {country}</span>
+                )}
+                <span className="text-2xs font-semibold text-white/25 tabular-nums shrink-0 ml-1">{fixtures.length}</span>
               </header>
               <div className="flex flex-col gap-2">
                 {fixtures.map((f: any) => {
@@ -171,6 +336,7 @@ export default function Matches() {
                   const prob = f.best_pick_probability ? Math.round(f.best_pick_probability * 100) : null;
                   const confStyle = getConfidenceStyle(f.pick_confidence_level);
                   const isHighProb = prob != null && prob >= 70;
+                  const scriptMeta = getScriptMeta(f.pick_script);
                   return (
                     <motion.button key={f.id} whileTap={{scale:0.98}}
                       onClick={()=>setLocation("/matches/"+f.id)}
@@ -198,7 +364,7 @@ export default function Matches() {
                           {(isLive||isFT) && <span className="text-base font-black text-white/80 w-5 text-right tabular-nums">{f.away_score??0}</span>}
                         </div>
                         {/* ── Enhanced pick row: pill + probability bar + script + edge ── */}
-                        <div className="mt-2 flex items-center gap-2 min-h-[20px]">
+                        <div className="mt-2 flex items-center gap-2 min-h-[20px] flex-wrap">
                           {hasPred ? (
                             <>
                               <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-2xs font-bold", confStyle.pill)}>
@@ -206,7 +372,7 @@ export default function Matches() {
                                 {f.best_pick_selection}
                               </span>
                               {prob != null && (
-                                <div className="flex items-center gap-1 flex-1 min-w-0">
+                                <div className="flex items-center gap-1 flex-1 min-w-[40px]">
                                   <div className="flex-1 h-1 rounded-full bg-white/8 overflow-hidden min-w-[24px]">
                                     <div className={cn("h-full rounded-full transition-all", confStyle.bar)} style={{ width: `${prob}%` }}/>
                                   </div>
@@ -216,19 +382,28 @@ export default function Matches() {
                               <ScriptTag script={f.pick_script} />
                               <EdgeBadge edge={f.best_pick_edge} />
                             </>
-                          ) : isPremium ? (
-                            <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
-                              <span className="w-1 h-1 rounded-full bg-white/15"/>
-                              No pick
-                            </span>
                           ) : (
-                            <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
-                              <Sparkles size={9} className="text-white/15"/>
-                              Premium
-                            </span>
+                            <>
+                              {/* Show script tag even without a pick — gives match-profile context */}
+                              {scriptMeta ? (
+                                <ScriptTag script={f.pick_script} />
+                              ) : isPremium ? (
+                                <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-white/15"/>
+                                  No pick
+                                </span>
+                              ) : (
+                                <span className="text-2xs font-medium text-white/20 flex items-center gap-1">
+                                  <Sparkles size={9} className="text-white/15"/>
+                                  Premium
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
+                      {/* ── Odds trio on the right (compact) ── */}
+                      {!isLive && !isFT && <OddsTrio home={f.odds_home} draw={f.odds_draw} away={f.odds_away} />}
                       <ChevronRight size={16} className="text-white/25 shrink-0"/>
                     </motion.button>
                   );
