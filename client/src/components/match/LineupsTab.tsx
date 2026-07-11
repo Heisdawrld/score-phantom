@@ -11,6 +11,13 @@ function getMissingReason(p: any) {
 }
 
 export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureId?: string }) {
+  // Fix #6: Use matchData (already fetched by parent MatchCenter) instead of re-fetching.
+  // Previously this fired a separate /predicted-lineup/:fixtureId request that triggered
+  // another full ensureFixtureData BSD gauntlet (10-30s). Now we only fetch as a fallback
+  // when matchData doesn't have lineup data.
+  const metaLineups = matchData?.meta?.lineups || matchData?.meta?.predicted_lineup;
+  const metaUnavailable = matchData?.meta?.unavailable_players;
+
   const { data, isLoading } = useQuery({
     queryKey: ['predicted-lineup', fixtureId],
     queryFn: async () => {
@@ -18,10 +25,12 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
       const res = await fetchApi(`/predicted-lineup/${fixtureId}/`);
       return res;
     },
-    enabled: !!fixtureId,
+    // Only fetch from API if matchData doesn't already have lineup data
+    enabled: !!fixtureId && !metaLineups,
+    staleTime: 5 * 60 * 1000, // 5 min — don't refetch on tab switches
   });
 
-  const isLiveFormat = Array.isArray(matchData?.meta?.lineups);
+  const isLiveFormat = Array.isArray(metaLineups);
 
   let homeLineup: any[] = [];
   let awayLineup: any[] = [];
@@ -33,9 +42,17 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
   let awayFormation = null;
 
   if (isLiveFormat) {
-    const allPlayers = matchData.meta.lineups || [];
+    const allPlayers = metaLineups || [];
     homeLineup = allPlayers.filter((p: any) => p.is_home);
     awayLineup = allPlayers.filter((p: any) => !p.is_home);
+  } else if (metaLineups && (metaLineups.home || metaLineups.away)) {
+    // Use lineup data from matchData.meta (already fetched by MatchCenter)
+    homeLineup = metaLineups.home?.starters || metaLineups.home?.players || [];
+    awayLineup = metaLineups.away?.starters || metaLineups.away?.players || [];
+    homeSubs = metaLineups.home?.substitutes || [];
+    awaySubs = metaLineups.away?.substitutes || [];
+    homeFormation = metaLineups.home?.formation || metaLineups.home?.predicted_formation;
+    awayFormation = metaLineups.away?.formation || metaLineups.away?.predicted_formation;
   } else if (data && data.lineups) {
     homeLineup = data.lineups.home?.starters || data.lineups.home?.players || [];
     awayLineup = data.lineups.away?.starters || data.lineups.away?.players || [];
@@ -46,18 +63,18 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
     homeFormation = data.lineups.home?.predicted_formation || data.lineups.home?.formation;
     awayFormation = data.lineups.away?.predicted_formation || data.lineups.away?.formation;
   } else {
-    homeLineup = matchData?.meta?.lineups?.home?.players || [];
-    awayLineup = matchData?.meta?.lineups?.away?.players || [];
+    homeLineup = metaLineups?.home?.players || [];
+    awayLineup = metaLineups?.away?.players || [];
     homeSubs = matchData?.meta?.lineups?.home?.substitutes || [];
     awaySubs = matchData?.meta?.lineups?.away?.substitutes || [];
     homeFormation = matchData?.meta?.lineups?.home?.formation || null;
     awayFormation = matchData?.meta?.lineups?.away?.formation || null;
   }
 
-  // BSD v2 enrichment stores unavailable players in meta.injuries. Use it as a
-  // safe fallback when the fresh lineup endpoint has no unavailable block yet.
-  if (homeUnavailable.length === 0) homeUnavailable = matchData?.meta?.injuries?.home || [];
-  if (awayUnavailable.length === 0) awayUnavailable = matchData?.meta?.injuries?.away || [];
+  // BSD v2 enrichment stores unavailable players in meta.injuries or meta.unavailable_players.
+  // Use them as a fallback when the fresh lineup endpoint has no unavailable block.
+  if (homeUnavailable.length === 0) homeUnavailable = metaUnavailable?.home || matchData?.meta?.injuries?.home || [];
+  if (awayUnavailable.length === 0) awayUnavailable = metaUnavailable?.away || matchData?.meta?.injuries?.away || [];
 
   const hasLineups = homeLineup.length > 0 || awayLineup.length > 0;
   const hasMissingPlayers = homeUnavailable.length > 0 || awayUnavailable.length > 0;

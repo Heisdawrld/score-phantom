@@ -75,7 +75,7 @@ export function Footer() {
               <span className="uppercase tracking-wider">Secure Checkout</span>
             </div>
             <a
-              href="https://wa.me/2348000000000"
+              href="https://wa.me/2348117024699"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs font-medium text-white/40 hover:text-primary/80 interactive"

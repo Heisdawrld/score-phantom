@@ -377,43 +377,48 @@ export async function ensureFixtureData(fixtureId, { skipEnrichment = false } = 
   const meta = buildMetaFromFixtureAndHistory(fixture, historyRows);
 
   // ── INJECT LIVE INJURIES, LINEUPS AND BEST ODDS ──
-  // BSD v1 /predictions is intentionally not called here. It is optional, slow under load,
-  // and must never block ScorePhantom's own engine. The engine uses BSD v2 data + our model.
+  // Fix #3: Only fetch lineup/odds live if DB doesn't already have them.
+  // Previously this ran on EVERY request (10-25 BSD calls for player stats alone),
+  // adding 5-10s to every match click even when data was already enriched.
+  // Now we check the DB first and only hit BSD if data is missing or stale.
   try {
     const bsdInternalEventId = fixture.id ? String(fixture.id) : null;
 
     if (bsdInternalEventId) {
-      async function attachMissingPlayerStats(players = []) {
-        return Promise.all(
-          players.map(async (p) => {
-            const playerId = p?.player?.id || p?.player_id || p?.id || null;
-            const stats = playerId ? await fetchPlayerStats(playerId) : null;
-            return { ...p, stats };
-          })
-        );
-      }
+      // Check if we already have lineup + odds data in meta (from enrichment)
+      const hasLineupInMeta = !!(meta.predicted_lineup || meta.lineups);
+      const hasOddsInDb = hasAnyOdds(odds);
 
-      const [lineupData, bestOdds] = await Promise.all([
-        fetchPredictedLineup(bsdInternalEventId),
-        fetchBestOdds(bsdInternalEventId),
-      ]);
+      // Only fetch live if missing from DB
+      if (!hasLineupInMeta || !hasOddsInDb) {
+        console.log(`[predictionCache] Fetching live lineup/odds for ${fixtureId} (lineup_in_meta=${hasLineupInMeta}, odds_in_db=${hasOddsInDb})`);
 
-      if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
-      if (lineupData?.unavailable_players) {
-        meta.unavailable_players = {
-          home: await attachMissingPlayerStats(lineupData.unavailable_players.home || []),
-          away: await attachMissingPlayerStats(lineupData.unavailable_players.away || []),
-        };
-      }
+        const [lineupData, bestOdds] = await Promise.all([
+          hasLineupInMeta ? Promise.resolve(null) : fetchPredictedLineup(bsdInternalEventId),
+          hasOddsInDb ? Promise.resolve(null) : fetchBestOdds(bsdInternalEventId),
+        ]);
 
-      const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
-      if (liveOdds) {
-        meta.best_odds = bestOdds;
-        if (!hasAnyOdds(odds)) {
-          odds = liveOdds;
-          console.log(`[predictionCache] Using live BSD odds fallback for fixture ${fixtureId}`);
+        if (lineupData?.lineups) meta.predicted_lineup = lineupData.lineups;
+        if (lineupData?.unavailable_players) {
+          // Fix #3: Don't fetch per-player stats on every request.
+          // The enrichment pipeline already fetches player stats for top players.
+          // Attaching stats for ALL unavailable players (10-25 per match) was adding
+          // 5-10s of BSD calls per request. Stats are a nice-to-have, not prediction input.
+          meta.unavailable_players = lineupData.unavailable_players;
         }
-        await upsertFixtureOdds(fixtureId, liveOdds);
+
+        if (bestOdds) {
+          const liveOdds = mapBestOddsToFixtureOdds(bestOdds);
+          meta.best_odds = bestOdds;
+          if (liveOdds && !hasOddsInDb) {
+            odds = liveOdds;
+            console.log(`[predictionCache] Using live BSD odds fallback for fixture ${fixtureId}`);
+          }
+          if (liveOdds) await upsertFixtureOdds(fixtureId, liveOdds);
+        }
+      } else {
+        // Data already in DB — skip live fetches entirely (fast path)
+        // meta.best_odds will be populated from buildMetaFromFixtureAndHistory if available
       }
     }
   } catch (err) {
@@ -592,17 +597,57 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, st
     }
   }
 
-  // ── Ensure fixture data (enrichment) ──────────────────────────────────────
+  // ── FAST PATH: Check cache BEFORE enrichment (Fix #1 + #2) ────────────────
+  // Previously, ensureFixtureData() ran FIRST (blocking 10-30s on BSD calls) even
+  // when a perfectly fresh cached prediction existed. Now we check the cache first.
+  // If fresh, return instantly. If stale but exists, return it + background refresh.
+  // Only if NO cache exists do we pay the enrichment cost.
+  if (!forceRefresh) {
+    const cacheFresh = await isCacheFresh(fixtureId);
+    if (cacheFresh) {
+      const cached = await loadCachedPrediction(fixtureId);
+      if (cached?.prediction) {
+        console.log(`[predictionCache] Cache HIT (fresh) for fixture ${fixtureId} — returning instantly, no enrichment`);
+
+        // Back-fill tier if missing from old cached predictions
+        if (cached.prediction?.dataQuality && cached.prediction.dataQuality.tier == null) {
+          const s = cached.prediction.dataQuality.completenessScore ?? 0.5;
+          if (s >= 0.8)       cached.prediction.dataQuality.tier = 'rich';
+          else if (s >= 0.55) cached.prediction.dataQuality.tier = 'good';
+          else if (s >= 0.35) cached.prediction.dataQuality.tier = 'partial';
+          else                cached.prediction.dataQuality.tier = 'thin';
+        }
+
+        // Fetch fixture + odds + meta WITHOUT triggering enrichment (fast DB reads)
+        const fixture = await getFixtureById(fixtureId);
+        const odds = await getOdds(fixtureId);
+        const historyRows = await getHistoryRows(fixtureId);
+        const meta = fixture ? buildMetaFromFixtureAndHistory(fixture, historyRows) : {};
+
+        return {
+          prediction: cached.prediction,
+          odds,
+          meta,
+          engineResult: cached.engineResult,
+          fixture,
+          fromCache: true,
+          stale: false,
+        };
+      }
+    }
+  }
+
+  // ── Ensure fixture data (enrichment) — only runs on cache miss ───────────
   const bundle = await ensureFixtureData(fixtureId, { skipEnrichment });
   if (!bundle) return null;
 
   const { fixture, odds, meta } = bundle;
 
-  // ── Check predictions_v2 cache ────────────────────────────────────────────
+  // ── Check predictions_v2 cache again (post-enrichment, in case enrichment was fast) ───
   if (!forceRefresh && await isCacheFresh(fixtureId)) {
     const cached = await loadCachedPrediction(fixtureId);
     if (cached) {
-      console.log(`[predictionCache] Cache HIT for fixture ${fixtureId} — returning stored prediction`);
+      console.log(`[predictionCache] Cache HIT (post-enrichment) for fixture ${fixtureId} — returning stored prediction`);
 
       // Back-fill tier if missing from old cached predictions
       if (cached.prediction?.dataQuality && cached.prediction.dataQuality.tier == null) {

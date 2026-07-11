@@ -1174,7 +1174,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                     className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
                     Clear League Cache
                   </button>
-                  <button onClick={() => run(() => call("/api/admin/clear-fixture-odds", { method: "POST" }), "Fixture odds cleared")}
+                  <button onClick={() => run(() => call("/api/admin/clear-odds-cache", { method: "POST" }), "Fixture odds cleared")}
                     className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all">
                     Clear Fixture Odds
                   </button>

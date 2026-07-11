@@ -132,7 +132,8 @@ export default function Dashboard() {
   // BUG FIX: Don't show hero card if the top pick is AVOID — showing an AVOID pick
   // as "Top Pick" with green glow is contradictory and confuses users.
   const rawHeroPick = (heroData as any)?.picks?.[0] || null;
-  const heroPick = rawHeroPick && rawHeroPick.advisor_status !== 'AVOID' && rawHeroPick.advisor_status !== 'SKIP' && rawHeroPick.valueTier !== 'JUNK' && rawHeroPick.valueTier !== 'NEGATIVE_EV'
+  const [heroDismissed, setHeroDismissed] = useState(false);
+  const heroPick = !heroDismissed && rawHeroPick && rawHeroPick.advisor_status !== 'AVOID' && rawHeroPick.advisor_status !== 'SKIP' && rawHeroPick.valueTier !== 'JUNK' && rawHeroPick.valueTier !== 'NEGATIVE_EV'
     ? rawHeroPick : null;
   const { data: trackData } = useQuery({ queryKey: ["/api/track-strip"], queryFn: () => fetchApi("/track-record?days=30&sport=football"), enabled: !authLoading, staleTime: 10 * 60 * 1000 });
   const trackStats = (trackData as any)?.overallStats || null;
@@ -313,9 +314,13 @@ export default function Dashboard() {
                   <Flame className="w-4 h-4 text-primary" />
                   <span className="text-2xs font-black uppercase tracking-[0.2em] text-primary">Top Pick</span>
                 </div>
-                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-white/20 text-xs hover:bg-white/10 transition-colors" onClick={(e) => { e.stopPropagation(); }}>
+                <button
+                  aria-label="Dismiss top pick"
+                  className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-white/40 text-sm hover:bg-white/10 hover:text-white/60 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setHeroDismissed(true); }}
+                >
                   ×
-                </div>
+                </button>
               </div>
 
               {/* Content: match info + confidence ring */}

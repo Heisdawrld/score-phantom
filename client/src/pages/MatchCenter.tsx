@@ -5,7 +5,7 @@ import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info } from "lucide-react";
+import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info, Grid2x2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
@@ -47,10 +47,10 @@ export function SpiralWatermark() {
 const TABS = [
   { key: "Prediction", label: "Prediction", Icon: Target },
   { key: "Stats", label: "Stats", Icon: BarChart2 },
-  { key: "Pitch", label: "Pitch", Icon: Target },
+  { key: "Pitch", label: "Pitch", Icon: Grid2x2 },
   { key: "Lineups", label: "Lineups", Icon: Users },
   { key: "League", label: "League", Icon: Trophy },
-  { key: "PhantomChat", label: "PhantomChat", Icon: MessageCircle },
+  { key: "PhantomChat", label: "Chat", Icon: MessageCircle },
 ];
 
 // ── Main MatchCenter ────────────────────────────────────────────────────────
@@ -133,12 +133,12 @@ export default function MatchCenter() {
       <div className="sticky top-0 z-50 bg-[#060a0e]/80 backdrop-blur-xl border-b border-white/[0.02] px-4 pt-4 pb-0 relative">
         {/* Back + close */}
         <div className="flex items-center justify-between mb-3">
-          <button onClick={() => window.history.back()}
+          <button onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/matches"); }}
             className="flex items-center gap-1.5 text-white/40 hover:text-white transition-colors">
             <span className="text-lg">←</span>
             <span className="text-xs font-bold">Back</span>
           </button>
-          <button onClick={() => window.history.back()}
+          <button onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/matches"); }}
             className="w-8 h-8 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
             <X size={14} className="text-white/40" />
           </button>

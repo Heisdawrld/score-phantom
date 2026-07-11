@@ -768,10 +768,10 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const fixtureId = req.params.fixtureId;
 
-    // REVERTED: staleWhileRevalidate caused stale/bad predictions (built with
-    // skipEnrichment) to be served on match clicks, masking data-quality issues.
-    // Using the standard path ensures every click gets a fresh, fully-enriched
-    // prediction (or a fresh cache hit if within CACHE_VALID_HOURS).
+    // Fix #1 + #2: getOrBuildPrediction now checks the cache BEFORE enrichment.
+    // If a fresh cached prediction exists, it returns instantly (DB reads only, ~200ms).
+    // Enrichment only runs on cache miss. This makes match clicks feel instant
+    // for any match that has been viewed before (or pre-built by the cron).
     const result = await getOrBuildPrediction(fixtureId);
     if (!result) {
       // Roll back the count if prediction fails for trial users
@@ -791,6 +791,9 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
       access: buildAccessPayload(req.access),
     };
 
+    // Fix #11: HTTP cache — 60s browser cache + 5min stale-while-revalidate.
+    // Server cache is 6h so 60s browser cache is safe and eliminates refetch on back-button.
+    res.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     res.json(response);
   } catch (err) {
     console.error(err);
@@ -1995,10 +1998,13 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
       try {
         console.log(`[MatchCenter] Refreshing stale core memory for fixture ${fixtureId}...`);
         await refreshCoreFixtureMemory(fixture);
-        bundle = await ensureFixtureData(fixtureId);
-        if (bundle) {
-          fixture = bundle.fixture;
-          meta = bundle.meta;
+        // Fix #4: Previously called ensureFixtureData(fixtureId) AGAIN here — a second
+        // full BSD gauntlet (10-30s). Now we just re-read from DB (instant) since
+        // refreshCoreFixtureMemory already updated the fixtures table.
+        const refreshedFixture = await getFixtureById(fixtureId);
+        if (refreshedFixture) {
+          fixture = refreshedFixture;
+          meta = refreshedFixture.meta ? (typeof refreshedFixture.meta === 'string' ? JSON.parse(refreshedFixture.meta) : refreshedFixture.meta) : meta;
         }
         historyRows = await getHistoryRows(fixtureId);
         h2h = historyRows.filter(r => r.type === "h2h").map(r => ({ home: r.home_team, away: r.away_team, score: formatScore(r), date: r.date }));
@@ -2045,6 +2051,13 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
       }
     }
 
+    // Fix #11: HTTP cache for match data — 60s browser cache (non-live only).
+    // Live matches bypass cache (Cache-Control: no-store) so spatial data stays fresh.
+    if (isLive) {
+      res.set('Cache-Control', 'no-store');
+    } else {
+      res.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+    }
     return res.json({ fixture, meta, h2h, homeForm, awayForm, standings, odds: oddsRow, access: buildAccessPayload(req.access) });
   } catch(err) {
     console.error("[MatchCenter]", err.message);

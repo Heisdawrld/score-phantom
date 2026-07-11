@@ -27,9 +27,12 @@ export function usePrediction(fixtureId: string | null, onError?: (code: string)
       }
     },
     enabled: !!fixtureId,
-    staleTime: 0,
-    retry: 1,          // retry once — handles Render free-tier cold starts
-    retryDelay: 2500,  // 2.5s between retries
+    // Fix #8: Cache predictions for 5 min so back-navigation doesn't refetch.
+    // Keep previous data while refetching so the UI doesn't flash empty.
+    staleTime: 5 * 60 * 1000,  // 5 min
+    retry: 1,
+    retryDelay: (attemptIndex) => Math.min(500 * Math.pow(2, attemptIndex), 5000), // 500ms, then 1s
+    placeholderData: (prev) => prev, // keep previous data while refetching
   });
 }
 

@@ -193,21 +193,6 @@ export default function Settings() {
                     )}
                  </div>
                  
-                 <div className="p-4 sm:p-5 flex items-center justify-between opacity-60">
-                    <div className="flex items-center gap-3">
-                       <div className="w-9 h-9 rounded-xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center shrink-0">
-                         <Moon className="w-4 h-4 text-white/70" />
-                       </div>
-                       <div>
-                          <p className="text-sm font-bold text-white">Dark Mode</p>
-                          <p className="text-xs text-white/40 mt-0.5">ScorePhantom dark engine is permanent.</p>
-                       </div>
-                    </div>
-                    {/* Fixed Active Toggle */}
-                    <div className="w-12 h-6 rounded-full bg-primary relative">
-                       <div className="w-4 h-4 rounded-full bg-black absolute right-1 top-1" />
-                    </div>
-                 </div>
               </div>
            </div>
 
@@ -226,35 +211,19 @@ export default function Settings() {
                        </div>
                     </div>
                  </div>
-                 
-                 <div className="p-4 sm:p-5 flex items-center justify-between opacity-60">
-                    <div className="flex items-center gap-3">
-                       <div className="w-9 h-9 rounded-xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center shrink-0">
-                         <Smartphone className="w-4 h-4 text-white/70" />
-                       </div>
-                       <div>
-                          <p className="text-sm font-bold text-white">Active Sessions</p>
-                          <p className="text-xs text-white/40 mt-0.5">1 current active session on this device.</p>
-                       </div>
-                    </div>
-                 </div>
               </div>
            </div>
         </motion.div>
-        
+
         {/* ── Destructive Actions ── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-10 space-y-3">
-           <button 
+           <button
              onClick={logout}
              className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] transition-all text-white/70 text-sm font-bold"
            >
               <LogOut size={16} /> Sign out of ScorePhantom
            </button>
-           
-           <button className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-500/[0.03] border border-red-500/10 hover:bg-red-500/10 transition-all text-red-400 text-sm font-bold opacity-60">
-              <AlertTriangle size={16} /> Delete Account
-           </button>
-           
+
            <p className="text-center text-[10px] text-white/20 mt-4 uppercase tracking-widest">ScorePhantom Core v2.0</p>
         </motion.div>
 
