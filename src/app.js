@@ -261,8 +261,13 @@ async function autoSeed() {
       return;
     }
 
-    // Check each of the next 7 days — seed any day that has 0 fixtures
+    // Check each of the next 7 days — seed any day that has 0 fixtures.
+    // FIX: Always re-seed today and tomorrow (days 0-1) because BSD adds fixtures
+    // to these days throughout the day. Previously, if a day had ANY fixtures from
+    // an earlier seed run, it was skipped — so newly-added fixtures (e.g., Norway
+    // matches added to BSD after the first seed) never appeared in the app.
     const missingDays = [];
+    const reseedDays = []; // days that have some fixtures but should be re-seeded
     for (let i = 0; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
@@ -272,21 +277,40 @@ async function autoSeed() {
         args: [`${dateStr}%`],
       });
       const count = Number(r.rows[0]?.count || 0);
-      if (count === 0) missingDays.push({ i, dateStr });
+      if (count === 0) {
+        missingDays.push({ i, dateStr });
+      } else if (i <= 1) {
+        // Today and tomorrow: always re-seed to catch newly-added fixtures
+        reseedDays.push({ i, dateStr, existingCount: count });
+      }
     }
 
-    if (missingDays.length === 0) {
+    if (missingDays.length === 0 && reseedDays.length === 0) {
       console.log("[AutoSeed] All 7 days have fixtures — skipping.");
       return;
     }
 
-    console.log(`[AutoSeed] Missing fixtures for ${missingDays.length} days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+    if (reseedDays.length > 0) {
+      console.log(`[AutoSeed] Re-seeding today + tomorrow to catch newly-added fixtures: ${reseedDays.map(d => `${d.dateStr} (${d.existingCount} existing)`).join(', ')}`);
+    }
+    if (missingDays.length > 0) {
+      console.log(`[AutoSeed] Missing fixtures for ${missingDays.length} days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
+    }
 
-    // Seed from the earliest missing day forward (without clearing existing data)
-    const fromDay = missingDays[0].i;
-    const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
+    // Seed today + tomorrow (re-seed, catches new fixtures) + any missing days
+    const allDaysToSeed = new Set();
+    // Always include days 0-1 (today + tomorrow) for re-seeding
+    allDaysToSeed.add(0);
+    allDaysToSeed.add(1);
+    // Add any missing days
+    for (const d of missingDays) allDaysToSeed.add(d.i);
+
+    const sortedDays = [...allDaysToSeed].sort((a, b) => a - b);
+    const fromDay = sortedDays[0];
+    const daysToSeed = sortedDays[sortedDays.length - 1] - fromDay + 1;
+
     const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
-    console.log(`[AutoSeed] Seeded ${result2.inserted} missing fixtures.`);
+    console.log(`[AutoSeed] Seeded ${result2.inserted} fixtures (${result2.failed} failed, ${result2.skippedByLeagueFilter} filtered).`);
   } catch (err) {
     console.error("[AutoSeed] Failed:", err.message);
   }
@@ -457,8 +481,9 @@ app.listen(PORT, async () => {
     setTimeout(async () => {
       console.log('[DailySeed] Midnight re-seed triggered');
       try {
-        // NEVER use clearFirst: true — it wipes all fixtures/predictions.
-        // Instead, seed only missing days (INSERT OR IGNORE keeps existing data safe).
+        // Re-seed today + tomorrow + any missing days.
+        // FIX: Previously only seeded days with 0 fixtures. Now always re-seeds
+        // today + tomorrow to catch fixtures that BSD added after the first seed.
         const missingDays = [];
         for (let i = 0; i <= 7; i++) {
           const d = new Date();
@@ -471,15 +496,15 @@ app.listen(PORT, async () => {
           const count = Number(r.rows[0]?.count || 0);
           if (count === 0) missingDays.push({ i, dateStr });
         }
-        if (missingDays.length > 0) {
-          console.log(`[DailySeed] Seeding ${missingDays.length} missing days: ${missingDays.map(d=>d.dateStr).join(', ')}`);
-          const fromDay = missingDays[0].i;
-          const daysToSeed = missingDays[missingDays.length - 1].i - fromDay + 1;
-          const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
-          console.log(`[DailySeed] Seeded ${result2.inserted} fixtures.`);
-        } else {
-          console.log('[DailySeed] All days have fixtures — skipping seed.');
-        }
+        // Always include today (0) + tomorrow (1) for re-seeding
+        const allDays = new Set([0, 1]);
+        for (const d of missingDays) allDays.add(d.i);
+        const sortedDays = [...allDays].sort((a, b) => a - b);
+        const fromDay = sortedDays[0];
+        const daysToSeed = sortedDays[sortedDays.length - 1] - fromDay + 1;
+        console.log(`[DailySeed] Re-seeding days ${fromDay}-${fromDay + daysToSeed} (today + tomorrow + missing)`);
+        const result2 = await seedFixtures({ startOffset: fromDay, days: daysToSeed, clearFirst: false });
+        console.log(`[DailySeed] Seeded ${result2.inserted} fixtures.`);
         // ── League-by-league backfill (v1.0.3) ────────────────────────────────
         // Catches competitions the date-based seed misses (cups, qualifiers,
         // sparse-schedule leagues like NPL Queensland). Idempotent + upcomingOnly
@@ -519,6 +544,20 @@ app.listen(PORT, async () => {
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');
   }
   scheduleNextMidnightSeed();
+
+  // ── Periodic re-seed every 2 hours: catches fixtures BSD adds throughout the day ──
+  // BSD adds fixtures to today/tomorrow as kickoff approaches. Without this, matches
+  // that appear in BSD after the startup/midnight seed never show in the app.
+  setInterval(async () => {
+    try {
+      console.log('[PeriodicSeed] 2h re-seed triggered (today + tomorrow)');
+      const result = await seedFixtures({ startOffset: 0, days: 1, clearFirst: false });
+      console.log(`[PeriodicSeed] Re-seeded ${result.inserted} fixtures (${result.failed} failed)`);
+    } catch (err) {
+      console.error('[PeriodicSeed] Failed:', err.message);
+    }
+  }, 2 * 60 * 60 * 1000); // every 2 hours
+  console.log('[PeriodicSeed] 2h re-seed scheduled (catches newly-added fixtures)');
 
   // ── Daily result checker: runs at 2 AM Lagos time to evaluate yesterday's picks ──
   function scheduleNextResultCheck() {
