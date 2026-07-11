@@ -5,6 +5,7 @@ import { calibrateFromHistory } from "../probabilities/calibrateFromHistory.js";
 import { refineScriptPostXg } from "../scripts/refineScriptPostXg.js";
 import { computeLayer2Shifts } from "../markets/computeLayer2Override.js";
 import { ensembleProbabilities } from "../probabilities/ensemble.js";
+import { computeCornersCardsProbabilities, computeAsianHandicapProbabilities } from "../probabilities/cornersCardsModel.js";
 
 /**
  * Stage 2 — Probability pipeline.
@@ -85,6 +86,36 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
 
   if (ensembleMeta.active) {
     console.log(`[pipeline] Ensemble active: weights P=${ensembleMeta.weights.poisson}/C=${ensembleMeta.weights.catboost}/M=${ensembleMeta.weights.polymarket}, agreement=${ensembleMeta.agreement}`);
+  }
+
+  // ── Corners + Cards + Asian Handicap probabilities (Tier 3) ───────────────
+  // These markets have BSD odds flowing in (via fetchOddsComparison) but previously
+  // had no model probability → no candidates → no edge calculation. Now we compute
+  // them from team average corners/cards (BSD stats) and the Poisson score matrix.
+  const oddsSnapshot = features?.advancedOdds || features?.marketOdds || {};
+  try {
+    const ccProbs = computeCornersCardsProbabilities(features, oddsSnapshot);
+    Object.assign(finalProbs, ccProbs);
+  } catch (err) {
+    console.warn('[pipeline] Corners/cards model failed:', err.message);
+  }
+
+  // Asian Handicap — derive from the Poisson score matrix for all major lines
+  // Keys must match MARKET_DEFINITIONS in buildMarketCandidates.js
+  // e.g., -1.5 → 'neg1_5', +1.5 → '1_5', -1 → 'neg1', +1 → '1'
+  try {
+    const ahLines = [-1.5, -1, -0.5, 0.5, 1, 1.5];
+    for (const line of ahLines) {
+      const ah = computeAsianHandicapProbabilities(scoreMatrix, line);
+      // Build key: -1.5 → 'neg1_5', 1.5 → '1_5', -1 → 'neg1', 1 → '1'
+      const sign = line < 0 ? 'neg' : '';
+      const absStr = String(Math.abs(line)).replace('.', '_');
+      const lineKey = `${sign}${absStr}`;
+      finalProbs[`ah_home_${lineKey}`] = ah.homeCover;
+      finalProbs[`ah_away_${lineKey}`] = ah.awayCover;
+    }
+  } catch (err) {
+    console.warn('[pipeline] Asian Handicap model failed:', err.message);
   }
 
   return {

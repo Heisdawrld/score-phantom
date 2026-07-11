@@ -6,6 +6,7 @@ const MARKET_DEFINITIONS = [
   { marketKey: 'draw',               selection: 'Draw',                 probKey: 'draw' },
   { marketKey: 'double_chance_home', selection: 'Double Chance 1X',     probKey: null,    compute: (p) => safeNum(p.homeWin, 0) + safeNum(p.draw, 0) },
   { marketKey: 'double_chance_away', selection: 'Double Chance X2',     probKey: null,    compute: (p) => safeNum(p.awayWin, 0) + safeNum(p.draw, 0) },
+  { marketKey: 'double_chance_draw', selection: 'Double Chance 12',     probKey: null,    compute: (p) => safeNum(p.homeWin, 0) + safeNum(p.awayWin, 0) },
   { marketKey: 'dnb_home',           selection: 'Home Win (DNB)',        probKey: null,    compute: (p) => { const h = safeNum(p.homeWin, 0); const a = safeNum(p.awayWin, 0); const denom = h + a; return denom > 0.01 ? h / denom : 0; } },
   { marketKey: 'dnb_away',           selection: 'Away Win (DNB)',        probKey: null,    compute: (p) => { const h = safeNum(p.homeWin, 0); const a = safeNum(p.awayWin, 0); const denom = h + a; return denom > 0.01 ? a / denom : 0; } },
   { marketKey: 'over_15',            selection: 'Over 1.5 Goals',       probKey: 'over15' },
@@ -26,6 +27,33 @@ const MARKET_DEFINITIONS = [
   { marketKey: 'away_under_15',      selection: 'Away Under 1.5 Goals', probKey: 'awayUnder15' },
   { marketKey: 'win_either_half_home', selection: 'Home Win Either Half', probKey: null,  compute: (p) => safeNum(p.homeOver05, 0) * 0.75 },
   { marketKey: 'win_either_half_away', selection: 'Away Win Either Half', probKey: null,  compute: (p) => safeNum(p.awayOver05, 0) * 0.7 },
+  // ── Corners markets (Tier 3) — BSD serves odds, model computes probability ──
+  { marketKey: 'corners_1x2_home',   selection: 'Corners 1X2 Home',     probKey: 'corners_1x2_home' },
+  { marketKey: 'corners_1x2_away',   selection: 'Corners 1X2 Away',     probKey: 'corners_1x2_away' },
+  { marketKey: 'corners_1x2_draw',   selection: 'Corners 1X2 Draw',     probKey: 'corners_1x2_draw' },
+  { marketKey: 'total_corners_over', selection: 'Total Corners Over',   probKey: 'total_corners_over' },
+  { marketKey: 'total_corners_under',selection: 'Total Corners Under',  probKey: 'total_corners_under' },
+  // ── Red card markets (Tier 3) ──────────────────────────────────────────────
+  { marketKey: 'red_card_yes',       selection: 'Red Card Yes',         probKey: 'red_card_yes' },
+  { marketKey: 'red_card_no',        selection: 'Red Card No',          probKey: 'red_card_no' },
+  { marketKey: 'total_red_cards_over', selection: 'Total Red Cards Over',  probKey: 'total_red_cards_over' },
+  { marketKey: 'total_red_cards_under',selection: 'Total Red Cards Under', probKey: 'total_red_cards_under' },
+  // ── Asian Handicap markets (Tier 3) — model-only (BSD doesn't serve AH odds) ──
+  // These produce model probabilities from the Poisson score matrix but have no
+  // bookmaker odds → edge can't be computed → they'll be model-only candidates.
+  // Adding them so the engine at least evaluates AH lines for informational purposes.
+  { marketKey: 'ah_home_neg1_5',     selection: 'Asian Handicap Home -1.5', probKey: 'ah_home_neg1_5' },
+  { marketKey: 'ah_away_1_5',        selection: 'Asian Handicap Away +1.5',  probKey: 'ah_away_1_5' },
+  { marketKey: 'ah_home_neg1',       selection: 'Asian Handicap Home -1',   probKey: 'ah_home_neg1' },
+  { marketKey: 'ah_away_1',          selection: 'Asian Handicap Away +1',    probKey: 'ah_away_1' },
+  { marketKey: 'ah_home_neg0_5',     selection: 'Asian Handicap Home -0.5', probKey: 'ah_home_neg0_5' },
+  { marketKey: 'ah_away_0_5',        selection: 'Asian Handicap Away +0.5',  probKey: 'ah_away_0_5' },
+  { marketKey: 'ah_home_0_5',        selection: 'Asian Handicap Home +0.5',  probKey: 'ah_home_0_5' },
+  { marketKey: 'ah_away_neg0_5',     selection: 'Asian Handicap Away -0.5', probKey: 'ah_away_neg0_5' },
+  { marketKey: 'ah_home_1',          selection: 'Asian Handicap Home +1',    probKey: 'ah_home_1' },
+  { marketKey: 'ah_away_neg1',       selection: 'Asian Handicap Away -1',   probKey: 'ah_away_neg1' },
+  { marketKey: 'ah_home_1_5',        selection: 'Asian Handicap Home +1.5',  probKey: 'ah_home_1_5' },
+  { marketKey: 'ah_away_neg1_5',     selection: 'Asian Handicap Away -1.5', probKey: 'ah_away_neg1_5' },
 ];
 
 /**

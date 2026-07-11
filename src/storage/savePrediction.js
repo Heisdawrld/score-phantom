@@ -54,6 +54,13 @@ export async function initPredictionsTable() {
       polymarket_draw_prob REAL,
       polymarket_away_prob REAL,
       is_sharp_value INTEGER DEFAULT 0,
+      stake_units REAL DEFAULT 1,
+      kelly_full REAL,
+      adversarial_challenge_json TEXT,
+      adversarial_recommendation TEXT,
+      clv_adjustment REAL,
+      confidence_json TEXT,
+      odds_comparison_json TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -82,6 +89,14 @@ export async function initPredictionsTable() {
     ['polymarket_draw_prob', 'REAL'],
     ['polymarket_away_prob', 'REAL'],
     ['is_sharp_value', 'INTEGER DEFAULT 0'],
+    // Tier 2/3 columns — queryable for admin dashboards
+    ['stake_units', 'REAL DEFAULT 1'],
+    ['kelly_full', 'REAL'],
+    ['adversarial_challenge_json', 'TEXT'],
+    ['adversarial_recommendation', 'TEXT'],
+    ['clv_adjustment', 'REAL'],
+    ['confidence_json', 'TEXT'],
+    ['odds_comparison_json', 'TEXT'],
   ];
 
   for (const [columnName, columnDef] of migrations) {
@@ -129,6 +144,9 @@ export async function savePrediction(predictionResult) {
           home_team, away_team, prediction_json,
           home_manager_tactics, away_manager_tactics,
           polymarket_home_prob, polymarket_draw_prob, polymarket_away_prob, is_sharp_value,
+          stake_units, kelly_full,
+          adversarial_challenge_json, adversarial_recommendation,
+          clv_adjustment, confidence_json,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?,
@@ -141,6 +159,9 @@ export async function savePrediction(predictionResult) {
           ?, ?, ?,
           ?, ?,
           ?, ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?,
           ?, ?
         ) ON CONFLICT (fixture_id) DO UPDATE SET
           model_version = EXCLUDED.model_version,
@@ -174,6 +195,12 @@ export async function savePrediction(predictionResult) {
           polymarket_draw_prob = EXCLUDED.polymarket_draw_prob,
           polymarket_away_prob = EXCLUDED.polymarket_away_prob,
           is_sharp_value = EXCLUDED.is_sharp_value,
+          stake_units = EXCLUDED.stake_units,
+          kelly_full = EXCLUDED.kelly_full,
+          adversarial_challenge_json = EXCLUDED.adversarial_challenge_json,
+          adversarial_recommendation = EXCLUDED.adversarial_recommendation,
+          clv_adjustment = EXCLUDED.clv_adjustment,
+          confidence_json = EXCLUDED.confidence_json,
           updated_at = EXCLUDED.updated_at
       `,
       args: [
@@ -209,6 +236,13 @@ export async function savePrediction(predictionResult) {
         r.features?.polymarketOdds?.odds?.['1x2']?.draw || null,
         r.features?.polymarketOdds?.odds?.['1x2']?.away || null,
         bp?.isSharpValue ? 1 : 0,
+        // Tier 2/3 fields
+        r.stake?.stakeUnits ?? bp?.stake?.stakeUnits ?? 1,
+        r.stake?.kellyFull ?? bp?.stake?.kellyFull ?? null,
+        r.adversarialChallenge ? JSON.stringify(r.adversarialChallenge) : null,
+        r.adversarialChallenge?.recommendation || null,
+        conf.clvAdjustment ?? null,
+        JSON.stringify(conf),
         r.createdAt || now,
         r.updatedAt || now,
       ],
