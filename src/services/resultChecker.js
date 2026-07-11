@@ -269,7 +269,10 @@ export async function checkResults(dateStr) {
           const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
           return impliedProb > 0 ? (1 / impliedProb) : null;
         })();
-    const profitUnits = computeProfitUnits(outcome, bookmakerOdds, 1);
+    // Read stake_units from the prediction pick (persisted by predictionCache.js).
+    // Falls back to 1 if not available (legacy picks or missing stake data).
+    const stakeUnits = pick?.stake_units != null ? parseFloat(pick.stake_units) : 1;
+    const profitUnits = computeProfitUnits(outcome, bookmakerOdds, stakeUnits);
     const pickId = pick?.id != null ? Number(pick.id) : null;
     const market = pick?.market_key || fix.best_pick_market;
     const selection = pick?.selection || fix.best_pick_selection;
@@ -326,12 +329,12 @@ export async function checkResults(dateStr) {
         args: [
           fid, 'football', fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name,
           pickId, market, selection, parseFloat(probability || 0),
-          bookmakerOdds != null ? parseFloat(bookmakerOdds) : null, 1, profitUnits,
+          bookmakerOdds != null ? parseFloat(bookmakerOdds) : null, stakeUnits, profitUnits,
           modelConfidence || null,
           score.home, score.away, score.home + '-' + score.away,
           outcome, outcome, isSharpValue ? 1 : 0,
           'live', isRetroactive,
-        ] 
+        ]
       });
       if (prev === 'void') outcomes.updated++;
       else outcomes[outcome === 'win' ? 'wins' : outcome === 'loss' ? 'losses' : 'voids']++;

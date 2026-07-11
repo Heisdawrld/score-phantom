@@ -253,6 +253,7 @@ function flattenFeatureVector(fv) {
     metadataReasonCodes: metadataInsights.reasonCodes || [],
     hasMetadataPreview: !!metadataInsights.preview,
     advancedOdds: fv.advancedOdds || null,
+    oddsComparison: fv.oddsComparison || null,
     polymarketOdds: fv.polymarketOdds || null,
     homeManager: fv.homeManager || null,
     awayManager: fv.awayManager || null,

@@ -261,6 +261,7 @@ export async function fetchAndStoreEnrichment(fixture) {
       homeStats: null, awayStats: null, matchStats: null, matchEvents: null,
       actualHomeXg: null, actualAwayXg: null, shotmap: null, refereeData: null,
       injuries: null, metadata: null, metadataInsights: null, eventContext: null, venue: null, playerStats: [], deepPlayerIntel: null, refereeVolatility: null, odds: null,
+      oddsComparison: null,
     };
   }
 
@@ -272,6 +273,7 @@ export async function fetchAndStoreEnrichment(fixture) {
   let metadata = null, metadataInsights = null, eventContext = null, venue = null, playerStats = [];
   let deepPlayerIntel = null, refereeVolatility = null;
   let basicOdds = null;
+  let oddsComparison = null;
 
   try {
     const eventId = fixture.id || fixture.match_id;
@@ -302,6 +304,7 @@ export async function fetchAndStoreEnrichment(fixture) {
       venue = eventDetail.venue || null;
       playerStats = Array.isArray(eventDetail.player_stats) ? eventDetail.player_stats : [];
       basicOdds = extractOddsFromEvent(eventDetail, eventId);
+      oddsComparison = eventDetail.odds_comparison || null;
 
       const h2hBlock = eventDetail.head_to_head;
       if (h2hBlock?.recent_matches?.length > 0) {
@@ -462,5 +465,6 @@ export async function fetchAndStoreEnrichment(fixture) {
     average_positions, momentum, xg_per_minute, bsdHomeFormStats, bsdAwayFormStats,
     refereeData, refereeVolatility, injuries, metadata, metadataInsights, eventContext, venue, playerStats, deepPlayerIntel,
     oddsData, polymarketOdds, homeManager, awayManager, odds: basicOdds,
+    oddsComparison,
   };
 }

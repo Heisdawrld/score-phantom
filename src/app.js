@@ -22,6 +22,8 @@ import { getBudgetStatus } from './services/requestBudget.js';
 import { scheduleDaily7amDigest } from './services/dailyDigest.js';
 import { checkResults } from "./services/resultChecker.js";
 import { refreshAccuracyCache } from "./storage/accuracyCache.js";
+import { refreshClvCalibration } from "./storage/clvCalibration.js";
+import { refreshLearnedWeights } from "./probabilities/ensemble.js";
 import { runMaintenanceJobs } from "./scripts/maintenance.js";
 import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
 // Team logos are now served via BSD URL template — no API calls or caching needed
@@ -384,6 +386,13 @@ app.listen(PORT, async () => {
   await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
   startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
+
+  // ── Startup cache refresh (Tier 3) ────────────────────────────────────────
+  // Pre-load all calibration caches so the first prediction after boot is fully calibrated.
+  // Without this, the engine uses hardcoded weights and no CLV/accuracy data for up to 3h.
+  refreshAccuracyCache().catch(() => console.warn('[AccuracyCache] Startup refresh failed'));
+  refreshClvCalibration().catch(() => console.warn('[ClvCalibration] Startup refresh failed'));
+  refreshLearnedWeights().catch(() => console.warn('[Ensemble] Startup learned weights refresh failed'));
   
   // Run maintenance jobs on startup and every 24 hours
   runMaintenanceJobs().catch(err => console.error("[Maintenance] Startup run failed:", err.message));
@@ -527,6 +536,10 @@ app.listen(PORT, async () => {
         // Refresh accuracy cache so the engine learns from last night's results
         await refreshAccuracyCache();
         console.log('[AccuracyCache] Refreshed after daily result check');
+        await refreshClvCalibration().catch(() => {});
+        console.log('[ClvCalibration] Refreshed after daily result check');
+        await refreshLearnedWeights().catch(() => {});
+        console.log('[Ensemble] Learned weights refreshed after daily result check');
       } catch (err) {
         console.error('[ResultChecker] Failed:', err.message);
       }
@@ -549,8 +562,9 @@ app.listen(PORT, async () => {
       const r2 = await checkResults(yesterday);
       if (r2.outcomes?.updated > 0) {
         console.log("[ResultChecker] 3h check (yesterday updated):", r2.outcomes);
-        // New results came in — refresh accuracy cache
         await refreshAccuracyCache().catch(() => {});
+        await refreshClvCalibration().catch(() => {});
+        await refreshLearnedWeights().catch(() => {});
       }
     } catch (err) { console.error("[ResultChecker] 3h check failed:", err.message); }
   }, 3 * 60 * 60 * 1000);
@@ -578,6 +592,41 @@ app.listen(PORT, async () => {
     }
   }, 15 * 60 * 1000); // every 15 minutes
   console.log('[CLV] Closing odds capture job scheduled (every 15 min)');
+
+  // ── Ensemble weight optimizer: weekly (Sundays at 4 AM Lagos) ─────────────
+  // Runs optimizeEnsembleWeights.js automatically and persists optimal weights
+  // to the ensemble_weights table. The engine reads these via refreshLearnedWeights.
+  const { spawn } = await import('child_process');
+  function scheduleWeeklyEnsembleOptimization() {
+    const now = new Date();
+    const lagosNow = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+    const nextSunday = new Date(lagosNow);
+    const daysUntilSunday = (7 - lagosNow.getDay()) % 7;
+    nextSunday.setDate(lagosNow.getDate() + daysUntilSunday);
+    nextSunday.setHours(4, 0, 0, 0);
+    if (nextSunday <= lagosNow) nextSunday.setDate(nextSunday.getDate() + 7);
+    const ms = nextSunday - lagosNow;
+    setTimeout(() => {
+      console.log('[Ensemble] Weekly optimization starting...');
+      const child = spawn('node', ['src/scripts/optimizeEnsembleWeights.js', '--days=60', '--limit=500'], {
+        stdio: 'inherit',
+        env: process.env,
+      });
+      child.on('close', (code) => {
+        console.log(`[Ensemble] Weekly optimization finished (exit ${code})`);
+        refreshLearnedWeights().catch(() => {});
+        scheduleWeeklyEnsembleOptimization();
+      });
+      child.on('error', (err) => {
+        console.error('[Ensemble] Weekly optimization failed:', err.message);
+        scheduleWeeklyEnsembleOptimization();
+      });
+    }, ms);
+    const hrs = Math.round(ms / 3600000);
+    console.log(`[Ensemble] Next weekly optimization in ~${hrs}h`);
+  }
+  scheduleWeeklyEnsembleOptimization();
+
   // ── Keep-alive: ping self every 10 min so Render free tier stays awake ───────
   // Without this, Render spins down after 15 min of inactivity causing
   // the server to cold-start on the next request, which makes /auth/me

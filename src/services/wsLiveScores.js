@@ -302,7 +302,9 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
 
   const outcome = evaluatePrediction(market, selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
   const resultStatus = outcome;
-  const stakeUnits = 1;
+  // Read stake_units from the prediction pick (persisted by predictionCache.js).
+  // Falls back to 1 if not available.
+  const stakeUnits = pick?.stake_units != null ? parseFloat(pick.stake_units) : 1;
   const profitUnits = computeProfitUnits(resultStatus, odds, stakeUnits);
 
   await db.execute({

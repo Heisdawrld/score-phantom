@@ -33,33 +33,114 @@
 
 import { clamp, safeNum } from '../utils/math.js';
 
+// ── Learned ensemble weights (Tier 3) ──────────────────────────────────────
+// Instead of hardcoded 50/35/15 weights, the engine can learn optimal weights
+// from historical prediction data via optimizeEnsembleWeights.js. Learned weights
+// are stored in the ensemble_weights table and cached in memory for 1 hour.
+// The cache is refreshed by a cron job (refreshLearnedWeights) that runs
+// alongside the accuracy cache rebuild.
+let _learnedWeights = null;
+let _learnedWeightsBuiltAt = 0;
+const LEARNED_WEIGHTS_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Refresh the learned weights cache from the DB. Called by cron.
+ * Safe to call — silently fails if table doesn't exist.
+ */
+export async function refreshLearnedWeights() {
+  try {
+    const db = (await import('../config/database.js')).default;
+    // Ensure table exists (idempotent)
+    await db.execute(`CREATE TABLE IF NOT EXISTS ensemble_weights (
+      tier TEXT PRIMARY KEY,
+      w_poisson REAL NOT NULL,
+      w_catboost REAL NOT NULL,
+      w_polymarket REAL NOT NULL,
+      brier_score REAL,
+      sample_size INTEGER DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`).catch(() => {});
+
+    const rows = await db.execute({
+      sql: `SELECT tier, w_poisson, w_catboost, w_polymarket, brier_score, sample_size
+            FROM ensemble_weights
+            ORDER BY updated_at DESC LIMIT 4`,
+    });
+    const weights = {};
+    for (const row of (rows.rows || [])) {
+      weights[row.tier] = {
+        poisson: Number(row.w_poisson),
+        catboost: Number(row.w_catboost),
+        polymarket: Number(row.w_polymarket),
+        brierScore: Number(row.brier_score),
+        sampleSize: Number(row.sample_size),
+      };
+    }
+    _learnedWeights = Object.keys(weights).length > 0 ? weights : null;
+    _learnedWeightsBuiltAt = Date.now();
+    console.log(`[Ensemble] Learned weights cache refreshed: ${Object.keys(weights).length} tiers loaded`);
+  } catch (err) {
+    _learnedWeights = null;
+    _learnedWeightsBuiltAt = Date.now();
+  }
+}
+
+/**
+ * Synchronous lookup of learned weights from the in-memory cache.
+ * Returns null if cache is empty or stale (cron will refresh).
+ */
+function getLearnedWeightsSync() {
+  if (_learnedWeights && (Date.now() - _learnedWeightsBuiltAt) < LEARNED_WEIGHTS_TTL_MS) {
+    return _learnedWeights;
+  }
+  return null;
+}
+
 /**
  * Compute dynamic blend weights based on data availability and confidence.
  *
+ * v2 (Tier 3): Checks for learned weights from the ensemble_weights table first.
+ * Falls back to hardcoded weights if no learned weights are available.
+ *
  * @param {Object} bsdPrediction - BSD CatBoost prediction (may be null)
  * @param {Object} polymarketOdds - Polymarket odds (may be null)
- * @returns {{poisson: number, catboost: number, polymarket: number, agreement: 'high'|'medium'|'low'|'none'}}
+ * @returns {{poisson: number, catboost: number, polymarket: number, agreement: 'high'|'medium'|'low'|'none', usingLearnedWeights: boolean}}
  */
 function computeBlendWeights(bsdPrediction, polymarketOdds) {
   const hasCatboost = bsdPrediction && (bsdPrediction.homeWinProb != null || bsdPrediction.over25Prob != null);
   const hasPolymarket = polymarketOdds && polymarketOdds.odds;
   const catboostConf = safeNum(bsdPrediction?.modelConfidence, 0.5);
 
-  // Base weights depend on CatBoost confidence
-  let wPoisson, wCatboost, wPolymarket;
+  // Determine which tier we're in
+  let tier;
+  if (hasCatboost && catboostConf >= 0.6) tier = 'high';
+  else if (hasCatboost && catboostConf >= 0.4) tier = 'medium';
+  else if (hasCatboost) tier = 'low';
+  else tier = 'none';
 
-  if (hasCatboost && catboostConf >= 0.6) {
-    // High-confidence CatBoost — give it more weight
-    wPoisson = 0.50; wCatboost = 0.35; wPolymarket = 0.15;
-  } else if (hasCatboost && catboostConf >= 0.4) {
-    // Medium-confidence CatBoost
-    wPoisson = 0.60; wCatboost = 0.25; wPolymarket = 0.15;
-  } else if (hasCatboost) {
-    // Low-confidence CatBoost — small weight
-    wPoisson = 0.75; wCatboost = 0.15; wPolymarket = 0.10;
+  // Check for learned weights (sync, from in-memory cache refreshed by cron)
+  const learnedWeights = getLearnedWeightsSync();
+  const learned = learnedWeights?.[tier];
+
+  let wPoisson, wCatboost, wPolymarket;
+  let usingLearned = false;
+
+  if (learned && learned.sampleSize >= 30) {
+    wPoisson = learned.poisson;
+    wCatboost = learned.catboost;
+    wPolymarket = learned.polymarket;
+    usingLearned = true;
   } else {
-    // No CatBoost — Polymarket-only supplement
-    wPoisson = 0.85; wCatboost = 0.00; wPolymarket = 0.15;
+    // Fall back to hardcoded weights
+    if (tier === 'high') {
+      wPoisson = 0.50; wCatboost = 0.35; wPolymarket = 0.15;
+    } else if (tier === 'medium') {
+      wPoisson = 0.60; wCatboost = 0.25; wPolymarket = 0.15;
+    } else if (tier === 'low') {
+      wPoisson = 0.75; wCatboost = 0.15; wPolymarket = 0.10;
+    } else {
+      wPoisson = 0.85; wCatboost = 0.00; wPolymarket = 0.15;
+    }
   }
 
   // If Polymarket is missing, redistribute its weight
@@ -67,12 +148,12 @@ function computeBlendWeights(bsdPrediction, polymarketOdds) {
     const wPoly = wPolymarket;
     wPolymarket = 0;
     if (hasCatboost) {
-      // Split between Poisson and CatBoost proportionally
       const total = wPoisson + wCatboost;
-      wPoisson += wPoly * (wPoisson / total);
-      wCatboost += wPoly * (wCatboost / total);
+      if (total > 0) {
+        wPoisson += wPoly * (wPoisson / total);
+        wCatboost += wPoly * (wCatboost / total);
+      }
     } else {
-      // All to Poisson
       wPoisson += wPoly;
     }
   }
@@ -88,6 +169,7 @@ function computeBlendWeights(bsdPrediction, polymarketOdds) {
     catboost: wCatboost,
     polymarket: wPolymarket,
     agreement: hasCatboost ? (catboostConf >= 0.6 ? 'high' : catboostConf >= 0.4 ? 'medium' : 'low') : 'none',
+    usingLearnedWeights: usingLearned,
   };
 }
 

@@ -37,20 +37,44 @@ export function computeSharpMoneySignal(oddsComparison, pick) {
   const selection = String(pick.selection || '').toLowerCase();
 
   let outcomeId = null;
-  if (marketKey === 'home_win' || (marketKey === 'match_result' && selection === 'home')) outcomeId = 'match_result:HOME';
-  else if (marketKey === 'away_win' || (marketKey === 'match_result' && selection === 'away')) outcomeId = 'match_result:AWAY';
-  else if (marketKey === 'draw' || (marketKey === 'match_result' && selection === 'draw')) outcomeId = 'match_result:DRAW';
-  else if (marketKey === 'over_15') outcomeId = 'over_under:over_15';
-  else if (marketKey === 'over_25') outcomeId = 'over_under:over_25';
-  else if (marketKey === 'over_35') outcomeId = 'over_under:over_35';
-  else if (marketKey === 'under_15') outcomeId = 'over_under:under_15';
-  else if (marketKey === 'under_25') outcomeId = 'over_under:under_25';
-  else if (marketKey === 'under_35') outcomeId = 'over_under:under_35';
+  if (marketKey === 'home_win') outcomeId = '1x2:HOME';
+  else if (marketKey === 'away_win') outcomeId = '1x2:AWAY';
+  else if (marketKey === 'draw') outcomeId = '1x2:DRAW';
+  else if (marketKey === 'double_chance_home') outcomeId = 'double_chance:1X';
+  else if (marketKey === 'double_chance_away') outcomeId = 'double_chance:X2';
+  else if (marketKey === 'double_chance_draw') outcomeId = 'double_chance:12';
+  else if (marketKey === 'dnb_home') outcomeId = 'draw_no_bet:HOME';
+  else if (marketKey === 'dnb_away') outcomeId = 'draw_no_bet:AWAY';
+  else if (marketKey === 'over_15') outcomeId = 'over_under_15:over@1.5';
+  else if (marketKey === 'under_15') outcomeId = 'over_under_15:under@1.5';
+  else if (marketKey === 'over_25') outcomeId = 'over_under_25:over@2.5';
+  else if (marketKey === 'under_25') outcomeId = 'over_under_25:under@2.5';
+  else if (marketKey === 'over_35') outcomeId = 'over_under_35:over@3.5';
+  else if (marketKey === 'under_35') outcomeId = 'over_under_35:under@3.5';
   else if (marketKey === 'btts_yes') outcomeId = 'btts:yes';
   else if (marketKey === 'btts_no') outcomeId = 'btts:no';
+  else if (marketKey === 'corners_1x2_home') outcomeId = 'corners_1x2:HOME';
+  else if (marketKey === 'corners_1x2_away') outcomeId = 'corners_1x2:AWAY';
+  else if (marketKey === 'corners_1x2_draw') outcomeId = 'corners_1x2:DRAW';
+  else if (marketKey === 'red_card_yes') outcomeId = 'red_card:yes';
+  else if (marketKey === 'red_card_no') outcomeId = 'red_card:no';
+  else if (marketKey === 'total_corners_over' || marketKey === 'total_corners_under') {
+    const line = pick.line || pick.total_corners_line;
+    if (line != null && ms.perOutcome) {
+      const candidate = `total_corners:${marketKey === 'total_corners_over' ? 'over' : 'under'}@${line}`;
+      if (ms.perOutcome[candidate]) outcomeId = candidate;
+    }
+  }
+  else if (marketKey === 'total_red_cards_over' || marketKey === 'total_red_cards_under') {
+    const line = pick.line || pick.total_red_cards_line;
+    if (line != null && ms.perOutcome) {
+      const candidate = `total_red_cards:${marketKey === 'total_red_cards_over' ? 'over' : 'under'}@${line}`;
+      if (ms.perOutcome[candidate]) outcomeId = candidate;
+    }
+  }
 
   if (!outcomeId) {
-    return { alignment: 'neutral', strength: 'none', signal: 0, details: { reason: 'no_outcome_mapping' } };
+    return { alignment: 'neutral', strength: 'none', signal: 0, details: { reason: 'no_outcome_mapping', marketKey } };
   }
 
   const outcomeMovement = ms.perOutcome[outcomeId];

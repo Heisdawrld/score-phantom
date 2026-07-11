@@ -652,6 +652,7 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, st
       model_confidence: engineResult?.confidence?.model || null,
       phantom_score: null,
       volatility_score: engineResult?.script?.volatilityScore ?? null,
+      stake_units: bp.stake?.stakeUnits ?? 1,
     });
 
     if (insertedId != null) engineResult.pickId = insertedId;

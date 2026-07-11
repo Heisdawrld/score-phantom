@@ -1,6 +1,7 @@
 import { safeNum, clamp } from '../utils/math.js';
 import { computeSharpMoneySignal } from '../probabilities/sharpMoneySignal.js';
 import { getEnsembleConfidenceAdjustment } from '../probabilities/ensemble.js';
+import { getClvConfidenceAdjustment } from '../storage/clvCalibration.js';
 
 /**
  * Build a confidence profile for the best pick.
@@ -298,16 +299,46 @@ export function buildConfidenceProfile(bestPick, featureVector) {
   // Enrichment tier "thin" (< 0.3) → restrict markets signal
   const restrictMarkets = enrichmentTier === "thin" || safeNum(fv.enrichmentCompleteness, 0.5) < 0.30;
 
+  // ── CLV-based confidence calibration (Tier 2) ─────────────────────────────
+  let clvAdjustment = 0;
+  let clvNote = null;
+  const clvCalibration = fv._clvCalibration || null;
+  if (clvCalibration && marketKey) {
+    const clvResult = getClvConfidenceAdjustment(marketKey, clvCalibration);
+    clvAdjustment = clvResult.adjustment;
+    if (Math.abs(clvAdjustment) >= 0.005) {
+      clvNote = clvResult.reason;
+      if (clvAdjustment >= 0.08) {
+        if (model === 'low') model = 'lean';
+        else if (model === 'lean') model = 'medium';
+        else if (model === 'medium') model = 'high';
+        if (!dataQualityNote) dataQualityNote = `CLV edge: ${clvNote}`;
+      } else if (clvAdjustment <= -0.08) {
+        if (model === 'high') model = 'medium';
+        else if (model === 'medium') model = 'lean';
+        else if (model === 'lean') model = 'low';
+        if (!dataQualityNote) dataQualityNote = `CLV warning: ${clvNote}`;
+      }
+      console.log(`[confidence] CLV adjustment for ${marketKey}: ${clvAdjustment >= 0 ? '+' : ''}${(clvAdjustment * 100).toFixed(1)}pp (${clvNote})`);
+    }
+  }
+
   // Log the probability-primary classification for debugging
   if (marketKey === 'under_35' || marketKey === 'over_35' || marketKey === 'over_15') {
     console.log(`[confidence] ${marketKey}: prob=${(modelProbability*100).toFixed(1)}% adjProb=${(adjustedProbability*100).toFixed(1)}% baseline=${(baseline*100).toFixed(0)}% edgeAboveBaseline=${(edgeAboveBaseline*100).toFixed(1)}pp → ${model}`);
   }
 
-  // Normalize to UPPERCASE for consistent storage/querying.
-  // Internal logic uses lowercase, but all downstream consumers (DB, API, UI)
-  // expect uppercase. This single normalization point prevents the
-  // high/HIGH case inconsistency that fragmented historical analysis.
   const modelUpper = (model || 'low').toUpperCase();
 
-  return { model: modelUpper, value: (value || 'low').toUpperCase(), volatility: (volatility || 'medium').toUpperCase(), dataQualityNote, restrictMarkets: !!restrictMarkets, edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)), marketBaseline: parseFloat(baseline.toFixed(4)) };
+  return {
+    model: modelUpper,
+    value: (value || 'low').toUpperCase(),
+    volatility: (volatility || 'medium').toUpperCase(),
+    dataQualityNote,
+    restrictMarkets: !!restrictMarkets,
+    edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)),
+    marketBaseline: parseFloat(baseline.toFixed(4)),
+    clvAdjustment: parseFloat(clvAdjustment.toFixed(4)),
+    clvNote,
+  };
 }

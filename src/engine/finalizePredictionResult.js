@@ -1,5 +1,8 @@
 import { safeNum } from "../utils/math.js";
 import { buildConfidenceProfile } from "./buildConfidenceProfile.js";
+import { getClvCalibration } from "../storage/clvCalibration.js";
+import { computeStake } from "./stakeSizing.js";
+import { challengePick, applyChallengeResult } from "./adversarialChallenge.js";
 import { buildReasonCodes } from "./buildReasonCodes.js";
 import { savePrediction } from "../storage/savePrediction.js";
 import { logRecommendedMarket } from "../storage/marketTracking.js";
@@ -18,8 +21,33 @@ import { buildMarketLadder, buildPhantomVerdictPayload } from './buildPhantomVer
 export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix, narrative, contextMods, reasonChain, ensembleMeta = null }) {
   const { backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
   let bestPick = selection.bestPick; // let — may be replaced by SKIP cascade
+
+  // Fetch CLV calibration cache (6h TTL, non-blocking — null = neutral).
+  const clvCalibration = await getClvCalibration().catch(() => null);
+  if (clvCalibration) features._clvCalibration = clvCalibration;
+
   let confidence = buildConfidenceProfile(bestPick, features);
   let reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
+
+  // ── Adversarial Challenge (Tier 2) — "think before you predict" ───────────
+  let adversarialChallenge = null;
+  let challengeAbstained = false;
+  if (bestPick && !noSafePick) {
+    const oddsComparison = features?.oddsComparison || null;
+    adversarialChallenge = challengePick(bestPick, features, oddsComparison, clvCalibration);
+    // Always attach challenge flags to the pick for transparency (even for PASS)
+    bestPick.challengeFlags = adversarialChallenge.flags;
+    bestPick.challengeSummary = adversarialChallenge.summary;
+    bestPick.challengeRecommendation = adversarialChallenge.recommendation;
+    if (adversarialChallenge.recommendation !== 'PASS') {
+      console.log(`[adversarialChallenge] ${bestPick.marketKey}: ${adversarialChallenge.summary} → ${adversarialChallenge.recommendation}`);
+      const result = applyChallengeResult(bestPick, confidence, adversarialChallenge);
+      if (result.abstained) {
+        challengeAbstained = true;
+        console.log(`[adversarialChallenge] ${bestPick.marketKey}: FAILED challenge — abstaining`);
+      }
+    }
+  }
 
   // ── Correct score probabilities from Poisson score matrix ───────────────
   let correctScoreProbs = [];
@@ -340,18 +368,20 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     h2hUsed: (features.h2hMatchesAvailable || 0) > 0,
     xgUsed: xg.homeExpectedGoals > 0 && xg.awayExpectedGoals > 0,
     tacticalUsed: !!(features.tacticalMatchup && features.tacticalMatchup.tacticalConfidence !== 'low'),
-    sharpUsed: !!features.bestOdds,
+    sharpUsed: !!features.advancedOdds || !!features.oddsComparison,
     injuriesUsed: features.homeMissingXgImpact > 0 || features.awayMissingXgImpact > 0,
   };
 
-  // ── AVOID-badge sync ──────────────────────────────────────────────────
+  // ── AVOID-badge sync + adversarial challenge abstain ─────────────────────
   const isAvoidedPick = bestPick?.isAvoidedPick === true;
-  const finalNoSafePick = noSafePick || isAvoidedPick;
+  const finalNoSafePick = noSafePick || isAvoidedPick || challengeAbstained;
   const finalNoSafePickReason = noSafePickReason
     || (isAvoidedPick ? bestPick.avoidReason : null)
+    || (challengeAbstained && adversarialChallenge ? `Adversarial challenge FAILED: ${adversarialChallenge.summary}` : null)
     || null;
   const finalAbstainCode = abstainCode
     || (isAvoidedPick ? 'AVOID_BADGE_NO_PICK' : null)
+    || (challengeAbstained ? 'ADVERSARIAL_FAIL' : null)
     || null;
 
   const marketLadder = finalNoSafePick
@@ -375,6 +405,15 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     marketLadder,
   });
 
+  // ── Stake sizing (Tier 2) — fractional Kelly with confidence + CLV scaling ──
+  let stake = null;
+  if (bestPick && !finalNoSafePick) {
+    const clvAdj = safeNum(confidence?.clvAdjustment, 0);
+    stake = computeStake(bestPick, { clvAdjustment: clvAdj, bankroll: 100, confidence });
+    bestPick.stake = stake;
+    bestPick.confidence = confidence; // attach for downstream consumers
+  }
+
   const result = {
     fixtureId,
     homeTeam: homeTeamName,
@@ -384,6 +423,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     expectedGoals: { home: xg.homeExpectedGoals, away: xg.awayExpectedGoals, total: xg.totalExpectedGoals },
     calibratedProbs,
     bestPick,
+    stake,
     backupPicks,
     noSafePick: finalNoSafePick,
     noSafePickReason: finalNoSafePickReason,
@@ -401,7 +441,8 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     narrative: narrative || null,
     contextMods: contextMods || null,
     reasonChain: reasonChain || null,
-    ensembleMeta,  // NEW — ensemble agreement signal for UI
+    ensembleMeta,
+    adversarialChallenge,
     updatedAt: new Date().toISOString(),
   };
   await savePrediction(result).catch(e => console.error("[finalize] save failed:", e.message));

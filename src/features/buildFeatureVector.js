@@ -220,6 +220,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
   const lineupFeatures = extractLineupModifiers(lineupModifier);
 
   const advancedOdds = meta?.odds_data || null;
+  const oddsComparison = meta?.odds_comparison || null;
   const polymarketOdds = meta?.polymarket_odds || null;
   const homeManager = meta?.home_manager || null;
   const awayManager = meta?.away_manager || null;
@@ -403,6 +404,7 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     bsdHomeFormStats,
     bsdAwayFormStats,
     advancedOdds,
+    oddsComparison,
     polymarketOdds,
     homeManager,
     awayManager,

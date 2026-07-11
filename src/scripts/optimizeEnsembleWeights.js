@@ -257,7 +257,39 @@ async function main() {
   }
   console.log('└──────────────────────┴───────┴──────────────────────────────────────────┘');
 
-  console.log('\n📄 Done. Update ensemble.js if the improvement is significant.\n');
+  // ── Persist optimal weights to DB (Tier 3) ────────────────────────────────
+  // Instead of requiring a manual update to ensemble.js, persist the optimal
+  // weights to the ensemble_weights table. The ensemble.js computeBlendWeights()
+  // function reads from this table (via refreshLearnedWeights cron) and uses
+  // the learned weights automatically.
+  if (improvement > 0.001 && bestWeights) {
+    try {
+      await db.execute(`CREATE TABLE IF NOT EXISTS ensemble_weights (
+        tier TEXT PRIMARY KEY,
+        w_poisson REAL NOT NULL,
+        w_catboost REAL NOT NULL,
+        w_polymarket REAL NOT NULL,
+        brier_score REAL,
+        sample_size INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`).catch(() => {});
+
+      // We don't have per-tier breakdown in this analysis, so store as 'high' tier
+      // (the most common tier). Per-tier optimization can be added later.
+      await db.execute({
+        sql: `INSERT OR REPLACE INTO ensemble_weights (tier, w_poisson, w_catboost, w_polymarket, brier_score, sample_size, updated_at)
+              VALUES ('high', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        args: [bestWeights.wP, bestWeights.wC, bestWeights.wM, parseFloat(optimalBrier.toFixed(4)), predictions.length],
+      });
+      console.log(`\n✅ Persisted optimal weights to ensemble_weights table (tier='high', ${predictions.length} samples, Brier=${optimalBrier.toFixed(4)})`);
+      console.log('   The engine will use these weights automatically within 1 hour (cache TTL).');
+    } catch (err) {
+      console.warn(`\n⚠ Could not persist weights to DB: ${err.message}`);
+      console.log('   Update ensemble.js manually if the improvement is significant.');
+    }
+  }
+
+  console.log('\n📄 Done.\n');
   process.exit(0);
 }
 

@@ -379,8 +379,95 @@ function mapOddsPayload(data) {
   };
 }
 
-export async function fetchEventOdds(eventId) {
+/**
+ * Map a BSD /events/{id}/odds/comparison/ payload into the FLAT odds shape
+ * the engine consumes (extended with all 11 markets BSD serves).
+ */
+function mapOddsComparisonToFlat(data) {
+  if (!data || !data.markets) return null;
+  const markets = data.markets;
+  const out = {};
+  const best = (mkt, outcome) => {
+    const m = markets[mkt];
+    if (!m || !m[outcome]) return null;
+    const v = m[outcome].best_odds;
+    return (typeof v === 'number' && v > 1) ? v : null;
+  };
+  out.home_win = best('1x2', 'HOME');
+  out.draw     = best('1x2', 'DRAW');
+  out.away_win = best('1x2', 'AWAY');
+  out.double_chance_home = best('double_chance', '1X');
+  out.double_chance_away = best('double_chance', 'X2');
+  out.double_chance_draw = best('double_chance', '12');
+  out.dnb_home = best('draw_no_bet', 'HOME');
+  out.dnb_away = best('draw_no_bet', 'AWAY');
+  out.over_15  = best('over_under_15', 'over@1.5');
+  out.under_15 = best('over_under_15', 'under@1.5');
+  out.over_25  = best('over_under_25', 'over@2.5');
+  out.under_25 = best('over_under_25', 'under@2.5');
+  out.over_35  = best('over_under_35', 'over@3.5');
+  out.under_35 = best('over_under_35', 'under@3.5');
+  out.btts_yes = best('btts', 'yes');
+  out.btts_no  = best('btts', 'no');
+  out.corners_1x2_home = best('corners_1x2', 'HOME');
+  out.corners_1x2_draw = best('corners_1x2', 'DRAW');
+  out.corners_1x2_away = best('corners_1x2', 'AWAY');
+  const cornersMkt = markets.total_corners || {};
+  const cornersByLine = {};
+  for (const [outKey, outData] of Object.entries(cornersMkt)) {
+    if (!outData || typeof outData !== 'object') continue;
+    const line = outData.line;
+    if (line == null) continue;
+    const key = String(line);
+    if (!cornersByLine[key]) cornersByLine[key] = { line };
+    if (outKey.startsWith('over') && outData.best_odds) cornersByLine[key].over = outData.best_odds;
+    if (outKey.startsWith('under') && outData.best_odds) cornersByLine[key].under = outData.best_odds;
+  }
+  const cornersMerged = Object.values(cornersByLine).filter(l => l.over != null && l.under != null);
+  if (cornersMerged.length > 0) {
+    cornersMerged.sort((a, b) => (Math.abs(a.over - 2.0) + Math.abs(a.under - 2.0)) - (Math.abs(b.over - 2.0) + Math.abs(b.under - 2.0)));
+    const main = cornersMerged[0];
+    out.total_corners_line  = main.line;
+    out.total_corners_over  = main.over;
+    out.total_corners_under = main.under;
+    out.total_corners_lines = cornersMerged.map(l => ({ line: l.line, over: l.over, under: l.under }));
+  }
+  out.red_card_yes = best('red_card', 'yes');
+  out.red_card_no  = best('red_card', 'no');
+  const rcMkt = markets.total_red_cards || {};
+  const rcByLine = {};
+  for (const [outKey, outData] of Object.entries(rcMkt)) {
+    if (!outData || typeof outData !== 'object') continue;
+    const line = outData.line;
+    if (line == null) continue;
+    const key = String(line);
+    if (!rcByLine[key]) rcByLine[key] = { line };
+    if (outKey.startsWith('over') && outData.best_odds) rcByLine[key].over = outData.best_odds;
+    if (outKey.startsWith('under') && outData.best_odds) rcByLine[key].under = outData.best_odds;
+  }
+  const rcMerged = Object.values(rcByLine).filter(l => l.over != null && l.under != null);
+  if (rcMerged.length > 0) {
+    rcMerged.sort((a, b) => (Math.abs(a.over - 2.0) + Math.abs(a.under - 2.0)) - (Math.abs(b.over - 2.0) + Math.abs(b.under - 2.0)));
+    const main = rcMerged[0];
+    out.total_red_cards_line  = main.line;
+    out.total_red_cards_over  = main.over;
+    out.total_red_cards_under = main.under;
+    out.total_red_cards_lines = rcMerged.map(l => ({ line: l.line, over: l.over, under: l.under }));
+  }
+  out._comparison = { markets: data.markets, bookmakersCount: data.bookmakers_count || 0, totalOdds: data.total_odds || 0 };
+  return out;
+}
+
+export async function fetchEventOdds(eventId, opts = {}) {
   if (!eventId) return null;
+  const includeComparison = opts.includeComparison !== false;
+  if (includeComparison) {
+    const compData = await bsdFetch(`/events/${eventId}/odds/comparison/`);
+    if (compData && compData.markets) {
+      const flat = mapOddsComparisonToFlat(compData);
+      if (flat) return flat;
+    }
+  }
   const data = await bsdFetch(`/events/${eventId}/odds/`);
   if (!data?.odds) return null;
   return mapOddsPayload(data);
@@ -474,10 +561,11 @@ export async function fetchEventDetail(eventId, full = false) {
 
   if (!full) return core;
 
-  const [statsData, incidentsData, oddsData, metadata, lineupData, playerStatsData, referee, venue] = await Promise.all([
+  const [statsData, incidentsData, oddsData, oddsComparison, metadata, lineupData, playerStatsData, referee, venue] = await Promise.all([
     fetchEventStats(eventId).catch(() => null),
     fetchEventIncidents(eventId).catch(() => null),
     fetchEventOdds(eventId).catch(() => null),
+    fetchOddsComparison(eventId).catch(() => null),
     fetchEventMetadata(eventId).catch(() => null),
     fetchEventLineups(eventId).catch(() => null),
     fetchEventPlayerStats(eventId).catch(() => null),
@@ -529,6 +617,25 @@ export async function fetchEventDetail(eventId, full = false) {
     odds_under_35: oddsData?.under_35 ?? null,
     odds_btts_yes: oddsData?.btts_yes ?? null,
     odds_btts_no: oddsData?.btts_no ?? null,
+    odds_double_chance_home: oddsData?.double_chance_home ?? null,
+    odds_double_chance_away: oddsData?.double_chance_away ?? null,
+    odds_double_chance_draw: oddsData?.double_chance_draw ?? null,
+    odds_dnb_home: oddsData?.dnb_home ?? null,
+    odds_dnb_away: oddsData?.dnb_away ?? null,
+    odds_corners_1x2_home: oddsData?.corners_1x2_home ?? null,
+    odds_corners_1x2_draw: oddsData?.corners_1x2_draw ?? null,
+    odds_corners_1x2_away: oddsData?.corners_1x2_away ?? null,
+    odds_total_corners_over: oddsData?.total_corners_over ?? null,
+    odds_total_corners_under: oddsData?.total_corners_under ?? null,
+    odds_total_corners_line: oddsData?.total_corners_line ?? null,
+    odds_total_corners_lines: oddsData?.total_corners_lines ?? null,
+    odds_red_card_yes: oddsData?.red_card_yes ?? null,
+    odds_red_card_no: oddsData?.red_card_no ?? null,
+    odds_total_red_cards_over: oddsData?.total_red_cards_over ?? null,
+    odds_total_red_cards_under: oddsData?.total_red_cards_under ?? null,
+    odds_total_red_cards_line: oddsData?.total_red_cards_line ?? null,
+    odds_comparison: oddsComparison || null,
+    odds_flat: oddsData || null,
     actual_home_xg: homeStats?.xg?.actual ?? null,
     actual_away_xg: awayStats?.xg?.actual ?? null,
     home_xg_live: homeStats?.xg?.actual ?? null,

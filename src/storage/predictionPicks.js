@@ -26,7 +26,8 @@ async function initPredictionPicksTable() {
       model_confidence TEXT,
       material_signature TEXT,
       phantom_score REAL,
-      volatility_score REAL
+      volatility_score REAL,
+      stake_units REAL DEFAULT 1
     )
   `);
 
@@ -35,6 +36,7 @@ async function initPredictionPicksTable() {
     const cols = (info.rows || []).map(r => String(r.name).toLowerCase());
     if (!cols.includes("material_signature")) await db.execute(`ALTER TABLE prediction_picks ADD COLUMN material_signature TEXT`);
     if (!cols.includes("model_confidence")) await db.execute(`ALTER TABLE prediction_picks ADD COLUMN model_confidence TEXT`);
+    if (!cols.includes("stake_units")) await db.execute(`ALTER TABLE prediction_picks ADD COLUMN stake_units REAL DEFAULT 1`);
   } catch (e) {}
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_generated ON prediction_picks(fixture_id, generated_at DESC)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_prediction_picks_fixture_source_generated ON prediction_picks(fixture_id, prediction_source, generated_at DESC)`);
@@ -94,11 +96,11 @@ export async function insertPredictionPickIfMaterialChange(pick) {
       INSERT INTO prediction_picks
         (fixture_id, engine_version, prediction_source, generated_at, kickoff_at,
          market_key, selection, bookmaker_odds, implied_probability, edge, model_probability, model_confidence, material_signature,
-         phantom_score, volatility_score)
+         phantom_score, volatility_score, stake_units)
       VALUES
         (?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?, ?, ?,
-         ?, ?)
+         ?, ?, ?)
       ON CONFLICT (fixture_id, prediction_source, material_signature) DO NOTHING
       RETURNING id
     `,
@@ -118,6 +120,7 @@ export async function insertPredictionPickIfMaterialChange(pick) {
       materialSignature,
       pick.phantom_score ?? null,
       pick.volatility_score ?? null,
+      pick.stake_units ?? 1,
     ],
   });
 

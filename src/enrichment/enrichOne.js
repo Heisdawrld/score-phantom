@@ -192,6 +192,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
     bsd_home_form_stats: data?.bsdHomeFormStats ?? null,
     bsd_away_form_stats: data?.bsdAwayFormStats ?? null,
     odds_data: data?.oddsData ?? null,
+    odds_comparison: data?.oddsComparison ?? null,
     polymarket_odds: data?.polymarketOdds ?? null,
     home_manager: data?.homeManager ?? null,
     away_manager: data?.awayManager ?? null,

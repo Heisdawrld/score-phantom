@@ -161,6 +161,8 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
       const isComfortMarket = [
         'under_35', 'over_15', 'double_chance_home', 'double_chance_away',
         'home_over_05', 'away_over_05',
+        'home_over_15', 'home_over_25', 'away_over_15', 'away_over_25',
+        'home_under_15', 'away_under_15',
       ].includes(c.marketKey);
       const smartRiskException =
         ev >= 0.02 &&                    // Genuine positive EV
