@@ -401,13 +401,14 @@ export { autoEnrich };
 
 app.use(errorHandler);
 
-app.listen(PORT, async () => {
+async function initializeRuntime() {
+  await initUsersTable();
+  await initPredictionsTable();
+  await initBasketballTables();
+  console.log('[Basketball] Beta tables ready');
   console.log("ScorePhantom running on port " + PORT);
   startLiveScoreWatcher();
   console.log("[Live] BSD live score watcher started");
-  await initUsersTable();
-  await initPredictionsTable();
-  await initBasketballTables().then(() => console.log('[Basketball] Beta tables ready')).catch(err => console.error('[Basketball init]', err.message));
   startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
 
@@ -537,13 +538,13 @@ app.listen(PORT, async () => {
       } catch (err) {
         console.error('[DailySeed] Failed:', err.message);
       }
-      scheduleDaily7amDigest();
-  scheduleNextMidnightSeed();
+      scheduleNextMidnightSeed();
     }, msUntilMidnight);
     const hrs = Math.round(msUntilMidnight / 3600000);
     console.log('[DailySeed] Next seed in ~' + hrs + 'h');
   }
   scheduleNextMidnightSeed();
+  scheduleDaily7amDigest();
 
   // ── Periodic re-seed every 2 hours: catches fixtures BSD adds throughout the day ──
   // BSD adds fixtures to today/tomorrow as kickoff approaches. Without this, matches
@@ -678,6 +679,13 @@ app.listen(PORT, async () => {
   }, 10 * 60 * 1000); // every 10 minutes
   console.log('[KeepAlive] Self-ping started — pinging every 10 min');
 
+}
+
+const server = app.listen(PORT, () => {
+  initializeRuntime().catch((err) => {
+    console.error('[Startup] Critical initialization failed:', err);
+    server.close(() => process.exit(1));
+  });
 });
 
 

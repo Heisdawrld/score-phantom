@@ -13,12 +13,12 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAHXHS9kwi_4HoCDyf0yi_UzLWzDRUU9Q0",
-  authDomain: "scorephantom-app.firebaseapp.com",
-  projectId: "scorephantom-app",
-  storageBucket: "scorephantom-app.firebasestorage.app",
-  messagingSenderId: "776631141819",
-  appId: "1:776631141819:web:f3e3ffca1c68d76d8f309e",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAHXHS9kwi_4HoCDyf0yi_UzLWzDRUU9Q0",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "scorephantom-app.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "scorephantom-app",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "scorephantom-app.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "776631141819",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:776631141819:web:f3e3ffca1c68d76d8f309e",
 };
 
 const app = initializeApp(firebaseConfig);

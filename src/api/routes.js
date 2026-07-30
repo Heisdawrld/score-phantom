@@ -7,6 +7,7 @@ import { adaptResponseFormat } from "./responseAdapter.js";
 import { explainPrediction, chatAboutMatch } from "../services/groqExplainer.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
 import { addSseClient, getLiveStatus } from '../services/wsLiveScores.js';
+import { requireAdminAccess } from '../middlewares/adminGuard.js';
 import {
   getOrBuildPrediction,
   ensureFixtureData,
@@ -65,7 +66,6 @@ setInterval(() => {
 }, 600000);
 // Must match authRoutes.js fallback exactly
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 if (!JWT_SECRET) {
   console.error('[FATAL] JWT_SECRET not set in routes.js');
   process.exit(1);
@@ -238,6 +238,7 @@ async function requireAuth(req, res, next) {
 // ─── Daily prediction limit for trial users ──────────────────────────────────
 
 const TRIAL_DAILY_LIMIT = 15; // 15 predictions per day during free trial
+let trialCountsHasLegacyDate = false;
 
 async function ensureDailyCountTable() {
   try {
@@ -264,6 +265,7 @@ async function ensureDailyCountTable() {
     const hasPredictionCount = await hasColumn('prediction_count');
     const hasLegacyDate = await hasColumn('date');
     const hasLegacyCount = await hasColumn('count');
+    trialCountsHasLegacyDate = hasLegacyDate;
 
     if (!hasDateStr) {
       await db.execute(`ALTER TABLE trial_daily_counts ADD COLUMN date_str TEXT`);
@@ -298,9 +300,10 @@ async function ensureDailyCountTable() {
     console.error("ensureDailyCountTable error:", err);
   }
 }
-ensureDailyCountTable();
+const dailyCountSchemaReady = ensureDailyCountTable();
 
 async function getTodayCount(userId) {
+  await dailyCountSchemaReady;
   const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
   try {
     const r = await db.execute({
@@ -316,14 +319,18 @@ async function getTodayCount(userId) {
 
 async function incrementAndCheckDailyCount(userId, limit) {
   try {
+    await dailyCountSchemaReady;
     const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(",")[0].trim();
     // Atomic check-and-increment: only increment if under the limit.
     // First, ensure the row exists
-    // Include 'date' column for legacy tables where 'date' is NOT NULL
+    const insertSql = trialCountsHasLegacyDate
+      ? `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 0)
+         ON CONFLICT (user_id, date_str) DO NOTHING`
+      : `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 0)
+         ON CONFLICT (user_id, date_str) DO NOTHING`;
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 0)
-            ON CONFLICT (user_id, date_str) DO NOTHING`,
-      args: [userId, today, today],
+      sql: insertSql,
+      args: trialCountsHasLegacyDate ? [userId, today, today] : [userId, today],
     });
     // Now atomically increment ONLY if currently under the limit
     const result = await db.execute({
@@ -356,11 +363,15 @@ async function incrementAndCheckDailyCount(userId, limit) {
 
 async function incrementDailyCount(userId, today) {
   try {
-    // Include 'date' column for legacy tables where 'date' is NOT NULL
+    await dailyCountSchemaReady;
+    const insertSql = trialCountsHasLegacyDate
+      ? `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 1)
+         ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`
+      : `INSERT INTO trial_daily_counts (user_id, date_str, prediction_count) VALUES (?, ?, 1)
+         ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`;
     await db.execute({
-      sql: `INSERT INTO trial_daily_counts (user_id, date_str, date, prediction_count) VALUES (?, ?, ?, 1)
-            ON CONFLICT (user_id, date_str) DO UPDATE SET prediction_count = prediction_count + 1`,
-      args: [userId, today, today],
+      sql: insertSql,
+      args: trialCountsHasLegacyDate ? [userId, today, today] : [userId, today],
     });
   } catch (err) {
     console.error("Error in incrementDailyCount:", err);
@@ -369,6 +380,7 @@ async function incrementDailyCount(userId, today) {
 
 async function decrementDailyCount(userId, today) {
   try {
+    await dailyCountSchemaReady;
     await db.execute({
       sql: `UPDATE trial_daily_counts SET prediction_count = MAX(prediction_count - 1, 0) WHERE user_id = ? AND date_str = ?`,
       args: [userId, today],
@@ -382,30 +394,7 @@ async function decrementDailyCount(userId, today) {
 // Verifies JWT and checks if user is admin (by email).
 
 async function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
-  try {
-    const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    
-    // Explicit Database Lock: Verify token creator is still in DB, not deleted, AND token not revoked
-    const result = await db.execute({ sql: "SELECT id, status, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] });
-    const dbUser = result.rows?.[0];
-    if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
-    
-    // BUG FIX: Check token_version to ensure token wasn't revoked (e.g. password change).
-    // Without this, a revoked JWT retains admin access until it expires.
-    if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
-      return res.status(401).json({ error: "Token revoked" });
-    }
-    
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  return requireAdminAccess(req, res, next);
 }
 
 // ─── Middleware: requireTrialOrPremium ────────────────────────────────────────

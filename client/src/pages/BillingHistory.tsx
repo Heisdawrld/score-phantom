@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { ChevronLeft, Receipt, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -28,7 +27,6 @@ export default function BillingHistory() {
 
   return (
     <div className='min-h-screen bg-background pb-20'>
-      <Header />
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}

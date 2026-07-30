@@ -256,7 +256,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a0e] text-white selection:bg-primary/30">
+    <div className="auth-2627 min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#060a0e] text-white selection:bg-primary/30">
       {/* Animated background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary/10 blur-[120px] mix-blend-screen" />
@@ -264,8 +264,39 @@ export default function Login() {
         <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
+      <aside className="auth-2627__story">
+        <button type="button" onClick={() => setLocation("/home")} className="auth-2627__brand">
+          <span><img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="" /></span>
+          <strong>SCORE<i>PHANTOM</i></strong>
+        </button>
+
+        <div className="auth-2627__story-copy">
+          <span className="auth-2627__season"><i /> Season 26/27 is live</span>
+          <h1>Your matchday<br /><em>command centre.</em></h1>
+          <p>
+            One account gives you the live slate, ranked value signals, the ACCA Lab,
+            match simulation and the complete public track record.
+          </p>
+        </div>
+
+        <div className="auth-2627__signal-card">
+          <div>
+            <span>Phantom signal</span>
+            <strong>Over 2.5 goals</strong>
+            <small>ARS vs CHE · 20:00 WAT</small>
+          </div>
+          <b>78<small>%</small></b>
+        </div>
+
+        <div className="auth-2627__benefits">
+          <span><CheckCircle2 /> Explainable model signals</span>
+          <span><CheckCircle2 /> 15 daily trial predictions</span>
+          <span><CheckCircle2 /> No card required</span>
+        </div>
+      </aside>
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-[400px] flex flex-col items-center gap-8">
+        className="auth-2627__form relative z-10 w-full max-w-[400px] flex flex-col items-center gap-8">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}

@@ -196,14 +196,14 @@ export default function Matches() {
   }, [allFixtures, isPremium]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+    <div className="matches-2627 flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
 
       {/* ── Sticky header: title · date pills · search · script filters ── */}
-      <header className="sticky top-0 z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5">
-        <div className="px-4 md:px-6 pt-4 pb-2 max-w-3xl mx-auto">
+      <header className="sp-subheader sticky top-[60px] md:top-[72px] z-20 bg-[#060a0e]/95 backdrop-blur-xl border-b border-white/5">
+        <div className="px-4 md:px-6 pt-4 pb-2 max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-2xl font-black text-white tracking-wide">Matches</h1>
             {/* ── Summary stats badge ── */}
@@ -240,7 +240,7 @@ export default function Matches() {
             ))}
           </div>
         </div>
-        <div className="px-4 md:px-6 pb-3 max-w-3xl mx-auto">
+        <div className="px-4 md:px-6 pb-3 max-w-5xl mx-auto">
           <div className="flex items-center gap-2.5 bg-white/5 border border-white/8 rounded-xl px-3.5 py-2.5 transition-colors focus-within:border-accent-blue/40">
             <Search size={16} className="text-white/40 shrink-0"/>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search teams or leagues"
@@ -289,7 +289,7 @@ export default function Matches() {
       </header>
 
       {/* ── Match list, grouped by league ── */}
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 py-4 flex flex-col gap-5 relative z-10">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 py-5 flex flex-col gap-5 relative z-10">
         {isLoading && Array.from({length:6}).map((_,i)=>(
           <div key={i} className="h-[80px] rounded-2xl bg-white/4 sp-shimmer"/>
         ))}

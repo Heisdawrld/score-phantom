@@ -12,7 +12,7 @@
  */
 
 import 'dotenv/config';
-import { fetchBzzoiroPrediction, fetchOddsComparison, fetchFixturesByDate } from '../src/services/bsd.js';
+import { bsdFetch, fetchBzzoiroPrediction, fetchOddsComparison, fetchFixturesByDate } from '../src/services/bsd.js';
 import { buildScoreMatrix, deriveMarketProbabilities, getLeagueRho } from '../src/probabilities/poisson.js';
 import { calibrateProbabilities } from '../src/probabilities/calibrateProbabilities.js';
 import { ensembleProbabilities } from '../src/probabilities/ensemble.js';
@@ -47,7 +47,7 @@ async function main() {
       upcomingFixtures.push(fixtures[0]);
     } else {
       console.log('❌ No fixtures available at all — aborting');
-      process.exit(0);
+      throw new Error('BSD fixture adapter was not validated: no fixtures were available');
     }
   }
 
@@ -59,7 +59,7 @@ async function main() {
 
   // ── Step 2: Fetch BSD CatBoost prediction (expanded shape) ────────────────
   console.log('\n[2] Fetching BSD CatBoost prediction...');
-  const bsdPrediction = await fetchBzzoiroPrediction(fixture.id, fixture.event_date).catch(e => {
+  let bsdPrediction = await fetchBzzoiroPrediction(fixture.id, fixture.event_date).catch(e => {
     console.log(`   ⚠ BSD prediction fetch failed: ${e.message}`);
     return null;
   });
@@ -74,7 +74,21 @@ async function main() {
     console.log(`     Most likely score: ${bsdPrediction.mostLikelyScore}`);
     console.log(`     Model confidence: ${bsdPrediction.modelConfidence} (${bsdPrediction.modelVersion})`);
   } else {
-    console.log('   ⚠ No BSD prediction available — testing ensemble fallback path');
+    console.log('   No prediction for selected fixture — finding a known prediction to validate the adapter...');
+    const predictionPage = await bsdFetch('/predictions/', { status: 'all', limit: 10 }, { cacheable: false });
+    const rows = Array.isArray(predictionPage) ? predictionPage : (predictionPage?.results || []);
+    for (const row of rows) {
+      const eventId = row?.event?.id;
+      if (!eventId) continue;
+      bsdPrediction = await fetchBzzoiroPrediction(eventId, row?.event?.event_date).catch(() => null);
+      if (bsdPrediction) {
+        console.log(`   ✓ Adapter validated with prediction event ${eventId}`);
+        break;
+      }
+    }
+    if (!bsdPrediction) {
+      throw new Error('BSD prediction adapter was not validated: no usable v2 prediction could be fetched');
+    }
   }
 
   // ── Step 3: Fetch odds comparison (movement signals) ──────────────────────
@@ -97,7 +111,7 @@ async function main() {
       console.log(`     ⚡ Pinnacle DRIFTING on: ${ms.pinnacleDrifting.join(', ')}`);
     }
   } else {
-    console.log('   ⚠ No odds comparison available');
+    throw new Error('BSD odds comparison adapter was not validated for the selected fixture');
   }
 
   // ── Step 4: Simulate our Poisson model (with per-league rho) ─────────────

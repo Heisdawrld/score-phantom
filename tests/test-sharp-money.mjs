@@ -30,7 +30,7 @@ test('Pinnacle SHORTENING on home_win → strong confirms signal', () => {
   const oddsComp = {
     movementSummary: {
       perOutcome: {
-        'match_result:HOME': {
+        '1x2:HOME': {
           shortening: 1, drifting: 0, pinnacle: 'SHORTENING', netSignal: 1, bestOdds: 2.10, bestBookmaker: 'pinnacle',
         },
       },
@@ -46,7 +46,7 @@ test('Pinnacle DRIFTING on home_win → strong contradicts signal', () => {
   const oddsComp = {
     movementSummary: {
       perOutcome: {
-        'match_result:HOME': { shortening: 0, drifting: 1, pinnacle: 'DRIFTING', netSignal: -1 },
+        '1x2:HOME': { shortening: 0, drifting: 1, pinnacle: 'DRIFTING', netSignal: -1 },
       },
     },
   };
@@ -60,7 +60,7 @@ test('3+ books shortening without Pinnacle → medium confirms', () => {
   const oddsComp = {
     movementSummary: {
       perOutcome: {
-        'over_under:over_25': { shortening: 4, drifting: 1, pinnacle: null, netSignal: 3 },
+        'over_under_25:over@2.5': { shortening: 4, drifting: 1, pinnacle: null, netSignal: 3 },
       },
     },
   };
@@ -86,8 +86,8 @@ test('aggregateSharpMoneySignals caps overall signal', () => {
   const oddsComp = {
     movementSummary: {
       perOutcome: {
-        'match_result:HOME': { shortening: 5, drifting: 0, pinnacle: 'SHORTENING', netSignal: 5 },
-        'over_under:over_25': { shortening: 5, drifting: 0, pinnacle: 'SHORTENING', netSignal: 5 },
+        '1x2:HOME': { shortening: 5, drifting: 0, pinnacle: 'SHORTENING', netSignal: 5 },
+        'over_under_25:over@2.5': { shortening: 5, drifting: 0, pinnacle: 'SHORTENING', netSignal: 5 },
         'btts:yes': { shortening: 5, drifting: 0, pinnacle: 'SHORTENING', netSignal: 5 },
       },
     },

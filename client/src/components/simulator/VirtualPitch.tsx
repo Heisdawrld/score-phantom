@@ -8,8 +8,8 @@ import { MatchEngine } from "./engine/MatchEngine";
 interface VirtualPitchProps {
   homeTeamName: string;
   awayTeamName: string;
-  homeTeamId: number;
-  awayTeamId: number;
+  homeTeamId: string | number;
+  awayTeamId: string | number;
   simulationScript: {
     events: Array<{ minute: number; type: string; team: string; xg?: number; message: string }>;
     addedTime: { half1: number; half2: number };

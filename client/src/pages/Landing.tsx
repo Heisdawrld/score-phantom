@@ -1,290 +1,443 @@
-import { useLocation } from "wouter";
+import { useRef } from "react";
+import { Link, useLocation } from "wouter";
 import { motion, useInView, useScroll, useTransform } from "framer-motion";
-import { useRef, useEffect, useState } from "react";
 import {
-  Zap, TrendingUp, Shield, BarChart3, Star, ChevronRight,
-  Clock, Target, Check, Users, Trophy, ArrowRight, Activity, Lock
+  Activity,
+  ArrowRight,
+  BarChart3,
+  BrainCircuit,
+  Check,
+  ChevronRight,
+  CircleDot,
+  Dna,
+  Flame,
+  Gauge,
+  Goal,
+  Layers3,
+  LockKeyhole,
+  Radio,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+  Users,
+  Zap,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-/* ─── Animated counter ─────────────────────────────────────── */
-function Counter({ to, duration = 1.4 }: { to: number; duration?: number }) {
-  const [val, setVal] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-  
-  useEffect(() => {
-    if (!inView) return;
-    let start = 0;
-    const step = to / (duration * 60);
-    const id = setInterval(() => {
-      start += step;
-      if (start >= to) { setVal(to); clearInterval(id); } else setVal(Math.floor(start));
-    }, 1000 / 60);
-    return () => clearInterval(id);
-  }, [inView, to, duration]);
-  
-  return <span ref={ref}>{val.toLocaleString()}</span>;
-}
-
-/* ─── Fade-in section wrapper ───────────────────────────────── */
-function FadeIn({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-70px" });
   return (
-    <motion.div ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }} className={className}>
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 24 }}
+      animate={inView ? { opacity: 1, y: 0 } : undefined}
+      transition={{ duration: 0.62, delay, ease: [0.16, 1, 0.3, 1] }}
+      className={className}
+    >
       {children}
     </motion.div>
   );
 }
 
+const leagueSignals = [
+  "Premier League",
+  "Champions League",
+  "La Liga",
+  "Serie A",
+  "Bundesliga",
+  "NBA",
+  "Europa League",
+  "Ligue 1",
+];
+
+const modelSteps = [
+  {
+    number: "01",
+    icon: ScanLine,
+    title: "Scan the slate",
+    copy: "Fixtures, form, injuries, lineups and market movement arrive in one match feed.",
+  },
+  {
+    number: "02",
+    icon: BrainCircuit,
+    title: "Run the models",
+    copy: "Probability, expected goals and value signals are calculated for every supported market.",
+  },
+  {
+    number: "03",
+    icon: Target,
+    title: "Act on the edge",
+    copy: "Strong opportunities rise to the top, with the reasoning and risk visible before you decide.",
+  },
+];
+
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const { scrollY } = useScroll();
-  const heroOpacity = useTransform(scrollY, [0, 400], [1, 0]);
-  const heroY = useTransform(scrollY, [0, 400], [0, 100]);
-  const goToLogin = () => setLocation("/login");
-  const goToSignup = () => setLocation("/login?mode=signup");
-  const goToTrackRecord = () => setLocation("/track-record");
+  const heroRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 90]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.88], [1, 0.28]);
+
+  const startTrial = () => setLocation("/login?mode=signup");
+  const signIn = () => setLocation("/login");
 
   return (
-    <div className="min-h-screen bg-[#060a0e] text-white overflow-x-hidden selection:bg-primary/30">
-      {/* Cinematic Global Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[80vw] h-[60vh] bg-primary/10 blur-[120px] opacity-60 rounded-full mix-blend-screen" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vh] bg-blue-500/5 blur-[100px] rounded-full mix-blend-screen" />
-        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] mix-blend-overlay" />
+    <div className="landing-2627">
+      <div className="landing-2627__backdrop" aria-hidden="true">
+        <div className="landing-2627__pitch" />
+        <div className="landing-2627__halo" />
+        <div className="landing-2627__noise" />
       </div>
 
-      {/* ── NAV ─────────────────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#060a0e]/50 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center overflow-hidden p-1">
-            <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="Logo" className="w-full h-full object-contain" />
+      <nav className="landing-nav" aria-label="Public navigation">
+        <div className="landing-nav__inner">
+          <Link href="/home" className="landing-brand" aria-label="ScorePhantom home">
+            <span className="landing-brand__mark">
+              <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="" />
+            </span>
+            <span className="landing-brand__wordmark">
+              SCORE<span>PHANTOM</span>
+            </span>
+          </Link>
+
+          <div className="landing-nav__season">
+            <span />
+            New season · 26/27
           </div>
-          <span className="font-black tracking-wide text-lg">Score<span className="text-primary">Phantom</span></span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button onClick={goToLogin} className="text-xs sm:text-sm font-semibold text-white/70 hover:text-white transition-colors whitespace-nowrap">Log in</button>
-          <button onClick={goToSignup} className="px-3 sm:px-4 py-2 rounded-full bg-white text-black text-xs sm:text-sm font-black hover:scale-95 transition-transform shadow-[0_10px_30px_rgba(255,255,255,0.16)] whitespace-nowrap">
-            <span className="sm:hidden">Start Free</span>
-            <span className="hidden sm:inline">Start Free Trial</span>
-          </button>
+
+          <div className="landing-nav__actions">
+            <button type="button" onClick={signIn} className="landing-nav__login">
+              Sign in
+            </button>
+            <button type="button" onClick={startTrial} className="landing-nav__cta">
+              Start free <ArrowRight />
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative pt-40 pb-20 px-6 min-h-[90vh] flex flex-col items-center justify-center text-center">
-        <motion.div style={{ opacity: heroOpacity, y: heroY }} className="relative z-10 max-w-4xl mx-auto w-full">
-          
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8">
-            <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-[11px] font-bold text-white/70 tracking-widest uppercase">AI-Powered Predictions</span>
-          </motion.div>
+      <main>
+        <section ref={heroRef} className="landing-hero">
+          <motion.div style={{ y: heroY, opacity: heroOpacity }} className="landing-hero__inner">
+            <div className="landing-hero__copy">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="landing-kicker"
+              >
+                <Radio />
+                Live match intelligence
+                <span>Football + Basketball</span>
+              </motion.div>
 
-          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-5xl sm:text-7xl lg:text-[84px] font-black leading-[1.05] tracking-tight mb-6">
-            Predict matches with<br className="hidden sm:block"/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300"> mathematical precision.</span>
-          </motion.h1>
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.65, delay: 0.08 }}
+              >
+                See the game
+                <span>before the noise.</span>
+              </motion.h1>
 
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-lg sm:text-xl text-white/50 mb-10 leading-relaxed max-w-2xl mx-auto font-medium">
-            ScorePhantom analyzes thousands of data points to find high-probability predictions across football and basketball.
-          </motion.p>
+              <motion.p
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.16 }}
+                className="landing-hero__lede"
+              >
+                ScorePhantom turns match data, model probability and market movement into
+                one clear matchday decision system.
+              </motion.p>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={goToSignup}
-              className="group relative h-14 px-8 rounded-full font-black text-black text-base overflow-hidden transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
-              style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
-              <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <span className="relative flex items-center gap-2">Start 7-Day Free Trial <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
-            </button>
-            <button onClick={goToTrackRecord}
-              className="h-14 px-8 rounded-full font-bold text-white bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.08] transition-colors flex items-center gap-2">
-              View Track Record
-            </button>
-          </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.24 }}
+                className="landing-hero__actions"
+              >
+                <button type="button" onClick={startTrial} className="landing-button landing-button--primary">
+                  Enter ScorePhantom <ChevronRight />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/login")}
+                  className="landing-button landing-button--ghost"
+                >
+                  <Activity /> Explore the product
+                </button>
+              </motion.div>
 
-          {/* Hero Visual Teaser */}
-          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.5 }}
-            className="mt-20 relative mx-auto max-w-4xl rounded-[2rem] p-1 overflow-hidden"
-            style={{ background: "linear-gradient(180deg, rgba(16,231,116,0.15) 0%, rgba(255,255,255,0.02) 100%)" }}>
-            <div className="absolute inset-0 bg-primary/10 blur-3xl rounded-full" />
-            <div className="relative bg-[#060a0e] rounded-[1.85rem] border border-white/[0.05] p-6 sm:p-8 flex flex-col md:flex-row gap-8 items-center shadow-2xl">
-              <div className="flex-1 space-y-4 text-left w-full">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-black px-2.5 py-1 rounded-full border border-primary/40 text-primary bg-primary/[0.08] uppercase tracking-widest">STRONG EDGE</span>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.7, delay: 0.36 }}
+                className="landing-trust"
+              >
+                <span><Check /> 7-day free trial</span>
+                <span><Check /> No card required</span>
+                <span><ShieldCheck /> Transparent record</span>
+              </motion.div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 26, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              transition={{ duration: 0.82, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="matchday-console"
+            >
+              <div className="matchday-console__glow" />
+              <div className="matchday-console__topbar">
+                <span className="matchday-console__live"><i /> Model live</span>
+                <span>Matchday 01 · 20:00 WAT</span>
+              </div>
+
+              <div className="matchday-console__league">
+                <Trophy />
+                Premier League
+                <span>London · England</span>
+              </div>
+
+              <div className="matchday-console__teams">
+                <div>
+                  <span className="team-monogram team-monogram--home">A</span>
+                  <strong>Arsenal</strong>
+                  <small>Home · W W D W W</small>
                 </div>
-                <h3 className="text-3xl font-black">Arsenal vs Chelsea</h3>
-                <div className="flex gap-4 border-b border-white/5 pb-4">
-                  <div><p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Pick</p><p className="text-lg font-bold text-white">Over 2.5 Goals</p></div>
-                  <div><p className="text-[10px] text-primary/70 uppercase tracking-widest mb-1">Model Prob</p><p className="text-lg font-bold text-primary">78%</p></div>
+                <div className="matchday-console__versus">
+                  <span>Kickoff</span>
+                  <strong>20:00</strong>
+                  <small>Emirates</small>
                 </div>
-                <div className="flex items-center gap-3 pt-2">
-                  <Activity className="w-5 h-5 text-white/30" />
-                  <p className="text-xs text-white/50 leading-relaxed">Arsenal enters on a 4-match win streak (xG 2.1). Chelsea concedes in 80% of away matches.</p>
+                <div>
+                  <span className="team-monogram team-monogram--away">C</span>
+                  <strong>Chelsea</strong>
+                  <small>Away · W D L W D</small>
                 </div>
               </div>
-              <div className="w-full md:w-64 shrink-0 bg-white/[0.02] border border-white/5 rounded-2xl p-5">
-                <p className="text-[10px] text-white/40 uppercase tracking-widest mb-4 text-center">Market Comparison</p>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center"><span className="text-xs text-white/50">Our Model</span><span className="text-sm font-bold">1.28 odds</span></div>
-                  <div className="flex justify-between items-center"><span className="text-xs text-white/50">Bookmaker</span><span className="text-sm font-bold text-primary">1.75 odds</span></div>
+
+              <div className="matchday-console__signal">
+                <div>
+                  <span className="signal-label"><Flame /> Phantom signal</span>
+                  <strong>Over 2.5 goals</strong>
+                  <small>Attack profiles create a high-tempo script</small>
                 </div>
-                <div className="mt-4 pt-4 border-t border-white/5 text-center">
-                  <span className="text-[10px] font-black text-primary bg-primary/10 px-3 py-1.5 rounded-full uppercase tracking-widest">+16% Value Edge</span>
+                <div className="signal-confidence">
+                  <span>78</span>
+                  <small>confidence</small>
                 </div>
               </div>
-            </div>
-          </motion.div>
 
-        </motion.div>
-      </section>
-
-      {/* ── METRICS ────────────────────────────────────────────── */}
-      <section className="py-12 border-y border-white/5 bg-white/[0.01]">
-        <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-          {[
-            { value: 68, suffix: "%", label: "Average Hit Rate" },
-            { value: 500, suffix: "+", label: "Picks Analyzed Weekly" },
-            { value: 20, suffix: "+", label: "Data Points Per Match" },
-            { value: 24, suffix: "/7", label: "Live Market Scanning" },
-          ].map((m, i) => (
-            <FadeIn key={m.label} delay={i * 0.1} className="text-center md:text-left">
-              <p className="text-3xl sm:text-4xl font-black text-white mb-1"><Counter to={m.value} />{m.suffix}</p>
-              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">{m.label}</p>
-            </FadeIn>
-          ))}
-        </div>
-      </section>
-
-      {/* ── FEATURES (Linear Style) ───────────────────────────── */}
-      <section className="py-32 px-6 max-w-6xl mx-auto space-y-32">
-        {/* Feature 1 */}
-        <div className="flex flex-col md:flex-row items-center gap-16">
-          <FadeIn className="flex-1 space-y-6">
-            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-2">
-              <BarChart3 className="w-6 h-6 text-primary" />
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Poisson distribution, <br/>applied to the pitch.</h2>
-            <p className="text-white/50 text-lg leading-relaxed max-w-md">
-              We don't rely on gut feeling. Our engine calculates exact Expected Goals (xG) using Poisson probability models, factoring in team form, defensive leaks, and head-to-head momentum to generate precise scoreline matrices.
-            </p>
-          </FadeIn>
-          <FadeIn delay={0.2} className="flex-1 w-full">
-            <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full" />
-              <div className="space-y-4 relative z-10">
+              <div className="probability-grid">
                 {[
-                  { score: "2-1", prob: "18.4%" }, { score: "1-1", prob: "14.2%" }, { score: "2-0", prob: "11.8%" }
-                ].map(s => (
-                  <div key={s.score} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/[0.05]">
-                    <span className="font-black text-xl">{s.score}</span>
-                    <span className="font-bold text-primary">{s.prob}</span>
+                  { label: "Home", value: 56, color: "green" },
+                  { label: "Draw", value: 24, color: "blue" },
+                  { label: "Away", value: 20, color: "orange" },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <span>{item.label}<b>{item.value}%</b></span>
+                    <i><em className={`is-${item.color}`} style={{ width: `${item.value}%` }} /></i>
                   </div>
                 ))}
               </div>
-            </div>
-          </FadeIn>
-        </div>
 
-        {/* Feature 2 */}
-        <div className="flex flex-col md:flex-row-reverse items-center gap-16">
-          <FadeIn className="flex-1 space-y-6">
-            <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mb-2">
-              <TrendingUp className="w-6 h-6 text-yellow-400" />
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-black leading-tight">We find the edge. <br/>You place the bet.</h2>
-            <p className="text-white/50 text-lg leading-relaxed max-w-md">
-              Knowing the probability isn't enough. Our engine constantly compares its own calculated odds against live bookmaker markets. If the bookmaker prices an outcome too high, we flag it as a Value Edge.
-            </p>
-          </FadeIn>
-          <FadeIn delay={0.2} className="flex-1 w-full">
-            <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 relative overflow-hidden flex items-center justify-center min-h-[300px]">
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-yellow-500/10 blur-[60px] rounded-full" />
-               <div className="text-center relative z-10">
-                 <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Market Inefficiency Detected</p>
-                 <p className="text-6xl font-black text-yellow-400 mb-4">+14%</p>
-                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm">
-                   <span>Bookmaker: <strong className="text-white">35%</strong></span>
-                   <span className="text-white/20">|</span>
-                   <span>Model: <strong className="text-primary">49%</strong></span>
-                 </div>
-               </div>
-            </div>
-          </FadeIn>
-        </div>
+              <div className="matchday-console__footer">
+                <span><Gauge /> +14.2% model edge</span>
+                <span><CircleDot /> Lineup monitored</span>
+                <span><Zap /> 24 signals checked</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        </section>
 
-        {/* Feature 3 */}
-        <div className="flex flex-col md:flex-row items-center gap-16">
-          <FadeIn className="flex-1 space-y-6">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-2">
-              <Zap className="w-6 h-6 text-blue-400" />
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Instant ACCA Builder. <br/>Built on logic.</h2>
-            <p className="text-white/50 text-lg leading-relaxed max-w-md">
-              Stop guessing on weekend accumulators. Set your risk tolerance (Safe, Value, or High Risk), and the engine instantly compiles the highest-confidence picks into a single slip.
-            </p>
-          </FadeIn>
-          <FadeIn delay={0.2} className="flex-1 w-full">
-            <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 relative overflow-hidden">
-               <div className="space-y-3 relative z-10">
-                 {[1, 2, 3].map(i => (
-                   <div key={i} className="flex items-center gap-4 p-3 border-b border-white/5 last:border-0">
-                     <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-xs text-white/40">{i}</div>
-                     <div><p className="text-sm font-bold">Over 1.5 Goals</p><p className="text-xs text-white/40">1.28 Odds</p></div>
-                     <div className="ml-auto"><Check className="w-4 h-4 text-primary" /></div>
-                   </div>
-                 ))}
-                 <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
-                   <span className="text-xs text-white/40 uppercase tracking-widest font-bold">Total Odds</span>
-                   <span className="text-2xl font-black text-white">2.45</span>
-                 </div>
-               </div>
-            </div>
-          </FadeIn>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ────────────────────────────────────────── */}
-      <section className="py-32 px-6 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-primary/10 rounded-full blur-[120px] mix-blend-screen" />
-        </div>
-        <FadeIn className="relative z-10 max-w-3xl mx-auto text-center">
-          <div className="w-16 h-16 mx-auto bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-8">
-            <Lock className="w-8 h-8 text-primary" />
+        <section className="signal-marquee" aria-label="Supported competitions">
+          <div className="signal-marquee__track">
+            {[...leagueSignals, ...leagueSignals].map((league, index) => (
+              <span key={`${league}-${index}`}>
+                <i />
+                {league}
+              </span>
+            ))}
           </div>
-          <h2 className="text-4xl sm:text-5xl font-black mb-6 leading-tight tracking-tight">
-            Unlock the algorithm.
-          </h2>
-          <p className="text-white/50 mb-10 text-lg max-w-xl mx-auto">
-            Join thousands of smart bettors. Get unlimited predictions, the ACCA builder, and deep model analysis for just ₦3,000/month.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button onClick={goToSignup}
-              className="w-full sm:w-auto px-10 h-14 rounded-full font-black text-black text-base transition-all shadow-[0_8px_32px_rgba(16,231,116,0.25)] hover:shadow-[0_12px_40px_rgba(16,231,116,0.35)] hover:-translate-y-0.5"
-              style={{ background: "linear-gradient(135deg,#10e774 0%,#0bc95f 100%)" }}>
-              Start 7-Day Free Trial
+        </section>
+
+        <section className="landing-proof">
+          <div className="landing-container landing-proof__grid">
+            {[
+              { value: "1K+", label: "Members", icon: Users },
+              { value: "500+", label: "Weekly signals", icon: Activity },
+              { value: "24/7", label: "Market monitoring", icon: Radio },
+              { value: "2", label: "Sports engines", icon: Dna },
+            ].map(({ value, label, icon: Icon }, index) => (
+              <Reveal key={label} delay={index * 0.06} className="landing-proof__item">
+                <Icon />
+                <div><strong>{value}</strong><span>{label}</span></div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        <section className="landing-section">
+          <div className="landing-container">
+            <Reveal className="landing-section__heading">
+              <span className="landing-eyebrow"><Sparkles /> Built for matchday</span>
+              <h2>From 300 fixtures to the <span>one signal that matters.</span></h2>
+              <p>
+                ScorePhantom removes the tab switching, spreadsheet work and guesswork.
+                Every layer of analysis resolves into a decision you can understand.
+              </p>
+            </Reveal>
+
+            <div className="model-steps">
+              {modelSteps.map(({ number, icon: Icon, title, copy }, index) => (
+                <Reveal key={number} delay={index * 0.09} className="model-step">
+                  <span className="model-step__number">{number}</span>
+                  <span className="model-step__icon"><Icon /></span>
+                  <h3>{title}</h3>
+                  <p>{copy}</p>
+                  {index < modelSteps.length - 1 && <span className="model-step__line" />}
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section landing-section--tight">
+          <div className="landing-container bento">
+            <Reveal className="bento-card bento-card--wide bento-card--green">
+              <div className="bento-card__copy">
+                <span className="landing-eyebrow"><TrendingUp /> Value engine</span>
+                <h3>Probability is useful. Mispriced probability is the edge.</h3>
+                <p>
+                  Compare the model against available market prices and see where the gap is
+                  large enough to deserve attention.
+                </p>
+              </div>
+              <div className="edge-visual">
+                <div>
+                  <span>Model</span><strong>62%</strong>
+                  <i><em style={{ width: "62%" }} /></i>
+                </div>
+                <div>
+                  <span>Market</span><strong>48%</strong>
+                  <i><em style={{ width: "48%" }} /></i>
+                </div>
+                <span className="edge-visual__badge">+14% value edge</span>
+              </div>
+            </Reveal>
+
+            <Reveal className="bento-card bento-card--sim" delay={0.05}>
+              <span className="landing-eyebrow"><Dna /> Match simulator</span>
+              <div className="mini-pitch">
+                <span className="mini-pitch__circle" />
+                <i className="mini-player mini-player--one" />
+                <i className="mini-player mini-player--two" />
+                <i className="mini-player mini-player--three" />
+                <i className="mini-ball" />
+              </div>
+              <h3>Watch the likely match script unfold.</h3>
+            </Reveal>
+
+            <Reveal className="bento-card" delay={0.08}>
+              <span className="landing-eyebrow"><Layers3 /> ACCA Lab</span>
+              <div className="acca-visual">
+                {["Over 1.5 goals", "Home +1.5", "Under 4.5 goals"].map((pick, index) => (
+                  <span key={pick}><i>{index + 1}</i>{pick}<Check /></span>
+                ))}
+              </div>
+              <h3>Build smarter combinations around a risk target.</h3>
+            </Reveal>
+
+            <Reveal className="bento-card bento-card--wide bento-card--record" delay={0.1}>
+              <div className="record-visual">
+                {[42, 58, 48, 70, 64, 78, 73, 86, 82, 92].map((height, index) => (
+                  <i key={index} style={{ height: `${height}%` }} />
+                ))}
+              </div>
+              <div className="bento-card__copy">
+                <span className="landing-eyebrow"><BarChart3 /> Public track record</span>
+                <h3>No disappearing losses. No mystery statistics.</h3>
+                <p>
+                  Wins, losses, voids and confidence calibration remain visible, so the model
+                  earns trust over time.
+                </p>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        <section className="landing-section">
+          <div className="landing-container transparency-panel">
+            <Reveal className="transparency-panel__copy">
+              <span className="landing-eyebrow"><LockKeyhole /> Confidence, not certainty</span>
+              <h2>Built to help you decide. <span>Never to promise an outcome.</span></h2>
+              <p>
+                Each signal shows confidence, model reasoning and risk context. You stay in
+                control, and every result remains part of the record.
+              </p>
+              <button type="button" onClick={() => setLocation("/login")} className="landing-text-link">
+                See how the model explains a pick <ArrowRight />
+              </button>
+            </Reveal>
+            <Reveal className="transparency-panel__rules" delay={0.08}>
+              {[
+                { icon: Goal, title: "Specific", copy: "One selection, clear market and confidence." },
+                { icon: Activity, title: "Explainable", copy: "Form, goals, matchup and pricing signals." },
+                { icon: Trophy, title: "Tracked", copy: "Settled outcomes remain in the public record." },
+              ].map(({ icon: Icon, title, copy }) => (
+                <div key={title}>
+                  <span><Icon /></span>
+                  <div><strong>{title}</strong><p>{copy}</p></div>
+                </div>
+              ))}
+            </Reveal>
+          </div>
+        </section>
+
+        <section className="landing-final">
+          <div className="landing-final__glow" aria-hidden="true" />
+          <Reveal className="landing-container landing-final__inner">
+            <span className="landing-eyebrow"><Zap /> Your matchday starts here</span>
+            <h2>Stop chasing tips.<br /><span>Build a repeatable process.</span></h2>
+            <p>
+              Get the complete ScorePhantom system free for seven days. No card required.
+            </p>
+            <button type="button" onClick={startTrial} className="landing-button landing-button--primary">
+              Start your free trial <ArrowRight />
             </button>
-            <p className="text-xs text-white/30 sm:hidden">Cancel anytime. No card required.</p>
-          </div>
-        </FadeIn>
-      </section>
+            <small>Premium is ₦3,000/month after trial · Cancel anytime</small>
+          </Reveal>
+        </section>
+      </main>
 
-      {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 py-12 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            <span className="font-bold tracking-wide text-sm text-white/50">ScorePhantom © 2026</span>
+      <footer className="landing-footer">
+        <div className="landing-container landing-footer__inner">
+          <div className="landing-brand">
+            <span className="landing-brand__mark">
+              <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="" />
+            </span>
+            <span className="landing-brand__wordmark">SCORE<span>PHANTOM</span></span>
           </div>
-          <p className="text-xs text-white/30 text-center md:text-right max-w-sm">
-            ScorePhantom provides statistical data and probabilities. We are not a bookmaker and do not accept bets. Always bet responsibly.
-          </p>
+          <div className="landing-footer__links">
+            <Link href="/terms">Terms</Link>
+            <Link href="/privacy">Privacy</Link>
+            <a href="https://wa.me/2348117024699" target="_blank" rel="noreferrer">Support</a>
+          </div>
+          <p>Data-led analysis, not guaranteed outcomes. 18+ only. Please play responsibly.</p>
         </div>
       </footer>
     </div>

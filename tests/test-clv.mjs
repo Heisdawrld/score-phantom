@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { oddsToImpliedProb, removeVig, computeClv, getOddsForPick } from '../src/storage/clvTracker.js';
+import { oddsToImpliedProb, removeVig, computeClv, getOddsForPick } from '../src/storage/clvMath.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {

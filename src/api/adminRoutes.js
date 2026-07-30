@@ -2,6 +2,7 @@ import express from "express";
 import { getAccuracyStats, runBacktestForFinishedFixtures, saveOutcome } from "../storage/backtesting.js";
 import { createReferralCommission } from "../auth/authRoutes.js";
 import rateLimit from "express-rate-limit";
+import { requireAdminAccess } from "../middlewares/adminGuard.js";
 
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -11,43 +12,11 @@ const adminLimiter = rateLimit({
   legacyHeaders: false,
 });
 import db from "../config/database.js";
-import jwt from "jsonwebtoken";
 import { computeAccessStatus } from "../auth/authRoutes.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('[FATAL] JWT_SECRET not set in adminRoutes.js');
-  process.exit(1);
-}
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-if (!ADMIN_EMAIL) console.warn('[Admin] ADMIN_EMAIL not set');
 const PLAN_DURATION_DAYS = 30;
-
-function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
-  try {
-    const token = auth.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!ADMIN_EMAIL || decoded.email?.toLowerCase() !== ADMIN_EMAIL)
-      return res.status(403).json({ error: "Forbidden" });
-    // BUG FIX: Verify admin exists in DB and token not revoked (matches routes.js fix).
-    // Without this, a revoked admin JWT retains access until expiry.
-    db.execute({ sql: "SELECT id, token_version FROM users WHERE email = ? LIMIT 1", args: [decoded.email.toLowerCase()] })
-      .then(result => {
-        const dbUser = result.rows?.[0];
-        if (!dbUser) return res.status(403).json({ error: "Admin revoked" });
-        if (decoded.token_version != null && dbUser.token_version != null && decoded.token_version !== dbUser.token_version) {
-          return res.status(401).json({ error: "Token revoked" });
-        }
-        req.user = decoded;
-        next();
-      })
-      .catch(() => res.status(401).json({ error: "Unauthorized" }));
-  } catch {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-}
+const requireAdmin = requireAdminAccess;
 
 // ── GET /stats — user counts, revenue, payments today ────────────────────────
 router.get("/stats", adminLimiter, requireAdmin, async (req, res) => {

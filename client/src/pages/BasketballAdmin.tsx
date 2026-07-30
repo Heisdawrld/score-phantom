@@ -109,7 +109,7 @@ export default function BasketballAdmin() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-[#080b10] text-white flex items-center justify-center p-4">
+      <div className="admin-login min-h-screen bg-[#080b10] text-white flex items-center justify-center p-4">
         <div className="w-full max-w-sm rounded-3xl border border-white/[0.08] bg-[#0f172a] p-6 text-center">
           <Trophy className="mx-auto h-10 w-10 text-orange-200" />
           <h1 className="mt-4 text-xl font-black">Basketball Admin</h1>
@@ -125,14 +125,14 @@ export default function BasketballAdmin() {
   const sel = (n: number) => n > 0 ? "active" : "inactive";
 
   return (
-    <div className="min-h-screen bg-[#080b10] text-white pb-10">
+    <div className="admin-shell min-h-screen bg-[#080b10] text-white pb-10">
       {message && (
         <div className={`fixed left-4 right-4 top-4 z-50 rounded-2xl border p-3 text-sm font-bold shadow-2xl ${message.ok ? "border-emerald-400/20 bg-emerald-500/15 text-emerald-200" : "border-red-400/20 bg-red-500/15 text-red-200"}`}>
           {message.ok ? <CheckCircle2 className="inline h-4 w-4 mr-2" /> : <AlertCircle className="inline h-4 w-4 mr-2" />}{message.text}
         </div>
       )}
 
-      <main className="mx-auto max-w-3xl space-y-5 px-4 pt-5">
+      <main className="admin-workspace mx-auto max-w-5xl space-y-5 px-4 pt-5">
         {/* ── Header ── */}
         <section className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-5">
           <div className="flex items-start justify-between gap-3">

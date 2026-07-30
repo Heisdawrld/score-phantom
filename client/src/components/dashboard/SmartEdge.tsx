@@ -79,7 +79,7 @@ export function SmartEdge() {
     .filter(p => p.valueTier !== "JUNK" && p.valueTier !== "NEGATIVE_EV")
     .filter(p => p._edge != null && p._edge > 0)
     .sort((a, b) => (b._edge || 0) - (a._edge || 0))
-    .slice(0, 5);
+    .slice(0, 3);
 
   if (isLoading) {
     return (
@@ -104,7 +104,7 @@ export function SmartEdge() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.05 }}
-      className="space-y-2.5"
+      className="smart-edge space-y-2.5"
     >
       {/* ── Section header ── */}
       <div className="flex items-center justify-between px-0.5">
@@ -126,7 +126,7 @@ export function SmartEdge() {
       </div>
 
       {/* ── Horizontal scroll strip ── */}
-      <div className="flex gap-2.5 overflow-x-auto hide-scrollbar touch-pan-x overscroll-x-contain -mx-1 px-1 pb-1">
+      <div className="smart-edge__list grid gap-2.5">
         {valuePicks.map((pick, idx) => {
           const modelProb = pick.probability;
           const edgePct = Math.round(pick._edge || 0);
@@ -141,7 +141,7 @@ export function SmartEdge() {
               whileTap={{ scale: 0.97 }}
               onClick={() => setLocation("/matches/" + pick.fixtureId)}
               className={cn(
-                "interactive-card shrink-0 w-[210px] text-left rounded-2xl border p-3 transition-all relative overflow-hidden",
+                "interactive-card w-full text-left rounded-2xl border p-3 transition-all relative overflow-hidden",
                 isExtreme
                   ? "border-accent-blue/30 bg-accent-blue/[0.06]"
                   : isStrong
@@ -212,7 +212,7 @@ export function SmartEdge() {
         {/* ── "View all" trailing card ── */}
         <button
           onClick={() => setLocation("/picks")}
-          className="interactive-card shrink-0 w-[100px] rounded-2xl border border-white/6 bg-white/[0.02] flex flex-col items-center justify-center gap-1.5 text-white/40 hover:text-white/70 transition-all"
+          className="smart-edge__all interactive-card w-full rounded-xl border border-white/6 bg-white/[0.02] flex items-center justify-center gap-1.5 text-white/40 hover:text-white/70 transition-all"
         >
           <ChevronRight className="w-4 h-4" />
           <span className="text-2xs font-bold">All Picks</span>

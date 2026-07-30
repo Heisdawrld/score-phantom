@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, useRef } from "react";
-import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
@@ -150,7 +149,6 @@ export default function TopPicksToday() {
   if (!isSubscribed) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="max-w-3xl mx-auto px-4 py-12">
           <div className="glass-card rounded-2xl p-8 text-center border-orange-500/20 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent pointer-events-none" />
@@ -179,7 +177,6 @@ export default function TopPicksToday() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="max-w-3xl mx-auto p-6 space-y-3 mt-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-28 rounded-2xl sp-shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
@@ -197,7 +194,6 @@ export default function TopPicksToday() {
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
         </div>
-        <Header />
         <div className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -256,13 +252,11 @@ export default function TopPicksToday() {
   }
 
   return (
-    <div className="min-h-screen bg-[#060a0e] text-white flex flex-col pb-24 selection:bg-primary/30 relative">
+    <div className="picks-2627 min-h-screen bg-[#060a0e] text-white flex flex-col pb-24 selection:bg-primary/30 relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>
-      <Header />
-
-      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10">
+      <div className="flex-1 w-full max-w-3xl mx-auto px-4 pt-5 space-y-5 relative z-10">
 
         {/* ── Page header ── */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>

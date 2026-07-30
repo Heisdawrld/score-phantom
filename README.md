@@ -94,7 +94,8 @@ npm start
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Postgres connection string |
+| `TURSO_DATABASE_URL` | Turso/libSQL database URL |
+| `TURSO_AUTH_TOKEN` | Turso database auth token |
 | `BSD_API_KEY` | BSD/Bzzoiro API key |
 | `JWT_SECRET` | Secret for JWT tokens |
 | `APP_URL` | Public app URL (used for links + CORS) |

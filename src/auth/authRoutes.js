@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../config/database.js";
+import { requireAdminAccess, requireAdminSecret } from "../middlewares/adminGuard.js";
 
 import disposableDomains from 'disposable-email-domains' with { type: "json" };
 
@@ -20,7 +21,6 @@ if (!JWT_SECRET) {
 }
 
 const ADMIN_EMAIL     = (process.env.ADMIN_EMAIL     || "").trim().toLowerCase();
-const ADMIN_SECRET    = process.env.ADMIN_SECRET || "";
 const APP_URL         = process.env.APP_URL          || "";
 const FLW_SECRET      = process.env.FLUTTERWAVE_SECRET_KEY || "";
 const FLW_PUBLIC      = process.env.FLUTTERWAVE_PUBLIC_KEY  || "";
@@ -350,7 +350,7 @@ export async function requirePremiumAccess(req, res, next) {
 }
 
 // ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
-import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
 async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN_AMOUNT_NGN, customDays = null) {
@@ -518,9 +518,12 @@ router.post("/google", authLimiter, async (req, res) => {
       return res.status(401).json({ error: "Token verification failed. Please sign in again." });
     }
 
-        const email = String(firebasePayload.email || "").trim().toLowerCase();
+    const email = String(firebasePayload.email || "").trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
     if (!email) return res.status(400).json({ error: "No email address in Google account" });
+    if (!firebasePayload.email_verified) {
+      return res.status(403).json({ error: "Google account email is not verified" });
+    }
 
     // SECURITY: Block disposable email domains
     const googleEmailDomain = email.split("@")[1];
@@ -612,7 +615,13 @@ router.post("/email", authLimiter, async (req, res) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+    const tokenEmail = String(firebasePayload.email || "").trim().toLowerCase();
     const firebaseUid = firebasePayload.uid || firebasePayload.sub || "";
+
+    if (!tokenEmail || tokenEmail !== normalizedEmail) {
+      console.warn("[EmailAuth] Rejected token/body email mismatch");
+      return res.status(401).json({ error: "Firebase token does not match the requested email" });
+    }
     
     // Validate email is not disposable
     const emailDomain = normalizedEmail.split("@")[1];
@@ -711,42 +720,19 @@ router.post("/signup", authLimiter, async (req, res) => {
     if ((existing.rows || []).length > 0) {
       const existingUser = existing.rows[0];
       const hasPassword = existingUser.password_hash || existingUser.password;
-      
+
       if (hasPassword) {
         return res.status(400).json({ error: "Email already registered" });
-      } else {
-        // User exists but has no password (e.g. created via admin, migration, or Firebase). Set their password now.
-        const hashedPassword = await bcrypt.hash(String(password), 10);
-        await db.execute({
-          sql: "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
-          args: [hashedPassword, existingUser.id]
-        });
-        
-        // Reload user to return token
-        const created = await db.execute({
-          sql: `SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code FROM users WHERE id = ? LIMIT 1`,
-          args: [existingUser.id],
-        });
-        const user = created.rows?.[0];
-        if (!user) throw new Error("User updated but could not be reloaded");
-
-        // Attach referral if code was provided (partner or user-based)
-        if (referralCode && user) {
-          await attachReferral(user.id, referralCode);
-        }
-
-        await ensureReferralCode(user);
-
-        // Auto-login: return JWT immediately
-        const token  = signToken(user);
-        const access = computeAccessStatus(user);
-        return res.status(201).json({
-          token,
-          user: publicUser(user),
-          has_access:    access.has_full_access,
-          access_status: access.status,
-        });
       }
+
+      // Never let an unauthenticated signup claim a passwordless account.
+      // These rows may belong to Google/Firebase users or accounts pre-created
+      // by an administrator. Ownership must be proved through the linked
+      // provider or the password-reset flow.
+      return res.status(409).json({
+        error: "An account already exists for this email. Sign in with the original method or reset your password.",
+        code: "account_exists_requires_recovery",
+      });
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
@@ -984,8 +970,7 @@ router.put("/profile", requireAuth, async (req, res) => {
 });
 
 // ── Password Reset ────────────────────────────────────────────────────────────
-// Step 1: Store a reset token for legacy bcrypt users.
-// Email delivery is handled client-side via Firebase SDK (sendPasswordResetEmail).
+// Step 1: Store a short-lived reset token and deliver it through the server email provider.
 router.post("/password/reset-request", authLimiter, async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -1008,9 +993,26 @@ router.post("/password/reset-request", authLimiter, async (req, res) => {
       args: [resetToken, expiresAt, userId],
     });
 
-    // Email is sent client-side via Firebase SDK — no backend email service needed.
-    console.log(`[PasswordReset] Reset token stored for user ${userId}. Firebase handles the email.`);
-    return res.json({ success: true, message: "Use Firebase to send the reset email.", firebase: true });
+    const resetUrl = `${APP_URL.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const delivery = await sendPasswordResetEmail({
+      to: normalizedEmail,
+      resetUrl,
+      expiresInMinutes: 60,
+    });
+
+    if (!delivery.success) {
+      // Do not leave a usable token behind when no reset email was delivered.
+      await db.execute({
+        sql: "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL WHERE id = ?",
+        args: [userId],
+      });
+      console.error(`[PasswordReset] Delivery failed for user ${userId}: ${delivery.reason || "unknown"}`);
+    }
+
+    return res.json({
+      success: true,
+      message: "If that email exists, a reset link has been sent.",
+    });
   } catch (err) {
     console.error("[PasswordReset]", err);
     return res.status(500).json({ error: "Reset request failed" });
@@ -1312,15 +1314,8 @@ router.get("/referral-stats", requireAuth, async (req, res) => {
 
 // ── Admin routes ──────────────────────────────────────────────────────────────
 
-function requireAdminSecret(req, res, next) {
-  const secret = req.headers["x-admin-secret"];
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
-}
-
 // POST /api/auth/admin/verify-payment
-router.post("/admin/verify-payment", adminLimiter, requireAdminSecret, async (req, res) => {
+router.post("/admin/verify-payment", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { user_id, reference } = req.body || {};
     if (!user_id && !reference)
@@ -1353,7 +1348,7 @@ router.post("/admin/verify-payment", adminLimiter, requireAdminSecret, async (re
 });
 
 // GET /api/auth/admin/users
-router.get("/admin/users", adminLimiter, requireAdminSecret, async (req, res) => {
+router.get("/admin/users", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const result = await db.execute(`
       SELECT id, email, status, trial_ends_at, premium_expires_at, subscription_expires_at, subscription_code
@@ -1374,7 +1369,7 @@ router.get("/admin/users", adminLimiter, requireAdminSecret, async (req, res) =>
 });
 
 // POST /api/auth/admin/upgrade-by-email
-router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (req, res) => {
+router.post("/admin/upgrade-by-email", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { email, days } = req.body || {};
     if (!email) return res.status(400).json({ error: "Email required" });
@@ -1409,7 +1404,7 @@ router.post("/admin/upgrade-by-email", adminLimiter, requireAdminSecret, async (
 });
 
 // DELETE /api/auth/admin/remove-user
-router.delete("/admin/remove-user", adminLimiter, requireAdminSecret, async (req, res) => {
+router.delete("/admin/remove-user", adminLimiter, requireAdminAccess, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
@@ -1447,7 +1442,7 @@ router.post("/resend-verification", requireAuth, authLimiter, async (req, res) =
 // Standalone admin login — verifies email === ADMIN_EMAIL + bcrypt password.
 // Returns JWT + adminSecret so the admin panel can call protected admin routes.
 // Rate-limited. Never reveals whether the admin account exists.
-router.post("/admin-login", adminLimiter, async (req, res) => {
+router.post("/admin-login", adminLimiter, requireAdminSecret, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });

@@ -1,6 +1,5 @@
 import { useAccess } from "@/hooks/use-access";
 import { useLocation } from 'wouter';
-import { Header } from '@/components/layout/Header';
 import { ChevronLeft, CreditCard, Crown, Zap, Shield, HelpCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PageLoader } from '@/components/ui/PageLoader';
@@ -17,7 +16,6 @@ export default function PaymentBilling() {
 
   return (
     <div className='min-h-screen bg-background pb-20'>
-      <Header />
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}

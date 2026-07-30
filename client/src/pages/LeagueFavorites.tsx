@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Header } from "@/components/layout/Header";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useAccess } from "@/hooks/use-access";
@@ -77,7 +76,6 @@ export default function LeagueFavorites() {
   if (authLoading || !isSubscribed) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
         </div>
@@ -88,7 +86,6 @@ export default function LeagueFavorites() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
         </div>
@@ -98,7 +95,6 @@ export default function LeagueFavorites() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-8">
           <button

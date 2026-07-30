@@ -204,4 +204,4 @@ async function run() {
 
 run().catch(err => { console.error('Fatal:', err); process.exit(1); });
 
-# Actually, let me add the migration to the app's startup sequence instead
+// The migration also runs as part of the application's startup sequence.

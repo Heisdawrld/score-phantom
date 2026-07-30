@@ -1,11 +1,11 @@
 {
   "name": "ScorePhantom",
   "short_name": "ScorePhantom",
-  "description": "AI-powered football prediction engine",
+  "description": "Matchday intelligence for football and basketball",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#060a0e",
-  "theme_color": "#060a0e",
+  "background_color": "#05090c",
+  "theme_color": "#05090c",
   "orientation": "portrait-primary",
   "icons": [
     {

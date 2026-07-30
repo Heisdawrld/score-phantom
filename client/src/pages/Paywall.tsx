@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useAuth, useInitPayment } from "@/hooks/use-auth";
 import {
-  Check, Crown, Zap, Shield, Loader2, ArrowLeft, Sparkles,
+  Check, Crown, Zap, Shield, Loader2, Sparkles,
   TrendingUp, Bot, Target, ChevronRight, Lock, AlertCircle, Activity, Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,18 +112,6 @@ export default function Paywall() {
       </div>
 
       <div className="relative z-10 flex flex-col min-h-screen pb-20">
-        {/* Minimal Header */}
-        <header className="px-6 py-6 flex items-center justify-between">
-          <button onClick={() => setLocation("/")} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-white/70" />
-          </button>
-          <div className="flex items-center gap-2">
-            <Crown className="w-5 h-5 text-primary" />
-            <span className="font-black tracking-wide text-lg">ScorePhantom</span>
-          </div>
-          <div className="w-10" />
-        </header>
-
         <AnimatePresence mode="wait">
           {paymentDone ? (
             <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col justify-center">
@@ -143,12 +131,12 @@ export default function Paywall() {
                 <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
                   className="text-3xl sm:text-4xl font-black text-white leading-[1.1] tracking-tight mb-3">
                   Stop Guessing.<br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300">Start Winning.</span>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300">Start Analyzing.</span>
                 </motion.h1>
 
                 <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                   className="text-white/55 text-sm max-w-sm mx-auto leading-relaxed">
-                  Unlock high-accuracy predictions, AI match analysis, and exclusive value picks across football &amp; basketball.
+                  Unlock model-ranked predictions, deep match analysis, and exclusive value signals across football &amp; basketball.
                 </motion.p>
               </div>
 

@@ -73,7 +73,7 @@ const SHARP_CONFIG = {
 };
 
 function getSharpConfig(sig: SharpMoneySignal) {
-  const key = `${sig.alignment}_${sig.strength}`;
+  const key = `${sig.alignment}_${sig.strength}` as keyof typeof SHARP_CONFIG;
   return SHARP_CONFIG[key] || SHARP_CONFIG.neutral;
 }
 

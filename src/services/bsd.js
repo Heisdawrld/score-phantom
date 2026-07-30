@@ -24,10 +24,10 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function cacheGet(key) {
+function cacheGet(key, ttlMs = CACHE_TTL_MS) {
   const entry = _cache.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+  if (Date.now() - entry.ts > ttlMs) {
     _cache.delete(key);
     return null;
   }
@@ -39,7 +39,7 @@ function cacheSet(key, data) {
 }
 
 // Periodic cleanup: prune expired entries every 5 minutes to prevent unbounded memory growth
-setInterval(() => {
+const cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of _cache) {
     if (now - entry.ts > CACHE_TTL_MS) {
@@ -47,6 +47,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+cacheCleanupTimer.unref?.();
 
 // ── GLOBAL RATE LIMITER (Token Bucket) ───────────────────────────────────
 // BSD enforces ~5 requests/second on our plan. Without a global concurrency
@@ -100,6 +101,7 @@ function firstDefined(...values) {
 
 export async function bsdFetch(path, params = {}, {
   cacheable = true,
+  cacheTtlMs = CACHE_TTL_MS,
   retries = 3,
   backoffMs = 1500,
   base = BSD_BASE,
@@ -117,7 +119,7 @@ export async function bsdFetch(path, params = {}, {
 
   const cacheKey = url.toString();
   if (cacheable) {
-    const cached = cacheGet(cacheKey);
+    const cached = cacheGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
   }
 
@@ -316,22 +318,10 @@ export async function fetchFixturesByRange(dateFrom, dateTo) {
 export async function fetchFixturesBySeason(seasonId, { status, leagueId } = {}) {
   if (!seasonId && !leagueId) return [];
 
-  let resolvedLeagueId = leagueId;
-  let date_from;
-  let date_to;
-
-  if (resolvedLeagueId && seasonId) {
-    const seasons = await fetchSeasons({ leagueId: resolvedLeagueId });
-    const season = seasons.find(s => String(s.id) === String(seasonId));
-    date_from = season?.start_date;
-    date_to = season?.end_date;
-  }
-
   const params = {};
-  if (resolvedLeagueId) params.league_id = resolvedLeagueId;
+  if (seasonId) params.season_id = seasonId;
+  if (leagueId) params.league_id = leagueId;
   if (status) params.status = status;
-  if (date_from) params.date_from = date_from;
-  if (date_to) params.date_to = date_to;
 
   const events = await bsdFetchAll('/events/', params);
   return attachLeagueObjects(events);
@@ -738,7 +728,7 @@ export async function deriveH2H(homeTeamId, homeTeamName, awayTeamId, awayTeamNa
  * Cached in Redis with 30s TTL on the BSD side.
  */
 export async function fetchLiveMatches() {
-  const data = await bsdFetch('/events/live/');
+  const data = await bsdFetch('/events/live/', {}, { cacheTtlMs: 25 * 1000 });
   if (!data) return [];
   const events = data.events || asArray(data) || [];
   return attachLeagueObjects(events);
@@ -802,6 +792,39 @@ export async function fetchVenueDetail(venueId) {
 // ── v1 fallback-only endpoints ────────────────────────────────────────────────
 
 function normalizePredictionRow(exact) {
+  const markets = exact?.markets || {};
+  if (markets.match_result) {
+    const matchResult = markets.match_result || {};
+    const expectedGoals = markets.expected_goals || {};
+    const overUnder = markets.over_under || {};
+    const btts = markets.btts || {};
+    const score = markets.score || {};
+    const model = exact.model || {};
+
+    return {
+      prediction: matchResult.predicted === 'H'
+        ? 'home_win'
+        : matchResult.predicted === 'A'
+          ? 'away_win'
+          : matchResult.predicted === 'D'
+            ? 'draw'
+            : null,
+      homeWinProb: matchResult.prob_home != null ? matchResult.prob_home / 100 : null,
+      drawProb: matchResult.prob_draw != null ? matchResult.prob_draw / 100 : null,
+      awayWinProb: matchResult.prob_away != null ? matchResult.prob_away / 100 : null,
+      expectedHomeGoals: expectedGoals.home ?? null,
+      expectedAwayGoals: expectedGoals.away ?? null,
+      over15Prob: overUnder.prob_over_15 != null ? overUnder.prob_over_15 / 100 : null,
+      over25Prob: overUnder.prob_over_25 != null ? overUnder.prob_over_25 / 100 : null,
+      over35Prob: overUnder.prob_over_35 != null ? overUnder.prob_over_35 / 100 : null,
+      bttsYesProb: btts.prob_yes != null ? btts.prob_yes / 100 : null,
+      mostLikelyScore: score.most_likely || null,
+      modelConfidence: model.confidence ?? null,
+      modelVersion: model.version || null,
+      recommendations: exact.recommendations || null,
+    };
+  }
+
   const rawPred = String(exact?.predicted_result || '').toUpperCase();
 
   let canonicalPrediction = null;
@@ -814,11 +837,11 @@ function normalizePredictionRow(exact) {
 
   return {
     prediction: canonicalPrediction || null,
-    homeWinProb: exact.prob_home_win || null,
-    drawProb: exact.prob_draw || null,
-    awayWinProb: exact.prob_away_win || null,
-    expectedHomeGoals: exact.expected_home_goals || null,
-    expectedAwayGoals: exact.expected_away_goals || null,
+    homeWinProb: exact.prob_home_win ?? null,
+    drawProb: exact.prob_draw ?? null,
+    awayWinProb: exact.prob_away_win ?? null,
+    expectedHomeGoals: exact.expected_home_goals ?? null,
+    expectedAwayGoals: exact.expected_away_goals ?? null,
   };
 }
 
@@ -831,7 +854,11 @@ export async function fetchBzzoiroPrediction(eventId, matchDateIso) {
   if (!eventId) return null;
 
   // Primary: direct event prediction endpoint (v2)
-  const direct = await bsdFetch(`/events/${eventId}/prediction/`);
+  const direct = await bsdFetch(
+    `/events/${eventId}/prediction/`,
+    {},
+    { cacheTtlMs: 2 * 60 * 1000 },
+  );
   if (direct) {
     const mkt = direct.markets || {};
     const mr = mkt.match_result || {};

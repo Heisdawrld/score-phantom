@@ -239,10 +239,10 @@ export class MatchEngine {
         let nearest: Player | null = null;
         let minDist = 999;
         
-        this.players.forEach(p => {
+        for (const p of this.players) {
           const d = p.pos.dist(this.ball.pos);
           if (d < minDist) { minDist = d; nearest = p; }
-        });
+        }
         
         // Intercept threshold
         if (minDist < 3 && nearest && this.ball.z < 2) {

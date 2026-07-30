@@ -15,7 +15,6 @@ import {
   Zap,
   XCircle,
 } from 'lucide-react';
-import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -360,7 +359,7 @@ export default function TrackRecord() {
 
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#060a0e] pb-24">
+    <div className="track-record-2627 relative min-h-screen overflow-hidden bg-[#060a0e] pb-24">
       <div className="pointer-events-none fixed inset-0">
         <div
           className={cn(
@@ -370,8 +369,6 @@ export default function TrackRecord() {
         />
         <div className="absolute bottom-[-14%] left-[-8%] h-[40vh] w-[38vw] rounded-full bg-cyan-500/8 blur-[120px]" />
       </div>
-      <Header />
-
       <main className="relative z-10 mx-auto max-w-5xl space-y-6 px-4 pt-4">
 
         {/* ── Page Header ── */}

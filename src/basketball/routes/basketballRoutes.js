@@ -6,7 +6,8 @@ import { syncBasketballV1, syncBasketballOdds, syncBasketballEvents, syncApiSpor
 import { syncApiSportsBasketballGamesCached } from '../jobs/apiSportsPremiumSync.js';
 import { runBasketballPrediction, BASKETBALL_ENGINE_VERSION } from '../engine/basketballEngine.js';
 import { basketballAutoSyncStatus } from '../jobs/basketballAutoSync.js';
-import { requireAdminSecret } from '../../middlewares/adminGuard.js';
+import { requireAuth, requirePremiumAccess } from '../../auth/authRoutes.js';
+import { requireAdminAccess } from '../../middlewares/adminGuard.js';
 
 const router = express.Router();
 
@@ -117,7 +118,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
-router.get('/games', async (req, res) => {
+router.get('/games', requireAuth, async (req, res) => {
   try {
     const leagueKey = req.query.league ? String(req.query.league).toLowerCase() : null;
     if (leagueKey) assertEnabledBasketballLeague(leagueKey);
@@ -131,7 +132,7 @@ router.get('/games', async (req, res) => {
   }
 });
 
-router.get('/games/:league/:externalId', async (req, res) => {
+router.get('/games/:league/:externalId', requireAuth, async (req, res) => {
   try {
     const league = assertEnabledBasketballLeague(req.params.league);
     const game = await findBasketballGameByExternalId(league.key, req.params.externalId);
@@ -156,7 +157,7 @@ router.get('/games/:league/:externalId', async (req, res) => {
   }
 });
 
-router.get('/predict/:league/:externalId', async (req, res) => {
+router.get('/predict/:league/:externalId', requirePremiumAccess, async (req, res) => {
   try {
     const league = assertEnabledBasketballLeague(req.params.league);
     const game = await findBasketballGameByExternalId(league.key, req.params.externalId);
@@ -189,7 +190,7 @@ router.get('/predict/:league/:externalId', async (req, res) => {
   }
 });
 
-router.get('/best-picks', async (req, res) => {
+router.get('/best-picks', requirePremiumAccess, async (req, res) => {
   try {
     const leagueKey = req.query.league ? String(req.query.league).toLowerCase() : null;
     if (leagueKey) assertEnabledBasketballLeague(leagueKey);
@@ -207,7 +208,7 @@ router.get('/best-picks', async (req, res) => {
   }
 });
 
-router.post('/admin/init', requireAdminSecret, async (req, res) => {
+router.post('/admin/init', requireAdminAccess, async (req, res) => {
   try {
     await initBasketballTables();
     res.json({ ok: true, message: 'Basketball tables ready' });
@@ -216,7 +217,7 @@ router.post('/admin/init', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.get('/admin/db-audit', requireAdminSecret, async (req, res) => {
+router.get('/admin/db-audit', requireAdminAccess, async (req, res) => {
   try {
     const { default: db } = await import('../../config/database.js');
     await initBasketballTables();
@@ -380,7 +381,7 @@ router.get('/admin/db-audit', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/test-api-sports', requireAdminSecret, async (req, res) => {
+router.post('/admin/test-api-sports', requireAdminAccess, async (req, res) => {
   try {
     const result = await testApiSportsBasketballCoverage({
       daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
@@ -392,7 +393,7 @@ router.post('/admin/test-api-sports', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-api-sports', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-api-sports', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncApiSportsBasketballGamesCached({
       daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
@@ -405,7 +406,7 @@ router.post('/admin/sync-api-sports', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-api-sports-odds', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-api-sports-odds', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncApiSportsBasketballOdds({
       daysAhead: Math.min(Math.max(Number(req.body?.daysAhead || 2), 1), 2),
@@ -419,7 +420,7 @@ router.post('/admin/sync-api-sports-odds', requireAdminSecret, async (req, res) 
   }
 });
 
-router.post('/admin/sync', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncBasketballV1({
       leagueKey: req.body?.league || null,
@@ -433,7 +434,7 @@ router.post('/admin/sync', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-events', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-events', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncBasketballEvents({ leagueKey: req.body?.league || null, daysAhead: Number(req.body?.daysAhead || 7) });
     res.json({ ok: true, result });
@@ -442,7 +443,7 @@ router.post('/admin/sync-events', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-nba-games', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-nba-games', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncNbaGames(req.body || {});
     res.json({ ok: true, result });
@@ -451,7 +452,7 @@ router.post('/admin/sync-nba-games', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-odds', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-odds', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncBasketballOdds(req.body || {});
     res.json({ ok: true, result });
@@ -460,7 +461,7 @@ router.post('/admin/sync-odds', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/run-predictions', requireAdminSecret, async (req, res) => {
+router.post('/admin/run-predictions', requireAdminAccess, async (req, res) => {
   try {
     const result = await runBasketballPredictions(req.body || {});
     res.json({ ok: true, result });
@@ -469,7 +470,7 @@ router.post('/admin/run-predictions', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/clear-predictions', requireAdminSecret, async (req, res) => {
+router.post('/admin/clear-predictions', requireAdminAccess, async (req, res) => {
   try {
     const { default: db } = await import('../../config/database.js');
     const r = await db.execute('DELETE FROM basketball_predictions');
@@ -479,7 +480,7 @@ router.post('/admin/clear-predictions', requireAdminSecret, async (req, res) => 
   }
 });
 
-router.post('/admin/force-rebuild', requireAdminSecret, async (req, res) => {
+router.post('/admin/force-rebuild', requireAdminAccess, async (req, res) => {
   try {
     const { default: db } = await import('../../config/database.js');
     // Step 1: Wipe stale predictions
@@ -498,7 +499,7 @@ router.post('/admin/force-rebuild', requireAdminSecret, async (req, res) => {
 });
 
 // ── ESPN Sync Routes (FREE — no API key) ────────────────────────────────
-router.post('/admin/sync-espn', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-espn', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncEspnScoreboards({
       leagueKey: req.body?.league || null,
@@ -510,7 +511,7 @@ router.post('/admin/sync-espn', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/sync-espn-standings', requireAdminSecret, async (req, res) => {
+router.post('/admin/sync-espn-standings', requireAdminAccess, async (req, res) => {
   try {
     const result = await syncEspnStandings({
       leagueKey: req.body?.league || null,
@@ -522,7 +523,7 @@ router.post('/admin/sync-espn-standings', requireAdminSecret, async (req, res) =
 });
 
 // ── NBA Stats API Routes (FREE — no API key) ────────────────────────────
-router.post('/admin/test-nba-stats', requireAdminSecret, async (req, res) => {
+router.post('/admin/test-nba-stats', requireAdminAccess, async (req, res) => {
   try {
     const { fetchTeamAdvanced, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
     const season = req.body?.season || inferCurrentNbaSeason();
@@ -534,7 +535,7 @@ router.post('/admin/test-nba-stats', requireAdminSecret, async (req, res) => {
   }
 });
 
-router.post('/admin/fetch-nba-boxscore', requireAdminSecret, async (req, res) => {
+router.post('/admin/fetch-nba-boxscore', requireAdminAccess, async (req, res) => {
   try {
     const { fetchBoxScore } = await import('../services/nbaStatsApi.js');
     const gameId = req.body?.gameId;
@@ -546,7 +547,7 @@ router.post('/admin/fetch-nba-boxscore', requireAdminSecret, async (req, res) =>
   }
 });
 
-router.post('/admin/fetch-nba-team-stats', requireAdminSecret, async (req, res) => {
+router.post('/admin/fetch-nba-team-stats', requireAdminAccess, async (req, res) => {
   try {
     const { fetchTeamAdvanced, fetchTeamDashboard, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
     const season = req.body?.season || inferCurrentNbaSeason();
@@ -566,7 +567,7 @@ router.post('/admin/fetch-nba-team-stats', requireAdminSecret, async (req, res) 
   }
 });
 
-router.post('/admin/fetch-nba-standings', requireAdminSecret, async (req, res) => {
+router.post('/admin/fetch-nba-standings', requireAdminAccess, async (req, res) => {
   try {
     const { fetchStandings, inferCurrentNbaSeason } = await import('../services/nbaStatsApi.js');
     const season = req.body?.season || inferCurrentNbaSeason();

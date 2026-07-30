@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { lazy, Suspense, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -6,7 +6,31 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
-import Login from "@/pages/Login";
+const Login = lazy(() => import("@/pages/Login"));
+const Signup = lazy(() => import("@/pages/Signup"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Basketball = lazy(() => import("@/pages/Basketball"));
+const BasketballGame = lazy(() => import("@/pages/BasketballGame"));
+const BasketballAdmin = lazy(() => import("@/pages/BasketballAdmin"));
+const Paywall = lazy(() => import("@/pages/Paywall"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const TrackRecord = lazy(() => import("@/pages/TrackRecord"));
+const TopPicksToday = lazy(() => import("@/pages/TopPicksToday"));
+const PredictionResults = lazy(() => import("@/pages/PredictionResults"));
+const LeagueFavorites = lazy(() => import("@/pages/LeagueFavorites"));
+const AccaCalculator = lazy(() => import("@/pages/AccaCalculator"));
+const Matches = lazy(() => import("@/pages/Matches"));
+const MatchCenter = lazy(() => import("@/pages/MatchCenter"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const PaymentBilling = lazy(() => import("@/pages/PaymentBilling"));
+const BillingHistory = lazy(() => import("@/pages/BillingHistory"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const Simulator = lazy(() => import("@/pages/Simulator"));
+const Landing = lazy(() => import("@/pages/Landing"));
+const Terms = lazy(() => import("@/pages/Terms"));
+const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
 
 // Global error boundary
 class ErrorBoundary extends React.Component<
@@ -40,31 +64,8 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-import Signup from "@/pages/Signup";
-import Dashboard from "@/pages/Dashboard";
-import Basketball from "@/pages/Basketball";
-import BasketballGame from "@/pages/BasketballGame";
-import BasketballAdmin from "@/pages/BasketballAdmin";
-import Paywall from "@/pages/Paywall";
-import ResetPassword from "@/pages/ResetPassword";
-import Admin from "@/pages/Admin";
-import TrackRecord from "@/pages/TrackRecord";
-import TopPicksToday from "@/pages/TopPicksToday";
-import PredictionResults from "@/pages/PredictionResults";
-import LeagueFavorites from "@/pages/LeagueFavorites";
-import AccaCalculator from "@/pages/AccaCalculator";
-import Matches from "@/pages/Matches";
-import MatchCenter from "@/pages/MatchCenter";
-import Profile from "@/pages/Profile";
-import PaymentBilling from "@/pages/PaymentBilling";
-import BillingHistory from "@/pages/BillingHistory";
 import { Footer } from "@/components/layout/Footer";
-import Settings from "@/pages/Settings";
-import Simulator from "@/pages/Simulator";
-import Landing from "@/pages/Landing";
-import Terms from "@/pages/Terms";
-import VerifyEmail from "@/pages/VerifyEmail";
-import Privacy from "@/pages/Privacy";
+import { Header } from "@/components/layout/Header";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { NotificationPrompt } from '@/components/NotificationPrompt';
 import { InstallPrompt } from "@/components/InstallPrompt";
@@ -86,6 +87,28 @@ function RedirectTo({ path }: { path: string }) {
   return null;
 }
 
+function AppFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="app-shell">
+      <Header />
+      <div className="app-page" data-app-page>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function RouteLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+        <img src="/images/logo.png" alt="" className="w-16 opacity-50" />
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading, error } = useAuth();
 
@@ -101,33 +124,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <RedirectTo path="/login" />;
   }
 
-  return <Component />;
+  return (
+    <AppFrame>
+      <Component />
+    </AppFrame>
+  );
 }
-
-function AdminRoute({ component: Component }: { component: React.ComponentType }) {
-  const { data: user, isLoading, error } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (error || !user) {
-    return <RedirectTo path="/login" />;
-  }
-
-  // Check admin status — user must be authenticated AND be admin
-  const isAdmin = (user as any)?.is_admin || (user as any)?.email === 'davidadiele7@gmail.com';
-  if (!isAdmin) {
-    return <RedirectTo path="/" />;
-  }
-
-  return <Component />;
-}
-
 
 function SmartRoot() {
   const { data: user, isLoading } = useAuth();
@@ -146,18 +148,24 @@ function SmartRoot() {
     );
   }
   if (!user) return <Landing />;
-  return <Dashboard />;
+  return (
+    <AppFrame>
+      <Dashboard />
+    </AppFrame>
+  );
 }
 
 
 // VerifyEmailHandler removed — Google Auth handles email verification
 
-function GlassBubbles() {
+function MatchdayBackdrop() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" style={{ clipPath: 'inset(0)' }} aria-hidden="true">
-      <div className="absolute top-[-25%] left-[-15%] w-[70vw] h-[70vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.07), transparent 70%)", filter: "blur(80px)" }}/>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(59,130,246,0.05), transparent 70%)", filter: "blur(90px)" }}/>
-      <div className="absolute top-[50%] right-[5%] w-[35vw] h-[35vw] rounded-full" style={{ background: "radial-gradient(circle, rgba(16,231,116,0.03), transparent 70%)", filter: "blur(60px)" }}/>
+    <div className="sp-world" aria-hidden="true">
+      <div className="sp-world__grid" />
+      <div className="sp-world__stadium" />
+      <div className="sp-world__orb sp-world__orb--green" />
+      <div className="sp-world__orb sp-world__orb--blue" />
+      <div className="sp-world__scan" />
     </div>
   );
 }
@@ -177,8 +185,8 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
-      <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
-      <Route path="/admin/basketball" component={() => <AdminRoute component={BasketballAdmin} />} />
+      <Route path="/admin" component={Admin} />
+      <Route path="/admin/basketball" component={BasketballAdmin} />
       <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
@@ -221,12 +229,14 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <GlassBubbles />
+            <MatchdayBackdrop />
             <ReferralCapture />
             {/* Flex-col min-h-screen wrapper enables sticky footer (mt-auto on Footer) */}
             <div className="relative z-10 min-h-screen flex flex-col">
               <div className="flex-1">
-                <Router />
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <Router />
+                </Suspense>
               </div>
               <Footer />
             </div>

@@ -10,7 +10,6 @@ import {
   Search,
   Trophy,
 } from 'lucide-react';
-import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -302,14 +301,12 @@ export default function Basketball() {
   const toggleGroup = (id: string) => setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#060a0e] pb-28 text-white">
+    <div className="basketball-2627 relative min-h-screen overflow-hidden bg-[#060a0e] pb-28 text-white">
       <div className="pointer-events-none fixed inset-0">
         <motion.div className="absolute -top-28 right-[-20%] h-[55vh] w-[80vw] rounded-full bg-orange-500/8 blur-[120px]" animate={{ scale: [1, 1.06, 1], opacity: [0.5, 0.75, 0.5] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }} />
       </div>
 
-      <Header />
-
-      <main className="relative z-10 mx-auto max-w-2xl space-y-5 px-4 pt-4">
+      <main className="relative z-10 mx-auto max-w-4xl space-y-5 px-4 pt-5">
 
         {/* ── Welcome Strip ── */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>

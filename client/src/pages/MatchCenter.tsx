@@ -130,7 +130,7 @@ export default function MatchCenter() {
       </div>
 
       {/* ── MATCH HEADER ── */}
-      <div className="sticky top-0 z-50 bg-[#060a0e]/80 backdrop-blur-xl border-b border-white/[0.02] px-4 pt-4 pb-0 relative">
+      <div className="sp-subheader sticky top-[60px] md:top-[72px] z-50 bg-[#060a0e]/80 backdrop-blur-xl border-b border-white/[0.02] px-4 pt-4 pb-0 relative">
         {/* Back + close */}
         <div className="flex items-center justify-between mb-3">
           <button onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/matches"); }}

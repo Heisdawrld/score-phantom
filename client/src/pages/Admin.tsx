@@ -60,7 +60,10 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
     try {
       const res = await fetch(`${API}/api/auth/admin-login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": adminSecret.trim(),
+        },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
       const data = await res.json();
@@ -75,7 +78,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#080b10] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="admin-login min-h-screen bg-[#080b10] flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-12%] left-[-8%] h-[40vh] w-[40vw] rounded-full bg-primary/10 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-10%] h-[38vh] w-[36vw] rounded-full bg-cyan-500/10 blur-[120px]" />
@@ -94,7 +97,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: AdminSession) => void }) {
         </div>
 
         {/* Card */}
-        <div className="bg-[#0f172a] border border-white/[0.08] rounded-2xl p-8 shadow-2xl">
+        <div className="admin-login__card bg-[#0f172a] border border-white/[0.08] rounded-2xl p-8 shadow-2xl">
           <h2 className="text-white font-bold text-lg mb-1">Admin Sign In</h2>
           <p className="text-gray-500 text-sm mb-6">Enter your admin credentials to continue.</p>
 
@@ -171,7 +174,7 @@ function StatusBadge({ status }: { status: string }) {
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
+    <div className="admin-stat-card bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
       <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{label}</p>
       <p className={`text-2xl font-black ${color || "text-white"}`}>{value}</p>
       {sub && <p className="text-xs text-gray-600 mt-1">{sub}</p>}
@@ -476,21 +479,24 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   ] as const;
 
   return (
-    <div className="min-h-screen bg-[#060a0e] text-white">
+    <div className="admin-shell min-h-screen bg-[#060a0e] text-white">
       {/* Top bar */}
-      <div className="border-b border-white/[0.04] bg-[#060a0e]/95 backdrop-blur-xl px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
+      <div className="admin-topbar border-b border-white/[0.04] bg-[#060a0e]/95 backdrop-blur-xl px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Shield className="w-4 h-4 text-primary" />
+          <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center p-1.5">
+            <img src="/images/logo.png" alt="" className="h-full w-full object-contain" />
           </div>
           <div>
             <p className="text-sm font-black tracking-widest">SCORE<span style={{ color: "#10e774" }}>PHANTOM</span></p>
-            <p className="text-[10px] text-gray-500">Admin Panel · {session.email}</p>
+            <p className="text-[10px] text-gray-500">Operations OS · {session.email}</p>
           </div>
         </div>
-        <button onClick={onLogout} className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-400 transition-colors px-3 py-2 rounded-lg hover:bg-red-500/10 border border-transparent hover:border-red-500/20">
-          <LogOut size={14} /> Sign Out
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="admin-system-status"><i /> Secure session</span>
+          <button onClick={onLogout} className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-400 transition-colors px-3 py-2 rounded-lg hover:bg-red-500/10 border border-transparent hover:border-red-500/20">
+            <LogOut size={14} /> Sign Out
+          </button>
+        </div>
       </div>
 
       {/* Flash message */}
@@ -501,9 +507,9 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6">
+      <div className="admin-workspace max-w-[1400px] mx-auto px-4 sm:px-8 py-6">
         {/* Tabs */}
-        <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 mb-8 overflow-x-auto">
+        <div className="admin-tabs flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 mb-8 overflow-x-auto">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex-1 justify-center ${tab === id ? "bg-primary/15 text-primary border border-primary/20" : "text-gray-500 hover:text-white hover:bg-white/5"}`}>

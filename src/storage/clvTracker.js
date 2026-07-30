@@ -43,7 +43,18 @@
 
 import db from '../config/database.js';
 import { fetchEventOdds } from '../services/bsd.js';
-import { safeNum } from '../utils/math.js';
+import {
+  computeClv,
+  getOddsForPick,
+  oddsToImpliedProb,
+} from './clvMath.js';
+
+export {
+  computeClv,
+  getOddsForPick,
+  oddsToImpliedProb,
+  removeVig,
+} from './clvMath.js';
 
 let _migrationDone = false;
 
@@ -79,84 +90,6 @@ export async function initClvColumns() {
     console.error('[CLV] Migration failed:', err.message);
     // Don't throw — let the caller continue without CLV tracking
   }
-}
-
-/**
- * Compute implied probability from decimal odds, with optional vig removal.
- *
- * @param {number} decimalOdds
- * @param {boolean} removeVig - if true, divide by the overround (requires all outcomes)
- * @returns {number} implied probability (0-1)
- */
-export function oddsToImpliedProb(decimalOdds, removeVig = false) {
-  if (!decimalOdds || decimalOdds <= 1) return null;
-  return 1 / decimalOdds; // vig removal is done at the market level, not per-outcome
-}
-
-/**
- * Remove vig from a set of outcomes.
- *
- * @param {Object} oddsMap - { home: 1.95, draw: 3.60, away: 4.20 }
- * @returns {Object} fair probabilities { home: 0.512, draw: 0.278, away: 0.238 }
- */
-export function removeVig(oddsMap) {
-  if (!oddsMap || typeof oddsMap !== 'object') return null;
-  const entries = Object.entries(oddsMap).filter(([, o]) => o && o > 1);
-  if (entries.length === 0) return null;
-
-  const implied = {};
-  let overround = 0;
-  for (const [key, o] of entries) {
-    implied[key] = 1 / o;
-    overround += implied[key];
-  }
-
-  if (overround === 0) return null;
-
-  // Normalize to remove the vig
-  const fair = {};
-  for (const [key, p] of Object.entries(implied)) {
-    fair[key] = p / overround;
-  }
-  return fair;
-}
-
-/**
- * Compute CLV for a single pick.
- *
- * @param {number} openingOdds - decimal odds when prediction was made
- * @param {number} closingOdds - decimal odds at close
- * @returns {{clv: number, clvPct: number, openingImplied: number, closingImplied: number}|null}
- */
-export function computeClv(openingOdds, closingOdds) {
-  const open = safeNum(openingOdds, null);
-  const close = safeNum(closingOdds, null);
-  if (open == null || close == null || open <= 1 || close <= 1) return null;
-
-  const openingImplied = 1 / open;
-  const closingImplied = 1 / close;
-  const clv = closingImplied - openingImplied; // positive = good (odds got shorter = we got value)
-  const clvPct = openingImplied > 0 ? clv / openingImplied : 0;
-
-  return {
-    clv: parseFloat(clv.toFixed(4)),
-    clvPct: parseFloat(clvPct.toFixed(4)),
-    openingImplied: parseFloat(openingImplied.toFixed(4)),
-    closingImplied: parseFloat(closingImplied.toFixed(4)),
-  };
-}
-
-/**
- * Extract the relevant odds for a specific pick from an odds payload.
- *
- * @param {Object} odds - { home_win, draw, away_win, over_15, over_25, ... }
- * @param {string} marketKey - 'home_win', 'over_25', 'btts_yes', etc.
- * @returns {number|null} decimal odds
- */
-export function getOddsForPick(odds, marketKey) {
-  if (!odds || !marketKey) return null;
-  const key = String(marketKey).toLowerCase();
-  return odds[key] ?? null;
 }
 
 /**

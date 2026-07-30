@@ -2,9 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { format, addDays, isSameDay } from "date-fns";
 import { useAccess } from "@/hooks/use-access";
 import { useFixtures } from "@/hooks/use-fixtures";
-import { Header } from "@/components/layout/Header";
 import { PredictionPanel } from "@/components/prediction/PredictionPanel";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/BasicSkeleton";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
@@ -209,41 +208,51 @@ export default function Dashboard() {
   const allFixtures = data?.fixtures || [];
   const displayName = (user as any)?.username || (user?.email ? user.email.split('@')[0] : 'User');
   const liveCount = allFixtures.filter((f: any) => ['LIVE', 'HT', '1H', '2H'].includes(f.match_status?.toUpperCase?.() || '')).length;
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? "Good morning" : currentHour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-accent-blue/30 relative">
+    <div className="dashboard-2627 flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-accent-blue/30 relative">
       {/* Ambient backdrop — soft blue/green wash for depth */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[50vh] bg-accent-blue/[0.04] blur-[120px] opacity-60 rounded-full mix-blend-screen" />
       </div>
 
-      <Header />
+      <main className="dashboard-2627__main flex-1 container mx-auto max-w-[1180px] px-4 lg:px-6 pt-6 space-y-6 relative z-10">
 
-      <main className="flex-1 container mx-auto max-w-2xl xl:max-w-3xl px-4 pt-5 space-y-6 relative z-10">
-
-        {/* ── Welcome Strip — clear hierarchy: greeting (text-2xl) + subtext (text-sm/white-50) ── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-center justify-between gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="dashboard-command"
+        >
+          <div className="flex items-end justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-2xl font-black text-white tracking-tight leading-tight">
-                Hey, <span className="text-accent-blue capitalize">{displayName}</span>
+              <span className="dashboard-command__kicker">
+                <span /> Season 26/27 · Matchday intelligence
+              </span>
+              <h1 className="dashboard-command__title">
+                {greeting}, <span className="capitalize">{displayName}</span>
               </h1>
-              <p className="text-sm text-white/50 mt-1">
-                {allFixtures.length} matches today{liveCount > 0 ? ` · ${liveCount} live` : ''}
+              <p className="dashboard-command__copy">
+                Your daily slate is ready. Start with the strongest signal, then scan the full board.
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="dashboard-command__stats">
+              <div>
+                <strong>{allFixtures.length}</strong>
+                <span>Fixtures</span>
+              </div>
+              <div className={liveCount > 0 ? "is-live" : ""}>
+                <strong>{liveCount}</strong>
+                <span>Live now</span>
+              </div>
               {trackStats?.hitRate && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent-blue/10 border border-accent-blue/20">
-                  <TrendingUp className="w-3.5 h-3.5 text-accent-blue" />
-                  <span className="text-xs font-bold text-accent-blue">{(trackStats.hitRate * 100).toFixed(0)}%</span>
+                <div>
+                  <strong>{(trackStats.hitRate * 100).toFixed(0)}%</strong>
+                  <span>30D hit rate</span>
                 </div>
               )}
-              <button onClick={() => setLocation("/picks")} className="interactive-card flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white/60 hover:text-white/90">
-                <Flame className="w-3.5 h-3.5 text-accent-orange" />
-                <span className="text-xs font-bold">Picks</span>
-              </button>
             </div>
           </div>
         </motion.div>
@@ -291,7 +300,7 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="relative w-full rounded-2xl overflow-hidden"
+            className="dashboard-hero-pick relative w-full rounded-2xl overflow-hidden"
           >
             {/* Cinematic green glow backdrop — green reserved for confidence context */}
             <div className="absolute inset-0 z-0">
@@ -304,8 +313,16 @@ export default function Dashboard() {
               <div className="absolute top-0 right-[20%] w-[40%] h-[60%] bg-primary/8 blur-[50px] rounded-full" />
             </div>
 
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setLocation("/matches/" + heroPick.fixtureId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setLocation("/matches/" + heroPick.fixtureId);
+                }
+              }}
               className="interactive-card relative z-10 w-full text-left p-6 border border-primary/15 rounded-2xl backdrop-blur-sm"
             >
               {/* Top bar: label + dismiss */}
@@ -359,134 +376,170 @@ export default function Dashboard() {
                   <span className="text-2xs font-bold text-white/40 uppercase tracking-widest mt-1.5">Conf.</span>
                 </div>
               </div>
-            </button>
+            </div>
           </motion.div>
         )}
 
-        {/* ── Smart Edge — Model vs Market value detector (new feature) ── */}
-        {/* Surfaces the top 5 picks ranked by EDGE (model prob − bookmaker implied),
-            giving users a different lens from TopPicks (which ranks by composite score). */}
-        <SmartEdge />
-
-        {/* ── Date Strip — blue for selected/today (color discipline) ── */}
-        <div ref={dateStripRef} className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain -mx-1 px-1">
-          {dates.map((date) => {
-            const isSelected = isSameDay(date, selectedDate);
-            const isToday = isSameDay(date, new Date());
-            return (
-              <button
-                key={date.toISOString()}
-                onClick={() => setSelectedDate(date)}
-                className={cn(
-                  "interactive snap-start shrink-0 min-w-[60px] flex flex-col items-center justify-center py-2.5 px-3 rounded-xl border transition-all",
-                  isSelected
-                    ? "bg-accent-blue/15 border-accent-blue/30 text-accent-blue"
-                    : "bg-white/[0.02] border-white/[0.04] text-white/40 hover:bg-white/[0.04] hover:text-white/60"
-                )}
-              >
-                <span className="text-2xs font-bold tracking-widest uppercase">{isToday ? 'Today' : format(date, "EEE")}</span>
-                <span className="text-lg font-black leading-none mt-1 tabular-nums">{format(date, "dd")}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── Recently Viewed — quick-access strip for matches the user explored ── */}
-        <RecentlyViewed />
-
-        {/* ── Search + Filter Bar — type scale + blue for active "all/fav" tab ── */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
-            <input
-              type="text"
-              placeholder="Search teams or leagues..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl pl-8 pr-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-accent-blue/30 transition-all"
-            />
-          </div>
-          <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5 shrink-0">
-            {([
-              { key: "all" as const, label: "All" },
-              { key: "live" as const, label: "Live" },
-              { key: "favorites" as const, label: "Fav" },
-            ]).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveGroupTab(tab.key)}
-                className={cn(
-                  "px-3 py-1.5 rounded-[10px] text-2xs font-bold uppercase tracking-wider transition-all",
-                  activeGroupTab === tab.key
-                    ? tab.key === "live" ? "bg-red-500/15 text-red-400" : "bg-accent-blue/15 text-accent-blue"
-                    : "text-white/30 hover:text-white/60"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Fixture Count — informational, blue accent (not green) ── */}
-        {allFixtures.length > 0 && (
-          <div className="flex items-center gap-2 px-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-blue shadow-[0_0_6px_rgba(33,150,243,0.5)] shrink-0" />
-            <span className="text-sm text-white/50">
-              <span className="text-white font-bold">{allFixtures.length}</span> fixtures · {format(selectedDate, "EEEE, MMM d")}
-            </span>
-          </div>
-        )}
-
-        {/* ── Fixtures by League — subtle separation between groups ── */}
-        <div className="space-y-5">
-          {fixturesLoading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="space-y-3 pb-4 border-b border-white/[0.04]">
-                <Skeleton className="h-5 w-36" />
-                <Skeleton className="h-16 w-full rounded-2xl" />
-                <Skeleton className="h-16 w-full rounded-2xl" />
+        <div className="dashboard-grid">
+          <section className="dashboard-fixtures">
+            <div className="dashboard-section-title">
+              <div>
+                <span>Match board</span>
+                <h2>Today&apos;s fixtures</h2>
               </div>
-            ))
-          ) : leagues.length === 0 ? (
-            <div className="text-center py-16 text-white/25 space-y-3">
-              <Trophy className="w-10 h-10 mx-auto opacity-30" />
-              <p className="text-base font-medium">
-                {activeGroupTab === "live" ? "No live matches right now." :
-                 activeGroupTab === "favorites" ? "No favorite league matches today." :
-                 `No fixtures for ${format(selectedDate, 'MMM d')}.`}
-              </p>
-              <p className="text-sm text-white/35">{isSameDay(selectedDate, dates[0]) ? 'Check back soon.' : 'Try another date.'}</p>
+              <button type="button" onClick={() => setLocation("/matches")}>
+                Full match center <ChevronRight />
+              </button>
             </div>
-          ) : (
-            leagues.map(([groupId, group]: [string, any]) => (
-              <div key={groupId} className="pb-4 border-b border-white/[0.04] last:border-b-0">
-                <LeagueGroup
-                  tournament={group.label}
-                  tournamentId={groupId}
-                  fixtures={group.fixtures}
-                  onSelectFixture={handleSelectFixture}
-                  defaultOpen={false}
-                  isPremium={isPremium}
+
+            <div ref={dateStripRef} className="dashboard-date-strip flex gap-2 overflow-x-auto hide-scrollbar pb-1 touch-pan-x overscroll-x-contain -mx-1 px-1">
+              {dates.map((date) => {
+                const isSelected = isSameDay(date, selectedDate);
+                const isToday = isSameDay(date, new Date());
+                return (
+                  <button
+                    key={date.toISOString()}
+                    onClick={() => setSelectedDate(date)}
+                    className={cn(
+                      "interactive snap-start shrink-0 min-w-[60px] flex flex-col items-center justify-center py-2.5 px-3 rounded-xl border transition-all",
+                      isSelected
+                        ? "bg-accent-blue/15 border-accent-blue/30 text-accent-blue"
+                        : "bg-white/[0.02] border-white/[0.04] text-white/40 hover:bg-white/[0.04] hover:text-white/60"
+                    )}
+                  >
+                    <span className="text-2xs font-bold tracking-widest uppercase">{isToday ? "Today" : format(date, "EEE")}</span>
+                    <span className="text-lg font-black leading-none mt-1 tabular-nums">{format(date, "dd")}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+                <input
+                  type="search"
+                  aria-label="Search teams or leagues"
+                  placeholder="Search teams or leagues..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl pl-8 pr-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-accent-blue/30 transition-all"
                 />
               </div>
-            ))
-          )}
-        </div>
+              <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-0.5 shrink-0">
+                {([
+                  { key: "all" as const, label: "All" },
+                  { key: "live" as const, label: "Live" },
+                  { key: "favorites" as const, label: "Fav" },
+                ]).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveGroupTab(tab.key)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-[10px] text-2xs font-bold uppercase tracking-wider transition-all",
+                      activeGroupTab === tab.key
+                        ? tab.key === "live"
+                          ? "bg-red-500/15 text-red-400"
+                          : "bg-accent-blue/15 text-accent-blue"
+                        : "text-white/30 hover:text-white/60"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* ── Bottom Quick Links — interactive cards, blue accent for track record ── */}
-        {!fixturesLoading && leagues.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <button onClick={() => setLocation("/picks")} className="interactive-card flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/50 hover:text-white/85">
-              <Flame className="w-4 h-4 text-accent-orange" />
-              <span className="text-sm font-bold">Today's Best Picks</span>
-            </button>
-            <button onClick={() => setLocation("/track-record")} className="interactive-card flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/50 hover:text-white/85">
-              <TrendingUp className="w-4 h-4 text-accent-blue" />
-              <span className="text-sm font-bold">Track Record</span>
-            </button>
-          </div>
-        )}
+            {allFixtures.length > 0 && (
+              <div className="flex items-center gap-2 px-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-blue shadow-[0_0_6px_rgba(33,150,243,0.5)] shrink-0" />
+                <span className="text-sm text-white/50">
+                  <span className="text-white font-bold">{allFixtures.length}</span> fixtures · {format(selectedDate, "EEEE, MMM d")}
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-5">
+              {fixturesLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="space-y-3 pb-4 border-b border-white/[0.04]">
+                    <Skeleton className="h-5 w-36" />
+                    <Skeleton className="h-16 w-full rounded-2xl" />
+                    <Skeleton className="h-16 w-full rounded-2xl" />
+                  </div>
+                ))
+              ) : leagues.length === 0 ? (
+                <div className="dashboard-empty">
+                  <Trophy />
+                  <p>
+                    {activeGroupTab === "live"
+                      ? "No live matches right now."
+                      : activeGroupTab === "favorites"
+                        ? "No favorite league matches today."
+                        : `No fixtures for ${format(selectedDate, "MMM d")}.`}
+                  </p>
+                  <span>{isSameDay(selectedDate, dates[0]) ? "Check back soon." : "Try another date."}</span>
+                </div>
+              ) : (
+                leagues.map(([groupId, group]: [string, any]) => (
+                  <div key={groupId} className="pb-4 border-b border-white/[0.04] last:border-b-0">
+                    <LeagueGroup
+                      tournament={group.label}
+                      tournamentId={groupId}
+                      fixtures={group.fixtures}
+                      onSelectFixture={handleSelectFixture}
+                      defaultOpen={false}
+                      isPremium={isPremium}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+
+            {!fixturesLoading && leagues.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button onClick={() => setLocation("/picks")} className="interactive-card flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/50 hover:text-white/85">
+                  <Flame className="w-4 h-4 text-accent-orange" />
+                  <span className="text-sm font-bold">Today&apos;s Best Picks</span>
+                </button>
+                <button onClick={() => setLocation("/track-record")} className="interactive-card flex items-center gap-2 p-3 rounded-xl bg-white/[0.025] border border-white/[0.04] text-white/50 hover:text-white/85">
+                  <TrendingUp className="w-4 h-4 text-accent-blue" />
+                  <span className="text-sm font-bold">Track Record</span>
+                </button>
+              </div>
+            )}
+          </section>
+
+          <aside className="dashboard-rail">
+            <div className="dashboard-section-title">
+              <div>
+                <span>Model desk</span>
+                <h2>Live intelligence</h2>
+              </div>
+            </div>
+
+            <SmartEdge />
+            <RecentlyViewed />
+
+            <div className="dashboard-tools">
+              <button type="button" onClick={() => setLocation("/picks")}>
+                <span><Flame /></span>
+                <div><strong>Top Picks</strong><small>Ranked by edge strength</small></div>
+                <ChevronRight />
+              </button>
+              <button type="button" onClick={() => setLocation("/acca")}>
+                <span><Zap /></span>
+                <div><strong>ACCA Lab</strong><small>Build around your risk</small></div>
+                <ChevronRight />
+              </button>
+              <button type="button" onClick={() => setLocation("/simulator")}>
+                <span><Trophy /></span>
+                <div><strong>Match Simulator</strong><small>Watch the script unfold</small></div>
+                <ChevronRight />
+              </button>
+            </div>
+          </aside>
+        </div>
       </main>
 
       <PredictionPanel

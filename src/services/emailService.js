@@ -1,7 +1,7 @@
 // emailService.js — Resend API email delivery + daily digest
 // Firebase handles: verification + password reset
 
-const FROM = process.env.RESEND_FROM_EMAIL || 'ScorePhantom <noreply@score-phantom.onrender.com>';
+const FROM = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'ScorePhantom <noreply@score-phantom.onrender.com>';
 const APP_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
 
 export async function sendEmail({ to, subject, html, text }) {
@@ -26,5 +26,34 @@ export async function sendDailyDigest({ to, picks, date }) {
   return sendEmail({ to, subject: 'ScorePhantom: Your Top Picks for ' + date, html, text });
 }
 
-export async function sendPasswordResetEmail() { return { success: false, reason: 'handled_by_firebase' }; }
+export async function sendPasswordResetEmail({ to, resetUrl, expiresInMinutes = 60 } = {}) {
+  if (!to || !resetUrl) return { success: false, reason: 'missing_reset_email_fields' };
+
+  const safeUrl = String(resetUrl)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+  const html = `
+    <!doctype html>
+    <html>
+      <body style="margin:0;padding:32px;background:#080b10;color:#f8fafc;font-family:Arial,sans-serif">
+        <div style="max-width:560px;margin:0 auto;background:#0f1923;border:1px solid #253142;border-radius:18px;padding:32px">
+          <h1 style="margin:0 0 12px;font-size:24px">Reset your ScorePhantom password</h1>
+          <p style="color:#a8b3c4;line-height:1.6">Use the secure button below to choose a new password. This link expires in ${Number(expiresInMinutes)} minutes.</p>
+          <a href="${safeUrl}" style="display:inline-block;margin:18px 0;background:#10e774;color:#03140b;font-weight:700;padding:14px 22px;border-radius:12px;text-decoration:none">Reset password</a>
+          <p style="color:#64748b;font-size:12px;line-height:1.6">If you did not request this, ignore this email. Your password will not change.</p>
+        </div>
+      </body>
+    </html>
+  `;
+  const text = `Reset your ScorePhantom password: ${resetUrl}\n\nThis link expires in ${Number(expiresInMinutes)} minutes.`;
+
+  return sendEmail({
+    to,
+    subject: 'Reset your ScorePhantom password',
+    html,
+    text,
+  });
+}
 export async function sendVerificationEmail() { return { success: false, reason: 'handled_by_firebase' }; }

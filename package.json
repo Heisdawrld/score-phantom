@@ -5,6 +5,9 @@
   "scripts": {
     "start": "node src/app.js",
     "build": "cd client && npm install && npm run build",
+    "test": "node tests/test-engine-math.mjs && node tests/test-isotonic.mjs && node tests/test-ensemble.mjs && node tests/test-clv.mjs && node tests/test-sharp-money.mjs",
+    "test:live": "node tests/test-live-pipeline.mjs",
+    "check": "npm test && npm --prefix client run typecheck && npm --prefix client run build",
     "seed": "node src/services/fixtureSeeder.js",
     "enrich": "node src/scripts/enrichFixtures.js"
   },

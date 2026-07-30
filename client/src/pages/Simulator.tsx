@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { useAccess } from "@/hooks/use-access";
 import { ChevronLeft, Zap, Target, TrendingUp, AlertTriangle, Shield, SlidersHorizontal, CloudRain, Search } from 'lucide-react';
@@ -65,7 +64,6 @@ export default function PhantomLab() {
   if (!isSubscribed) {
     return (
       <div className='min-h-screen bg-background pb-20'>
-        <Header />
         <main className='max-w-lg mx-auto px-4 pt-6'>
           <div className='glass-panel p-8 rounded-3xl text-center space-y-6 border border-primary/20 shadow-[0_0_50px_rgba(16,231,116,0.15)] relative overflow-hidden'>
             <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.2),transparent_50%)] opacity-60' />
@@ -80,14 +78,12 @@ export default function PhantomLab() {
   }
 
   return (
-    <div className='min-h-screen bg-background pb-24 relative overflow-hidden'>
+    <div className='simulator-2627 min-h-screen bg-background pb-24 relative overflow-hidden'>
       <div className='fixed inset-0 pointer-events-none'>
         <div className='absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-96 bg-[radial-gradient(ellipse_at_top,rgba(16,231,116,0.08),transparent_70%)]' />
       </div>
 
-      <Header />
-
-      <main className='max-w-2xl mx-auto px-4 pt-4 space-y-5 relative z-10'>
+      <main className='max-w-4xl mx-auto px-4 pt-5 space-y-5 relative z-10'>
         <div className='flex items-center gap-3'>
           <button onClick={() => setLocation('/')} className='p-2 hover:bg-white/5 rounded-xl transition shrink-0'>
             <ChevronLeft className='w-4 h-4' />

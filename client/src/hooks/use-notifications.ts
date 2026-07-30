@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './use-auth';
-import { requestPushPermission, onForegroundMessage } from '@/lib/firebase';
-import { getAuthToken, fetchApi } from '@/lib/api';
+import { fetchApi } from '@/lib/api';
 import { useToast } from './use-toast';
 
 export interface AppNotification {
@@ -41,17 +40,27 @@ export function useNotifications() {
 
   useEffect(() => {
     if (!user) return;
-    return onForegroundMessage((payload: any) => {
-      const n = payload.notification || {};
-      toast({ title: n.title || 'ScorePhantom', description: n.body });
-      setUnreadCount(c => c + 1);
-      loadNotifications();
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    import('@/lib/firebase').then(({ onForegroundMessage }) => {
+      if (!active) return;
+      unsubscribe = onForegroundMessage((payload: any) => {
+        const n = payload.notification || {};
+        toast({ title: n.title || 'ScorePhantom', description: n.body });
+        setUnreadCount(c => c + 1);
+        loadNotifications();
+      });
     });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, [user, toast, loadNotifications]);
 
   const enableNotifications = useCallback(async () => {
     if (!user) return false;
     try {
+      const { requestPushPermission } = await import('@/lib/firebase');
       const token = await requestPushPermission();
       if (!token) { setPermission(Notification.permission); return false; }
       await savePushToken(token);

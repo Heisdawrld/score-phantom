@@ -1,14 +1,13 @@
 import { useAuth, useLogout } from '@/hooks/use-auth';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useLocation } from 'wouter';
-import { Header } from '@/components/layout/Header';
 import { ChevronLeft, User, Bell, Shield, Moon, LogOut, Smartphone, AlertTriangle, Check, X, Edit2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { fetchApi } from '@/lib/api';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/BasicSkeleton';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -25,7 +24,6 @@ export default function Settings() {
   
   if (isLoading) return (
     <div className='min-h-screen bg-background pb-20'>
-      <Header />
       <div className='max-w-2xl mx-auto px-4 pt-6 space-y-8'>
         <div className='flex items-center gap-3'>
           <Skeleton className='w-9 h-9 rounded-xl' />
@@ -73,7 +71,6 @@ export default function Settings() {
 
   return (
     <div className='min-h-screen bg-background pb-20'>
-      <Header />
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}

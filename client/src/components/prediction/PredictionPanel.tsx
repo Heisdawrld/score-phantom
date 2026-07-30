@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn, fuzzyTeamMatch, sortMatchesByDateDesc, getOddsForPick } from "@/lib/utils";
 import { ChatInterface } from "./ChatInterface";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/BasicSkeleton";
 import { ModelAdvisorBadge } from "@/components/ui/ModelAdvisorBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -110,7 +110,7 @@ function OddsDisplay({ odds, pick, market }: { odds: any; pick: string; market: 
   const bookmakerName = odds?.betLinkSportybet ? "SportyBet" : odds?.betLinkBet365 ? "Bet365" : "SportyBet";
   const oddsPick = getOddsForPick(odds, pick, market);
   if (!oddsPick || !oddsPick.value || oddsPick.value <= 1) return null;
-  const bkOdds = parseFloat(oddsPick.value);
+  const bkOdds = Number(oddsPick.value);
   const implied = parseFloat(((1 / bkOdds) * 100).toFixed(1));
   const isValue = implied < 60;
   const isFair = implied < 68;

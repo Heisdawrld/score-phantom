@@ -36,7 +36,7 @@ export function RecentlyViewed() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.05 }}
-      className="space-y-2.5"
+      className="recently-viewed space-y-2.5"
     >
       {/* ── Section header ── */}
       <div className="flex items-center justify-between px-0.5">
@@ -62,7 +62,7 @@ export function RecentlyViewed() {
       </div>
 
       {/* ── Horizontal scroll strip ── */}
-      <div className="flex gap-2 overflow-x-auto hide-scrollbar touch-pan-x overscroll-x-contain -mx-1 px-1 pb-1">
+      <div className="recently-viewed__list grid gap-2">
         {recentlyViewed.map((item) => {
           const prob = item.probability != null ? Math.round(item.probability * 100) : null;
           return (
@@ -70,7 +70,7 @@ export function RecentlyViewed() {
               key={item.fixtureId}
               whileTap={{ scale: 0.97 }}
               onClick={() => setLocation("/matches/" + item.fixtureId)}
-              className="interactive-card shrink-0 w-[180px] text-left rounded-2xl border border-white/6 bg-white/[0.025] p-2.5 transition-all hover:border-white/12 hover:bg-white/[0.04] relative group"
+              className="interactive-card w-full text-left rounded-2xl border border-white/6 bg-white/[0.025] p-2.5 transition-all hover:border-white/12 hover:bg-white/[0.04] relative group"
             >
               {/* Time ago badge */}
               <span className="absolute top-2 right-2 text-[9px] font-medium text-white/25 tabular-nums">

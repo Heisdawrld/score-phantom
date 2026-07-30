@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { Header } from '@/components/layout/Header';
 import { fetchApi } from '@/lib/api';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
@@ -40,7 +39,6 @@ export default function PredictionResults() {
 
   return (
     <div className='min-h-screen bg-background pb-20'>
-      <Header />
       <div className='max-w-3xl mx-auto px-4'>
         
         {/* ── Page Header ── */}
