@@ -56,7 +56,7 @@ export function StatsTab({ d }: any) {
   const h2hS = h2hSum();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="match-tab match-tab--stats flex flex-col gap-4">
       {/* ── TEAM FORM ── */}
       <p className="text-[10px] font-black text-white/40 uppercase tracking-wider">Team Form (Last 5 Matches)</p>
       {[
@@ -110,7 +110,7 @@ export function StatsTab({ d }: any) {
 
       {/* ── HEAD TO HEAD ── */}
       {h2h.length > 0 && (
-        <div className="relative rounded-2xl overflow-hidden mt-2">
+        <div className="match-tab__wide relative rounded-2xl overflow-hidden mt-2">
           {/* Cinematic green glow backdrop */}
           <div className="absolute inset-0 z-0 pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />

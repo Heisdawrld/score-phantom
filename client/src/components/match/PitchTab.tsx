@@ -40,10 +40,10 @@ export function PitchTab({ matchData }: any) {
   }));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="match-tab match-tab--pitch flex flex-col gap-4">
       {/* ── LIVE SCORE & MINUTE ── */}
       {['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(matchData?.fixture?.match_status || '') && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] flex items-center justify-between">
+        <div className="match-tab__wide rounded-2xl border border-white/[0.06] p-4 bg-white/[0.02] flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-red-500 uppercase tracking-wider flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -219,7 +219,7 @@ export function PitchTab({ matchData }: any) {
 
       {/* ── MATCH EVENTS TIMELINE ── */}
       {timelineEvents.length > 0 && (
-        <div className="relative rounded-2xl overflow-hidden mt-2 mb-2">
+        <div className="match-tab__wide relative rounded-2xl overflow-hidden mt-2 mb-2">
           {/* Cinematic green glow backdrop */}
           <div className="absolute inset-0 z-0 pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />

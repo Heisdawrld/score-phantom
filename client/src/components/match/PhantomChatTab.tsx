@@ -26,7 +26,7 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
   }, [msgs]);
 
   if (!isPremium) return (
-    <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]" style={{ height: "400px" }}>
+    <div className="match-tab match-tab--chat relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]" style={{ height: "400px" }}>
       <div className="blur-sm select-none pointer-events-none p-5 opacity-50 flex flex-col h-full">
         <div className="flex gap-2">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
@@ -90,7 +90,7 @@ export function PhantomChatTab({ fixtureId, isPremium, setLocation }: any) {
   };
 
   return (
-    <div className="relative flex flex-col h-[480px] rounded-2xl overflow-hidden mb-4">
+    <div className="match-tab match-tab--chat relative flex flex-col h-[480px] rounded-2xl overflow-hidden mb-4">
       {/* Cinematic green glow backdrop */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />

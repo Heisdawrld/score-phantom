@@ -88,7 +88,7 @@ export function LineupsTab({ matchData, fixtureId }: { matchData?: any, fixtureI
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="match-tab match-tab--lineups flex flex-col gap-4">
       <div className="relative rounded-2xl overflow-hidden mb-4">
         {/* Cinematic green glow backdrop */}
         <div className="absolute inset-0 z-0 pointer-events-none">

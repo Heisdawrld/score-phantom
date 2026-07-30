@@ -1,103 +1,163 @@
-import { useState, useRef, useEffect, lazy, Suspense, useMemo } from "react";
-import { useParams, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Activity,
+  ArrowLeft,
+  BarChart2,
+  Grid2x2,
+  Info,
+  Lock,
+  MessageCircle,
+  Radio,
+  Share2,
+  Target,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { useAccess } from "@/hooks/use-access";
 import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Target, BarChart2, MessageCircle, Send, Bot, Zap, TrendingUp, Trophy, ChevronRight, Lock, Share2, Users, Info, Grid2x2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
-import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { TeamLogo } from "@/components/TeamLogo";
 
-
-const PredictionTab = lazy(() => import("@/components/match/PredictionTab").then(m => ({ default: m.PredictionTab })));
-const StatsTab = lazy(() => import("@/components/match/StatsTab").then(m => ({ default: m.StatsTab })));
-const LeagueTab = lazy(() => import("@/components/match/LeagueTab").then(m => ({ default: m.LeagueTab })));
-const PitchTab = lazy(() => import("@/components/match/PitchTab").then(m => ({ default: m.PitchTab })));
-const LineupsTab = lazy(() => import("@/components/match/LineupsTab").then(m => ({ default: m.LineupsTab })));
-const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").then(m => ({ default: m.PhantomChatTab })));
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const PredictionTab = lazy(() => import("@/components/match/PredictionTab").then((m) => ({ default: m.PredictionTab })));
+const StatsTab = lazy(() => import("@/components/match/StatsTab").then((m) => ({ default: m.StatsTab })));
+const LeagueTab = lazy(() => import("@/components/match/LeagueTab").then((m) => ({ default: m.LeagueTab })));
+const PitchTab = lazy(() => import("@/components/match/PitchTab").then((m) => ({ default: m.PitchTab })));
+const LineupsTab = lazy(() => import("@/components/match/LineupsTab").then((m) => ({ default: m.LineupsTab })));
+const PhantomChatTab = lazy(() => import("@/components/match/PhantomChatTab").then((m) => ({ default: m.PhantomChatTab })));
 
 function ordinal(n: number) {
-  // BUG FIX: Handle 11th/12th/13th correctly.
-  // Old logic used (v-20)%10 which gave "11st", "12nd", "13rd".
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  // 11th, 12th, 13th are exceptions — they all take "th"
-  return n + (v >= 11 && v <= 13 ? s[0] : s[v % 10] || s[0]);
+  const suffixes = ["th", "st", "nd", "rd"];
+  const value = n % 100;
+  return n + (value >= 11 && value <= 13 ? suffixes[0] : suffixes[value % 10] || suffixes[0]);
 }
 
 export function SpiralWatermark() {
   return (
-    <svg width="110" height="110" viewBox="0 0 110 110" fill="none"
-      className="absolute top-3 right-3 opacity-[0.06] pointer-events-none text-primary">
-      <circle cx="55" cy="55" r="50" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="55" cy="55" r="38" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="55" cy="55" r="27" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="55" cy="55" r="16" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="55" cy="55" r="6" stroke="currentColor" strokeWidth="1.5" />
+    <svg
+      width="110"
+      height="110"
+      viewBox="0 0 110 110"
+      fill="none"
+      aria-hidden="true"
+      className="absolute top-3 right-3 opacity-[0.06] pointer-events-none text-primary"
+    >
+      {[50, 38, 27, 16, 6].map((radius) => (
+        <circle key={radius} cx="55" cy="55" r={radius} stroke="currentColor" strokeWidth="1.5" />
+      ))}
       <circle cx="55" cy="55" r="2" fill="currentColor" />
     </svg>
   );
 }
 
 const TABS = [
-  { key: "Prediction", label: "Prediction", Icon: Target },
-  { key: "Stats", label: "Stats", Icon: BarChart2 },
-  { key: "Pitch", label: "Pitch", Icon: Grid2x2 },
-  { key: "Lineups", label: "Lineups", Icon: Users },
-  { key: "League", label: "League", Icon: Trophy },
-  { key: "PhantomChat", label: "Chat", Icon: MessageCircle },
-];
+  {
+    key: "Prediction",
+    label: "Prediction",
+    eyebrow: "Phantom verdict",
+    title: "Model Intelligence",
+    description: "The strongest angle, confidence, market value and the signals behind the call.",
+    Icon: Target,
+  },
+  {
+    key: "Stats",
+    label: "Stats",
+    eyebrow: "Performance lab",
+    title: "Form & Matchup",
+    description: "Recent form, scoring behaviour and head-to-head context in one comparison view.",
+    Icon: BarChart2,
+  },
+  {
+    key: "Pitch",
+    label: "Pitch",
+    eyebrow: "Live room",
+    title: "Match Pulse",
+    description: "Momentum, shot quality and the sequence of events as the game develops.",
+    Icon: Grid2x2,
+  },
+  {
+    key: "Lineups",
+    label: "Lineups",
+    eyebrow: "Team intelligence",
+    title: "Shape & Availability",
+    description: "Starting elevens, formations, predicted personnel and important absences.",
+    Icon: Users,
+  },
+  {
+    key: "League",
+    label: "League",
+    eyebrow: "Competition context",
+    title: "Table Pressure",
+    description: "See exactly what this fixture means for both teams in the current standings.",
+    Icon: Trophy,
+  },
+  {
+    key: "PhantomChat",
+    label: "PhantomChat",
+    eyebrow: "Ask the model",
+    title: "Match Analyst",
+    description: "Interrogate the data, test an angle or ask for a safer alternative in real time.",
+    Icon: MessageCircle,
+  },
+] as const;
 
-// ── Main MatchCenter ────────────────────────────────────────────────────────
+function MatchLoading() {
+  return (
+    <div className="match-center__loading" role="status" aria-label="Loading match intelligence">
+      <span />
+      <p>Building the match intelligence room</p>
+    </div>
+  );
+}
 
 export default function MatchCenter() {
   const params = useParams();
   const fixtureId = params?.id;
   const [, setLocation] = useLocation();
-  const { user, isPremium, isLoading: authLoading } = useAccess();
+  const { isPremium, isLoading: authLoading } = useAccess();
   const [tab, setTab] = useState("Prediction");
 
-  // Scroll to top when MatchCenter loads
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   const { data, isLoading } = useQuery({
-      queryKey: ["/api/matches", fixtureId],
-      queryFn: () => fetchApi("/matches/" + fixtureId),
-      staleTime: 30 * 1000,
-      refetchInterval: (query) => {
-        const d = query?.state?.data as any;
-        const status = String(d?.fixture?.match_status || "").toUpperCase();
-        return ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(status) ? 30000 : false;
-      },
-      enabled: !!fixtureId,
-    });
-  // Single prediction fetch for MatchCenter — passed to PredictionTab to avoid double API calls.
+    queryKey: ["/api/matches", fixtureId],
+    queryFn: () => fetchApi("/matches/" + fixtureId),
+    staleTime: 30 * 1000,
+    refetchInterval: (query) => {
+      const match = query?.state?.data as any;
+      const status = String(match?.fixture?.match_status || "").toUpperCase();
+      return ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(status) ? 30000 : false;
+    },
+    enabled: !!fixtureId,
+  });
+
   const { data: predictionData } = useQuery({
-      queryKey: ["/api/predict", fixtureId],
-      queryFn: () => fetchApi("/predict/" + fixtureId),
-      enabled: !!fixtureId && !!isPremium,
-      staleTime: 5 * 60 * 1000,
-    });
+    queryKey: ["/api/predict", fixtureId],
+    queryFn: () => fetchApi("/predict/" + fixtureId),
+    enabled: !!fixtureId && !!isPremium,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const d = data as any;
   const fix = d?.fixture || {};
   const statusUpper = String(fix.match_status || "").toUpperCase();
   const isLive = ["LIVE", "HT", "1H", "2H", "ET", "PEN"].includes(statusUpper);
-  // BUG FIX: PEN (penalty shootout) is LIVE, not FT. Only FT/AET/PEN_FT are finished.
-  // Old code had PEN in both isLive and isFT arrays, causing contradictory UI.
-  const isFT = ["FT", "AET", "PEN_FT", "PENS"].includes(statusUpper) || (statusUpper === "PEN" && String(fix.match_status || "") === "Pen");
-  const matchTime = fix.match_date
-      ? new Date(fix.match_date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : "";
+  const isFT =
+    ["FT", "AET", "PEN_FT", "PENS"].includes(statusUpper) ||
+    (statusUpper === "PEN" && String(fix.match_status || "") === "Pen");
+  const kickoff = fix.match_date ? new Date(fix.match_date) : null;
+  const matchTime = kickoff
+    ? kickoff.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : "TBC";
+  const matchDate = kickoff
+    ? kickoff.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
+    : "Fixture date pending";
 
-  // ── Track this match in Recently Viewed (localStorage) ────────────────────
-  // Fires when fixture data loads. Dedup + cap handled by the hook.
   const { addRecentlyViewed } = useRecentlyViewed();
   const trackedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -111,149 +171,261 @@ export default function MatchCenter() {
       awayLogo: fix.away_team_logo,
       tournament: fix.tournament_name,
       pick: (predictionData as any)?.recommendation?.pick || (predictionData as any)?.pick || undefined,
-      probability: (predictionData as any)?.recommendation?.probability ?? (predictionData as any)?.probability ?? undefined,
+      probability:
+        (predictionData as any)?.recommendation?.probability ??
+        (predictionData as any)?.probability ??
+        undefined,
     });
-  }, [fix.id, fix.home_team_name, fix.away_team_name, fix.home_team_logo, fix.away_team_logo, fix.tournament_name, predictionData, addRecentlyViewed]);
+  }, [
+    fix.id,
+    fix.home_team_name,
+    fix.away_team_name,
+    fix.home_team_logo,
+    fix.away_team_logo,
+    fix.tournament_name,
+    predictionData,
+    addRecentlyViewed,
+  ]);
 
-    // Get standings position
-    const { homePos, awayPos } = useMemo(() => {
-      const st = Array.isArray(d?.standings) ? d.standings : Array.isArray(d?.meta?.standings) ? d.meta.standings : [];
-      const home = st.find((r: any) => (r.team || "").toLowerCase().includes((fix.home_team_name || "").toLowerCase().split(" ")[0]));
-      const away = st.find((r: any) => (r.team || "").toLowerCase().includes((fix.away_team_name || "").toLowerCase().split(" ")[0]));
-      return { homePos: home, awayPos: away };
-    }, [d?.standings, d?.meta?.standings, fix.home_team_name, fix.away_team_name]);
+  const { homePos, awayPos } = useMemo(() => {
+    const standings = Array.isArray(d?.standings)
+      ? d.standings
+      : Array.isArray(d?.meta?.standings)
+        ? d.meta.standings
+        : [];
+    const home = standings.find((row: any) =>
+      (row.team || "").toLowerCase().includes((fix.home_team_name || "").toLowerCase().split(" ")[0]),
+    );
+    const away = standings.find((row: any) =>
+      (row.team || "").toLowerCase().includes((fix.away_team_name || "").toLowerCase().split(" ")[0]),
+    );
+    return { homePos: home, awayPos: away };
+  }, [d?.standings, d?.meta?.standings, fix.home_team_name, fix.away_team_name]);
 
-    return (
-    <div className="flex flex-col min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
+  const recommendation =
+    (predictionData as any)?.predictions?.recommendation ||
+    (predictionData as any)?.recommendation ||
+    {};
+  const modelConfidence =
+    recommendation.probability_pct ??
+    (recommendation.probability != null ? Math.round(recommendation.probability * 100) : null);
+  const modelPick = recommendation.pick || recommendation.selection || "No clear edge";
+  const modelStatus = String(recommendation.advisor_status || (modelConfidence ? "MODEL READY" : "ANALYSING")).replace(/_/g, " ");
+  const activeTab = TABS.find((item) => item.key === tab) || TABS[0];
+
+  const goBack = () => {
+    if (window.history.length > 1) window.history.back();
+    else setLocation("/matches");
+  };
+
+  const shareMatch = () => {
+    const text = `${fix.home_team_name || "Home"} vs ${fix.away_team_name || "Away"} on ScorePhantom`;
+    if (navigator.share) {
+      navigator.share({ title: "ScorePhantom Match Center", text, url: window.location.href }).catch(() => undefined);
+      return;
+    }
+    navigator.clipboard?.writeText(window.location.href).catch(() => undefined);
+  };
+
+  return (
+    <div className="match-center">
+      <div className="match-center__world" aria-hidden="true">
+        <span className="match-center__orb match-center__orb--one" />
+        <span className="match-center__orb match-center__orb--two" />
+        <span className="match-center__grid" />
       </div>
 
-      {/* ── MATCH HEADER ── */}
-      <div className="sp-subheader sticky top-[60px] md:top-[72px] z-50 bg-[#060a0e]/80 backdrop-blur-xl border-b border-white/[0.02] px-4 pt-4 pb-0 relative">
-        {/* Back + close */}
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/matches"); }}
-            className="flex items-center gap-1.5 text-white/40 hover:text-white transition-colors">
-            <span className="text-lg">←</span>
-            <span className="text-xs font-bold">Back</span>
-          </button>
-          <button onClick={() => { if (window.history.length > 1) window.history.back(); else setLocation("/matches"); }}
-            className="w-8 h-8 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
-            <X size={14} className="text-white/40" />
-          </button>
-        </div>
-
-        {/* Tournament + time info */}
-        <div className="flex items-center justify-center gap-1.5 mb-3">
-          {fix.tournament_id && (
-            <img
-              src={`https://sports.bzzoiro.com/img/league/${fix.tournament_id}/`}
-              className="w-3.5 h-3.5 rounded-sm object-contain"
-              onError={e=>{(e.currentTarget as HTMLImageElement).style.display="none";}}
-              alt={fix.tournament_name || ""}
-            />
-          )}
-          <p className="text-[10px] text-white/25">
-            {fix.tournament_name || ""}{matchTime ? " · Today, " + matchTime : ""}
-          </p>
-        </div>
-
-        {/* ── TEAM CRESTS ── */}
-        <div className="flex items-center justify-center gap-6 mb-4">
-          {/* Home */}
-          <div className="flex flex-col items-center gap-1.5">
-            <TeamLogo src={fix.home_team_logo} name={fix.home_team_name || "Home"} size="lg" />
-            <span className="text-sm font-black text-white">{(fix.home_team_name || "Home").slice(0, 3).toUpperCase()}</span>
-            {homePos && (
-              <span className="text-[9px] text-white/30">{ordinal(homePos.position)} · {homePos.points} PTS</span>
-            )}
+      <section className="match-center__hero">
+        <div className="match-center__hero-inner">
+          <div className="match-center__utility">
+            <button type="button" onClick={goBack} className="match-center__back">
+              <ArrowLeft size={16} />
+              <span>All matches</span>
+            </button>
+            <div className="match-center__identity">
+              <span className={cn("match-center__status-dot", isLive && "is-live")} />
+              <span>Match Intelligence</span>
+              <b>26/27</b>
+            </div>
+            <button type="button" onClick={shareMatch} className="match-center__share" aria-label="Share this match">
+              <Share2 size={15} />
+            </button>
           </div>
 
-          {/* Score / VS */}
-          <div className="flex flex-col items-center">
-            {(isLive || isFT) ? (
-              <>
-                <span className="text-3xl font-black text-white tabular-nums">
-                  {fix.home_score ?? 0} - {fix.away_score ?? 0}
-                </span>
-                {isLive && (
-                  <div className="flex flex-col items-center mt-1 gap-1">
-                    <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full animate-pulse">● LIVE {fix.live_minute ? `${fix.live_minute}'` : ''}</span>
-                    {d?.meta?.matchStats?.home_xg_live != null && (
-                      <span className="text-[10px] text-white/50 font-medium">xG: {Number(d.meta.matchStats.home_xg_live).toFixed(2)} - {Number(d.meta.matchStats.away_xg_live ?? 0).toFixed(2)}</span>
-                    )}
-                  </div>
-                )}
-                {isFT && <span className="text-xs font-bold text-white/25 bg-white/[0.04] px-2 py-0.5 rounded-full mt-1">FT</span>}
-              </>
-            ) : (
-              <span className="text-lg font-bold text-white/20">vs</span>
-            )}
+          <div className="match-center__competition">
+            {fix.tournament_id ? (
+              <img
+                src={`https://sports.bzzoiro.com/img/league/${fix.tournament_id}/`}
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+                alt=""
+              />
+            ) : null}
+            <span>{fix.tournament_name || "Competition"}</span>
+            <i />
+            <span>{matchDate}</span>
+            <i />
+            <span>{matchTime} local</span>
           </div>
 
-          {/* Away */}
-          <div className="flex flex-col items-center gap-1.5">
-            <TeamLogo src={fix.away_team_logo} name={fix.away_team_name || "Away"} size="lg" />
-            <span className="text-sm font-black text-white">{(fix.away_team_name || "Away").slice(0, 3).toUpperCase()}</span>
-            {awayPos && (
-              <span className="text-[9px] text-white/30">{ordinal(awayPos.position)} · {awayPos.points} PTS</span>
-            )}
+          <div className="match-center__scoreboard">
+            <div className="match-center__team match-center__team--home">
+              <TeamLogo
+                src={fix.home_team_logo}
+                teamId={fix.home_team_id}
+                name={fix.home_team_name || "Home"}
+                size="xl"
+                className="match-center__crest"
+              />
+              <div>
+                <span>Home</span>
+                <h1>{fix.home_team_name || "Home team"}</h1>
+                {homePos ? <small>{ordinal(homePos.position)} · {homePos.points} pts</small> : <small>Season profile</small>}
+              </div>
+            </div>
+
+            <div className="match-center__score">
+              {isLive || isFT ? (
+                <strong>
+                  {fix.home_score ?? 0}
+                  <span>:</span>
+                  {fix.away_score ?? 0}
+                </strong>
+              ) : (
+                <strong className="is-kickoff">
+                  {matchTime}
+                  <span>WAT</span>
+                </strong>
+              )}
+              {isLive ? (
+                <em className="is-live">
+                  <Radio size={11} />
+                  Live {fix.live_minute ? `${fix.live_minute}'` : ""}
+                </em>
+              ) : isFT ? (
+                <em>Full time</em>
+              ) : (
+                <em>Kick-off</em>
+              )}
+            </div>
+
+            <div className="match-center__team match-center__team--away">
+              <TeamLogo
+                src={fix.away_team_logo}
+                teamId={fix.away_team_id}
+                name={fix.away_team_name || "Away"}
+                size="xl"
+                className="match-center__crest"
+              />
+              <div>
+                <span>Away</span>
+                <h1>{fix.away_team_name || "Away team"}</h1>
+                {awayPos ? <small>{ordinal(awayPos.position)} · {awayPos.points} pts</small> : <small>Season profile</small>}
+              </div>
+            </div>
+          </div>
+
+          <div className="match-center__intel-strip">
+            <div>
+              <span>
+                <Activity size={12} />
+                Phantom verdict
+              </span>
+              <strong>{authLoading ? "Loading…" : isPremium ? modelStatus : "Premium locked"}</strong>
+            </div>
+            <div>
+              <span>Best model angle</span>
+              <strong>{isPremium ? modelPick : "Unlock prediction"}</strong>
+            </div>
+            <div>
+              <span>Model confidence</span>
+              <strong className={cn(modelConfidence && modelConfidence >= 70 && "is-positive")}>
+                {isPremium && modelConfidence != null ? `${modelConfidence}%` : "—"}
+              </strong>
+            </div>
+            <div>
+              <span>Data feed</span>
+              <strong className="is-positive">{isLive ? "Live sync" : "Pre-match ready"}</strong>
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* ── TABS ── */}
-        <div className="flex border-b border-white/[0.06] overflow-x-auto scrollbar-hide touch-pan-x overscroll-x-contain">
+      <div className="match-center__tabs-shell">
+        <nav className="match-center__tabs" aria-label="Match intelligence sections">
           {TABS.map(({ key, label, Icon }) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={cn("flex items-center gap-1.5 px-4 py-3 text-sm font-bold transition-all border-b-2 -mb-px shrink-0 whitespace-nowrap",
-                tab === key ? "text-primary border-primary" : "text-white/30 border-transparent hover:text-white/50")}>
-              <Icon size={13} />
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-selected={tab === key}
+              className={cn("match-center__tab", tab === key && "is-active")}
+            >
+              <Icon size={15} />
               <span>{label}</span>
+              {key === "Prediction" && !isPremium ? <Lock size={10} className="match-center__tab-lock" /> : null}
             </button>
           ))}
-        </div>
+        </nav>
       </div>
 
-      {/* ── TAB CONTENT ── */}
-      {isLoading && (
-        <div className="flex justify-center py-20">
-          <div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-        </div>
-      )}
-      {!isLoading && (
-          <div className="flex-1 w-full max-w-lg mx-auto px-4 pt-5 relative z-10">
+      <main className="match-center__content">
+        {isLoading ? (
+          <MatchLoading />
+        ) : (
+          <>
+            <header className="match-center__panel-heading">
+              <div>
+                <span>{activeTab.eyebrow}</span>
+                <h2>{activeTab.title}</h2>
+              </div>
+              <p>{activeTab.description}</p>
+            </header>
+
             <AnimatePresence mode="wait">
-              <motion.div key={tab}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.15 }}>
-                <Suspense fallback={<div className="flex justify-center py-20"><div className="w-10 h-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /></div>}>
-                  {tab === "Prediction" && (
+              <motion.div
+                key={tab}
+                className="match-center__panel"
+                initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Suspense fallback={<MatchLoading />}>
+                  {tab === "Prediction" ? (
                     <>
-                      {isFT && (
-                        <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-3 flex items-start gap-2">
-                          <Info className="w-4 h-4 text-amber-300 mt-0.5 shrink-0" />
+                      {isFT ? (
+                        <div className="match-center__notice">
+                          <Info size={16} />
                           <div>
-                            <p className="text-[11px] font-black text-amber-200 uppercase tracking-[0.14em]">Match Completed</p>
-                            <p className="text-[11px] text-amber-100/60 leading-snug mt-1">Prediction is shown for review only. This is not an active pick.</p>
+                            <strong>Review mode</strong>
+                            <p>This completed match is kept here to audit the model call, not as an active pick.</p>
                           </div>
                         </div>
-                      )}
-                      <PredictionTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} matchData={d} predictionData={predictionData} />
+                      ) : null}
+                      <PredictionTab
+                        fixtureId={fixtureId}
+                        isPremium={isPremium}
+                        setLocation={setLocation}
+                        matchData={d}
+                        predictionData={predictionData}
+                      />
                     </>
-                  )}
-                  {tab === "Stats" && <StatsTab d={d} />}
-                  {tab === "Pitch" && <PitchTab matchData={d} />}
-                  {tab === "Lineups" && <LineupsTab matchData={d} fixtureId={fixtureId} />}
-                  {tab === "League" && <LeagueTab d={d} />}
-                  {tab === "PhantomChat" && <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />}
+                  ) : null}
+                  {tab === "Stats" ? <StatsTab d={d} /> : null}
+                  {tab === "Pitch" ? <PitchTab matchData={d} /> : null}
+                  {tab === "Lineups" ? <LineupsTab matchData={d} fixtureId={fixtureId} /> : null}
+                  {tab === "League" ? <LeagueTab d={d} /> : null}
+                  {tab === "PhantomChat" ? (
+                    <PhantomChatTab fixtureId={fixtureId} isPremium={isPremium} setLocation={setLocation} />
+                  ) : null}
                 </Suspense>
               </motion.div>
             </AnimatePresence>
-          </div>
+          </>
         )}
+      </main>
     </div>
   );
 }

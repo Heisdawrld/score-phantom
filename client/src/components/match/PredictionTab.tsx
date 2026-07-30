@@ -40,7 +40,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const data = predictionData || fetchedData;
 
   if (!isPremium) return (
-    <div className="relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
+    <div className="match-tab match-tab--prediction match-tab--locked relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
       <div className="blur-md select-none pointer-events-none p-5 space-y-4 opacity-50">
         <div className="flex items-center justify-between mb-2">
            <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const model = (data as any)?.model;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="match-tab match-tab--prediction flex flex-col gap-4">
       {/* ── RECOMMENDATION CARD — Premium Glow Style ── */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
