@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/app.js",
     "build": "cd client && npm install && npm run build",
-    "test": "node tests/test-engine-math.mjs && node tests/test-isotonic.mjs && node tests/test-ensemble.mjs && node tests/test-clv.mjs && node tests/test-sharp-money.mjs && node --test tests/test-settlement.mjs tests/test-engine-policy.mjs",
+    "test": "node tests/test-engine-math.mjs && node tests/test-isotonic.mjs && node tests/test-ensemble.mjs && node tests/test-clv.mjs && node tests/test-sharp-money.mjs && node --test tests/test-settlement.mjs tests/test-engine-policy.mjs tests/test-recommendation-policy.mjs tests/test-stake-sizing.mjs tests/test-acca-pricing.mjs",
     "test:live": "node tests/test-live-pipeline.mjs",
     "check": "npm test && npm --prefix client run typecheck && npm --prefix client run build",
     "seed": "node src/services/fixtureSeeder.js",

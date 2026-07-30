@@ -220,7 +220,7 @@ export function buildPhantomVerdictPayload({
   const seenSupport = new Set();
   const seenCautions = new Set();
   const frame = buildNarrativeFrame(narrative || {}, fv);
-  const status = String(bestPick?.advisor_status || (noSafePick ? 'SKIP' : 'ACCA')).toUpperCase();
+  const status = String(bestPick?.advisor_status || (noSafePick ? 'SKIP' : 'WATCH')).toUpperCase();
 
   if (reasonChain?.shortReasons) {
     for (const reason of reasonChain.shortReasons.slice(0, 3)) uniquePush(support, seenSupport, reason);
@@ -270,8 +270,8 @@ export function buildPhantomVerdictPayload({
   const pickLabel = leader?.pickLabel || formatMarketLabel(bestPick.marketKey, bestPick.selection);
   const headline = status === 'BET'
     ? `${pickLabel} leads the ladder on a ${frame.short}.`
-    : status === 'ACCA'
-      ? `${pickLabel} is the cleanest accumulator angle on a ${frame.short}.`
+    : status === 'WATCH'
+      ? `${pickLabel} is worth monitoring, but it has not cleared the bet threshold.`
       : `The pre-match thesis is too thin to feature ${pickLabel}.`;
 
   const thesis = reasonChain?.analystSummary

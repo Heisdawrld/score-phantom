@@ -1,6 +1,7 @@
 import { safeNum, clamp } from '../utils/math.js';
 import { getHistoricalAccuracyScore, getLeagueMarketAccuracyScore, getLeagueRestrictionSignal, getDynamicMarketBaselines } from '../storage/accuracyCache.js';
 import { classifyValueTier, computeEVScore } from './valueTiers.js';
+import { evaluateRecommendation } from '../engine/recommendationPolicy.js';
 
 const SCRIPT_MARKET_FIT = {
   dominant_home_pressure: {
@@ -340,64 +341,14 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     // ── Phase 1D: Classify value tier ──────────────────────────────────────
     const valueTier = classifyValueTier(candidate);
 
-    // ── Phase 4A: Simplified 3-Tier Badge: BET / ACCA / SKIP ────────────
-    // Beginner-friendly: each badge gives ONE clear message.
-    //   BET   = "Bet on this" — trusted as a single bet
-    //   ACCA  = "Acca pick" — use in accumulators, not as a single
-    //   SKIP  = "Don't bet" — not worth it
-    const odds = safeNum(candidate.bookmakerOdds, 0);
-    const ev = odds > 1.0 ? (prob * odds) - 1 : null;
-    const isPositiveEV = ev != null && ev >= 0;
-
-    let advisorStatus;
-    let advisorReason = '';
-
-    if (leagueSignal.status === 'restricted') {
-      advisorStatus = prob >= 0.65 ? 'ACCA' : 'SKIP';
-      advisorReason = 'league_restricted';
-    } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
-      // Junk odds or negative EV — always SKIP
-      advisorStatus = 'SKIP';
-      advisorReason = valueTier.tier === 'JUNK' ? 'junk_odds' : 'negative_ev';
-    } else if (valueTier.tier === 'ACCUMULATOR') {
-      // ACCUMULATOR tier: solid probability at low odds → ACCA (not a single)
-      advisorStatus = 'ACCA';
-      advisorReason = 'accumulator_pick';
-    } else if (valueTier.tier === 'STRONG') {
-      // STRONG tier: BET if data is decent, ACCA if data is poor
-      advisorStatus = (isPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
-      advisorReason = isPositiveEV ? 'strong_value_bet' : 'strong_poor_data';
-    } else if (valueTier.tier === 'VALUE') {
-      // VALUE tier: BET if +EV, ACCA if marginal EV
-      advisorStatus = isPositiveEV ? 'BET' : 'ACCA';
-      advisorReason = isPositiveEV ? 'value_pick_positive_ev' : 'value_pick_marginal_ev';
-    } else if (valueTier.tier === 'SHARP') {
-      // SHARP tier: BET if +EV (value exists), SKIP if not
-      advisorStatus = isPositiveEV ? 'BET' : 'SKIP';
-      advisorReason = isPositiveEV ? 'sharp_value_positive_ev' : 'sharp_negative_ev';
-    } else if (prob >= 0.72 && odds >= 1.30) {
-      // High probability with decent odds → BET
-      advisorStatus = predScore < 0.20 ? 'ACCA' : 'BET';
-      advisorReason = predScore < 0.20 ? 'high_prob_poor_data' : 'high_confidence';
-    } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
-      // ACCA-eligible probability/odds range → ACCA
-      advisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
-      advisorReason = predScore < 0.20 ? 'moderate_poor_data' : 'acca_eligible';
-    } else if (prob >= 0.60) {
-      // Decent probability → ACCA (good building block)
-      advisorStatus = predScore < 0.25 ? 'SKIP' : 'ACCA';
-      advisorReason = predScore < 0.25 ? 'moderate_poor_data' : 'moderate_confidence';
-    } else if (prob >= 0.50 && isPositiveEV) {
-      // Marginal probability but positive EV → ACCA
-      advisorStatus = 'ACCA';
-      advisorReason = 'marginal_prob_positive_ev';
-    } else if (prob >= 0.50) {
-      advisorStatus = predScore >= 0.40 ? 'ACCA' : 'SKIP';
-      advisorReason = predScore >= 0.40 ? 'marginal_acca' : 'marginal_skip';
-    } else {
-      advisorStatus = 'SKIP';
-      advisorReason = 'low_probability';
-    }
+    // One authoritative decision policy. ACCA eligibility is calculated
+    // separately by the dedicated accumulator engine.
+    const recommendation = evaluateRecommendation(
+      { ...candidate, leagueSignal, finalScore },
+      { features: featureVector, script: scriptOutput, valueTier },
+    );
+    const advisorStatus = recommendation.status;
+    const advisorReason = recommendation.reasonCode;
 
     return {
       ...candidate,
@@ -422,6 +373,7 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
       finalScore: parseFloat(clamp(finalScore, -0.5, 1.0).toFixed(4)),
       advisor_status: advisorStatus,
       advisor_reason: advisorReason,
+      recommendationDecision: recommendation,
       edgeAboveBaseline: parseFloat(edgeAboveBaseline.toFixed(4)),
       marketBaseline: parseFloat(baseline.toFixed(4)),
       valueTier: valueTier.tier,

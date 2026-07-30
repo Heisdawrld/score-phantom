@@ -7,6 +7,7 @@
  * Principle: quality-first. Never force filler selections just to reach 5 picks.
  */
 import { getAccuracyCache, getHistoricalAccuracyScore } from '../storage/accuracyCache.js';
+import { resolvePickOdds } from './accaPricing.js';
 
 const ALWAYS_ALLOWED = new Set([
   'double_chance_home',
@@ -165,44 +166,6 @@ function scoreAccaCandidate(row, accuracyCache = null) {
   return ((prob * 0.36) + (dqWeight * 0.16) + (volBonus * 0.16) + (histAccuracy * 0.22) + (prestige * 0.10)) * diversityMult;
 }
 
-function safeParseJson(val) {
-  if (!val) return {};
-  if (typeof val === 'object') return val;
-  try { return JSON.parse(val); } catch { return {}; }
-}
-
-function resolvePickOdds(row) {
-  const mk = (row.best_pick_market || '').toLowerCase();
-  const sel = (row.best_pick_selection || '').toLowerCase();
-  if (mk === 'home_win') return parseFloat(row.odds_home || row.home || 0) || null;
-  if (mk === 'away_win') return parseFloat(row.odds_away || row.away || 0) || null;
-  if (mk === 'draw') return parseFloat(row.odds_draw || row.draw || 0) || null;
-  if (mk === 'dnb_home') return parseFloat(row.odds_home || row.home || 0) || null;
-  if (mk === 'dnb_away') return parseFloat(row.odds_away || row.away || 0) || null;
-  if (mk === 'double_chance_home') {
-    if (row.odds_dc_home_draw || row.dc_home_draw) return parseFloat(row.odds_dc_home_draw || row.dc_home_draw);
-    const h = parseFloat(row.odds_home || row.home);
-    const d = parseFloat(row.odds_draw || row.draw);
-    if (h && d) return parseFloat(((1 / (1 / h + 1 / d)) * 0.95).toFixed(2));
-    return null;
-  }
-  if (mk === 'double_chance_away') {
-    if (row.odds_dc_away_draw || row.dc_away_draw) return parseFloat(row.odds_dc_away_draw || row.dc_away_draw);
-    const a = parseFloat(row.odds_away || row.away);
-    const d = parseFloat(row.odds_draw || row.draw);
-    if (a && d) return parseFloat(((1 / (1 / a + 1 / d)) * 0.95).toFixed(2));
-    return null;
-  }
-  if (mk === 'btts_yes') return parseFloat(row.odds_btts_yes || row.btts_yes || 0) || null;
-  if (mk === 'btts_no') return parseFloat(row.odds_btts_no || row.btts_no || 0) || null;
-  const ou = safeParseJson(row.over_under);
-  if (mk === 'over_15') return parseFloat(ou.over_1_5 || ou.over15 || row.odds_over_15 || 0) || null;
-  if (mk === 'over_25' || (mk === 'over_under' && sel.includes('over'))) return parseFloat(ou.over_2_5 || ou.over25 || row.odds_over_25 || 0) || null;
-  if (mk === 'under_25' || (mk === 'over_under' && sel.includes('under'))) return parseFloat(ou.under_2_5 || ou.under25 || row.odds_under_25 || 0) || null;
-  if (mk === 'under_35') return parseFloat(ou.under_3_5 || ou.under35 || row.odds_under_35 || 0) || null;
-  return null;
-}
-
 function buildInsights(selected, candidates, mode) {
   const byLeague = new Map();
   const byScript = new Map();
@@ -229,14 +192,14 @@ function buildInsights(selected, candidates, mode) {
 
 export async function buildAcca(rows, mode = 'safe') {
   const isSafeMode = mode !== 'value';
-  const minProb = isSafeMode ? 0.60 : 0.57;
+  const minProb = isSafeMode ? 0.66 : 0.62;
   const targetMin = 3;
   const targetMax = isSafeMode ? 4 : 5;
   const allowedRisk = isSafeMode ? ['SAFE'] : ['SAFE', 'MODERATE'];
   const maxModerate = isSafeMode ? 0 : 2;
   const maxUnders = isSafeMode ? 1 : 2;
-  const minLeaguePrestige = isSafeMode ? 0.45 : 0.40;
-  const minDataScore = isSafeMode ? 0.35 : 0.25;
+  const minLeaguePrestige = isSafeMode ? 0.50 : 0.45;
+  const minDataScore = isSafeMode ? 0.50 : 0.40;
   const accuracyCache = await getAccuracyCache().catch(() => null);
 
   const candidates = rows
@@ -254,7 +217,14 @@ export async function buildAcca(rows, mode = 'safe') {
       const dataScore = parseFloat(row.data_completeness_score || row.best_pick_score || 0);
       if (dataScore > 0 && dataScore < minDataScore) return false;
       const pickOdds = resolvePickOdds(row);
-      if (pickOdds && pickOdds < 1.05) return false;
+      // ACCA legs must have an executable captured price. Never invent odds
+      // from model probability or substitute a different market's price.
+      if (!pickOdds || pickOdds <= 1.05) return false;
+      const ev = (prob * pickOdds) - 1;
+      const minEv = isSafeMode ? 0.02 : 0.03;
+      if (ev < minEv) return false;
+      const status = String(row.advisor_status || '').toUpperCase();
+      if (status === 'SKIP' || status === 'AVOID') return false;
       return true;
     })
     .map(row => ({
@@ -391,11 +361,17 @@ export async function buildAcca(rows, mode = 'safe') {
         riskLevel: p.riskLevel,
         enrichmentStatus: p.enrichment_status,
         dataQuality: p.data_quality,
-        pickOdds: resolvedOdds || parseFloat((1 / Math.max(parseFloat(p.best_pick_probability || 0.5), 0.1) * 0.95).toFixed(2)),
+        pickOdds: resolvedOdds,
+        ev: resolvedOdds
+          ? parseFloat(((parseFloat(p.best_pick_probability || 0) * resolvedOdds) - 1).toFixed(4))
+          : null,
         oddsHome: parseFloat(p.odds_home || p.home || 0) || null,
         oddsAway: parseFloat(p.odds_away || p.away || 0) || null,
         oddsDraw: parseFloat(p.odds_draw || p.draw || 0) || null,
       };
     }),
+    combinedOdds: parseFloat(
+      selected.reduce((acc, pick) => acc * (resolvePickOdds(pick) || 1), 1).toFixed(2),
+    ),
   };
 }

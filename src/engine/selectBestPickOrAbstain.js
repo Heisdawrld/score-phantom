@@ -144,7 +144,9 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
         edge: null,
         impliedProbability: null,
         bookmakerOdds: null,
-        advisor_status: safeNum(modelOnly.modelProbability, 0) >= 0.72 ? 'BET' : safeNum(modelOnly.modelProbability, 0) >= 0.60 ? 'ACCA' : 'SKIP',
+        // Without a captured price this can be a football thesis, never a bet.
+        advisor_status: 'WATCH',
+        advisor_reason: 'WAIT_FOR_PRICE',
         reasons: [
           'MODEL_ONLY_NO_ODDS',
           ...(modelOnly.reasons || []),

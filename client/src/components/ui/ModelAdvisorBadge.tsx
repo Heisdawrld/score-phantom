@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
-import { CheckCircle2, Layers, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * Simplified 3-tier badge system — beginner-friendly.
+ * Simplified 3-tier recommendation system.
  *
  *   BET   = "Bet on this" — model trusts it as a single bet
- *   ACCA  = "Acca pick" — reliable, but only use in accumulators, not as a single
+ *   WATCH = credible direction, but not enough price/evidence to bet
  *   SKIP  = "Don't bet" — not worth the risk
  *
  * Every badge gives ONE clear message. No contradictions.
@@ -14,22 +14,23 @@ import { cn } from '@/lib/utils';
  * Legacy statuses (FIRE, RECOMMENDED, GAMBLE, CAUTIOUS, AVOID, GO, CAREFUL)
  * are mapped to the new 3 tiers automatically so old cached data still works.
  */
-export type AdvisorStatus = 'BET' | 'ACCA' | 'SKIP';
+export type AdvisorStatus = 'BET' | 'WATCH' | 'SKIP';
 
 // Legacy→new mapping for backward compatibility
 export function normalizeStatus(status: string): AdvisorStatus {
   const s = status.toUpperCase();
   if (s === 'BET') return 'BET';
-  if (s === 'ACCA') return 'ACCA';
+  if (s === 'WATCH') return 'WATCH';
   if (s === 'SKIP') return 'SKIP';
+  if (s === 'ACCA') return 'WATCH';
   // Previous 3-tier (GO/CAREFUL/SKIP)
   if (s === 'GO') return 'BET';
-  if (s === 'CAREFUL') return 'ACCA';
+  if (s === 'CAREFUL') return 'WATCH';
   // Legacy mapping (original 6-badge system)
   if (s === 'FIRE' || s === 'RECOMMENDED') return 'BET';
-  if (s === 'GAMBLE' || s === 'CAUTIOUS') return 'ACCA';
+  if (s === 'GAMBLE' || s === 'CAUTIOUS') return 'WATCH';
   if (s === 'AVOID') return 'SKIP';
-  return 'ACCA'; // safe default
+  return 'WATCH';
 }
 
 interface ModelAdvisorBadgeProps {
@@ -39,7 +40,7 @@ interface ModelAdvisorBadgeProps {
 }
 
 export function ModelAdvisorBadge({ status, className, showLabel = true }: ModelAdvisorBadgeProps) {
-  const badge = normalizeStatus(status || 'ACCA');
+  const badge = normalizeStatus(status || 'WATCH');
 
   // ── BET — green, checkmark, "Bet" ───────────────────────────────────────
   if (badge === 'BET') {
@@ -57,17 +58,17 @@ export function ModelAdvisorBadge({ status, className, showLabel = true }: Model
     );
   }
 
-  // ── ACCA — cyan, layers icon, "Acca Pick" ─────────────────────────────
-  if (badge === 'ACCA') {
+  // ── WATCH — amber, monitor the price/evidence ──────────────────────────
+  if (badge === 'WATCH') {
     return (
-      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-400/15 border border-cyan-400/40 shadow-[0_0_12px_rgba(34,211,238,0.2)] backdrop-blur-md', className)}>
+      <div className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/15 border border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.18)] backdrop-blur-md', className)}>
         <motion.div
           animate={{ opacity: [0.7, 1, 0.7] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
-          <Layers className="w-4 h-4 text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]" />
+          <Eye className="w-4 h-4 text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]" />
         </motion.div>
-        {showLabel && <span className="text-[10px] font-bold text-cyan-400 tracking-[0.15em] uppercase">Acca Pick</span>}
+        {showLabel && <span className="text-[10px] font-bold text-amber-400 tracking-[0.15em] uppercase">Watch</span>}
       </div>
     );
   }

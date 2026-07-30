@@ -195,11 +195,11 @@ function resolveEdgeLabel(pick, phantomScore) {
 }
 
 /**
- * Simplified 3-tier badge system: BET / ACCA / SKIP
+ * Simplified 3-tier recommendation system: BET / WATCH / SKIP
  *
  * Beginner-friendly:
  *   BET   = "Bet on this" — model trusts it as a single bet
- *   ACCA  = "Acca pick" — use in accumulators, not as a single
+ *   WATCH = credible direction, but price/evidence has not cleared BET
  *   SKIP  = "Don't bet" — not worth the risk
  *
  * The engine's finalizePredictionResult.js is the primary source of truth.
@@ -215,33 +215,32 @@ function resolveAdvisorStatus(engineStatus, riskLevel, modelProbability, edgeSco
 
   // ── Pass through new 3-tier badges from engine ────────────────────────
   if (s === 'BET') return 'BET';
-  if (s === 'ACCA') return 'ACCA';
+  if (s === 'WATCH') return 'WATCH';
   if (s === 'SKIP') return 'SKIP';
+  if (s === 'ACCA') return 'WATCH';
 
   // ── Previous 3-tier (GO/CAREFUL/SKIP) mapping ────────────────────────
   if (s === 'GO') return 'BET';
-  if (s === 'CAREFUL') return 'ACCA';       // CAREFUL → ACCA (the pick has value, just not as a single)
+  if (s === 'CAREFUL') return 'WATCH';
   // SKIP stays SKIP (handled above)
 
   // ── Legacy badge mapping (for old cached API data) ────────────────────
   if (s === 'FIRE') return 'BET';
   if (s === 'RECOMMENDED') return 'BET';
-  if (s === 'GAMBLE') return 'ACCA';        // GAMBLE was "risky but worth it" → ACCA
-  if (s === 'CAUTIOUS') return 'ACCA';      // CAUTIOUS → ACCA (same as CAREFUL)
+  if (s === 'GAMBLE') return 'WATCH';
+  if (s === 'CAUTIOUS') return 'WATCH';
   if (s === 'AVOID') return 'SKIP';
 
   // ── Fallback: compute from scratch if no engine status ────────────────
   if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') return 'SKIP';
-  if (valueTier === 'STRONG') return (isPositiveEV && dataQ >= 0.25) ? 'BET' : 'ACCA';
-  if (valueTier === 'VALUE') return isPositiveEV ? 'BET' : 'ACCA';
+  if (!odds || odds <= 1) return prob >= 0.62 && dataQ >= 0.40 ? 'WATCH' : 'SKIP';
+  if (valueTier === 'STRONG') return (ev >= 0.03 && edgeScore >= 0.025 && dataQ >= 0.45) ? 'BET' : 'WATCH';
+  if (valueTier === 'VALUE') return (ev >= 0.03 && edgeScore >= 0.025 && dataQ >= 0.45) ? 'BET' : 'WATCH';
   if (valueTier === 'SHARP') return isPositiveEV ? 'BET' : 'SKIP';
-  if (valueTier === 'ACCUMULATOR') return 'ACCA';
+  if (valueTier === 'ACCUMULATOR') return 'WATCH';
 
-  if (prob >= 0.72 && odds >= 1.30) return dataQ < 0.20 ? 'ACCA' : 'BET';
-  if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) return dataQ < 0.20 ? 'SKIP' : 'ACCA';
-  if (prob >= 0.60 && odds >= 1.25) return dataQ < 0.20 ? 'SKIP' : 'ACCA';
-  if (prob >= 0.50 && isPositiveEV) return 'ACCA';
-  if (prob >= 0.50) return dataQ >= 0.40 ? 'ACCA' : 'SKIP';
+  if (prob >= 0.72 && odds >= 1.30 && ev >= 0.03 && edgeScore >= 0.025) return dataQ < 0.45 ? 'WATCH' : 'BET';
+  if (prob >= 0.56 && ev >= -0.02) return dataQ < 0.35 ? 'SKIP' : 'WATCH';
   return 'SKIP';
 }
 
@@ -427,6 +426,9 @@ function buildPickObject(pick, homeTeam, awayTeam, dataCompletenessScore, engine
     odds: odds > 1.0 ? parseFloat(odds.toFixed(2)) : null,
     isAccaEligible: pick.isAccaEligible || false,
     riskReward: pick.riskReward || null,
+    decision: pick.recommendationDecision || null,
+    convictionTier: pick.recommendationDecision?.convictionTier || null,
+    stake: pick.stake || null,
   };
 }
 
@@ -601,6 +603,9 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
       odds: bestOdds > 1.0 ? parseFloat(bestOdds.toFixed(2)) : null,
       isAccaEligible: isSkipInNormalBranch ? false : (bestPick.isAccaEligible || false),
       riskReward: isSkipInNormalBranch ? null : (bestPick.riskReward || null),
+      decision: bestPick.recommendationDecision || null,
+      convictionTier: bestPick.recommendationDecision?.convictionTier || null,
+      stake: isSkipInNormalBranch ? null : (bestPick.stake || engineResult?.stake || null),
       analystSummary: reasonChain?.analystSummary || null,
     };
   } else {

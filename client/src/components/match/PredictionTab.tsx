@@ -142,25 +142,24 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const riskLabel = (rec.riskLevel || 'MODERATE').toUpperCase();
   const marketLabel = rec.marketLabel || (rec.market || "").replace(/_/g, " ");
   const edgeLabel = rec.edgeLabel || "LEAN";
-  const advisorStatusRaw = rec.advisor_status || "ACCA";
+  const advisorStatusRaw = rec.advisor_status || "WATCH";
   const advisorStatus = normalizeStatus(advisorStatusRaw) as AdvisorStatus;
   const isAvoidedPick = rec.isAvoidedPick === true;
   const avoidReason = rec.avoidReason || null;
   // SKIP detection: also handle legacy AVOID status from cached data
   const isNoPick = rec.no_edge === true || isAvoidedPick || advisorStatus === 'SKIP';
 
-  // Simplified verdict: BET / ACCA / SKIP
-  // Every badge gives ONE clear message — no more CAREFUL+ACCA contradiction.
+  // Simplified verdict: BET / WATCH / SKIP.
   // Legacy statuses are normalized by ModelAdvisorBadge component.
   const normalizedStatus = advisorStatus;
 
   const verdictLabel = normalizedStatus === 'BET' ? 'BET'
-    : normalizedStatus === 'ACCA' ? 'ACCA PICK'
+    : normalizedStatus === 'WATCH' ? 'WATCH'
     : 'SKIP';
 
   const verdictColor =
     verdictLabel === "BET" ? "text-[#10e774]" :
-    verdictLabel === "ACCA PICK" ? "text-cyan-400" :
+    verdictLabel === "WATCH" ? "text-amber-400" :
     "text-red-400";
     
   // UNIFIED risk pill — matches PredictionPanel's RiskBadge labels exactly.
@@ -183,8 +182,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
   const valueTierLabel = rec.valueTierLabel || null; // Human-readable tier label
   const ev = rec.ev != null ? rec.ev : null;         // Expected Value (decimal, e.g. 0.05 = +5%)
   const engineOdds = rec.odds || null;                // Bookmaker odds from engine (not from oddsData)
-  const isAccaEligible = rec.isAccaEligible === true; // Good for accumulators
   const riskReward = rec.riskReward || null;          // Risk/reward data object
+  const decision = rec.decision || null;
+  const stake = rec.stake || null;
   const analystSummary = rec.analystSummary || null;  // Analyst reasoning summary
   const narrative = (data as any)?.narrative || null;  // Match narrative from engine
 
@@ -264,13 +264,6 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             transition={{ delay: 0.15 }}
             className="flex flex-wrap gap-2 mb-3">
             <ModelAdvisorBadge status={advisorStatus} />
-            {/* ACCA pill — only show for BET picks that are ALSO good for ACCAs */}
-            {/* Don't show when badge is already ACCA (no contradiction) */}
-            {isAccaEligible && !isNoPick && normalizedStatus === 'BET' && (
-              <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
-                +ACCA
-              </span>
-            )}
             {/* SHARP MONEY alert — only when Polymarket mispricing detected */}
             {isSharpValue && !isNoPick && (
               <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#E5F522]/20 text-[#E5F522] border border-[#E5F522]/30 uppercase tracking-wide flex items-center gap-1 shadow-[0_0_10px_rgba(229,245,34,0.15)]">
@@ -317,7 +310,9 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             </motion.div>
           ) : (
             <>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">{normalizedStatus === 'ACCA' ? 'Acca Pick' : 'Our Best Bet'}</p>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-4">
+                {normalizedStatus === 'WATCH' ? 'Model Watchlist' : 'Our Best Bet'}
+              </p>
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -363,7 +358,26 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
           )}
 
           {/* Edge vs bookmakers — only for non-AVOID picks */}
-          {!isNoPick && isSharpValue ? (
+          {!isNoPick && normalizedStatus === 'WATCH' && (
+            <div className="mt-3 mb-3 p-3 rounded-xl bg-amber-400/[0.06] border border-amber-400/20">
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-400 mb-1">Monitor, don&apos;t bet yet</p>
+              <p className="text-xs leading-relaxed text-white/55">
+                {decision?.reason || "The direction is credible, but the current evidence or price has not cleared the bet threshold."}
+              </p>
+            </div>
+          )}
+
+          {!isNoPick && normalizedStatus === 'BET' && stake?.shouldBet && (
+            <div className="mt-3 mb-3 flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/[0.06] border border-primary/20">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-primary">{stake.exposureLabel || 'Approved exposure'}</p>
+                <p className="text-[10px] text-white/35 mt-0.5">Capped bankroll exposure</p>
+              </div>
+              <p className="text-sm font-black text-white tabular-nums">{((stake.bankrollPct || 0) * 100).toFixed(2)}%</p>
+            </div>
+          )}
+
+          {!isNoPick && normalizedStatus === 'BET' && isSharpValue ? (
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
@@ -374,7 +388,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               </span>
               <span className="text-[11px] font-bold text-[#E5F522]/90">Polymarket mispricing detected</span>
             </motion.div>
-          ) : !isNoPick && hasValue && edgePct != null ? (
+          ) : !isNoPick && normalizedStatus === 'BET' && hasValue && edgePct != null ? (
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}

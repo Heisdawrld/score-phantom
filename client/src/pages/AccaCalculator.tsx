@@ -51,10 +51,13 @@ export default function DailyAcca() {
   const insights = data?.insights || null;
   const correlationWarnings = insights?.correlationWarnings || [];
   const qualityMessage = data?.message || (picks.length > 0 ? 'Quality-first ACCA: ScorePhantom avoids forced filler selections.' : null);
-  const combinedOdds = picks.reduce((acc: number, p: any) => {
-    const o = p.pickOdds || (100 / Math.max(p.probability, 1)) * 0.95;
-    return acc * parseFloat(o);
-  }, 1);
+  const allOddsCaptured = picks.every((pick: any) => {
+    const odds = Number(pick.pickOdds);
+    return Number.isFinite(odds) && odds > 1;
+  });
+  const combinedOdds = allOddsCaptured
+    ? Number(data?.combinedOdds) || picks.reduce((acc: number, pick: any) => acc * Number(pick.pickOdds), 1)
+    : 0;
   const potentialReturn = stake * combinedOdds;
   const avgProb = picks.length > 0
     ? picks.reduce((s: number, p: any) => s + (p.probability || 0), 0) / picks.length
@@ -222,8 +225,8 @@ export default function DailyAcca() {
 
             <div className='space-y-2'>
               {picks.map((pick: any, i: number) => {
-                const o = pick.pickOdds || (100 / Math.max(pick.probability, 1)) * 0.95;
-                const oddsFmt = parseFloat(o).toFixed(2);
+                const odds = Number(pick.pickOdds);
+                const oddsFmt = Number.isFinite(odds) && odds > 1 ? odds.toFixed(2) : '—';
                 const prob = pick.probability || 0;
 
                 return (

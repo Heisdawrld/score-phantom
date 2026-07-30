@@ -98,6 +98,7 @@ const DATA_QUALITY_SCORE_MAP = {
 
 const KNOWN_ADVISOR_STATUSES = new Set([
   'BET',
+  'WATCH',
   'ACCA',
   'SKIP',
   'FIRE',
@@ -106,6 +107,14 @@ const KNOWN_ADVISOR_STATUSES = new Set([
   'CAUTIOUS',
   'AVOID',
 ]);
+
+function normalizeAdvisorStatus(status) {
+  const value = String(status || '').toUpperCase();
+  if (value === 'BET' || value === 'FIRE' || value === 'RECOMMENDED') return 'BET';
+  if (value === 'SKIP' || value === 'AVOID') return 'SKIP';
+  if (value) return 'WATCH';
+  return null;
+}
 
 function mapDataQualityScore(rawValue, fallback = 0.5) {
   const raw = String(rawValue || '').toLowerCase().trim();
@@ -597,8 +606,8 @@ router.get("/fixtures", requireAuth, async (req, res) => {
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
       if (v4Fields.advisor_status && KNOWN_ADVISOR_STATUSES.has(String(v4Fields.advisor_status).toUpperCase())) {
-        // Use engine-computed status when present, including the current BET/ACCA/SKIP system.
-        f.advisor_status = v4Fields.advisor_status;
+        // Use the engine-computed BET/WATCH/SKIP status when present.
+        f.advisor_status = normalizeAdvisorStatus(v4Fields.advisor_status);
       } else if (prob > 0) {
         // Fallback: EV-aware probability logic (matches responseAdapter fallback path)
         const ev = v4Fields.ev;
@@ -607,25 +616,23 @@ router.get("/fixtures", requireAuth, async (req, res) => {
         const valueTier = v4Fields.valueTier;
 
         if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') {
-          f.advisor_status = 'AVOID';
+          f.advisor_status = 'SKIP';
         } else if (valueTier === 'STRONG') {
-          f.advisor_status = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+          f.advisor_status = (isPositiveEV && dataQ >= 0.45) ? 'BET' : 'WATCH';
         } else if (valueTier === 'VALUE' || valueTier === 'SHARP') {
-          f.advisor_status = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+          f.advisor_status = isPositiveEV ? 'WATCH' : 'SKIP';
         } else if (valueTier === 'ACCUMULATOR') {
-          f.advisor_status = 'GAMBLE';
-        } else if (prob >= 0.72 && odds >= 1.30) {
-          f.advisor_status = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
-        } else if (prob >= 0.72 && odds && odds < 1.30 && odds > 0) {
-          f.advisor_status = 'GAMBLE';
-        } else if (prob >= 0.60) {
-          f.advisor_status = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+          f.advisor_status = 'WATCH';
+        } else if (!odds || odds <= 1) {
+          f.advisor_status = prob >= 0.62 && dataQ >= 0.40 ? 'WATCH' : 'SKIP';
+        } else if (prob >= 0.72 && odds >= 1.30 && isPositiveEV) {
+          f.advisor_status = dataQ < 0.45 ? 'WATCH' : 'BET';
         } else if (prob >= 0.50 && isPositiveEV) {
-          f.advisor_status = 'CAUTIOUS';
+          f.advisor_status = 'WATCH';
         } else if (prob >= 0.50) {
-          f.advisor_status = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+          f.advisor_status = (dataQ >= 0.40 && vol !== 'high') ? 'WATCH' : 'SKIP';
         } else {
-          f.advisor_status = 'AVOID';
+          f.advisor_status = 'SKIP';
         }
       } else {
         f.advisor_status = null;
@@ -640,10 +647,10 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       // ── BUG FIX: Suppress is_safe_bet/is_value_bet for AVOID picks ──
       // Showing "Safe Bet" or "Value Bet" badges alongside an AVOID advisor status
       // is contradictory and confuses users. AVOID overrides these flags.
-      if (f.advisor_status === 'AVOID' || f.advisor_status === 'SKIP' || v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
+      if (f.advisor_status === 'AVOID' || f.advisor_status === 'SKIP' || f.advisor_status === 'WATCH' || v4Fields.valueTier === 'JUNK' || v4Fields.valueTier === 'NEGATIVE_EV') {
         f.is_safe_bet = false;
         f.is_value_bet = false;
-        f.is_acca_eligible = false;
+        if (f.advisor_status !== 'WATCH') f.is_acca_eligible = false;
       }
 
       // Remove prediction_json from response (too large for fixture list)
@@ -1111,14 +1118,21 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     const expandedRows = [];
 
     for (const row of rows) {
-      // Always include the best pick row (unchanged behavior)
-      expandedRows.push(row);
-
-      // Try to extract additional ranked markets from prediction_json
       try {
         const pj = row.prediction_json ? JSON.parse(row.prediction_json) : null;
-        const engineResult = pj?.engineResult || pj?.prediction || null;
+        const engineResult = pj?.engineResult || pj?.prediction || pj || null;
+        const engineBestPick = engineResult?.bestPick || null;
         const rankedMarkets = engineResult?.rankedMarkets || engineResult?.rankedCandidates || [];
+
+        // Include the exact immutable headline pick and its captured price.
+        expandedRows.push({
+          ...row,
+          captured_pick_odds: engineBestPick?.bookmakerOdds ?? null,
+          captured_pick_edge: engineBestPick?.edge ?? null,
+          advisor_status: engineBestPick?.advisor_status || null,
+          is_acca_eligible: engineBestPick?.isAccaEligible === true,
+          data_completeness_score: engineResult?.features?.dataCompletenessScore ?? null,
+        });
 
         for (let i = 0; i < Math.min(rankedMarkets.length, MAX_RANKED_PER_FIXTURE); i++) {
           const rm = rankedMarkets[i];
@@ -1136,6 +1150,10 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
             best_pick_probability: rm.modelProbability,
             best_pick_score: rm.finalScore ?? rm.headlineQualityScore ?? null,
             confidence_volatility: row.confidence_volatility || 'medium',
+            captured_pick_odds: rm.bookmakerOdds ?? null,
+            captured_pick_edge: rm.edge ?? null,
+            advisor_status: rm.advisor_status || null,
+            data_completeness_score: engineResult?.features?.dataCompletenessScore ?? null,
             // Tag this as an alternate market so buildAcca can deduplicate
             _isAlternateMarket: true,
             _alternateMarketIndex: i,
@@ -1143,7 +1161,8 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
           });
         }
       } catch (e) {
-        // prediction_json parse failed — skip alternates for this fixture
+        // Without the immutable engine snapshot we cannot verify the exact
+        // market price, so this fixture is deliberately excluded from ACCA.
       }
     }
 
@@ -1586,8 +1605,8 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
       let advisorStatus;
       if (v4Fields.advisor_status && KNOWN_ADVISOR_STATUSES.has(String(v4Fields.advisor_status).toUpperCase())) {
-        // Use engine-computed status, including current BET/ACCA/SKIP badges.
-        advisorStatus = v4Fields.advisor_status;
+        // Normalize old cached badges while preserving the current decision model.
+        advisorStatus = normalizeAdvisorStatus(v4Fields.advisor_status);
       } else {
         // Fallback: EV-aware probability logic (synced with responseAdapter fallback path)
         const dataQ = mapDataQualityScore(row.data_quality, 0.5);
@@ -1597,25 +1616,25 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         const valueTier = v4Fields.valueTier;
 
         if (valueTier === 'JUNK' || valueTier === 'NEGATIVE_EV') {
-          advisorStatus = 'AVOID';
+          advisorStatus = 'SKIP';
         } else if (valueTier === 'STRONG') {
-          advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+          advisorStatus = (isPositiveEV && dataQ >= 0.45) ? 'BET' : 'WATCH';
         } else if (valueTier === 'VALUE' || valueTier === 'SHARP') {
-          advisorStatus = isPositiveEV ? 'RECOMMENDED' : 'GAMBLE';
+          advisorStatus = isPositiveEV ? 'WATCH' : 'SKIP';
         } else if (valueTier === 'ACCUMULATOR') {
-          advisorStatus = 'GAMBLE';
+          advisorStatus = 'WATCH';
         } else if (prob >= 0.72 && odds >= 1.30) {
-          advisorStatus = dataQ < 0.25 ? 'GAMBLE' : 'FIRE';
+          advisorStatus = (isPositiveEV && dataQ >= 0.45) ? 'BET' : 'WATCH';
         } else if (prob >= 0.72 && odds && odds < 1.30) {
-          advisorStatus = 'GAMBLE';
+          advisorStatus = 'WATCH';
         } else if (prob >= 0.60) {
-          advisorStatus = dataQ < 0.20 ? 'AVOID' : 'GAMBLE';
+          advisorStatus = dataQ < 0.20 ? 'SKIP' : 'WATCH';
         } else if (prob >= 0.50 && isPositiveEV) {
-          advisorStatus = 'CAUTIOUS';
+          advisorStatus = 'WATCH';
         } else if (prob >= 0.50) {
-          advisorStatus = (dataQ >= 0.40 && vol !== 'high') ? 'GAMBLE' : 'AVOID';
+          advisorStatus = (dataQ >= 0.40 && vol !== 'high') ? 'WATCH' : 'SKIP';
         } else {
-          advisorStatus = 'AVOID';
+          advisorStatus = 'SKIP';
         }
       }
 
@@ -1696,10 +1715,14 @@ router.get("/acca-payout", requireAuth, async (req, res) => {
     }
 
     // Calculate combined odds (multiplication of all odds)
-    const combinedOdds = picksArray.reduce((prod, pick) => {
-      const odds = parseFloat(pick.odds) || 1.5;
-      return prod * Math.max(1.01, Math.min(odds, 100)); // Clamp odds
-    }, 1);
+    const verifiedOdds = picksArray.map((pick) => parseFloat(pick.odds));
+    if (verifiedOdds.some((odds) => !Number.isFinite(odds) || odds <= 1.0)) {
+      return res.status(400).json({ error: "Every ACCA leg requires captured market odds" });
+    }
+    const combinedOdds = verifiedOdds.reduce(
+      (prod, odds) => prod * Math.max(1.01, Math.min(odds, 100)),
+      1,
+    );
 
     const potentialReturn = parseFloat((stakeAmount * combinedOdds).toFixed(2));
     const profit = parseFloat((potentialReturn - stakeAmount).toFixed(2));
@@ -1747,11 +1770,24 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
               AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
             ORDER BY COALESCE(p.best_pick_edge, 0) DESC,
                      COALESCE(p.best_pick_score, p.best_pick_probability * 0.6) DESC
-            LIMIT 1`,
+            LIMIT 20`,
       args: [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`]
     });
 
-    const row = result.rows?.[0];
+    const row = (result.rows || []).find((candidateRow) => {
+      const pick = getStoredBestPick(candidateRow.prediction_json);
+      if (!pick || normalizeAdvisorStatus(pick.advisor_status) !== 'BET') return false;
+      const probability = parseFloat(pick.modelProbability || candidateRow.best_pick_probability || 0);
+      const capturedOdds = parseFloat(pick.bookmakerOdds || 0);
+      const expectedValue = pick.ev != null
+        ? parseFloat(pick.ev)
+        : capturedOdds > 1
+          ? (probability * capturedOdds) - 1
+          : null;
+      const capturedEdge = parseFloat(pick.edge || candidateRow.best_pick_edge || 0);
+      if (pick.valueTier === 'JUNK' || pick.valueTier === 'NEGATIVE_EV') return false;
+      return capturedOdds > 1 && expectedValue != null && expectedValue >= 0.03 && capturedEdge >= 0.025;
+    });
     if (!row) {
       return res.json({ found: false, access: buildAccessPayload(req.access) });
     }
@@ -1776,7 +1812,7 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
     } catch (_) {}
 
     // Calculate EV from prob + odds if not in JSON
-    const bookOdds = v4Fields.odds || (impl > 0 ? (1 / impl) : null);
+    const bookOdds = v4Fields.odds;
     const calcEV = v4Fields.ev != null ? v4Fields.ev : (bookOdds > 1.0 ? (prob * bookOdds) - 1 : null);
 
     // ── BUG FIX: Don't return AVOID/junk picks as the "value bet of the day" ──
@@ -1808,6 +1844,7 @@ router.get("/value-bet-today", requireAuth, async (req, res) => {
       ev:                  calcEV != null ? parseFloat(calcEV.toFixed(4)) : null,
       odds:                bookOdds != null ? parseFloat(parseFloat(bookOdds).toFixed(2)) : null,
       isAccaEligible:      v4Fields.isAccaEligible,
+      advisor_status:      'BET',
       access:              buildAccessPayload(req.access),
     });
   } catch (err) {
@@ -2179,7 +2216,7 @@ router.post("/simulator/run", requireAuth, async (req, res) => {
     const formatMarkets = (markets) => markets.sort((a, b) => b.finalScore - a.finalScore).map(m => ({
       market: m.marketKey,
       probability: m.modelProbability,
-      advisor_status: m.advisor_status || m.advisorStatus || 'GAMBLE'
+      advisor_status: m.advisor_status || m.advisorStatus || 'WATCH'
     }));
 
     res.json({

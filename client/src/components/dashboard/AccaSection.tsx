@@ -39,9 +39,9 @@ export function AccaSection({ isPremium }: { isPremium: boolean }) {
   }
 
   const picks = data?.picks || [];
-  const combinedOdds = picks.reduce((acc: number, p: any) => {
-    const realOdds = p.pickOdds || p.oddsHome || p.oddsAway || (100 / Math.max(p.probability, 1));
-    return acc * parseFloat(realOdds);
+  const combinedOdds = Number(data?.combinedOdds) || picks.reduce((acc: number, p: any) => {
+    const realOdds = Number(p.pickOdds);
+    return Number.isFinite(realOdds) && realOdds > 1 ? acc * realOdds : acc;
   }, 1);
 
   return (
@@ -67,10 +67,9 @@ export function AccaSection({ isPremium }: { isPremium: boolean }) {
             </div>
           )}
           {picks.map((pick: any, i: number) => {
-            const realOdds = pick.pickOdds || pick.oddsHome || pick.oddsAway;
-            const oddsFmt = realOdds ? parseFloat(realOdds).toFixed(2) : (100 / Math.max(pick.probability, 1)).toFixed(2);
+            const realOdds = Number(pick.pickOdds);
+            const oddsFmt = Number.isFinite(realOdds) && realOdds > 1 ? realOdds.toFixed(2) : '—';
             const pickEV = pick.ev != null ? pick.ev : null;
-            const isAccaEligible = pick.isAccaEligible === true;
             return (
               <div key={pick.fixtureId || i} className='flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]'>
                 <span className='text-xs font-black text-white/25 w-5 shrink-0 pt-0.5'>#{i + 1}</span>
@@ -78,9 +77,8 @@ export function AccaSection({ isPremium }: { isPremium: boolean }) {
                   <p className='text-sm font-semibold truncate'>{pick.homeTeam} <span className='text-white/30 text-xs'>vs</span> {pick.awayTeam}</p>
                   <p className='text-[10px] text-white/30 truncate'>{pick.tournament}</p>
                   <p className='text-xs font-bold text-white mt-0.5'>{(pick.market || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} — {pick.selection}</p>
-                  {/* v4: ACCA-eligible + EV badges */}
+                  {/* ACCA legs use verified market prices and explicit value. */}
                   <div className='flex items-center gap-1.5 mt-1'>
-                    {isAccaEligible && pick.advisor_status === 'BET' && <span className='text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-cyan-400/10 text-cyan-400 border border-cyan-400/20'>+ACCA</span>}
                     {pickEV != null && <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded uppercase border', pickEV >= 0 ? 'bg-primary/10 text-primary border-primary/25' : 'bg-red-500/10 text-red-400 border-red-500/25')}>EV {pickEV >= 0 ? '+' : ''}{(pickEV * 100).toFixed(1)}%</span>}
                     {pick.valueTier && <span className='text-[8px] font-bold px-1.5 py-0.5 rounded uppercase bg-white/5 text-white/40 border border-white/10'>{pick.valueTier}</span>}
                   </div>

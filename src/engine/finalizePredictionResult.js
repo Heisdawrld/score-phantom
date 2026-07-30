@@ -7,16 +7,17 @@ import { buildReasonCodes } from "./buildReasonCodes.js";
 import { savePrediction } from "../storage/savePrediction.js";
 import { logRecommendedMarket } from "../storage/marketTracking.js";
 import { classifyValueTier } from "../markets/valueTiers.js";
-import { getMarketEscalationTargets, isJunkOdds, isAcceptableOdds } from "../markets/marketWorthRanges.js";
+import { getMarketEscalationTargets, isAcceptableOdds } from "../markets/marketWorthRanges.js";
 import { buildMarketLadder, buildPhantomVerdictPayload } from './buildPhantomVerdict.js';
+import { evaluateRecommendation, findSafetyFallback } from './recommendationPolicy.js';
 
 /**
  * Stage 4 — Finalize prediction result.
  * Builds confidence profile, reason codes, assembles the result object,
  * persists to DB, logs market tracking. Returns the full prediction.
  *
- * v5: Intelligent Analyst — 3-tier badge (BET/ACCA/SKIP), per-market worth,
- *     3-pass punter-style SKIP cascade, context-aware escalation.
+ * v5.3: BET/WATCH/SKIP policy, safety-first fallback, adversarial checks,
+ *       and capped conviction-based exposure.
  */
 export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTeamName, script, xg, calibratedProbs, features, selection, tacticalMatchup, scoreMatrix, narrative, contextMods, reasonChain, ensembleMeta = null }) {
   const { backupPicks, noSafePick, noSafePickReason, abstainCode, rankedCandidates, layer2Override, layer2OverrideApplied, maxShift, maxShiftMarket, topProbKey } = selection;
@@ -84,55 +85,120 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     bestPick.valueTierDescription = valueTier.tierDescription;
     bestPick.ev = valueTier.ev;
 
-    // ── Simplified 3-Tier Badge: BET / ACCA / SKIP ────────────────────────
+    // ── Unified recommendation: BET / WATCH / SKIP ───────────────────────
     const dataQ = features.dataCompletenessScore ?? 0.5;
-    const matchChaos = safeNum(features.matchChaosScore, 0.5);
-    const upsetRisk = safeNum(features.upsetRiskScore, 0.5);
-    const predScore = (dataQ * 0.5) + ((1 - matchChaos) * 0.3) + ((1 - upsetRisk) * 0.2);
     const isRestricted = bestPick.leagueSignal?.status === 'restricted';
     const ev = (odds != null && odds > 1.0) ? (prob * odds) - 1 : null;
-    const isPositiveEV = ev != null && ev >= 0;
-
-    let syncedAdvisorStatus;
-
-    if (isRestricted) {
-      syncedAdvisorStatus = prob >= 0.65 ? 'ACCA' : 'SKIP';
-    } else if (valueTier.tier === 'JUNK' || valueTier.tier === 'NEGATIVE_EV') {
-      syncedAdvisorStatus = 'SKIP';
-    } else if (valueTier.tier === 'ACCUMULATOR') {
-      syncedAdvisorStatus = 'ACCA';
-    } else if (valueTier.tier === 'STRONG' || valueTier.tier === 'VALUE') {
-      syncedAdvisorStatus = (isPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
-    } else if (valueTier.tier === 'SHARP') {
-      syncedAdvisorStatus = isPositiveEV ? 'BET' : 'SKIP';
-    } else if (prob >= 0.72 && odds >= 1.30) {
-      syncedAdvisorStatus = predScore < 0.20 ? 'ACCA' : 'BET';
-    } else if (prob >= 0.58 && odds >= 1.30 && odds <= 1.65) {
-      syncedAdvisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
-    } else if (prob >= 0.60 && odds >= 1.25) {
-      syncedAdvisorStatus = predScore < 0.20 ? 'SKIP' : 'ACCA';
-    } else if (prob >= 0.50 && isPositiveEV) {
-      syncedAdvisorStatus = 'ACCA';
-    } else if (prob >= 0.50) {
-      syncedAdvisorStatus = predScore >= 0.40 ? 'ACCA' : 'SKIP';
-    } else {
-      syncedAdvisorStatus = 'SKIP';
-    }
+    let recommendationDecision = evaluateRecommendation(bestPick, {
+      features,
+      script,
+      confidence,
+      valueTier,
+      challengeRecommendation: adversarialChallenge?.recommendation,
+    });
+    let syncedAdvisorStatus = recommendationDecision.status;
     bestPick.advisor_status = syncedAdvisorStatus;
+    bestPick.advisor_reason = recommendationDecision.reasonCode;
+    bestPick.recommendationDecision = recommendationDecision;
 
-    // ── 3-PASS SKIP CASCADE — The Punter's Instinct ──────────────────────
+    // ── Safety-first fallback ─────────────────────────────────────────────
+    // Before searching for another high-return angle, look for a lower-risk
+    // market that preserves the football thesis. A poor price can only produce
+    // WATCH; it can never be promoted to BET.
+    let safetyFallbackApplied = false;
+    if (syncedAdvisorStatus !== 'BET' && rankedCandidates && rankedCandidates.length > 1) {
+      const evaluatedFallbacks = new Map();
+      const evaluateFallback = (candidate) => {
+        const candidateConfidence = buildConfidenceProfile(candidate, features);
+        const candidateChallenge = challengePick(
+          candidate,
+          features,
+          features?.oddsComparison || null,
+          clvCalibration,
+        );
+        if (candidateChallenge.recommendation === 'DOWNGRADE') {
+          applyChallengeResult(candidate, candidateConfidence, candidateChallenge);
+        }
+        const candidateValueTier = classifyValueTier(candidate);
+        const decision = evaluateRecommendation(candidate, {
+          features,
+          script,
+          confidence: candidateConfidence,
+          valueTier: candidateValueTier,
+          challengeRecommendation: candidateChallenge.recommendation,
+        });
+        evaluatedFallbacks.set(candidate, {
+          decision,
+          confidence: candidateConfidence,
+          challenge: candidateChallenge,
+          valueTier: candidateValueTier,
+        });
+        return decision;
+      };
+
+      const safetyFallback = findSafetyFallback(
+        bestPick,
+        rankedCandidates,
+        { features, script, confidence },
+        evaluateFallback,
+      );
+
+      if (safetyFallback) {
+        const originalPick = bestPick;
+        const fallback = safetyFallback.candidate;
+        const evaluated = evaluatedFallbacks.get(fallback);
+        const fallbackProb = safeNum(fallback.modelProbability, 0);
+        const fallbackScore = safeNum(fallback.finalScore, fallbackProb);
+        const fallbackOdds = safeNum(fallback.bookmakerOdds, 0);
+
+        fallback.displayedConfidence = parseFloat((fallbackProb * 100).toFixed(1));
+        fallback.phantomScoreRaw = parseFloat(((fallbackProb * 0.55) + (fallbackScore * 0.45)).toFixed(4));
+        fallback.valueTier = evaluated.valueTier.tier;
+        fallback.valueTierLabel = evaluated.valueTier.tierLabel;
+        fallback.valueTierDescription = evaluated.valueTier.tierDescription;
+        fallback.ev = evaluated.valueTier.ev;
+        fallback.advisor_status = evaluated.decision.status;
+        fallback.advisor_reason = evaluated.decision.reasonCode;
+        fallback.recommendationDecision = evaluated.decision;
+        fallback.challengeFlags = evaluated.challenge.flags;
+        fallback.challengeSummary = evaluated.challenge.summary;
+        fallback.challengeRecommendation = evaluated.challenge.recommendation;
+        fallback.safetyFallback = {
+          fromMarket: originalPick.marketKey,
+          fromSelection: originalPick.selection,
+          toMarket: fallback.marketKey,
+          toSelection: fallback.selection,
+          reason: `Lower-risk alternative preferred before chasing a more aggressive price`,
+        };
+
+        console.log(
+          `[finalize] SAFETY FALLBACK: ${originalPick.marketKey} -> ${fallback.marketKey} ` +
+          `status=${evaluated.decision.status} prob=${(fallbackProb * 100).toFixed(1)}% odds=${fallbackOdds.toFixed(2)}`,
+        );
+
+        bestPick = fallback;
+        confidence = evaluated.confidence;
+        adversarialChallenge = evaluated.challenge;
+        challengeAbstained = false;
+        recommendationDecision = evaluated.decision;
+        syncedAdvisorStatus = evaluated.decision.status;
+        reasonCodes = buildReasonCodes(features, script, bestPick.marketKey);
+        safetyFallbackApplied = true;
+      }
+    }
+
+    // ── 3-PASS DECISION CASCADE — The Punter's Instinct ─────────────────
     // When the #1 pick gets SKIP'd, the engine thinks like a punter:
     //
     //   PASS 1: Natural Escalation — "Home Win at 1.20 is disrespectful,
     //           can they score 2? → Home Over 1.5, Home -1, Win Either Half"
     //   PASS 2: Broad BET Scan — "OK, what market IS worth betting on?"
     //           Find the best BET-badge pick across all markets
-    //   PASS 3: ACCA Lifeline — "Nothing earns BET? What about ACCA?
-    //           Needs high confidence (≥65%) and decent score"
+    //   PASS 3: WATCHLIST — preserve a credible thesis without calling it a bet.
     //
     // The cascade uses per-market worth ranges so each market's odds are
     // judged against its OWN thresholds, not a flat 1.25 gate.
-    if (syncedAdvisorStatus === 'SKIP' && rankedCandidates && rankedCandidates.length > 1) {
+    if (syncedAdvisorStatus !== 'BET' && !safetyFallbackApplied && rankedCandidates && rankedCandidates.length > 1) {
       const originalSkipPick = bestPick;
       const originalSkipReason = (() => {
         const reasons = [];
@@ -181,25 +247,33 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       };
 
       // ── Helper: Compute badge for a promoted candidate ───────────────────
+      const cascadeEvaluations = new Map();
       const computeCandidateBadge = (c) => {
-        const cProb = safeNum(c.modelProbability, 0);
-        const cOdds = safeNum(c.bookmakerOdds, 0);
+        const cConfidence = buildConfidenceProfile(c, features);
+        const cChallenge = challengePick(
+          c,
+          features,
+          features?.oddsComparison || null,
+          clvCalibration,
+        );
+        if (cChallenge.recommendation === 'DOWNGRADE') {
+          applyChallengeResult(c, cConfidence, cChallenge);
+        }
         const cValueTier = classifyValueTier(c);
-        const cEv = cOdds > 1.0 ? (cProb * cOdds) - 1 : null;
-        const cIsPositiveEV = cEv != null && cEv >= 0;
-        const cIsRestricted = c.leagueSignal?.status === 'restricted';
-
-        if (cIsRestricted && cProb < 0.65) return 'SKIP';
-        if (cValueTier.tier === 'JUNK' || cValueTier.tier === 'NEGATIVE_EV') return 'SKIP';
-        if (cValueTier.tier === 'ACCUMULATOR') return 'ACCA';
-        if (cValueTier.tier === 'STRONG' || cValueTier.tier === 'VALUE') return (cIsPositiveEV && predScore >= 0.25) ? 'BET' : 'ACCA';
-        if (cValueTier.tier === 'SHARP') return cIsPositiveEV ? 'BET' : 'SKIP';
-        if (cProb >= 0.72 && cOdds >= 1.30) return predScore < 0.20 ? 'ACCA' : 'BET';
-        if (cProb >= 0.58 && cOdds >= 1.30 && cOdds <= 1.65) return predScore < 0.20 ? 'SKIP' : 'ACCA';
-        if (cProb >= 0.60 && cOdds >= 1.25) return predScore < 0.20 ? 'SKIP' : 'ACCA';
-        if (cProb >= 0.50 && cIsPositiveEV) return 'ACCA';
-        if (cProb >= 0.50) return predScore >= 0.40 ? 'ACCA' : 'SKIP';
-        return 'SKIP';
+        const cDecision = evaluateRecommendation(c, {
+          features,
+          script,
+          confidence: cConfidence,
+          valueTier: cValueTier,
+          challengeRecommendation: cChallenge.recommendation,
+        });
+        cascadeEvaluations.set(c, {
+          confidence: cConfidence,
+          challenge: cChallenge,
+          valueTier: cValueTier,
+          decision: cDecision,
+        });
+        return cDecision.status;
       };
 
       let promotedCandidate = null;
@@ -210,7 +284,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       // When a market has junk odds, check its natural escalation targets first.
       // Home Win at 1.20 → check Home -1, Home Over 1.5, Win Either Half
       // Over 1.5 at 1.22 → check Over 2.5, BTTS, Home/Away Over 1.5
-      const { targets, reason } = getMarketEscalationTargets(originalSkipPick.marketKey);
+      const { targets } = getMarketEscalationTargets(originalSkipPick.marketKey);
 
       for (const target of targets) {
         const candidate = rankedCandidates.find(c => c.marketKey === target && c !== originalSkipPick);
@@ -244,24 +318,24 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
         }
       }
 
-      // ── PASS 3: ACCA Lifeline ───────────────────────────────────────────
-      // No BET found. Check for high-confidence ACCA picks (prob ≥ 0.65).
-      // The punter asks: "Nothing is strong enough for a single? What about ACCA?"
+      // ── PASS 3: WATCHLIST ───────────────────────────────────────────────
+      // No BET found. Keep a high-confidence angle visible without telling the
+      // user to wager on it. ACCA construction remains a separate engine.
       if (!promotedCandidate) {
         for (const candidate of rankedCandidates) {
           if (candidate === originalSkipPick) continue;
           const cProb = safeNum(candidate.modelProbability, 0);
           const cFinalScore = safeNum(candidate.finalScore, 0);
-          // ACCA lifeline: higher bar — must be genuinely confident
+          // WATCHLIST: higher bar — must be genuinely credible
           if (cProb < 0.65) continue;
           if (cFinalScore < 0.30) continue;
           if (!passesConfidenceGates(candidate)) continue;
 
           const badge = computeCandidateBadge(candidate);
-          if (badge === 'ACCA') {
+          if (badge === 'WATCH') {
             promotedCandidate = candidate;
             promotedBadge = badge;
-            cascadePass = `P3(ACCA lifeline: ${candidate.marketKey})`;
+            cascadePass = `P3(WATCHLIST: ${candidate.marketKey})`;
             break;
           }
         }
@@ -276,7 +350,8 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
 
         console.log(`[finalize] SKIP cascade ${cascadePass}: ${originalSkipPick.marketKey}(${originalSkipPick.selection}) → ${promotedCandidate.marketKey}(${promotedCandidate.selection}) badge=${promotedBadge} prob=${(cProb*100).toFixed(1)}% score=${cFinalScore.toFixed(3)} odds=${cOdds.toFixed(2)} ev=${cEv != null ? (cEv*100).toFixed(1) + '%' : 'N/A'}`);
 
-        const cValueTier = classifyValueTier(promotedCandidate);
+        const promotedEvaluation = cascadeEvaluations.get(promotedCandidate);
+        const cValueTier = promotedEvaluation?.valueTier || classifyValueTier(promotedCandidate);
         const cPhantomScoreRaw = (cProb * 0.55) + (cFinalScore * 0.45);
         promotedCandidate.displayedConfidence = parseFloat((cProb * 100).toFixed(1));
         promotedCandidate.phantomScoreRaw = parseFloat(cPhantomScoreRaw.toFixed(4));
@@ -285,6 +360,11 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
         promotedCandidate.valueTierDescription = cValueTier.tierDescription;
         promotedCandidate.ev = cValueTier.ev;
         promotedCandidate.advisor_status = promotedBadge;
+        promotedCandidate.advisor_reason = promotedEvaluation?.decision?.reasonCode || null;
+        promotedCandidate.recommendationDecision = promotedEvaluation?.decision || null;
+        promotedCandidate.challengeFlags = promotedEvaluation?.challenge?.flags || [];
+        promotedCandidate.challengeSummary = promotedEvaluation?.challenge?.summary || null;
+        promotedCandidate.challengeRecommendation = promotedEvaluation?.challenge?.recommendation || null;
 
         // Preserve the original SKIP as a skip note for transparency
         promotedCandidate.skipNote = {
@@ -298,23 +378,18 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
 
         bestPick = promotedCandidate;
         syncedAdvisorStatus = promotedBadge;
-        confidence = buildConfidenceProfile(bestPick, features);
+        confidence = promotedEvaluation?.confidence || buildConfidenceProfile(bestPick, features);
+        adversarialChallenge = promotedEvaluation?.challenge || adversarialChallenge;
+        challengeAbstained = false;
+        recommendationDecision = promotedEvaluation?.decision || recommendationDecision;
         reasonCodes = buildReasonCodes(features, script, bestPick?.marketKey || null);
       } else {
-        // Cascade didn't find anything — mark original as SKIP
-        console.log(`[finalize] SKIP cascade: no quality alternative found for ${originalSkipPick.marketKey} — ${rankedCandidates.length - 1} alternatives checked across 3 passes`);
-        const skipReasons = [];
-        if (isRestricted) skipReasons.push('Restricted league — limited data reliability');
-        if (valueTier.tier === 'JUNK') skipReasons.push(`Odds at ${(odds ?? 0).toFixed(2)} offer no value`);
-        if (valueTier.tier === 'NEGATIVE_EV') skipReasons.push(`Negative expected value (${(ev != null ? (ev * 100).toFixed(1) : '?')}%) — not profitable`);
-        if (dataQ < 0.20) skipReasons.push('Very low data quality — prediction unreliable');
-        else if (dataQ < 0.40) skipReasons.push('Below-average data quality — confidence reduced');
-        if (prob < 0.50) skipReasons.push(`Probability too low (${(prob * 100).toFixed(1)}%) for a reliable pick`);
-
-        bestPick.isAvoidedPick = true;
-        bestPick.avoidReason = skipReasons.length > 0
-          ? skipReasons.join('. ')
-          : `Model does not recommend this pick — insufficient edge or value`;
+        console.log(`[finalize] Decision cascade: no stronger alternative found for ${originalSkipPick.marketKey} — ${rankedCandidates.length - 1} alternatives checked`);
+        if (syncedAdvisorStatus === 'SKIP') {
+          bestPick.isAvoidedPick = true;
+          bestPick.avoidReason = recommendationDecision?.reason
+            || `Model does not recommend this pick — insufficient edge or value`;
+        }
       }
     } else if (syncedAdvisorStatus === 'SKIP') {
       // SKIP but no rankedCandidates to cascade through
@@ -341,15 +416,24 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     const bpEv = bpOdds > 1.0 ? (bpProb * bpOdds) - 1 : null;
     const bpValueTier = bp.valueTier || classifyValueTier(bp).tier;
 
-    const isAccaEligible = bpProb >= 0.58 &&
-      (bpOdds >= 1.30 && bpOdds <= 1.65) &&
-      (bpEv == null || bpEv >= -0.05) &&
+    const isAccaEligible = bpProb >= 0.66 &&
+      (bpOdds >= 1.25 && bpOdds <= 1.85) &&
+      bpEv != null && bpEv >= 0.02 &&
+      bpEdge >= 0.015 &&
+      dataQ >= 0.50 &&
       confidence.volatility !== 'high' &&
+      safeNum(script?.volatilityScore, 0.5) < 0.68 &&
+      safeNum(features.matchChaosScore, 0.5) < 0.66 &&
+      safeNum(features.upsetRiskScore, 0.5) < 0.75 &&
+      bestPick.challengeRecommendation !== 'FAIL' &&
       syncedAdvisorStatus !== 'SKIP';
 
     bp.isAccaEligible = isAccaEligible;
-    bp.isSafeBet = bpProb >= 0.72 && confidence.volatility === 'low' && bpOdds >= 1.25;
-    bp.isValueBet = (bpImpl > 0) && (bpEdge >= 0.08);
+    bp.isSafeBet = syncedAdvisorStatus === 'BET' &&
+      bpProb >= 0.72 &&
+      confidence.volatility === 'low' &&
+      bpOdds >= 1.25;
+    bp.isValueBet = syncedAdvisorStatus === 'BET' && (bpImpl > 0) && (bpEdge >= 0.08);
 
     // ── Phase 4C: Risk Reward Data ────────────────────────────────────────
     bp.riskReward = {
@@ -409,7 +493,13 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
   let stake = null;
   if (bestPick && !finalNoSafePick) {
     const clvAdj = safeNum(confidence?.clvAdjustment, 0);
-    stake = computeStake(bestPick, { clvAdjustment: clvAdj, bankroll: 100, confidence });
+    stake = computeStake(bestPick, {
+      clvAdjustment: clvAdj,
+      bankroll: 100,
+      confidence,
+      advisorStatus: bestPick.advisor_status,
+      convictionTier: bestPick.recommendationDecision?.convictionTier,
+    });
     bestPick.stake = stake;
     bestPick.confidence = confidence; // attach for downstream consumers
   }
@@ -446,6 +536,12 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     updatedAt: new Date().toISOString(),
   };
   await savePrediction(result).catch(e => console.error("[finalize] save failed:", e.message));
-  if (bestPick?.marketKey) await logRecommendedMarket(fixtureId, bestPick.marketKey, bestPick.selection || bestPick.marketKey).catch(e => console.error("[finalize] tracking failed:", e.message));
+  if (bestPick?.marketKey && bestPick?.advisor_status === 'BET') {
+    await logRecommendedMarket(
+      fixtureId,
+      bestPick.marketKey,
+      bestPick.selection || bestPick.marketKey,
+    ).catch(e => console.error("[finalize] tracking failed:", e.message));
+  }
   return result;
 }

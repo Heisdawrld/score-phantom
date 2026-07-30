@@ -279,8 +279,9 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
   const ev = rec?.ev != null ? rec.ev : null;
   const valueTier = rec?.valueTier || null;
   const engineOdds = rec?.odds || null;
-  const isAccaEligible = rec?.isAccaEligible === true;
   const riskReward = rec?.riskReward || null;
+  const decision = rec?.decision || null;
+  const stake = rec?.stake || null;
   const analystSummary = rec?.analystSummary || null;
   const narrative = (data as any)?.narrative || null;
 
@@ -551,19 +552,19 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                         className="space-y-5"
                       >
                         {/* Best Bet Angle — only show for non-SKIP picks */}
-                        {/* Normalize status to handle legacy badges (GAMBLE→ACCA, CAUTIOUS→ACCA, AVOID→SKIP, etc.) */}
+                        {/* Normalize cached legacy badges into BET / WATCH / SKIP. */}
                         {(() => {
                           const rawStatus = String(rec?.advisor_status || '').toUpperCase();
                           const normalized = rawStatus === 'BET' || rawStatus === 'FIRE' || rawStatus === 'RECOMMENDED' || rawStatus === 'GO' ? 'BET'
                             : rawStatus === 'SKIP' || rawStatus === 'AVOID' ? 'SKIP'
-                            : 'ACCA'; // ACCA, GAMBLE, CAUTIOUS, CAREFUL, or default
+                            : 'WATCH';
                           const isSkip = normalized === 'SKIP' || rec?.no_edge || rec?.isAvoidedPick;
-                          const isAcca = normalized === 'ACCA';
+                          const isWatch = normalized === 'WATCH';
                           return !isSkip && rec ? (
                           <div className={cn(
                             "rounded-3xl p-6 relative overflow-hidden border",
-                            isAcca
-                              ? "bg-gradient-to-br from-cyan-400/10 to-cyan-400/3 border-cyan-400/20"
+                            isWatch
+                              ? "bg-gradient-to-br from-amber-400/10 to-amber-400/3 border-amber-400/20"
                               : "bg-gradient-to-br from-primary/15 to-primary/5 border-primary/25"
                           )}>
                             <div className="absolute top-0 right-0 p-3 opacity-8 pointer-events-none">
@@ -573,12 +574,12 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                                 <p className={cn(
                                   "text-[10px] font-bold tracking-widest uppercase",
-                                  isAcca ? 'text-cyan-400' : 'text-primary'
+                                  isWatch ? 'text-amber-400' : 'text-primary'
                                 )}>
-                                  {isAcca ? 'Acca Pick' : 'Best Bet Angle'}
+                                  {isWatch ? 'Model Watchlist' : 'Best Bet Angle'}
                                 </p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <ModelAdvisorBadge status={rec.advisor_status || 'ACCA'} />
+                                  <ModelAdvisorBadge status={rec.advisor_status || 'WATCH'} />
                                 </div>
                               </div>
                               {rec.dataQualityNote && (
@@ -599,14 +600,7 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                 </div>
                               </div>
                               {/* ── ACCA pill + EV strip ── */}
-                              {/* Only show +ACCA pill for BET picks that are also ACCA-eligible */}
-                              {/* Don't show when badge is already ACCA (no contradiction) */}
                               <div className="flex items-center gap-2 flex-wrap mb-3">
-                                {isAccaEligible && rec.advisor_status === 'BET' && (
-                                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 uppercase tracking-wide">
-                                    +ACCA
-                                  </span>
-                                )}
                                 {ev != null && (
                                   <span className={cn(
                                     "text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border",
@@ -621,6 +615,31 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                   </span>
                                 )}
                               </div>
+
+                              {isWatch && (
+                                <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/[0.07] px-3 py-2.5">
+                                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                                  <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Do not place yet</p>
+                                    <p className="mt-1 text-[11px] leading-snug text-white/55">
+                                      {decision?.reason || 'The direction is credible, but the price or evidence has not cleared the bet threshold.'}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {!isWatch && stake?.shouldBet && (
+                                <div className="mb-3 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
+                                  <div>
+                                    <p className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Approved exposure</p>
+                                    <p className="text-xs font-black text-primary">{stake.exposureLabel || 'STANDARD'}</p>
+                                  </div>
+                                  <p className="text-sm font-black tabular-nums text-white">
+                                    {(Number(stake.bankrollPct || 0) * 100).toFixed(2)}%
+                                    <span className="ml-1 text-[9px] font-medium uppercase text-white/30">bankroll</span>
+                                  </p>
+                                </div>
+                              )}
 
                               {/* v4: Analyst Summary */}
                               {analystSummary && (
