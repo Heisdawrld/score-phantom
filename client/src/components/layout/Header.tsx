@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity,
   BarChart3,
   Check,
   ChevronDown,
@@ -25,7 +24,6 @@ import { cn } from "@/lib/utils";
 
 const DESKTOP_NAV = [
   { href: "/", label: "Overview", icon: Gauge },
-  { href: "/matches", label: "Matches", icon: Activity },
   { href: "/picks", label: "Top Picks", icon: Flame },
   { href: "/acca", label: "ACCA Lab", icon: Zap },
   { href: "/simulator", label: "Simulator", icon: Dna },

@@ -1,12 +1,11 @@
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Flame, Home, Layers3, Radio, User } from "lucide-react";
+import { Flame, Home, Layers3, User } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/matches", label: "Matches", icon: Radio },
   { href: "/picks", label: "Picks", icon: Flame, feature: true },
   { href: "/acca", label: "ACCA", icon: Layers3 },
   { href: "/profile", label: "Account", icon: User },
