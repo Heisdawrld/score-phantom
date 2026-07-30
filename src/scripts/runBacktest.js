@@ -9,6 +9,7 @@ import { calibrateProbabilities } from '../probabilities/calibrateProbabilities.
 import { buildMarketCandidates } from '../markets/buildMarketCandidates.js';
 import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
 import { assessMatchPredictability } from '../engine/assessMatchPredictability.js';
+import { evaluatePrediction } from '../services/predictionSettlement.js';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -60,29 +61,16 @@ function buildHistoricalVector(match) {
   };
 }
 
-function determineResult(market, homeGoals, awayGoals) {
-  const total = homeGoals + awayGoals;
-  switch (market) {
-    case 'home_win': return homeGoals > awayGoals ? 'WON' : 'LOST';
-    case 'away_win': return awayGoals > homeGoals ? 'WON' : 'LOST';
-    case 'draw': return homeGoals === awayGoals ? 'WON' : 'LOST';
-    case 'home_draw': return homeGoals >= awayGoals ? 'WON' : 'LOST';
-    case 'away_draw': return awayGoals >= homeGoals ? 'WON' : 'LOST';
-    case 'home_away': return homeGoals !== awayGoals ? 'WON' : 'LOST';
-    case 'over_1_5': return total > 1.5 ? 'WON' : 'LOST';
-    case 'under_1_5': return total < 1.5 ? 'WON' : 'LOST';
-    case 'over_2_5': return total > 2.5 ? 'WON' : 'LOST';
-    case 'under_2_5': return total < 2.5 ? 'WON' : 'LOST';
-    case 'over_3_5': return total > 3.5 ? 'WON' : 'LOST';
-    case 'under_3_5': return total < 3.5 ? 'WON' : 'LOST';
-    case 'btts_yes': return (homeGoals > 0 && awayGoals > 0) ? 'WON' : 'LOST';
-    case 'btts_no': return (homeGoals === 0 || awayGoals === 0) ? 'WON' : 'LOST';
-    case 'home_over_0_5': return homeGoals > 0.5 ? 'WON' : 'LOST';
-    case 'away_over_0_5': return awayGoals > 0.5 ? 'WON' : 'LOST';
-    case 'home_over_1_5': return homeGoals > 1.5 ? 'WON' : 'LOST';
-    case 'away_over_1_5': return awayGoals > 1.5 ? 'WON' : 'LOST';
-    default: return 'VOID';
-  }
+function determineResult(market, selection, homeGoals, awayGoals, homeTeam, awayTeam) {
+  const outcome = evaluatePrediction(
+    market,
+    selection,
+    homeGoals,
+    awayGoals,
+    homeTeam,
+    awayTeam,
+  );
+  return outcome === 'win' ? 'WON' : outcome === 'loss' ? 'LOST' : 'VOID';
 }
 
 async function runBacktestForSeason(leagueId, seasonId) {
@@ -138,7 +126,14 @@ async function runBacktestForSeason(leagueId, seasonId) {
       markets.sort((a, b) => b.finalScore - a.finalScore);
       const topPick = markets[0];
       
-      const actualResult = determineResult(topPick.marketKey, homeGoals, awayGoals);
+      const actualResult = determineResult(
+        topPick.marketKey,
+        topPick.selection,
+        homeGoals,
+        awayGoals,
+        homeTeam,
+        awayTeam,
+      );
       
       // Save to DB
       await db.execute({

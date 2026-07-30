@@ -1,7 +1,9 @@
 import db from '../config/database.js';
 import { storeOpeningOdds, initClvColumns } from './clvTracker.js';
 
-const MODEL_VERSION = '5.1.0'; // Keep in sync with CURRENT_ENGINE_VERSION in predictionCache.js
+import { FOOTBALL_ENGINE_VERSION } from '../config/engineVersion.js';
+
+const MODEL_VERSION = FOOTBALL_ENGINE_VERSION;
 let predictionsTableReady = false;
 
 async function getTableColumns(tableName) {

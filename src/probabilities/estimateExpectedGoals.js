@@ -66,21 +66,6 @@ function applyFormBoosts(homeXg, awayXg, fv) {
   return { homeXg: homeXg*(1+homeXgBoost), awayXg: awayXg*(1+awayXgBoost) };
 }
 
-function applyOddsAnchor(homeXg, awayXg, fv) {
-  const impl = fv.impliedOver25!=null ? safeNum(fv.impliedOver25) : null;
-  if (impl==null) return { homeXg, awayXg };
-  if (impl <= 0.05 || impl >= 0.95) {
-    console.warn(`[xG] Ignoring invalid impliedOver25=${impl.toFixed(2)} odds anchor`);
-    return { homeXg, awayXg };
-  }
-  const implTotal = Math.max(1.2, -2.1*Math.log(Math.max(0.01,1-impl)));
-  const engTotal = homeXg+awayXg;
-  const blended = engTotal*0.65+implTotal*0.35;
-  const scale = clamp(blended/Math.max(0.5,engTotal), 0.78, 1.25);
-  console.log("[xG] L3 odds anchor over25="+impl.toFixed(2)+" implied="+implTotal.toFixed(2)+" blended="+blended.toFixed(2)+" scale="+scale.toFixed(2));
-  return { homeXg: homeXg*scale, awayXg: awayXg*scale };
-}
-
 /**
  * NEW: Blend H2H average goals into the xG estimate.
  *
@@ -168,23 +153,6 @@ function applyAdvancedTacticalAI(homeXg, awayXg, fv) {
   let hXg = homeXg;
   let aXg = awayXg;
   let multiplierDebug = [];
-
-  if (fv.polymarketOdds && fv.polymarketOdds.odds && fv.polymarketOdds.odds.over_under) {
-    const polyOver25 = safeNum(fv.polymarketOdds.odds.over_under.over_25, null);
-    if (polyOver25 != null) {
-      if (polyOver25 <= 0.05 || polyOver25 >= 0.95) {
-        multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)}) ignored-invalid`);
-      } else {
-        const sharpTotalXg = Math.max(1.2, -2.1 * Math.log(Math.max(0.01, 1 - polyOver25)));
-        const currentTotal = hXg + aXg;
-        const blendedTotal = (currentTotal * 0.72) + (sharpTotalXg * 0.28);
-        const scale = clamp(Math.max(0.5, blendedTotal) / Math.max(0.5, currentTotal), 0.82, 1.18);
-        hXg *= scale;
-        aXg *= scale;
-        multiplierDebug.push(`Polymarket O2.5(${polyOver25.toFixed(2)})->Scale(${scale.toFixed(2)})`);
-      }
-    }
-  }
 
   const applyTactics = (manager, isHome) => {
     if (!manager) return 1.0;
@@ -520,7 +488,6 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyScriptAdjustments(homeXg, awayXg, script, fv));
   const baseHomeXg = homeXg, baseAwayXg = awayXg;
   ({ homeXg, awayXg } = applyFormBoosts(homeXg, awayXg, fv));
-  ({ homeXg, awayXg } = applyOddsAnchor(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyH2HBlend(homeXg, awayXg, fv));             // NEW: wire H2H data
   ({ homeXg, awayXg } = applyLeagueGoalRateAdjustment(homeXg, awayXg, fv)); // NEW: league O3.5 rate
   ({ homeXg, awayXg } = applyAdvancedTacticalAI(homeXg, awayXg, fv));

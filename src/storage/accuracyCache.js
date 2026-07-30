@@ -16,6 +16,7 @@
  */
 
 import db from '../config/database.js';
+import { FOOTBALL_ENGINE_VERSION } from '../config/engineVersion.js';
 
 const MIN_SAMPLES = 10;
 const LEAGUE_MIN_SAMPLES = 12;
@@ -50,7 +51,19 @@ function addWeightedRateEntry(target, key, row, minSamples) {
   const weightedWins = Number(row.weighted_wins || 0);
   if (!key || total < minSamples) return;
   const weightedWinRate = weightedTotal > 0 ? weightedWins / weightedTotal : wins / total;
-  target[key] = { winRate: wins / total, weightedWinRate, samples: total };
+  const pricedSamples = Number(row.priced_samples || 0);
+  const pricedStake = Number(row.priced_stake || 0);
+  const profitUnits = Number(row.profit_units || 0);
+  const weightedStake = Number(row.weighted_stake || 0);
+  const weightedProfit = Number(row.weighted_profit || 0);
+  target[key] = {
+    winRate: wins / total,
+    weightedWinRate,
+    samples: total,
+    pricedSamples,
+    yieldRate: pricedStake > 0 ? profitUnits / pricedStake : null,
+    weightedYield: weightedStake > 0 ? weightedProfit / weightedStake : null,
+  };
 }
 
 function bandOdds(odds) {
@@ -75,7 +88,9 @@ const TIME_DECAY_SQL = `
 `;
 
 // Source filter: only use live predictions for accuracy calculations (not backtest/retroactive)
-const SOURCE_FILTER = `(po.prediction_source IN ('live', 'ws_live') OR po.prediction_source IS NULL) AND (po.is_retroactive = 0 OR po.is_retroactive IS NULL)`;
+const SOURCE_FILTER = `(po.prediction_source IN ('live', 'ws_live') OR po.prediction_source IS NULL)
+  AND (po.is_retroactive = 0 OR po.is_retroactive IS NULL)
+  AND po.engine_version = '${FOOTBALL_ENGINE_VERSION}'`;
 
 async function buildAccuracyMaps() {
   console.log('[AccuracyCache] Building v2 accuracy maps (time-weighted + odds-band + script-market)...');
@@ -169,7 +184,12 @@ async function buildAccuracyMaps() {
         COUNT(*) AS total,
         SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
         SUM(${TIME_DECAY_SQL}) AS weighted_total,
-        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins,
+        SUM(CASE WHEN po.profit_units IS NOT NULL THEN 1 ELSE 0 END) AS priced_samples,
+        SUM(CASE WHEN po.profit_units IS NOT NULL THEN COALESCE(po.stake_units, 1) ELSE 0 END) AS priced_stake,
+        SUM(COALESCE(po.profit_units, 0)) AS profit_units,
+        SUM(CASE WHEN po.profit_units IS NOT NULL THEN ${TIME_DECAY_SQL} * COALESCE(po.stake_units, 1) ELSE 0 END) AS weighted_stake,
+        SUM(${TIME_DECAY_SQL} * COALESCE(po.profit_units, 0)) AS weighted_profit
       FROM prediction_outcomes po
       WHERE po.outcome IN ('win','loss')
         AND po.best_pick_odds IS NOT NULL
@@ -179,6 +199,29 @@ async function buildAccuracyMaps() {
     `);
   } catch (e) {
     console.warn('[AccuracyCache] odds-band query failed:', e.message);
+  }
+
+  // ── 6. Per-market probability band (proper calibration target) ───────────
+  let perProbabilityBand = { rows: [] };
+  try {
+    perProbabilityBand = await db.execute(`
+      SELECT
+        po.predicted_market,
+        CAST(MIN(9, MAX(0, CAST(po.predicted_probability * 10 AS INTEGER))) AS INTEGER) AS probability_band,
+        COUNT(*) AS total,
+        SUM(CASE WHEN po.outcome = 'win' THEN 1 ELSE 0 END) AS wins,
+        SUM(${TIME_DECAY_SQL}) AS weighted_total,
+        SUM(CASE WHEN po.outcome = 'win' THEN ${TIME_DECAY_SQL} ELSE 0 END) AS weighted_wins
+      FROM prediction_outcomes po
+      WHERE po.outcome IN ('win','loss')
+        AND po.predicted_probability IS NOT NULL
+        AND po.predicted_probability >= 0
+        AND po.predicted_probability <= 1
+        AND ${SOURCE_FILTER}
+      GROUP BY po.predicted_market, probability_band
+    `);
+  } catch (e) {
+    console.warn('[AccuracyCache] probability-band query failed:', e.message);
   }
 
   // ── Build lookup maps ──────────────────────────────────────────────────────
@@ -215,10 +258,17 @@ async function buildAccuracyMaps() {
     addWeightedRateEntry(byOddsBand, key, row, MIN_SAMPLES);
   }
 
-  const totalOutcomes = rowsOf(perMarket).reduce((s, r) => s + Number(r.total || 0), 0);
-  console.log(`[AccuracyCache] Built v2. Outcomes=${totalOutcomes}. Markets=${Object.keys(byMarket).length}. Market+script=${Object.keys(byMarketScript).length}. League+market=${Object.keys(byLeagueMarket).length}. Odds-bands=${Object.keys(byOddsBand).length}`);
+  const byProbabilityBand = {};
+  for (const row of rowsOf(perProbabilityBand)) {
+    if (!row.predicted_market || row.probability_band == null) continue;
+    const key = `${row.predicted_market}::${Number(row.probability_band)}`;
+    addWeightedRateEntry(byProbabilityBand, key, row, MIN_SAMPLES);
+  }
 
-  return { byMarket, byMarketScript, byLeagueMarket, leagueNames, byConfidence, byOddsBand, builtAt: Date.now(), totalOutcomes };
+  const totalOutcomes = rowsOf(perMarket).reduce((s, r) => s + Number(r.total || 0), 0);
+  console.log(`[AccuracyCache] Built v3. Outcomes=${totalOutcomes}. Markets=${Object.keys(byMarket).length}. Probability-bands=${Object.keys(byProbabilityBand).length}. League+market=${Object.keys(byLeagueMarket).length}. Odds-bands=${Object.keys(byOddsBand).length}`);
+
+  return { byMarket, byMarketScript, byLeagueMarket, leagueNames, byConfidence, byOddsBand, byProbabilityBand, builtAt: Date.now(), totalOutcomes };
 }
 
 export async function getAccuracyCache() {
@@ -229,7 +279,7 @@ export async function getAccuracyCache() {
     _cacheBuiltAt = now;
   } catch (err) {
     console.error('[AccuracyCache] Failed to build cache:', err.message);
-    _cache = { byMarket: {}, byMarketScript: {}, byLeagueMarket: {}, leagueNames: {}, byConfidence: {}, byOddsBand: {}, totalOutcomes: 0 };
+    _cache = { byMarket: {}, byMarketScript: {}, byLeagueMarket: {}, leagueNames: {}, byConfidence: {}, byOddsBand: {}, byProbabilityBand: {}, totalOutcomes: 0 };
     _cacheBuiltAt = now;
   }
   return _cache;
@@ -294,6 +344,27 @@ export function getOddsBandAccuracy(marketKey, decimalOdds, cache) {
   const entry = byOddsBand[`${marketKey}::${oddsBand}`];
   if (!entry || entry.samples < MIN_SAMPLES) return null;
   return { winRate: entry.weightedWinRate || entry.winRate, samples: entry.samples };
+}
+
+/**
+ * Return the observed frequency for predictions made in the same probability
+ * band. Unlike a market-wide win rate, this measures calibration directly:
+ * "When version 5.2 said 60-69%, how often did that event occur?"
+ */
+export function getProbabilityBandCalibration(marketKey, modelProbability, cache) {
+  if (!cache || !marketKey || !Number.isFinite(Number(modelProbability))) return null;
+  const probability = Math.max(0, Math.min(1, Number(modelProbability)));
+  const band = Math.min(9, Math.floor(probability * 10));
+  const entry = cache.byProbabilityBand?.[`${marketKey}::${band}`];
+  if (!entry || entry.samples < MIN_SAMPLES) return null;
+  return {
+    observedFrequency: entry.weightedWinRate || entry.winRate,
+    rawObservedFrequency: entry.winRate,
+    samples: entry.samples,
+    band,
+    bandStart: band / 10,
+    bandEnd: (band + 1) / 10,
+  };
 }
 
 /**

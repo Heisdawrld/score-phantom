@@ -301,46 +301,8 @@ export function scoreMarketCandidates(candidates, scriptOutput, featureVector, r
     //   - BSD predicts home_win + our pick is home_win → match (+0.06)
     //   - BSD predicts home_win + our pick is over_25 → partial match (+0.03)
     //   - BSD predicts away_win + our pick is home_win → conflict (−0.04)
-    const bsdPred = fv.bsdPrediction || null;
-    if (bsdPred && bsdPred.prediction) {
-      const bsdPick = bsdPred.prediction; // 'home_win' | 'draw' | 'away_win'
-      const candKey = String(candidate.marketKey || '').toLowerCase();
-      const bsdConf = safeNum(bsdPred.modelConfidence, 0.5);
-      const confMultiplier = bsdConf >= 0.6 ? 1.0 : bsdConf >= 0.4 ? 0.7 : 0.4;
-
-      // Direct match: BSD picks home_win and our market is home_win (etc.)
-      const isDirectMatch = candKey === bsdPick;
-      // Family match: BSD picks home_win and our market is double_chance_home or home_over_05 etc.
-      const isFamilyMatch = !isDirectMatch && (
-        (bsdPick === 'home_win' && (candKey.includes('home') || candKey === 'double_chance_home' || candKey === 'dnb_home')) ||
-        (bsdPick === 'away_win' && (candKey.includes('away') || candKey === 'double_chance_away' || candKey === 'dnb_away'))
-      );
-      // Conflict: BSD picks opposite side
-      const isConflict = (
-        (bsdPick === 'home_win' && (candKey === 'away_win' || candKey === 'double_chance_away' || candKey === 'dnb_away')) ||
-        (bsdPick === 'away_win' && (candKey === 'home_win' || candKey === 'double_chance_home' || candKey === 'dnb_home'))
-      );
-
-      if (isDirectMatch) {
-        const bonus = 0.06 * confMultiplier;
-        finalScore += bonus;
-        contextAdjustmentScore += bonus;
-        candidate.isEnsembleMatch = true;
-        candidate.ensembleAlignment = 'direct';
-      } else if (isFamilyMatch) {
-        const bonus = 0.03 * confMultiplier;
-        finalScore += bonus;
-        contextAdjustmentScore += bonus;
-        candidate.isEnsembleMatch = true;
-        candidate.ensembleAlignment = 'family';
-      } else if (isConflict) {
-        const penalty = 0.04 * confMultiplier;
-        finalScore -= penalty;
-        contextAdjustmentScore -= penalty;
-        candidate.isModelConflict = true;
-        candidate.ensembleAlignment = 'conflict';
-      }
-    }
+    // CatBoost already influences modelProbability in the ensemble. Applying
+    // a second ranking bonus here would double-count the same evidence.
 
     if (candidate.impliedProbability > 0 && candidate.edge >= 0.05) {
       finalScore += 0.08;

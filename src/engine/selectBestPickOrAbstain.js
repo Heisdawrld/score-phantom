@@ -42,6 +42,7 @@ function isPricedCandidate(candidate) {
 
 function isHeadlineQualityCandidate(candidate, featureVector, scriptOutput) {
   if (!candidate) return false;
+  if (!isHeadlineEligibleMarket(candidate.marketKey)) return false;
   const annotated = annotate(candidate, featureVector, scriptOutput);
   const prob = safeNum(candidate.modelProbability, 0);
   const finalScore = safeNum(candidate.finalScore, 0);

@@ -4,8 +4,9 @@
 import db from '../config/database.js';
 import { fetchFixturesByDate } from './bsd.js';
 import { computeProfitUnits } from '../storage/profitUnits.js';
+import { evaluatePrediction } from './predictionSettlement.js';
 
-export function evaluatePrediction(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
+function evaluatePredictionLegacy(market, selection, homeScore, awayScore, homeTeamName, awayTeamName) {
   if (homeScore == null || awayScore == null) return 'void';
   const total = homeScore + awayScore;
   const sel = (selection || '').toLowerCase().trim();
@@ -164,8 +165,9 @@ export async function checkResults(dateStr) {
   for (const f of apiFixtures) {
     // BSD uses status='finished' and id (not match_id)
     const isFinal = f.status === 'finished' || f.match_status === 'FT' || f.match_status === 'AET';
-    const hScore  = f.home_score ?? f.home_score_ht ?? null;
-    if (isFinal && hScore != null) {
+    const hScore = f.home_score;
+    const aScore = f.away_score;
+    if (isFinal && hScore != null && aScore != null) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };
       const fid = String(f.id || f.match_id);
       scoreMap[fid] = s;
@@ -220,7 +222,7 @@ export async function checkResults(dateStr) {
     try {
       const placeholders = fixtureIds.map(() => '?').join(',');
       const picksRes = await db.execute({
-        sql: `SELECT id, fixture_id, market_key, selection, model_probability, bookmaker_odds, model_confidence
+        sql: `SELECT id, fixture_id, engine_version, market_key, selection, model_probability, bookmaker_odds, model_confidence, stake_units
               FROM prediction_picks
               WHERE fixture_id IN (${placeholders})
                 AND prediction_source = 'pre_match'
@@ -257,18 +259,13 @@ export async function checkResults(dateStr) {
       continue;
     }
 
-    const outcome = evaluatePrediction(fix.best_pick_market, fix.best_pick_selection, score.home, score.away, fix.home_team_name, fix.away_team_name);
-    
     // ── Unified odds source: read bookmaker_odds from prediction_picks ────────
-    // This matches how wsLiveScores.js and backtesting.js calculate profit_units.
-    // Falls back to deriving from implied_probability if no pick found.
+    // Only immutable odds captured with the pre-match pick can produce a real
+    // ROI. A fair implied probability is not a bookmaker price.
     const pick = picksMap[fid] || null;
     const bookmakerOdds = pick?.bookmaker_odds != null
       ? parseFloat(pick.bookmaker_odds)
-      : (() => {
-          const impliedProb = parseFloat(fix.best_pick_implied_probability || 0);
-          return impliedProb > 0 ? (1 / impliedProb) : null;
-        })();
+      : null;
     // Read stake_units from the prediction pick (persisted by predictionCache.js).
     // Falls back to 1 if not available (legacy picks or missing stake data).
     const stakeUnits = pick?.stake_units != null ? parseFloat(pick.stake_units) : 1;
@@ -278,6 +275,16 @@ export async function checkResults(dateStr) {
     const selection = pick?.selection || fix.best_pick_selection;
     const probability = pick?.model_probability ?? parseFloat(fix.best_pick_probability || 0);
     const modelConfidence = pick?.model_confidence || fix.confidence_model || '';
+    // Settle the exact immutable pre-match pick that will be written to the
+    // outcome row. predictions_v2 may have been refreshed after kickoff.
+    const outcome = evaluatePrediction(
+      market,
+      selection,
+      score.home,
+      score.away,
+      fix.home_team_name,
+      fix.away_team_name,
+    );
     
     // Determine if this is a sharp value pick (high edge)
     const edge = parseFloat(fix.best_pick_edge || 0);
@@ -290,7 +297,7 @@ export async function checkResults(dateStr) {
       await db.execute({ 
         sql: `INSERT INTO prediction_outcomes (
           fixture_id, sport_key, home_team, away_team, match_date, tournament,
-          pick_id, predicted_market, predicted_selection, predicted_probability,
+          pick_id, engine_version, predicted_market, predicted_selection, predicted_probability,
           best_pick_odds, stake_units, profit_units,
           model_confidence,
           home_score, away_score, full_score,
@@ -299,7 +306,7 @@ export async function checkResults(dateStr) {
           evaluated_at, created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
           ?, ?, ?,
           ?,
           ?, ?, ?,
@@ -310,6 +317,7 @@ export async function checkResults(dateStr) {
         ON CONFLICT (fixture_id) DO UPDATE SET
           sport_key = EXCLUDED.sport_key,
           pick_id = EXCLUDED.pick_id,
+          engine_version = EXCLUDED.engine_version,
           predicted_market = EXCLUDED.predicted_market,
           predicted_selection = EXCLUDED.predicted_selection,
           predicted_probability = EXCLUDED.predicted_probability,
@@ -328,7 +336,7 @@ export async function checkResults(dateStr) {
           evaluated_at = CURRENT_TIMESTAMP`, 
         args: [
           fid, 'football', fix.home_team_name, fix.away_team_name, fix.match_date, fix.tournament_name,
-          pickId, market, selection, parseFloat(probability || 0),
+          pickId, pick?.engine_version || null, market, selection, parseFloat(probability || 0),
           bookmakerOdds != null ? parseFloat(bookmakerOdds) : null, stakeUnits, profitUnits,
           modelConfidence || null,
           score.home, score.away, score.home + '-' + score.away,
@@ -356,3 +364,5 @@ export async function backfillResults(daysBack = 7) {
   }
   return results;
 }
+
+export { evaluatePrediction } from './predictionSettlement.js';

@@ -1,5 +1,5 @@
 import db from '../config/database.js';
-import { evaluatePrediction as sharedEvaluatePrediction } from '../services/resultChecker.js';
+import { evaluatePrediction as sharedEvaluatePrediction } from '../services/predictionSettlement.js';
 import { computeProfitUnits } from './profitUnits.js';
 
 /**
@@ -20,6 +20,7 @@ export async function initBacktestingTable() {
         tournament TEXT,
         -- Prediction
         pick_id INTEGER,
+        engine_version TEXT,
         predicted_market TEXT,
         predicted_selection TEXT,
         predicted_probability REAL,
@@ -34,6 +35,8 @@ export async function initBacktestingTable() {
         -- Outcome
         outcome TEXT,
         result_status TEXT,
+        prediction_source TEXT DEFAULT 'live',
+        is_retroactive INTEGER DEFAULT 0,
         evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -45,10 +48,13 @@ export async function initBacktestingTable() {
     const migrations = [
       ['sport_key',      `ALTER TABLE prediction_outcomes ADD COLUMN sport_key TEXT DEFAULT 'football'`],
       ['pick_id',        `ALTER TABLE prediction_outcomes ADD COLUMN pick_id INTEGER`],
+      ['engine_version', `ALTER TABLE prediction_outcomes ADD COLUMN engine_version TEXT`],
       ['best_pick_odds', `ALTER TABLE prediction_outcomes ADD COLUMN best_pick_odds REAL`],
       ['stake_units',    `ALTER TABLE prediction_outcomes ADD COLUMN stake_units REAL DEFAULT 1`],
       ['profit_units',   `ALTER TABLE prediction_outcomes ADD COLUMN profit_units REAL`],
       ['result_status',  `ALTER TABLE prediction_outcomes ADD COLUMN result_status TEXT`],
+      ['prediction_source', `ALTER TABLE prediction_outcomes ADD COLUMN prediction_source TEXT DEFAULT 'live'`],
+      ['is_retroactive', `ALTER TABLE prediction_outcomes ADD COLUMN is_retroactive INTEGER DEFAULT 0`],
       ['is_sharp_value', `ALTER TABLE prediction_outcomes ADD COLUMN is_sharp_value INTEGER DEFAULT 0`],
     ];
     for (const [col, sql] of migrations) {
@@ -61,6 +67,10 @@ export async function initBacktestingTable() {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_market ON prediction_outcomes(predicted_market)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_outcome ON prediction_outcomes(outcome)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_po_pick_id ON prediction_outcomes(pick_id)`);
+    await db.execute(`
+      CREATE INDEX IF NOT EXISTS idx_po_engine_source_outcome
+      ON prediction_outcomes(engine_version, prediction_source, is_retroactive, outcome)
+    `);
     console.log('[Backtest] Table initialized');
   } catch (err) {
     console.error('[Backtest] Init error:', err.message);
@@ -84,7 +94,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
       try {
         const r = await db.execute({
           sql: `
-        SELECT id, market_key, selection, model_probability, bookmaker_odds, model_confidence
+        SELECT id, engine_version, market_key, selection, model_probability, bookmaker_odds, model_confidence, stake_units
         FROM prediction_picks
         WHERE fixture_id = ?
           AND prediction_source = 'pre_match'
@@ -101,12 +111,11 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
   const market = snapshot?.market_key || prediction.best_pick_market;
   const selection = snapshot?.selection || prediction.best_pick_selection;
   const probability = snapshot?.model_probability ?? prediction.best_pick_probability ?? 0;
-  // Odds fallback chain: snapshot.bookmaker_odds → derive from predictions_v2.best_pick_implied_probability → null
-  // Matches resultChecker.js:266-271 and wsLiveScores.js odds fallback.
-  const impliedProb = prediction.best_pick_implied_probability != null ? parseFloat(prediction.best_pick_implied_probability) : 0;
+  // Fair implied probability is not a captured bookmaker price, so it cannot
+  // be used to manufacture historical ROI.
   const odds = snapshot?.bookmaker_odds != null
     ? parseFloat(snapshot.bookmaker_odds)
-    : (impliedProb > 0 ? (1 / impliedProb) : null);
+    : null;
   const modelConfidence = snapshot ? snapshot.model_confidence : prediction.confidence_model;
 
   const outcome = evaluatePrediction(
@@ -116,22 +125,28 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
     homeTeamName, awayTeamName
   );
   const resultStatus = outcome;
-  const stakeUnits = 1;
+  const stakeUnits = snapshot?.stake_units != null ? parseFloat(snapshot.stake_units) : 1;
   const profitUnits = computeProfitUnits(resultStatus, odds, stakeUnits);
   try {
     await db.execute({
       sql: `INSERT INTO prediction_outcomes
         (fixture_id, sport_key, home_team, away_team, match_date, tournament,
-         pick_id, predicted_market, predicted_selection, predicted_probability,
+         pick_id, engine_version, predicted_market, predicted_selection, predicted_probability,
          best_pick_odds, stake_units, profit_units,
          model_confidence, home_score, away_score, full_score, outcome, result_status, prediction_source, evaluated_at, created_at)
-        VALUES (?,?,?,?,?,?,
-                ?,?,?,?,?,?,
-                ?,?,
-                ?,?,?,?, ?, ?, 'backtest', CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        VALUES (
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?,
+          ?, ?, ?,
+          ?, ?,
+          'backtest', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
         ON CONFLICT (fixture_id) DO UPDATE SET
           sport_key = EXCLUDED.sport_key,
           pick_id = EXCLUDED.pick_id,
+          engine_version = EXCLUDED.engine_version,
           predicted_market = EXCLUDED.predicted_market,
           predicted_selection = EXCLUDED.predicted_selection,
           predicted_probability = EXCLUDED.predicted_probability,
@@ -154,6 +169,7 @@ export async function saveOutcome(fixtureId, prediction, homeScore, awayScore, h
         prediction.match_date || '',
         prediction.tournament || '',
         snapshot?.id != null ? Number(snapshot.id) : null,
+        snapshot?.engine_version || prediction.model_version || null,
         market || '',
         selection || '',
         parseFloat(probability || 0),

@@ -36,27 +36,86 @@ const ODDS_MAP = {
  */
 function lookupOdds(marketKey, oddsSnapshot) {
   if (!oddsSnapshot) return null;
+  const snapshot = oddsSnapshot.odds && typeof oddsSnapshot.odds === 'object'
+    ? oddsSnapshot.odds
+    : oddsSnapshot;
 
   const keys = ODDS_MAP[marketKey] || [marketKey];
   for (const k of keys) {
-    if (oddsSnapshot[k] != null) {
-      const val = safeNum(oddsSnapshot[k], 0);
+    if (snapshot[k] != null) {
+      const val = safeNum(snapshot[k], 0);
       if (val > 1.0) return val;
     }
   }
 
   // Check over_under nested object
-  if (oddsSnapshot.over_under && typeof oddsSnapshot.over_under === 'object') {
+  if (snapshot.over_under && typeof snapshot.over_under === 'object') {
     const ouKeys = ODDS_MAP[marketKey] || [];
     for (const k of ouKeys) {
-      if (oddsSnapshot.over_under[k] != null) {
-        const val = safeNum(oddsSnapshot.over_under[k], 0);
+      if (snapshot.over_under[k] != null) {
+        const val = safeNum(snapshot.over_under[k], 0);
         if (val > 1.0) return val;
       }
     }
   }
 
   return null;
+}
+
+const FAIR_MARKET_GROUPS = [
+  ['home_win', 'draw', 'away_win'],
+  ['over_15', 'under_15'],
+  ['over_25', 'under_25'],
+  ['over_35', 'under_35'],
+  ['btts_yes', 'btts_no'],
+  ['dnb_home', 'dnb_away'],
+  ['home_over_15', 'home_under_15'],
+  ['away_over_15', 'away_under_15'],
+  ['corners_1x2_home', 'corners_1x2_draw', 'corners_1x2_away'],
+  ['total_corners_over', 'total_corners_under'],
+  ['red_card_yes', 'red_card_no'],
+  ['total_red_cards_over', 'total_red_cards_under'],
+];
+
+function buildFairProbabilityMap(oddsSnapshot) {
+  const fair = {};
+  for (const group of FAIR_MARKET_GROUPS) {
+    const prices = group.map((marketKey) => lookupOdds(marketKey, oddsSnapshot));
+    if (prices.some((price) => !price || price <= 1)) continue;
+
+    const raw = prices.map((price) => 1 / price);
+    const overround = raw.reduce((sum, probability) => sum + probability, 0);
+
+    // Normalize only a genuine bookmaker margin. A best-price snapshot can
+    // occasionally be an underround; normalizing that would manufacture vig.
+    if (overround <= 1.001 || overround > 1.35) continue;
+    group.forEach((marketKey, index) => {
+      fair[marketKey] = {
+        probability: raw[index] / overround,
+        overround,
+      };
+    });
+  }
+  return fair;
+}
+
+function priceCandidate(candidate, oddsSnapshot, fairMap) {
+  const decimalOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
+  if (!decimalOdds || decimalOdds <= 1) return null;
+
+  const rawImpliedProbability = 1 / decimalOdds;
+  const fairEntry = fairMap[candidate.marketKey] || null;
+  const impliedProbability = fairEntry?.probability ?? rawImpliedProbability;
+  const edge = candidate.modelProbability - impliedProbability;
+
+  return {
+    ...candidate,
+    impliedProbability: parseFloat(impliedProbability.toFixed(4)),
+    rawImpliedProbability: parseFloat(rawImpliedProbability.toFixed(4)),
+    bookmakerOverround: fairEntry ? parseFloat(fairEntry.overround.toFixed(4)) : null,
+    edge: parseFloat(edge.toFixed(4)),
+    bookmakerOdds: decimalOdds,
+  };
 }
 
 /**
@@ -68,36 +127,17 @@ function lookupOdds(marketKey, oddsSnapshot) {
  * @returns {MarketCandidate[]}
  */
 export function computeImpliedProbabilities(candidates, oddsSnapshot, features) {
+  const primaryFairMap = buildFairProbabilityMap(oddsSnapshot);
+  const advancedOdds = features?.advancedOdds || null;
+  const advancedFairMap = buildFairProbabilityMap(advancedOdds);
+
   return candidates.map((candidate) => {
-    const decimalOdds = lookupOdds(candidate.marketKey, oddsSnapshot);
-
-    if (decimalOdds && decimalOdds > 1.0) {
-      const impliedProbability = parseFloat((1 / decimalOdds).toFixed(4));
-      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
-
-      return {
-        ...candidate,
-        impliedProbability,
-        edge,
-        bookmakerOdds: decimalOdds,
-      };
-    }
+    const primary = priceCandidate(candidate, oddsSnapshot, primaryFairMap);
+    if (primary) return primary;
 
     // Look for advanced odds if basic odds are missing
-    const adv = features?.advancedOdds || null;
-    const advOdds = lookupOdds(candidate.marketKey, adv);
-
-    if (advOdds && advOdds > 1.0) {
-      const impliedProbability = parseFloat((1 / advOdds).toFixed(4));
-      const edge = parseFloat((candidate.modelProbability - impliedProbability).toFixed(4));
-
-      return {
-        ...candidate,
-        impliedProbability,
-        edge,
-        bookmakerOdds: advOdds,
-      };
-    }
+    const advanced = priceCandidate(candidate, advancedOdds, advancedFairMap);
+    if (advanced) return advanced;
 
     return { ...candidate, impliedProbability: null, edge: null };
   });

@@ -32,6 +32,16 @@ import { computeBsdIntelligenceFeatures } from './computeBsdIntelligenceFeatures
 import { computeLeagueContext } from './computeLeagueContext.js';
 import { resolveFixtureMeta } from './resolveFixtureMeta.js';
 
+function fairTwoWayImplied(outcomeOdds, oppositeOdds) {
+  const price = safeNum(outcomeOdds, null);
+  if (!price || price <= 1) return null;
+  const raw = 1 / price;
+  const opposite = safeNum(oppositeOdds, null);
+  if (!opposite || opposite <= 1) return raw;
+  const overround = raw + (1 / opposite);
+  return overround > 1.001 && overround <= 1.35 ? raw / overround : raw;
+}
+
 async function getMatches(fixtureId, type) {
   const result = await db.execute({
     sql: 'SELECT * FROM historical_matches WHERE fixture_id = ? AND type = ? ORDER BY date DESC',
@@ -315,9 +325,12 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
       ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
     if (odds.home) impliedHomeProb = parseFloat(((1 / odds.home) / margin).toFixed(4));
     if (odds.away) impliedAwayProb = parseFloat(((1 / odds.away) / margin).toFixed(4));
-    if (odds.over_2_5) impliedOver25 = parseFloat((1 / odds.over_2_5).toFixed(4));
-    if (odds.over_1_5) impliedOver15 = parseFloat((1 / odds.over_1_5).toFixed(4));
-    if (odds.btts_yes) impliedBttsYes = parseFloat((1 / odds.btts_yes).toFixed(4));
+    const fairOver25 = fairTwoWayImplied(odds.over_2_5, odds.under_2_5);
+    const fairOver15 = fairTwoWayImplied(odds.over_1_5, odds.under_1_5);
+    const fairBttsYes = fairTwoWayImplied(odds.btts_yes, odds.btts_no);
+    if (fairOver25 != null) impliedOver25 = parseFloat(fairOver25.toFixed(4));
+    if (fairOver15 != null) impliedOver15 = parseFloat(fairOver15.toFixed(4));
+    if (fairBttsYes != null) impliedBttsYes = parseFloat(fairBttsYes.toFixed(4));
   }
 
   // Fallback: from enrichment advancedOdds (BSD fetchEventOdds)
@@ -337,15 +350,21 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     }
     if (impliedOver25 == null) {
       const o25 = safeNum(ao.over_25 || ao.over_25_goals, null);
-      if (o25) impliedOver25 = parseFloat((1/o25).toFixed(4));
+      const u25 = safeNum(ao.under_25 || ao.under_25_goals, null);
+      const fair = fairTwoWayImplied(o25, u25);
+      if (fair != null) impliedOver25 = parseFloat(fair.toFixed(4));
     }
     if (impliedOver15 == null) {
       const o15 = safeNum(ao.over_15 || ao.over_15_goals, null);
-      if (o15) impliedOver15 = parseFloat((1/o15).toFixed(4));
+      const u15 = safeNum(ao.under_15 || ao.under_15_goals, null);
+      const fair = fairTwoWayImplied(o15, u15);
+      if (fair != null) impliedOver15 = parseFloat(fair.toFixed(4));
     }
     if (impliedBttsYes == null) {
       const btts = safeNum(ao.btts_yes, null);
-      if (btts) impliedBttsYes = parseFloat((1/btts).toFixed(4));
+      const bttsNo = safeNum(ao.btts_no, null);
+      const fair = fairTwoWayImplied(btts, bttsNo);
+      if (fair != null) impliedBttsYes = parseFloat(fair.toFixed(4));
     }
   }
 

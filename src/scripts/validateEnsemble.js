@@ -1,31 +1,28 @@
 /**
- * validateEnsemble.js — A/B comparison: old model vs new ensemble model.
+ * validateEnsemble.js — Probability replay: stored model vs current ensemble.
  *
  * PURPOSE:
  *   Proves (or disproves) that the ensemble + per-league rho + sharp money
- *   signals actually improve prediction accuracy. This is the validation
- *   step before fully trusting the new engine in production.
+ *   signals improve probability quality for the same settled selections.
  *
  * HOW IT WORKS:
  *   1. Queries settled predictions from predictions_v2 JOIN prediction_outcomes
  *   2. For each prediction, loads the stored feature vector (from prediction_json)
  *   3. Re-runs the probability pipeline WITH the ensemble enabled
  *   4. Compares: stored (old) probabilities vs new (ensemble) probabilities vs actual outcome
- *   5. Reports: Brier score, calibration error, log loss, accuracy by market
+ *   5. Reports Brier score and calibration error overall and by market
  *
  * METRICS:
  *   - Brier Score: lower is better (0 = perfect, 0.25 = random)
  *   - Calibration Error: lower is better (mean |predicted - observed| per bin)
- *   - Log Loss: lower is better (penalizes overconfident wrong predictions)
- *   - Accuracy: % of top picks that won
- *   - ROI: profit units per pick at bookmaker odds
+ *   - Settled win rate and ROI are controls only because picks are unchanged
  *
  * USAGE:
  *   node src/scripts/validateEnsemble.js
  *   node src/scripts/validateEnsemble.js --days=30 --limit=200
  *
  * OUTPUT:
- *   Console report + JSON saved to /tmp/ensemble-validation.json
+ *   Console report + JSON saved in the operating system's temp directory
  *
  * IMPORTANT:
  *   This uses STORED feature vectors — the same data that was available at
@@ -39,14 +36,18 @@
 
 import 'dotenv/config';
 import db from '../config/database.js';
-import { runProbabilityPipeline } from '../engine/runProbabilityPipeline.js';
 import { buildScoreMatrix, deriveMarketProbabilities } from '../probabilities/poisson.js';
 import { calibrateProbabilities } from '../probabilities/calibrateProbabilities.js';
 import { calibrateFromHistory } from '../probabilities/calibrateFromHistory.js';
 import { estimateExpectedGoals } from '../probabilities/estimateExpectedGoals.js';
 import { classifyMatchScript } from '../scripts/classifyMatchScript.js';
 import { brierScore, calibrationError } from '../probabilities/isotonicCalibration.js';
-import { evaluatePrediction } from '../services/resultChecker.js';
+import { ensembleProbabilities } from '../probabilities/ensemble.js';
+import { getMarketProbability } from '../probabilities/getMarketProbability.js';
+import { FOOTBALL_ENGINE_VERSION } from '../config/engineVersion.js';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ── Parse args ───────────────────────────────────────────────────────────────
 const args = process.argv.slice(2).reduce((acc, a) => {
@@ -87,13 +88,21 @@ async function main() {
             f.league_id
           FROM predictions_v2 p
           JOIN prediction_outcomes po ON po.fixture_id = p.fixture_id
+          JOIN prediction_picks pp ON pp.id = po.pick_id
           LEFT JOIN fixtures f ON f.id = p.fixture_id
           WHERE po.outcome IN ('win', 'loss')
             AND p.prediction_json IS NOT NULL
-            AND p.created_at >= ?
-          ORDER BY p.created_at DESC
+            AND pp.generated_at >= ?
+            AND pp.prediction_source = 'pre_match'
+            AND pp.generated_at < pp.kickoff_at
+            AND p.updated_at <= pp.kickoff_at
+            AND po.prediction_source IN ('live', 'ws_live')
+            AND COALESCE(po.is_retroactive, 0) = 0
+            AND po.engine_version = ?
+            AND p.model_version = ?
+          ORDER BY pp.generated_at DESC
           LIMIT ?`,
-    args: [since, LIMIT],
+    args: [since, FOOTBALL_ENGINE_VERSION, FOOTBALL_ENGINE_VERSION, LIMIT],
   });
 
   const predictions = rows.rows || [];
@@ -119,14 +128,14 @@ async function main() {
   for (const pred of predictions) {
     try {
       const stored = JSON.parse(pred.prediction_json);
-      const features = stored.features || {};
-      const script = stored.script || classifyMatchScript(features);
+      const storedResult = stored.engineResult || stored;
+      const features = storedResult.features || stored.prediction?.features || {};
+      const script = storedResult.script || classifyMatchScript(features);
       const actualOutcome = pred.outcome; // 'win' or 'loss'
       const actualWin = actualOutcome === 'win' ? 1 : 0;
 
       // ── OLD MODEL: stored probabilities (pre-ensemble) ────────────────────
-      const oldProbs = stored.calibratedProbs || {};
-      const oldBestPick = stored.bestPick || {};
+      const oldBestPick = storedResult.bestPick || stored.prediction?.bestPick || {};
       const oldProb = pred.best_pick_probability || oldBestPick.modelProbability || 0;
       const oldMarket = pred.best_pick_market || oldBestPick.marketKey;
 
@@ -144,47 +153,21 @@ async function main() {
         impliedBttsYes: features.impliedBttsYes || null,
       };
       const calProbs = calibrateProbabilities(rawProbs, script, null, impliedOdds);
-      const newProbs = calibrateFromHistory(calProbs, null, {
-        odds: features.advancedOdds || features.marketOdds || {},
-        scriptPrimary: script?.primary || null,
-        leagueId: features.leagueId || null,
-        tournamentName: features.tournamentName || null,
-      });
+      const newProbs = calibrateFromHistory(calProbs, null);
 
-      // Apply ensemble manually (to avoid re-fetching accuracy cache)
+      // Apply the same ensemble implementation used in production.
       const bsdPrediction = features?.bsdPrediction || null;
       const polymarketOdds = features?.polymarketOdds || null;
-      const hasEnsembleData = !!(bsdPrediction && bsdPrediction.homeWinProb);
-
-      // Simple ensemble blend (matches ensemble.js logic)
-      let ensembleProbs = { ...newProbs };
-      let ensembleActive = false;
-      if (hasEnsembleData) {
-        ensembleActive = true;
-        const catboostConf = bsdPrediction.modelConfidence || 0.5;
-        let wP, wC;
-        if (catboostConf >= 0.6) { wP = 0.50; wC = 0.35; }
-        else if (catboostConf >= 0.4) { wP = 0.60; wC = 0.25; }
-        else { wP = 0.75; wC = 0.15; }
-        const wM = 1 - wP - wC;
-
-        if (bsdPrediction.homeWinProb != null) {
-          ensembleProbs.homeWin = (newProbs.homeWin * wP + bsdPrediction.homeWinProb * wC) / (wP + wC);
-          ensembleProbs.draw = (newProbs.draw * bsdPrediction.drawProb) / (wP + wC + 0.001);
-          ensembleProbs.awayWin = (newProbs.awayWin * wP + bsdPrediction.awayWinProb * wC) / (wP + wC);
-        }
-        if (bsdPrediction.over25Prob != null && ensembleProbs.over25 != null) {
-          ensembleProbs.over25 = (newProbs.over25 * wP + bsdPrediction.over25Prob * wC) / (wP + wC);
-          ensembleProbs.under25 = 1 - ensembleProbs.over25;
-        }
-        if (bsdPrediction.bttsYesProb != null && ensembleProbs.bttsYes != null) {
-          ensembleProbs.bttsYes = (newProbs.bttsYes * wP + bsdPrediction.bttsYesProb * wC) / (wP + wC);
-          ensembleProbs.bttsNo = 1 - ensembleProbs.bttsYes;
-        }
-      }
+      const ensembleActive = bsdPrediction?.homeWinProb != null;
+      const { probabilities: ensembleProbs } = ensembleProbabilities({
+        calibratedProbs: newProbs,
+        bsdPrediction,
+        polymarketOdds,
+        features,
+      });
 
       // ── Determine new best pick (same market as old, but with new probability) ──
-      const newProb = ensembleProbs[oldMarket] || oldProb;
+      const newProb = getMarketProbability(ensembleProbs, oldMarket, oldProb);
 
       // ── Collect metrics ───────────────────────────────────────────────────
       results.total++;
@@ -279,10 +262,11 @@ async function main() {
   console.log('┌─────────────────────┬──────────────┬──────────────┬──────────────┐');
   console.log('│ Metric              │ Old Model    │ New Model    │ Δ (improvement)');
   console.log('├─────────────────────┼──────────────┼──────────────┼──────────────┤');
-  console.log(`│ Accuracy (%)        │ ${pad(oldSummary.accuracy)}%     │ ${pad(newSummary.accuracy)}%     │ ${delta(oldSummary.accuracy, newSummary.accuracy)}pp`);
+  console.log(`│ Settled-pick wins   │ ${pad(oldSummary.accuracy)}%     │ ${pad(newSummary.accuracy)}%     │ same selections`);
   console.log(`│ Brier Score ↓       │ ${pad(oldSummary.brierScore)}       │ ${pad(newSummary.brierScore)}       │ ${deltaBrier(oldSummary.brierScore, newSummary.brierScore)}`);
   console.log(`│ Calibration Error ↓ │ ${pad(oldSummary.calibrationError)}       │ ${pad(newSummary.calibrationError)}       │ ${deltaBrier(oldSummary.calibrationError, newSummary.calibrationError)}`);
-  console.log(`│ ROI per pick (%)    │ ${pad(oldSummary.avgROI)}%     │ ${pad(newSummary.avgROI)}%     │ ${delta(oldSummary.avgROI, newSummary.avgROI)}pp`);
+  console.log(`│ Settled-pick ROI    │ ${pad(oldSummary.avgROI)}%     │ ${pad(newSummary.avgROI)}%     │ same selections`);
+  console.log('  Win rate and ROI are controls only: this replay changes probabilities, not the stored selections.');
   console.log('└─────────────────────┴──────────────┴──────────────┴──────────────┘');
 
   if (results.withEnsembleData >= 20) {
@@ -302,31 +286,19 @@ async function main() {
 
   console.log('\n── BY MARKET ────────────────────────────────────────────────────');
   console.log('┌──────────────────────┬───────┬──────────────┬──────────────┐');
-  console.log('│ Market               │   N   │ Old Accuracy │ New Accuracy │');
+  console.log('│ Market               │   N   │ Old Brier    │ New Brier    │');
   console.log('├──────────────────────┼───────┼──────────────┼──────────────┤');
   for (const [market, data] of Object.entries(results.byMarket)) {
     if (data.total < 3) continue;
-    const oldAcc = ((data.oldWins / data.total) * 100).toFixed(1);
-    const newAcc = ((data.newWins / data.total) * 100).toFixed(1);
     const oldBrier = brierScore(data.oldBrier)?.toFixed(3) || 'N/A';
     const newBrier = brierScore(data.newBrier)?.toFixed(3) || 'N/A';
-    console.log(`│ ${market.padEnd(20)} │ ${String(data.total).padStart(5)} │ ${oldAcc.padStart(12)}% │ ${newAcc.padStart(12)}% │`);
+    console.log(`│ ${market.padEnd(20)} │ ${String(data.total).padStart(5)} │ ${oldBrier.padStart(12)} │ ${newBrier.padStart(12)} │`);
   }
   console.log('└──────────────────────┴───────┴──────────────┴──────────────┘');
 
   // ── Interpretation ────────────────────────────────────────────────────────
   console.log('\n── INTERPRETATION ───────────────────────────────────────────────');
-  const accDelta = (newSummary.accuracy || 0) - (oldSummary.accuracy || 0);
   const brierDelta = (oldSummary.brierScore || 0) - (newSummary.brierScore || 0); // positive = improvement
-  const roiDelta = (newSummary.avgROI || 0) - (oldSummary.avgROI || 0);
-
-  if (accDelta > 1) {
-    console.log(`✅ Accuracy improved by ${accDelta.toFixed(2)}pp — ensemble is working.`);
-  } else if (accDelta < -1) {
-    console.log(`⚠ Accuracy DECREASED by ${Math.abs(accDelta).toFixed(2)}pp — investigate ensemble weights.`);
-  } else {
-    console.log(`➡ Accuracy unchanged (${accDelta.toFixed(2)}pp) — ensemble is neutral on accuracy.`);
-  }
 
   if (brierDelta > 0.002) {
     console.log(`✅ Brier score improved by ${brierDelta.toFixed(4)} — probabilities are more accurate.`);
@@ -336,13 +308,7 @@ async function main() {
     console.log(`➡ Brier score unchanged (${brierDelta.toFixed(4)}) — probability quality is similar.`);
   }
 
-  if (roiDelta > 0.5) {
-    console.log(`✅ ROI improved by ${roiDelta.toFixed(2)}pp/pick — ensemble is profitable.`);
-  } else if (roiDelta < -0.5) {
-    console.log(`⚠ ROI DECREASED by ${Math.abs(roiDelta).toFixed(2)}pp/pick — ensemble is losing value.`);
-  } else {
-    console.log(`➡ ROI unchanged (${roiDelta.toFixed(2)}pp) — value is similar.`);
-  }
+  console.log('➡ Selection accuracy and ROI require a true forward A/B run; this replay only validates probability quality.');
 
   // ── Save JSON report ──────────────────────────────────────────────────────
   const report = {
@@ -364,9 +330,9 @@ async function main() {
     })),
   };
 
-  const fs = await import('fs');
-  fs.writeFileSync('/tmp/ensemble-validation.json', JSON.stringify(report, null, 2));
-  console.log('\n📄 Full report saved to /tmp/ensemble-validation.json');
+  const reportPath = join(tmpdir(), 'ensemble-validation.json');
+  writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  console.log(`\n📄 Full report saved to ${reportPath}`);
 
   console.log('\n' + '═'.repeat(70) + '\n');
   process.exit(0);
@@ -375,12 +341,6 @@ async function main() {
 function pad(v) {
   if (v == null) return '  N/A';
   return String(v).padStart(6);
-}
-
-function delta(old, neu) {
-  if (old == null || neu == null) return '  N/A';
-  const d = neu - old;
-  return (d >= 0 ? '+' : '') + d.toFixed(2);
 }
 
 function deltaBrier(old, neu) {

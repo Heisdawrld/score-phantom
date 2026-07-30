@@ -46,8 +46,6 @@ const MARKET_MIN_ODDS = {
 export function classifyValueTier(candidate) {
   const prob = safeNum(candidate.modelProbability, 0);
   const odds = safeNum(candidate.bookmakerOdds, 0);
-  const implied = safeNum(candidate.impliedProbability, 0);
-  const edge = safeNum(candidate.edge, 0);
 
   // Expected Value: how much profit per unit stake
   // EV = (probability * odds) - 1
@@ -68,6 +66,18 @@ export function classifyValueTier(candidate) {
   // Check minimum odds gate for this market
   const marketMinOdds = MARKET_MIN_ODDS[candidate.marketKey] || 1.10;
   const minOddsMet = odds >= marketMinOdds;
+
+  // STRONG must be evaluated before VALUE/SHARP. Those broader ranges also
+  // contain every strong candidate and previously made this tier unreachable.
+  if (prob >= 0.62 && odds >= 1.60 && ev >= 0) {
+    return {
+      tier: 'STRONG',
+      tierLabel: 'Strong',
+      tierDescription: 'High confidence with fair odds — excellent pick',
+      minOddsMet,
+      ev: parseFloat(ev.toFixed(4)),
+    };
+  }
 
   // ACCUMULATOR tier: solid probability at low-ish odds (1.30-1.60)
   // Good for building accumulators, not great for singles
@@ -100,18 +110,6 @@ export function classifyValueTier(candidate) {
       tier: 'SHARP',
       tierLabel: 'Sharp',
       tierDescription: 'Model disagrees with market — high risk/reward',
-      minOddsMet,
-      ev: parseFloat(ev.toFixed(4)),
-    };
-  }
-
-  // STRONG tier: high probability at decent odds (1.60+)
-  // Rare — the model is very confident AND the odds are fair
-  if (prob >= 0.62 && odds >= 1.60 && ev >= 0) {
-    return {
-      tier: 'STRONG',
-      tierLabel: 'Strong',
-      tierDescription: 'High confidence with fair odds — excellent pick',
       minOddsMet,
       ev: parseFloat(ev.toFixed(4)),
     };

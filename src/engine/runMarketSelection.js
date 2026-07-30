@@ -191,8 +191,23 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
     // Same-category escalation (e.g., Over 1.5 → Over 2.5)
     const escalation = checkMarketEscalation(bestPick, ranked, narrative);
     if (escalation.shouldEscalate && escalation.escalatedTo) {
-      console.log('[runMarketSelection] ESCALATION: ' + escalation.reason);
-      bestPick = escalation.escalatedTo;
+      const revalidated = selectBestPickOrAbstain(
+        [escalation.escalatedTo],
+        script,
+        features,
+        { layer2Override: false },
+      );
+      if (!revalidated.noSafePick && revalidated.bestPick) {
+        console.log('[runMarketSelection] ESCALATION: ' + escalation.reason);
+        bestPick = {
+          ...revalidated.bestPick,
+          escalatedFrom: escalation.escalatedTo.escalatedFrom,
+          escalationReason: escalation.escalatedTo.escalationReason,
+          escalationEVImprovement: escalation.escalatedTo.escalationEVImprovement,
+        };
+      } else {
+        console.log('[runMarketSelection] Escalation rejected by final headline gate');
+      }
     }
 
     // v5: Cross-market escalation (e.g., Home Win → Over 2.5 when Home Win has poor value)
@@ -200,8 +215,24 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
     // teams attack → Over 2.5 is the smarter play."
     const crossEscalation = checkCrossMarketEscalation(bestPick, ranked, narrative, script);
     if (crossEscalation.shouldEscalate && crossEscalation.escalatedTo) {
-      console.log('[runMarketSelection] CROSS-ESCALATION: ' + crossEscalation.reason);
-      bestPick = crossEscalation.escalatedTo;
+      const revalidated = selectBestPickOrAbstain(
+        [crossEscalation.escalatedTo],
+        script,
+        features,
+        { layer2Override: false },
+      );
+      if (!revalidated.noSafePick && revalidated.bestPick) {
+        console.log('[runMarketSelection] CROSS-ESCALATION: ' + crossEscalation.reason);
+        bestPick = {
+          ...revalidated.bestPick,
+          escalatedFrom: crossEscalation.escalatedTo.escalatedFrom,
+          escalationReason: crossEscalation.escalatedTo.escalationReason,
+          escalationEVImprovement: crossEscalation.escalatedTo.escalationEVImprovement,
+          escalationType: crossEscalation.escalatedTo.escalationType,
+        };
+      } else {
+        console.log('[runMarketSelection] Cross-escalation rejected by final headline gate');
+      }
     }
   }
 

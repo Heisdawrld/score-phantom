@@ -32,6 +32,7 @@
  */
 
 import { clamp, safeNum } from '../utils/math.js';
+import { FOOTBALL_ENGINE_VERSION } from '../config/engineVersion.js';
 
 // ── Learned ensemble weights (Tier 3) ──────────────────────────────────────
 // Instead of hardcoded 50/35/15 weights, the engine can learn optimal weights
@@ -53,6 +54,7 @@ export async function refreshLearnedWeights() {
     // Ensure table exists (idempotent)
     await db.execute(`CREATE TABLE IF NOT EXISTS ensemble_weights (
       tier TEXT PRIMARY KEY,
+      engine_version TEXT,
       w_poisson REAL NOT NULL,
       w_catboost REAL NOT NULL,
       w_polymarket REAL NOT NULL,
@@ -60,11 +62,18 @@ export async function refreshLearnedWeights() {
       sample_size INTEGER DEFAULT 0,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`).catch(() => {});
+    const tableInfo = await db.execute(`PRAGMA table_info(ensemble_weights)`);
+    const columns = new Set((tableInfo.rows || []).map((row) => String(row.name)));
+    if (!columns.has('engine_version')) {
+      await db.execute(`ALTER TABLE ensemble_weights ADD COLUMN engine_version TEXT`);
+    }
 
     const rows = await db.execute({
       sql: `SELECT tier, w_poisson, w_catboost, w_polymarket, brier_score, sample_size
             FROM ensemble_weights
+            WHERE engine_version = ?
             ORDER BY updated_at DESC LIMIT 4`,
+      args: [FOOTBALL_ENGINE_VERSION],
     });
     const weights = {};
     for (const row of (rows.rows || [])) {
@@ -181,7 +190,7 @@ function computeBlendWeights(bsdPrediction, polymarketOdds) {
  * @returns {{level: 'strong'|'moderate'|'weak'|'divergent', signal: number}}
  */
 function computeAgreement(poissonProbs, bsdPrediction) {
-  if (!bsdPrediction || !bsdPrediction.homeWinProb) {
+  if (!bsdPrediction || bsdPrediction.homeWinProb == null) {
     return { level: 'none', signal: 0 };
   }
 
@@ -352,14 +361,8 @@ export function ensembleProbabilities({ calibratedProbs, bsdPrediction, polymark
     }
   }
 
-  // ── Apply agreement signal (tiny confidence nudge based on model agreement) ──
-  if (agreement.signal !== 0) {
-    // Only nudge the TOP probability — don't redistribute across all markets
-    const topKey = ['homeWin', 'awayWin', 'draw'].sort((a, b) => blended[b] - blended[a])[0];
-    const oldTop = blended[topKey];
-    blended[topKey] = clamp(blended[topKey] + agreement.signal, 0.01, 0.99);
-    console.log(`[ensemble] Agreement (${agreement.level}) nudge on ${topKey}: ${oldTop.toFixed(3)}→${blended[topKey].toFixed(3)}`);
-  }
+  // Agreement is uncertainty metadata only. CatBoost has already influenced
+  // the probabilities above, so applying another nudge would count it twice.
 
   // ── Enforce complements (under = 1 - over) ──────────────────────────────
   const pairs = [

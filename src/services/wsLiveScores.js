@@ -4,6 +4,7 @@ import db from '../config/database.js';
 import { bsdFetchAll, fetchLiveMatches, fetchEventDetail } from './bsd.js';
 import { normalizeEventStatsPayload } from './bsdStatsNormalizer.js';
 import { computeProfitUnits } from '../storage/profitUnits.js';
+import { evaluatePrediction } from './predictionSettlement.js';
 
 const sseClients = new Set();
 let pollTimer = null;
@@ -228,8 +229,6 @@ async function handleScoreUpdate(msg) {
 
 // Immediately evaluate predictions when a match finishes via WebSocket
 async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = null) {
-  const { evaluatePrediction } = await import('./resultChecker.js');
-  
   // Update H2H Historical Matches Memory for the Prediction Engine
   const fix = await db.execute({ sql: 'SELECT * FROM fixtures WHERE id = ? LIMIT 1', args: [fixtureId] });
   const f = fix.rows?.[0];
@@ -276,7 +275,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
 
   const pickRes = await db.execute({
     sql: `
-      SELECT id, market_key, selection, model_probability, bookmaker_odds, model_confidence
+      SELECT id, engine_version, market_key, selection, model_probability, bookmaker_odds, model_confidence, stake_units
       FROM prediction_picks
       WHERE fixture_id = ?
         AND prediction_source = 'pre_match'
@@ -292,12 +291,10 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
   const market = pick?.market_key || row.best_pick_market;
   const selection = pick?.selection || row.best_pick_selection;
   const probability = pick?.model_probability ?? row.best_pick_probability ?? 0;
-  // Odds fallback chain: pick.bookmaker_odds → derive from predictions_v2.best_pick_implied_probability → null
-  // This matches resultChecker.js:266-271 and prevents 72% of outcomes from having NULL odds.
-  const impliedProb = row.best_pick_implied_probability != null ? parseFloat(row.best_pick_implied_probability) : 0;
+  // Only odds captured with the immutable pre-match pick are valid for ROI.
   const odds = pick?.bookmaker_odds != null
     ? parseFloat(pick.bookmaker_odds)
-    : (impliedProb > 0 ? (1 / impliedProb) : null);
+    : null;
   const modelConfidence = pick ? pick.model_confidence : row.confidence_model;
 
   const outcome = evaluatePrediction(market, selection, homeScore, awayScore, f.home_team_name, f.away_team_name);
@@ -311,7 +308,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
     sql: `
       INSERT INTO prediction_outcomes (
         fixture_id, sport_key, home_team, away_team, match_date, tournament,
-        pick_id, predicted_market, predicted_selection, predicted_probability,
+        pick_id, engine_version, predicted_market, predicted_selection, predicted_probability,
         best_pick_odds, stake_units, profit_units,
         model_confidence,
         home_score, away_score, full_score,
@@ -319,7 +316,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
         evaluated_at, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?,
         ?, ?, ?,
@@ -329,6 +326,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
       ON CONFLICT (fixture_id) DO UPDATE SET
         sport_key = EXCLUDED.sport_key,
         pick_id = EXCLUDED.pick_id,
+        engine_version = EXCLUDED.engine_version,
         predicted_market = EXCLUDED.predicted_market,
         predicted_selection = EXCLUDED.predicted_selection,
         predicted_probability = EXCLUDED.predicted_probability,
@@ -352,6 +350,7 @@ async function triggerResultCheck(fixtureId, homeScore, awayScore, finalEvent = 
       f.match_date,
       f.tournament_name,
       pick?.id != null ? Number(pick.id) : null,
+      pick?.engine_version || null,
       market,
       selection,
       parseFloat(probability || 0),

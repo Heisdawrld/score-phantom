@@ -59,14 +59,9 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
   // External market feeds are intentionally not allowed to steer ScorePhantom's core probabilities.
   const calibratedProbs = calibrateProbabilities(rawProbs, script, null, impliedOdds);
 
-  // L2: Historical accuracy calibration (regress toward observed reality)
-  // Now includes leagueId and tournamentName for league-market probability regression
-  const historyCalibratedProbs = calibrateFromHistory(calibratedProbs, accuracyCache, {
-    odds: features.advancedOdds || features.marketOdds || {},
-    scriptPrimary: script?.primary || null,
-    leagueId: features.leagueId || null,
-    tournamentName: features.tournamentName || null,
-  });
+  // L2: Version-scoped calibration against outcomes from the same probability
+  // band. This avoids treating a market's overall pick win rate as probability.
+  const historyCalibratedProbs = calibrateFromHistory(calibratedProbs, accuracyCache);
 
   // L3 (ENSEMBLE — v3): Blend with BSD CatBoost + Polymarket.
   // This is the multi-model ensemble layer. Falls back gracefully if no external signals.

@@ -13,6 +13,7 @@
 
 import db from '../config/database.js';
 import { runPredictionEngine } from '../engine/runPredictionEngine.js';
+import { FOOTBALL_ENGINE_VERSION } from '../config/engineVersion.js';
 import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
 import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds } from './bsd.js';
@@ -30,7 +31,7 @@ const ENRICHMENT_IMMINENT_HOURS = Number(process.env.ENRICHMENT_IMMINENT_HOURS |
 
 // Bump this whenever the engine logic changes significantly.
 // Any cached prediction built with a different version is automatically rebuilt.
-const CURRENT_ENGINE_VERSION = '5.1.0'; // v5.1.0: engine transplant + verdict ladder contract fixes
+const CURRENT_ENGINE_VERSION = FOOTBALL_ENGINE_VERSION;
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 

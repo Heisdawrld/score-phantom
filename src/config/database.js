@@ -1,5 +1,7 @@
 import { createClient } from "@libsql/client/web";
 import dotenv from "dotenv";
+import { evaluatePrediction } from '../services/predictionSettlement.js';
+import { computeProfitUnits } from '../storage/profitUnits.js';
 
 dotenv.config();
 
@@ -342,7 +344,10 @@ async function runSchema() {
       pick_id INTEGER,
       best_pick_odds REAL,
       stake_units REAL DEFAULT 1,
-      result_status TEXT
+      result_status TEXT,
+      engine_version TEXT,
+      prediction_source TEXT DEFAULT 'live',
+      is_retroactive INTEGER DEFAULT 0
     )`,
     `CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id,read,created_at)`,
@@ -435,12 +440,17 @@ async function runSchema() {
   // Prediction Outcomes — add source column to distinguish backtest vs live
   await addColumnIfNotExists("prediction_outcomes", "prediction_source", "TEXT DEFAULT 'live'");
   await addColumnIfNotExists("prediction_outcomes", "is_retroactive", "INTEGER DEFAULT 0");
+  await addColumnIfNotExists("prediction_outcomes", "engine_version", "TEXT");
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_po_engine_source_outcome
+    ON prediction_outcomes(engine_version, prediction_source, is_retroactive, outcome)
+  `);
 
   // ── One-time migration: fix existing prediction_outcomes data ──────────────
   // This runs once to reclassify incorrectly-voided outcomes and tag data sources.
   // Uses a sentinel flag to avoid re-running on every startup.
-  // NOTE: evaluatePrediction is inlined here to avoid circular dependency
-  // (resultChecker.js imports database.js)
+  // The original v1 migration retains its historical evaluator. A v2 migration
+  // below re-grades every scored row with the canonical settlement module.
   try {
     const migrationCheck = await db.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'`);
     if ((migrationCheck.rows || []).length === 0) {
@@ -567,6 +577,63 @@ async function runSchema() {
     // Don't crash — the app can still run
   }
 
+  // Re-grade settled rows with the canonical v5.2 settlement rules.
+  try {
+    const settlementFix = await db.execute({
+      sql: `SELECT name FROM _migrations WHERE name = ?`,
+      args: ['regrade_settlement_v2'],
+    });
+    if ((settlementFix.rows || []).length === 0) {
+      const settled = await db.execute(`
+        SELECT id, predicted_market, predicted_selection, home_team, away_team,
+               home_score, away_score, best_pick_odds, stake_units
+        FROM prediction_outcomes
+        WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+      `);
+
+      let updated = 0;
+      for (const row of (settled.rows || [])) {
+        const outcome = evaluatePrediction(
+          row.predicted_market,
+          row.predicted_selection,
+          Number(row.home_score),
+          Number(row.away_score),
+          row.home_team,
+          row.away_team,
+        );
+        const odds = Number(row.best_pick_odds);
+        const stake = Number(row.stake_units) > 0 ? Number(row.stake_units) : 1;
+        const profitUnits = computeProfitUnits(outcome, odds, stake);
+
+        await db.execute({
+          sql: `UPDATE prediction_outcomes
+                SET outcome = ?, result_status = ?, profit_units = ?, evaluated_at = CURRENT_TIMESTAMP
+                WHERE id = ?`,
+          args: [outcome, outcome, profitUnits, row.id],
+        });
+        updated++;
+      }
+
+      await db.execute(`
+        UPDATE prediction_outcomes
+        SET engine_version = (
+          SELECT pp.engine_version
+          FROM prediction_picks pp
+          WHERE pp.id = prediction_outcomes.pick_id
+          LIMIT 1
+        )
+        WHERE engine_version IS NULL AND pick_id IS NOT NULL
+      `);
+      await db.execute({
+        sql: `INSERT INTO _migrations (name) VALUES (?)`,
+        args: ['regrade_settlement_v2'],
+      });
+      console.log(`[Migration] regrade_settlement_v2 corrected ${updated} settled outcomes`);
+    }
+  } catch (migrationErr) {
+    console.error('[Migration] regrade_settlement_v2 error:', migrationErr.message);
+  }
+
   // ── One-time migration: normalize model_confidence to UPPERCASE ───────────
   // Historically, buildConfidenceProfile emitted lowercase ('high','medium',...)
   // while mapModelConfidence (responseAdapter) emitted UPPERCASE. Both got
@@ -601,32 +668,26 @@ async function runSchema() {
   }
 
   // ── One-time migration: backfill best_pick_odds from predictions_v2 ────────
-  // 72% of prediction_outcomes had NULL best_pick_odds because the odds were
-  // never recorded at pick time. This migration recovers what we can by deriving
-  // odds from predictions_v2.best_pick_implied_probability (odds = 1/implied_prob).
-  // Also recomputes profit_units for newly-backfilled rows.
+  // Recover only bookmaker prices captured with the exact immutable pick.
+  // Model/fair probabilities are not executable odds and must never drive ROI.
   try {
     const oddsBackfill = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['backfill_odds_v1'] });
     if ((oddsBackfill.rows || []).length === 0) {
-      console.log('[Migration] Running backfill_odds_v1 — recovering odds from predictions_v2...');
+      console.log('[Migration] Running backfill_odds_v1 - recovering captured pick odds...');
 
-      // Step 1: Backfill best_pick_odds from 1 / implied_probability
+      // Step 1: Backfill from the exact immutable pick only.
       const oddsResult = await db.execute(`
         UPDATE prediction_outcomes
         SET best_pick_odds = (
-          SELECT 1.0 / p.best_pick_implied_probability
-          FROM predictions_v2 p
-          WHERE p.fixture_id = prediction_outcomes.fixture_id
-            AND p.best_pick_implied_probability IS NOT NULL
-            AND p.best_pick_implied_probability > 0
+          SELECT pp.bookmaker_odds
+          FROM prediction_picks pp
+          WHERE pp.id = prediction_outcomes.pick_id
+            AND pp.bookmaker_odds IS NOT NULL
+            AND pp.bookmaker_odds > 1.0
           LIMIT 1
         )
         WHERE best_pick_odds IS NULL
-          AND (prediction_source IN ('live','ws_live') OR prediction_source IS NULL)
-          AND fixture_id IN (
-            SELECT fixture_id FROM predictions_v2
-            WHERE best_pick_implied_probability IS NOT NULL AND best_pick_implied_probability > 0
-          )
+          AND pick_id IS NOT NULL
       `);
       console.log(`[Migration] Backfilled best_pick_odds: ${oddsResult.rowsAffected} rows`);
 
@@ -651,6 +712,46 @@ async function runSchema() {
     }
   } catch (oddsBackfillErr) {
     console.error('[Migration] backfill_odds_v1 error:', oddsBackfillErr.message);
+  }
+
+  // Canonicalize legacy ROI data. Earlier releases inferred odds as 1 / model
+  // probability, which created fictitious prices. If an outcome cannot be tied
+  // to a captured immutable-pick price, its ROI remains deliberately unknown.
+  try {
+    const canonicalOdds = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['canonical_odds_v2'] });
+    if ((canonicalOdds.rows || []).length === 0) {
+      console.log('[Migration] Running canonical_odds_v2 - removing inferred odds...');
+
+      const canonicalOddsResult = await db.execute(`
+        UPDATE prediction_outcomes
+        SET best_pick_odds = (
+          SELECT pp.bookmaker_odds
+          FROM prediction_picks pp
+          WHERE pp.id = prediction_outcomes.pick_id
+            AND pp.bookmaker_odds IS NOT NULL
+            AND pp.bookmaker_odds > 1.0
+          LIMIT 1
+        )
+      `);
+      console.log(`[Migration] Canonicalized outcome odds: ${canonicalOddsResult.rowsAffected} rows`);
+
+      const canonicalProfitResult = await db.execute(`
+        UPDATE prediction_outcomes
+        SET profit_units = CASE
+          WHEN best_pick_odds IS NULL OR best_pick_odds <= 1.0 THEN NULL
+          WHEN outcome IN ('win','correct') THEN (best_pick_odds - 1.0) * COALESCE(stake_units, 1.0)
+          WHEN outcome IN ('loss','wrong') THEN -COALESCE(stake_units, 1.0)
+          WHEN outcome = 'void' THEN 0
+          ELSE NULL
+        END
+      `);
+      console.log(`[Migration] Canonicalized outcome profit: ${canonicalProfitResult.rowsAffected} rows`);
+
+      await db.execute({ sql: `INSERT INTO _migrations (name) VALUES (?)`, args: ['canonical_odds_v2'] });
+      console.log('[Migration] canonical_odds_v2 completed');
+    }
+  } catch (canonicalOddsErr) {
+    console.error('[Migration] canonical_odds_v2 error:', canonicalOddsErr.message);
   }
 
   // Push Tokens
