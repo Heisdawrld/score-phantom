@@ -314,9 +314,11 @@ app.get('/api/cron-health', requireAdminSecret, (req, res) => {
   res.json(getJobHealthSummary());
 });
 
-// Serve standalone admin page (engine room)
+// Keep legacy bookmarks working while exposing only the current admin panel.
+// The old standalone HTML used the normal user login flow and no longer sent
+// the admin secret required by protected admin APIs.
 app.get("/admin.html", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "admin.html"));
+  res.redirect(302, "/admin");
 });
 
 // SPA fallback — serve index.html for all non-API routes
