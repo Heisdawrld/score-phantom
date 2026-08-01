@@ -116,7 +116,8 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
     checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
     checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
     checks.basketball = (process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY) ? 'odds_configured' : 'odds_missing';
-    const allOk = Object.values(checks).every(v => typeof v !== 'string' || v === 'ok' || v.includes('configured'));
+    const healthyStatuses = new Set(['ok', 'configured', 'resend_configured', 'odds_configured']);
+    const allOk = Object.values(checks).every(v => typeof v !== 'string' || healthyStatuses.has(v));
     return res.json({ status: allOk ? 'healthy' : 'degraded', checks, provider: 'BSD v2 + Basketball Beta' });
   } catch (err) {
     return res.status(500).json({ error: err.message });

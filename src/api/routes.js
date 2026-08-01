@@ -1496,24 +1496,54 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
     const today   = lagosDt.split(',')[0].trim();
     const d = new Date();
     const yesterday = new Date(d - 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-    const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const dayAfterTomorrow = new Date(d.getTime() + 2 * 86400000)
+      .toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
-    const limit        = Math.min(parseInt(req.query.limit || 20, 10), 50);
+    const limit        = Math.min(50, Math.max(1, Number.parseInt(req.query.limit || 20, 10) || 20));
     const favoritesOnly = req.query.favorites === 'true';
 
     // Build date filter — include yesterday, today and tomorrow. 
     // Yesterday is needed because a 01:00 AM Lagos game is 23:00 UTC yesterday!
     // The match_status NOT IN ('FT',...) filter prevents old finished games from showing up.
-    const dateFilter = `(f.match_date LIKE ? OR f.match_date LIKE ? OR f.match_date LIKE ?)`;
-    let args = [`%${yesterday}%`, `%${today}%`, `%${tomorrow}%`];
+    const dateFilter = `(f.match_date >= ? AND f.match_date < ?)`;
+    let args = [yesterday, dayAfterTomorrow];
 
     // ── Step 1: Try to get picks from predictions_v2 ──────────────────────────
     let pickQuery = `
       SELECT p.fixture_id, p.home_team, p.away_team,
              p.best_pick_market, p.best_pick_selection, p.best_pick_probability,
              p.best_pick_implied_probability, p.best_pick_edge,
-             p.best_pick_score, p.confidence_model, p.confidence_volatility, p.is_sharp_value,
-             p.prediction_json, p.backup_picks_json,
+              p.best_pick_score, p.confidence_model, p.confidence_volatility, p.is_sharp_value,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.valueTier'),
+                json_extract(p.prediction_json, '$.bestPick.valueTier')
+              ) END AS stored_value_tier,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.ev'),
+                json_extract(p.prediction_json, '$.bestPick.ev')
+              ) END AS stored_ev,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.bookmakerOdds'),
+                json_extract(p.prediction_json, '$.engineResult.bestPick.odds'),
+                json_extract(p.prediction_json, '$.bestPick.bookmakerOdds'),
+                json_extract(p.prediction_json, '$.bestPick.odds')
+              ) END AS stored_odds,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.isAccaEligible'),
+                json_extract(p.prediction_json, '$.bestPick.isAccaEligible')
+              ) END AS stored_is_acca_eligible,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.advisor_status'),
+                json_extract(p.prediction_json, '$.bestPick.advisor_status')
+              ) END AS stored_advisor_status,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.isSafeBet'),
+                json_extract(p.prediction_json, '$.bestPick.isSafeBet')
+              ) END AS stored_is_safe_bet,
+              CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+                json_extract(p.prediction_json, '$.engineResult.bestPick.isValueBet'),
+                json_extract(p.prediction_json, '$.bestPick.isValueBet')
+              ) END AS stored_is_value_bet,
              f.tournament_name, f.tournament_id, f.match_date, f.enrichment_status, f.data_quality,
              f.home_team_logo, f.away_team_logo, f.match_status
       FROM predictions_v2 p
@@ -1535,7 +1565,7 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
         args: [req.user.id],
       });
       const userRow = userResult.rows?.[0];
-      favorites = userRow?.league_favorites ? JSON.parse(userRow.league_favorites) : [];
+      favorites = userRow?.league_favorites ? safeJsonParse(userRow.league_favorites, []) : [];
       if (favorites.length > 0) {
         const placeholders = favorites.map(() => '?').join(',');
         pickQuery += ` AND f.tournament_name IN (${placeholders})`;
@@ -1619,19 +1649,15 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       // ── Extract v4 fields from prediction_json ────────────────────────────
       // BUG FIX: Previously used explanation_json which stores explanation lines (array),
       // NOT the full prediction. prediction_json stores the full engine result.
-      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
-      try {
-        const bestPick = getStoredBestPick(row.prediction_json);
-        if (bestPick) {
-          v4Fields.valueTier = bestPick.valueTier || null;
-          v4Fields.ev = bestPick.ev != null ? bestPick.ev : null;
-          v4Fields.odds = bestPick.bookmakerOdds || bestPick.odds || null;
-          v4Fields.isAccaEligible = bestPick.isAccaEligible === true;
-          v4Fields.advisor_status = bestPick.advisor_status || null;
-          v4Fields.isSafeBet = bestPick.isSafeBet != null ? bestPick.isSafeBet : null;
-          v4Fields.isValueBet = bestPick.isValueBet != null ? bestPick.isValueBet : null;
-        }
-      } catch (_) {}
+      const v4Fields = {
+        valueTier: row.stored_value_tier || null,
+        ev: finiteNumberOrNull(row.stored_ev),
+        odds: finiteNumberOrNull(row.stored_odds),
+        isAccaEligible: dbBoolean(row.stored_is_acca_eligible),
+        advisor_status: row.stored_advisor_status || null,
+        isSafeBet: row.stored_is_safe_bet == null ? null : dbBoolean(row.stored_is_safe_bet),
+        isValueBet: row.stored_is_value_bet == null ? null : dbBoolean(row.stored_is_value_bet),
+      };
 
       // ── Compute advisor_status using EV-aware logic (synced with responseAdapter) ──
       let advisorStatus;
