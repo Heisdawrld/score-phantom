@@ -316,43 +316,97 @@ async function autoSeed() {
   }
 }
 
-// ── Auto-enrichment: runs at startup and every 4 hours ───────────────────────
-const ENRICH_BATCH = 200; // full week of fixtures in one pass
-const ENRICH_DELAY_MS = 2500; // increased to avoid rate limiting
+// ── Auto-enrichment: startup + recurring freshness queue ────────────────────
+const ENRICH_BATCH = Math.max(1, Number(process.env.ENRICH_BATCH) || 40);
+const ENRICH_DELAY_MS = Math.max(0, Number(process.env.ENRICH_DELAY_MS) || 750);
+const ENRICH_REFRESH_HOURS = Math.max(1, Number(process.env.ENRICHMENT_REFRESH_HOURS) || 6);
+const FINISHED_MATCH_STATUSES = new Set(['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD']);
 
-async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
+let activeEnrichmentRun = null;
+
+function parseFixtureMeta(meta) {
+  if (!meta) return {};
+  if (typeof meta === 'object') return meta;
+  try { return JSON.parse(meta); } catch { return {}; }
+}
+
+function fixtureNeedsEnrichment(fixture) {
+  if (!fixture || FINISHED_MATCH_STATUSES.has(String(fixture.match_status || '').toUpperCase())) return false;
+  if (!Number(fixture.enriched)) return true;
+
+  const meta = parseFixtureMeta(fixture.meta);
+  const timestamp = meta?.dataFreshness?.refreshedAt || meta?.enrichedAt || meta?.bsdRefreshedAt;
+  if (!timestamp) return true;
+
+  const refreshedAt = new Date(timestamp).getTime();
+  if (!Number.isFinite(refreshedAt)) return true;
+  return Date.now() - refreshedAt >= ENRICH_REFRESH_HOURS * 60 * 60 * 1000;
+}
+
+async function runAutoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
     const today = dateFilter || new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const requestedLimit = Math.max(1, Number(limit) || ENRICH_BATCH);
+    const previousDay = new Date(Date.now() - 86400000)
+      .toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const fromDate = dateFilter || previousDay;
 
-    // Count pending unenriched fixtures for today + next 6 days
+    // Inspect a wider lightweight window in JS so legacy/malformed JSON metadata
+    // cannot break the query and stale enriched fixtures are not overlooked.
+    const scanLimit = Math.max(requestedLimit * 5, 500);
     const pending = await db.execute({
-      sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
+      sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id,
+                   tournament_id, match_date, match_status, enriched, enrichment_status, meta
             FROM fixtures
-            WHERE enriched = 0 AND match_date >= ?
+            WHERE match_date >= ?
+              AND COALESCE(match_status, 'NS') NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
             ORDER BY match_date ASC
             LIMIT ?`,
-      args: [today, limit],
+      args: [fromDate, scanLimit],
     });
 
-    const fixtures = pending.rows || [];
+    const fixtures = (pending.rows || [])
+      .filter(fixtureNeedsEnrichment)
+      .sort((a, b) => {
+        const aToday = String(a.match_date || '').includes(today) ? 0 : 1;
+        const bToday = String(b.match_date || '').includes(today) ? 0 : 1;
+        if (aToday !== bToday) return aToday - bToday;
+        if (Number(a.enriched) !== Number(b.enriched)) return Number(a.enriched) - Number(b.enriched);
+        return new Date(a.match_date || 0).getTime() - new Date(b.match_date || 0).getTime();
+      })
+      .slice(0, requestedLimit);
     if (fixtures.length === 0) {
       console.log(`[AutoEnrich] All fixtures already enriched for ${today}+`);
-      return { enriched: 0, failed: 0 };
+      return { enriched: 0, predictions: 0, failed: 0 };
     }
 
     console.log(`[AutoEnrich] Starting enrichment for ${fixtures.length} fixtures...`);
 
-    // Dynamic import to avoid circular dependencies at startup
-    const { enrichFixture } = await import("./enrichment/enrichOne.js");
+    // Shared prediction-cache path deduplicates this provider-heavy refresh
+    // against any user click or other scheduled job for the same fixture.
+    const { refreshFixtureEnrichment, getOrBuildPrediction } = await import('./services/predictionCache.js');
 
     let success = 0;
+    let predictions = 0;
     let failed = 0;
 
     for (const fixture of fixtures) {
       try {
-        await enrichFixture(fixture);
+        await refreshFixtureEnrichment(fixture);
         success++;
         console.log(`[AutoEnrich] ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
+
+        // Replace any fast-pass cache built from older stored data as soon as
+        // this fixture's fresh provider data arrives.
+        try {
+          await getOrBuildPrediction(String(fixture.id), {
+            forceRefresh: true,
+            skipEnrichment: true,
+          });
+          predictions++;
+        } catch (predictionErr) {
+          console.warn(`[AutoEnrich] Prediction refresh failed for ${fixture.id}: ${predictionErr.message}`);
+        }
       } catch (err) {
         failed++;
         console.warn(`[AutoEnrich] ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
@@ -361,39 +415,27 @@ async function autoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
       await new Promise((r) => setTimeout(r, ENRICH_DELAY_MS));
     }
 
-    console.log(`[AutoEnrich] Done. Success: ${success} | Failed: ${failed}`);
-
-    // Re-enrich fixtures that came back LIMITED with 0 form data (API returned empty last time)
-    if (success > 0) {
-      const retryResult = await db.execute({
-        sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id, tournament_id, match_date
-              FROM fixtures
-              WHERE enrichment_status IN ('limited', 'no_data')
-                AND match_date >= ?
-              ORDER BY match_date ASC
-              LIMIT 30`,
-        args: [today],
-      });
-      const retryFixtures = retryResult.rows || [];
-      if (retryFixtures.length > 0) {
-        console.log(`[AutoEnrich] Retrying ${retryFixtures.length} limited/no_data fixtures...`);
-        const { enrichFixture } = await import('./enrichment/enrichOne.js');
-        for (const fixture of retryFixtures) {
-          try {
-            await enrichFixture(fixture);
-            console.log(`[AutoEnrich] Retry ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);
-          } catch (err) {
-            console.warn(`[AutoEnrich] Retry ✗ ${fixture.home_team_name} vs ${fixture.away_team_name}: ${err.message}`);
-          }
-          await new Promise(r => setTimeout(r, ENRICH_DELAY_MS));
-        }
-      }
-    }
-    return { enriched: success, failed };
+    // A limited/no-data response is not retried immediately. The previous
+    // immediate retry doubled API work with the same upstream data; the next
+    // freshness cycle is the safer retry point.
+    console.log(`[AutoEnrich] Done. Refreshed: ${success} | Predictions rebuilt: ${predictions} | Failed: ${failed}`);
+    return { enriched: success, predictions, failed };
   } catch (err) {
     console.error("[AutoEnrich] Fatal:", err.message);
-    return { enriched: 0, failed: 0, error: err.message };
+    return { enriched: 0, predictions: 0, failed: 0, error: err.message };
   }
+}
+
+async function autoEnrich(options = {}) {
+  if (activeEnrichmentRun) {
+    console.log('[AutoEnrich] Refresh already running; joining the active job.');
+    return activeEnrichmentRun;
+  }
+
+  activeEnrichmentRun = runAutoEnrich(options).finally(() => {
+    activeEnrichmentRun = null;
+  });
+  return activeEnrichmentRun;
 }
 
 // Expose autoEnrich so adminRoutes can call it via dynamic import
@@ -427,19 +469,31 @@ async function initializeRuntime() {
 
   await autoSeed();
 
-  // Full enrichment pass immediately after seed — 200 fixtures, non-blocking
-  // This ensures all fixtures for the week get enriched on startup
-  console.log('[AutoEnrich] Starting full startup enrichment pass...');
+  // Warm cached predictions from stored data first. External enrichment can take
+  // minutes per fixture after a long suspension, but it must not block the card.
+  console.log('[PredRunner] Starting fast startup prediction warm-up...');
   const { autoBuildPredictions } = await import('./services/predictionRunner.js');
-  const startupEnrichStart = Date.now();
-  autoEnrich({ limit: 200 })
-    .then((result) => {
-      recordJobRun('startup_enrichment', { success: true, durationMs: Date.now() - startupEnrichStart, meta: { enriched: result?.enriched, failed: result?.failed } });
-      console.log('[PredRunner] Enrichment done — pre-generating predictions...');
-      return autoBuildPredictions({ limit: 100 });
+  const startupWarmStart = Date.now();
+  autoBuildPredictions({ limit: 200 })
+    .then((warmResult) => {
+      recordJobRun('startup_prediction_warmup', {
+        success: true,
+        durationMs: Date.now() - startupWarmStart,
+        meta: { built: warmResult?.built, failed: warmResult?.failed },
+      });
+      console.log('[AutoEnrich] Fast cache ready — starting freshness refresh...');
+      const startupEnrichStart = Date.now();
+      return autoEnrich({ limit: ENRICH_BATCH }).then((result) => {
+        recordJobRun('startup_enrichment', {
+          success: true,
+          durationMs: Date.now() - startupEnrichStart,
+          meta: { enriched: result?.enriched, predictions: result?.predictions, failed: result?.failed },
+        });
+        return result;
+      });
     })
     .catch((err) => {
-      recordJobRun('startup_enrichment', { success: false, durationMs: Date.now() - startupEnrichStart, error: err.message });
+      recordJobRun('startup_prediction_pipeline', { success: false, durationMs: Date.now() - startupWarmStart, error: err.message });
       console.error('[AutoEnrich/PredRunner] startup error:', err.message);
     });
   // Immediately backfill last 7 days of results on startup (fixes void outcomes)
@@ -462,7 +516,7 @@ async function initializeRuntime() {
   setInterval(async () => {
     const cronStart = Date.now();
     try {
-      const enrichResult = await autoEnrich({ limit: 200 });
+      const enrichResult = await autoEnrich({ limit: ENRICH_BATCH });
       const predResult = await autoBuildPredictions({ limit: 200 });
       recordJobRun('15min_enrich_predict', { success: true, durationMs: Date.now() - cronStart, meta: { enriched: enrichResult?.enriched, predictions: predResult?.built } });
     } catch (err) {

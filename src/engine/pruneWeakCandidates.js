@@ -1,6 +1,7 @@
 import { safeNum } from '../utils/math.js';
 import { getDynamicMarketFloor, getOddsBandPerformance } from '../storage/accuracyCache.js';
 import { checkOddsGate } from '../markets/valueTiers.js';
+import { isBelowProbabilityFloor } from './probabilityThresholds.js';
 
 /**
  * pruneWeakCandidates — removes candidates that don't meet minimum quality bars.
@@ -156,7 +157,7 @@ export function pruneWeakCandidates(scoredCandidates, options = {}) {
     // ── v5: Smart Risk Exception ────────────────────────────────────────
     // Don't prune a market below floor if it has genuine value.
     // ALL five conditions must be true — this is NOT a general loosening.
-    if (prob < marketFloor) {
+    if (isBelowProbabilityFloor(prob, marketFloor)) {
       const dataCompleteness = safeNum(featureVector?.dataCompletenessScore, 0.5);
       const isComfortMarket = [
         'under_35', 'over_15', 'double_chance_home', 'double_chance_away',

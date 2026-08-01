@@ -301,7 +301,23 @@ async function isCacheFresh(fixtureId) {
 //     stale-loop vicious cycle and save Render compute + BSD API budget.
 const enrichmentInFlight = new Map();
 const enrichmentFailureCooldown = new Map();
+const backgroundPredictionRefreshes = new Map();
 const ENRICHMENT_FAILURE_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+
+function startBackgroundPredictionRefresh(fixtureId, task) {
+  const key = String(fixtureId);
+  if (backgroundPredictionRefreshes.has(key)) {
+    console.log(`[predictionCache] Background refresh already running for fixture ${key}`);
+    return backgroundPredictionRefreshes.get(key);
+  }
+
+  const promise = Promise.resolve()
+    .then(task)
+    .catch(err => console.error(`[predictionCache] Background refresh failed ${key}:`, err.message))
+    .finally(() => backgroundPredictionRefreshes.delete(key));
+  backgroundPredictionRefreshes.set(key, promise);
+  return promise;
+}
 
 async function enrichFixtureDedup(fixture) {
   const fixtureId = String(fixture.id);
@@ -338,6 +354,16 @@ async function enrichFixtureDedup(fixture) {
 
   enrichmentInFlight.set(fixtureId, promise);
   return promise;
+}
+
+/**
+ * Shared enrichment entry point for background workers.
+ * Keeping the worker on this path means a user click and a scheduled refresh
+ * can never launch two provider-heavy enrichments for the same fixture.
+ */
+export async function refreshFixtureEnrichment(fixture) {
+  if (!fixture?.id) throw new Error('A fixture with an id is required for enrichment');
+  return enrichFixtureDedup(fixture);
 }
 
 // ── Core data assembly (used by all routes) ───────────────────────────────────
@@ -491,7 +517,7 @@ async function savePredictionToCache(fixtureId, prediction, engineResult) {
   }
 }
 
-async function loadCachedPrediction(fixtureId) {
+async function loadCachedPrediction(fixtureId, { allowVersionMismatch = false } = {}) {
   try {
     const r = await db.execute({
       sql: `SELECT prediction_json FROM predictions_v2 WHERE fixture_id = ? LIMIT 1`,
@@ -501,10 +527,11 @@ async function loadCachedPrediction(fixtureId) {
     if (!row?.prediction_json) return null;
     const cached = JSON.parse(row.prediction_json);
     // Invalidate if built with a different engine version — forces a fresh rebuild
-    if (cached.engineVersion !== CURRENT_ENGINE_VERSION) {
+    if (cached.engineVersion !== CURRENT_ENGINE_VERSION && !allowVersionMismatch) {
       console.log(`[predictionCache] Engine version mismatch for ${fixtureId} (stored: ${cached.engineVersion}, current: ${CURRENT_ENGINE_VERSION}) — forcing rebuild`);
       return null;
     }
+    cached.versionMismatch = cached.engineVersion !== CURRENT_ENGINE_VERSION;
     return cached;
   } catch {
     return null;
@@ -542,7 +569,9 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, st
   // up the fresh data.
   if (staleWhileRevalidate && !forceRefresh) {
     try {
-      const cachedAny = await loadCachedPrediction(fixtureId);
+      // During an engine rollout, an older prediction is still preferable to a
+      // loading screen. It is explicitly marked stale and rebuilt below.
+      const cachedAny = await loadCachedPrediction(fixtureId, { allowVersionMismatch: true });
       if (cachedAny?.prediction) {
         console.log(`[predictionCache] SWR fast-path HIT for fixture ${fixtureId} — returning cached, triggering background refresh`);
 
@@ -563,24 +592,34 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, st
 
         // Fire-and-forget background refresh (enrichment + engine rebuild if needed).
         // Use a self-healing IIFE that never throws to the caller.
-        (async () => {
+        startBackgroundPredictionRefresh(fixtureId, async () => {
           try {
+            let enrichmentRefreshed = false;
             // Check if enrichment is actually needed before doing the heavy work
             if (fixture && (needsEnrichmentRefresh(fixture, historyRows) || !fixture.enriched || !hasUsableHistory(historyRows))) {
               console.log(`[predictionCache] SWR background enrichment for fixture ${fixtureId}`);
-              await enrichFixtureDedup(fixture).catch(e => console.error(`[predictionCache] SWR enrich failed ${fixtureId}:`, e.message));
+              try {
+                await enrichFixtureDedup(fixture);
+                enrichmentRefreshed = true;
+              } catch (e) {
+                console.error(`[predictionCache] SWR enrich failed ${fixtureId}:`, e.message);
+              }
             }
-            // If the cache is stale (> CACHE_VALID_HOURS), rebuild the prediction
+            // Rebuild whenever enrichment changed, the cache aged out, or an engine
+            // rollout made this cached response a transition-only fallback.
             const cacheFresh = await isCacheFresh(fixtureId);
-            if (!cacheFresh) {
+            if (enrichmentRefreshed || !cacheFresh || cachedAny.versionMismatch) {
               console.log(`[predictionCache] SWR background rebuild for fixture ${fixtureId}`);
-              // Recursive call with staleWhileRevalidate=false to do the real rebuild
-              await getOrBuildPrediction(fixtureId, { staleWhileRevalidate: false }).catch(e => console.error(`[predictionCache] SWR rebuild failed ${fixtureId}:`, e.message));
+              await getOrBuildPrediction(fixtureId, {
+                forceRefresh: true,
+                skipEnrichment: true,
+                staleWhileRevalidate: false,
+              }).catch(e => console.error(`[predictionCache] SWR rebuild failed ${fixtureId}:`, e.message));
             }
           } catch (err) {
             console.error(`[predictionCache] SWR background error for ${fixtureId}:`, err.message);
           }
-        })();
+        });
 
         return {
           prediction: cachedAny.prediction,

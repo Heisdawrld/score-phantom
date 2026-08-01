@@ -768,7 +768,7 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
     // If a fresh cached prediction exists, it returns instantly (DB reads only, ~200ms).
     // Enrichment only runs on cache miss. This makes match clicks feel instant
     // for any match that has been viewed before (or pre-built by the cron).
-    const result = await getOrBuildPrediction(fixtureId);
+    const result = await getOrBuildPrediction(fixtureId, { staleWhileRevalidate: true });
     if (!result) {
       // Roll back the count if prediction fails for trial users
       if (trialToday) {
@@ -1084,7 +1084,9 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
       for (let i = 0; i < maxWarm; i += batchSize) {
         if (Date.now() - warmStart > 15000) break; // 15s budget
         const batch = fixtureIds.slice(i, i + batchSize);
-        await Promise.allSettled(batch.map(id => getOrBuildPrediction(id).catch(() => null)));
+        await Promise.allSettled(batch.map(id => getOrBuildPrediction(id, {
+          skipEnrichment: true,
+        }).catch(() => null)));
       }
 
       // Re-query now that predictions are built
@@ -1512,48 +1514,13 @@ router.get("/top-picks-today", requireAuth, async (req, res) => {
       console.log('[TopPicks] No pre-generated picks — firing BACKGROUND generation (non-blocking)...');
       warmingUp = true;
       try {
-        const enrichedResult = await db.execute({
-          sql: `SELECT f.id FROM fixtures f
-                LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
-                WHERE ${dateFilter}
-                  AND f.enrichment_status IN ('deep', 'basic', 'limited', 'none', 'no_data')
-                  AND f.match_status NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
-                  AND p.fixture_id IS NULL
-                ORDER BY f.match_date ASC
-                LIMIT 10`,
-          args,
-        });
-        const unpredicted = enrichedResult.rows || [];
-        if (unpredicted.length > 0) {
-          // Fire-and-forget — do NOT await. Generation runs in the background.
-          // The 15-min cron (autoBuildPredictions) is the long-term backstop.
-          //
-          // NOTE: Full enrichment (NOT skipEnrichment) is used here to preserve
-          // prediction quality. The skipEnrichment fast-pass was reverted because
-          // it caused the engine to run on stale/partial DB data, which inflated
-          // upsetRisk and triggered mass abstentions ("all matches skipping").
-          // Full enrichment takes longer per fixture but produces accurate
-          // dataCompleteness + upsetRisk scores. Batch size 3 keeps BSD rate
-          // limits safe (40+ calls per fixture at 4 RPS).
-          import('../services/predictionCache.js')
-            .then(({ getOrBuildPrediction }) => {
-              console.log(`[TopPicks] Background generation started for ${unpredicted.length} fixtures (full enrichment)`);
-              const BATCH = 3;
-              const batches = [];
-              for (let i = 0; i < unpredicted.length; i += BATCH) {
-                batches.push(unpredicted.slice(i, i + BATCH));
-              }
-              (async () => {
-                for (const batch of batches) {
-                  await Promise.allSettled(
-                    batch.map(row => getOrBuildPrediction(String(row.id)))
-                  );
-                }
-                console.log('[TopPicks] Background generation complete');
-              })().catch(err => console.error('[TopPicks] Background gen error:', err.message));
-            })
-            .catch(err => console.error('[TopPicks] Dynamic import failed:', err.message));
-        }
+        // Join the singleton warmer used by startup and cron. This avoids a Top
+        // Picks request launching a second provider-heavy pipeline while the app
+        // is already recovering from a cold start.
+        import('../services/predictionRunner.js')
+          .then(({ autoBuildPredictions }) => autoBuildPredictions({ limit: 30 }))
+          .then(result => console.log(`[TopPicks] Background warm-up complete (${result?.built || 0} built)`))
+          .catch(err => console.error('[TopPicks] Background warm-up failed:', err.message));
       } catch (genErr) {
         console.error('[TopPicks] On-demand gen query error:', genErr.message);
       }

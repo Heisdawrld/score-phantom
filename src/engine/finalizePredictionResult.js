@@ -9,7 +9,7 @@ import { logRecommendedMarket } from "../storage/marketTracking.js";
 import { classifyValueTier } from "../markets/valueTiers.js";
 import { getMarketEscalationTargets, isAcceptableOdds } from "../markets/marketWorthRanges.js";
 import { buildMarketLadder, buildPhantomVerdictPayload } from './buildPhantomVerdict.js';
-import { evaluateRecommendation, findSafetyFallback } from './recommendationPolicy.js';
+import { evaluateRecommendation, findSafetyFallback, isSameMarketSelection } from './recommendationPolicy.js';
 
 /**
  * Stage 4 — Finalize prediction result.
@@ -287,7 +287,9 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       const { targets } = getMarketEscalationTargets(originalSkipPick.marketKey);
 
       for (const target of targets) {
-        const candidate = rankedCandidates.find(c => c.marketKey === target && c !== originalSkipPick);
+        const candidate = rankedCandidates.find(c =>
+          c.marketKey === target && !isSameMarketSelection(c, originalSkipPick)
+        );
         if (!candidate) continue;
         if (!passesConfidenceGates(candidate)) continue;
 
@@ -305,7 +307,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       // The punter asks: "What market IS worth betting on?"
       if (!promotedCandidate) {
         for (const candidate of rankedCandidates) {
-          if (candidate === originalSkipPick) continue;
+          if (isSameMarketSelection(candidate, originalSkipPick)) continue;
           if (!passesConfidenceGates(candidate)) continue;
 
           const badge = computeCandidateBadge(candidate);
@@ -323,7 +325,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
       // user to wager on it. ACCA construction remains a separate engine.
       if (!promotedCandidate) {
         for (const candidate of rankedCandidates) {
-          if (candidate === originalSkipPick) continue;
+          if (isSameMarketSelection(candidate, originalSkipPick)) continue;
           const cProb = safeNum(candidate.modelProbability, 0);
           const cFinalScore = safeNum(candidate.finalScore, 0);
           // WATCHLIST: higher bar — must be genuinely credible

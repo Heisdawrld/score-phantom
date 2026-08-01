@@ -57,6 +57,22 @@ export function isSafetyMarket(marketKey) {
   return Object.prototype.hasOwnProperty.call(SAFETY_SCORE, String(marketKey || '').toLowerCase());
 }
 
+function normalizeSelection(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Candidate lists may contain cloned objects for the same market. */
+export function isSameMarketSelection(left, right) {
+  if (!left || !right) return false;
+  const leftMarket = String(left.marketKey || '').trim().toLowerCase();
+  const rightMarket = String(right.marketKey || '').trim().toLowerCase();
+  if (!leftMarket || leftMarket !== rightMarket) return false;
+
+  const leftSelection = normalizeSelection(left.selection);
+  const rightSelection = normalizeSelection(right.selection);
+  return !leftSelection || !rightSelection || leftSelection === rightSelection;
+}
+
 function buildDecision(status, reasonCode, reason, metrics, convictionTier = 'NONE') {
   return {
     status,
@@ -310,7 +326,7 @@ export function findSafetyFallback(original, candidates, context = {}, evaluate 
 
   const evaluated = [];
   for (const candidate of candidates) {
-    if (!candidate || candidate === original) continue;
+    if (!candidate || isSameMarketSelection(candidate, original)) continue;
     const key = String(candidate.marketKey || '').toLowerCase();
     const explicitPriority = targetOrder.get(key) || 0;
     const safetyScore = SAFETY_SCORE[key] || 0;

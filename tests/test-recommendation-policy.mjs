@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateRecommendation,
   findSafetyFallback,
+  isSameMarketSelection,
 } from '../src/engine/recommendationPolicy.js';
 
 const strongContext = {
@@ -158,4 +159,12 @@ test('safety fallback prefers a qualified lower-risk BET over a weak original an
   assert.ok(fallback);
   assert.equal(fallback.candidate.marketKey, 'over_15');
   assert.equal(fallback.decision.status, 'BET');
+});
+
+test('a cloned copy of the original market cannot promote itself in a fallback cascade', () => {
+  const original = candidate({ marketKey: 'over_15', selection: 'Over 1.5 Goals' });
+  const clonedOriginal = { ...original };
+
+  assert.equal(isSameMarketSelection(original, clonedOriginal), true);
+  assert.equal(findSafetyFallback(original, [clonedOriginal], strongContext), null);
 });
