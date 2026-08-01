@@ -23,9 +23,10 @@ export function Footer() {
   // The footer is md:block so it only renders on desktop
 
   const year = new Date().getFullYear();
+  const isBasketball = location.startsWith("/basketball");
 
   return (
-    <footer className="sp-footer">
+    <footer className={`sp-footer${isBasketball ? " is-basketball" : ""}`}>
       <div className="container mx-auto px-6 py-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Left — Brand + copyright */}
@@ -59,13 +60,13 @@ export function Footer() {
               </span>
             </Link>
             {user && (
-              <Link href="/billing/history">
+              <Link href={isBasketball ? "/basketball/billing/history" : "/billing/history"}>
                 <span className="text-xs font-medium text-white/40 hover:text-white/70 interactive cursor-pointer">
                   Billing
                 </span>
               </Link>
             )}
-            <Link href={user ? "/track-record" : "/login"}>
+            <Link href={user ? (isBasketball ? "/basketball/track-record" : "/track-record") : "/login"}>
               <span className="text-xs font-medium text-white/40 hover:text-white/70 interactive cursor-pointer">
                 Track Record
               </span>

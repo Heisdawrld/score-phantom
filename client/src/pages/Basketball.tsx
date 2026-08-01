@@ -4,14 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation, useSearch } from 'wouter';
 import { motion } from 'framer-motion';
 import {
+  Activity,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
-  RefreshCw,
+  Dna,
+  Flame,
+  Layers3,
   Search,
   Trophy,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { basketballDecision, basketballGameHref, basketballPercent, type BasketballPrediction } from '@/lib/basketball-world';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -270,6 +275,16 @@ export default function Basketball() {
     refetchInterval: 45_000,
   });
 
+  const { data: bestPicksData } = useQuery({
+    queryKey: ['basketball-best-picks', 14],
+    queryFn: () => fetchApi('/basketball/best-picks?days=14'),
+    staleTime: 90_000,
+    refetchInterval: 3 * 60_000,
+  });
+
+  const qualifiedPicks = (((bestPicksData as any)?.picks || []) as BasketballPrediction[]);
+  const topPick = qualifiedPicks[0] || null;
+
   const allGamesForDay = useMemo(() => {
     return ((gamesData as any)?.games || []).filter((g: any) => dateKey(g.start_time) === selectedDate || !g.start_time);
   }, [gamesData, selectedDate]);
@@ -301,7 +316,8 @@ export default function Basketball() {
   const toggleGroup = (id: string) => setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div className="basketball-2627 relative min-h-screen overflow-hidden bg-[#060a0e] pb-28 text-white">
+    <div className="basketball-2627 basketball-world relative min-h-screen overflow-hidden bg-[#060a0e] pb-28 text-white">
+      <div className="basketball-world__court" aria-hidden="true" />
       <div className="pointer-events-none fixed inset-0">
         <motion.div className="absolute -top-28 right-[-20%] h-[55vh] w-[80vw] rounded-full bg-orange-500/8 blur-[120px]" animate={{ scale: [1, 1.06, 1], opacity: [0.5, 0.75, 0.5] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }} />
       </div>
@@ -322,6 +338,61 @@ export default function Basketball() {
             </div>
           </div>
         </motion.div>
+
+        <section className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)]">
+          <motion.article
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="relative overflow-hidden rounded-[1.75rem] border border-orange-200/12 bg-gradient-to-br from-orange-400/[0.09] via-[#10151c] to-violet-500/[0.07] p-5 sm:p-6"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-orange-200/[0.06]" />
+            <div className="pointer-events-none absolute -right-4 -top-12 h-40 w-40 rounded-full border border-orange-200/[0.08]" />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-100/45">Hoops command center</p>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200/12 bg-orange-400/[0.06] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-orange-100/55">
+                  <Activity className="h-3 w-3" /> basketball-v2
+                </span>
+              </div>
+              {topPick ? (
+                <div className="mt-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("rounded-full border px-2.5 py-1 text-[9px] font-black tracking-wider", basketballDecision(topPick) === 'BET' ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-200' : 'border-amber-300/20 bg-amber-400/10 text-amber-100')}>{basketballDecision(topPick)}</span>
+                    <span className="text-[9px] font-black uppercase tracking-wider text-white/25">{topPick.league?.label}</span>
+                  </div>
+                  <h2 className="mt-3 text-base font-black sm:text-xl">{topPick.game?.homeTeam} <span className="text-white/20">vs</span> {topPick.game?.awayTeam}</h2>
+                  <p className="mt-1 text-2xl font-black text-orange-100 sm:text-3xl">{topPick.recommendation?.pick}</p>
+                  <div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] text-white/30">
+                    <span>Model <strong className="text-white/70">{basketballPercent(topPick.recommendation?.modelProbability)}</strong></span>
+                    <span>Signal <strong className="text-orange-100">{Math.round(Number(topPick.recommendation?.phantomScore || 0))}</strong></span>
+                    <span>Coverage <strong className="text-violet-100">{topPick.intel?.dataQuality || 0}%</strong></span>
+                  </div>
+                  <button type="button" onClick={() => setLocation(basketballGameHref(topPick))} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-orange-300 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#180b02]">Open matchup <ArrowRight className="h-3.5 w-3.5" /></button>
+                </div>
+              ) : (
+                <div className="mt-8 max-w-lg">
+                  <h2 className="text-2xl font-black">The board is scanning.</h2>
+                  <p className="mt-2 text-xs leading-5 text-white/35">No basketball edge currently clears the gates. The schedule remains available below while the engine waits for a priced signal.</p>
+                </div>
+              )}
+            </div>
+          </motion.article>
+
+          <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+            {[
+              { title: 'Picks', detail: `${qualifiedPicks.length} qualified`, href: '/basketball/picks', icon: Flame, tone: 'orange' },
+              { title: 'Parlay', detail: 'Safety-built', href: '/basketball/acca', icon: Layers3, tone: 'violet' },
+              { title: 'Game Lab', detail: 'Stress-test', href: '/basketball/simulator', icon: Dna, tone: 'cyan' },
+            ].map(({ title, detail, href, icon: Icon, tone }) => (
+              <motion.button key={href} type="button" onClick={() => setLocation(href)} whileTap={{ scale: 0.98 }} className={cn('group rounded-2xl border p-3 text-left transition sm:p-4', tone === 'orange' ? 'border-orange-200/12 bg-orange-400/[0.045] hover:border-orange-200/24' : tone === 'violet' ? 'border-violet-200/12 bg-violet-400/[0.04] hover:border-violet-200/24' : 'border-cyan-200/10 bg-cyan-400/[0.035] hover:border-cyan-200/22')}>
+                <Icon className={cn('h-4 w-4', tone === 'orange' ? 'text-orange-200' : tone === 'violet' ? 'text-violet-200' : 'text-cyan-200')} />
+                <strong className="mt-3 block text-[10px] font-black uppercase tracking-wider text-white/70 sm:text-xs">{title}</strong>
+                <small className="mt-1 block text-[8px] text-white/25 sm:text-[9px]">{detail}</small>
+              </motion.button>
+            ))}
+          </div>
+        </section>
 
         {/* ── Date Strip ── */}
         <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 -mx-1 px-1">

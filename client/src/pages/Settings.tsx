@@ -10,7 +10,8 @@ import { fetchApi } from '@/lib/api';
 import { Skeleton } from '@/components/ui/BasicSkeleton';
 
 export default function Settings() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isBasketball = location.startsWith('/basketball');
   const { data: user, isLoading } = useAuth();
   const logout = useLogout();
   const queryClient = useQueryClient();
@@ -23,7 +24,7 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   
   if (isLoading) return (
-    <div className='min-h-screen bg-background pb-20'>
+    <div className={`${isBasketball ? 'basketball-world ' : ''}min-h-screen bg-background pb-20`}>
       <div className='max-w-2xl mx-auto px-4 pt-6 space-y-8'>
         <div className='flex items-center gap-3'>
           <Skeleton className='w-9 h-9 rounded-xl' />
@@ -70,12 +71,12 @@ export default function Settings() {
 
 
   return (
-    <div className='min-h-screen bg-background pb-20'>
+    <div className={`${isBasketball ? 'basketball-world ' : ''}min-h-screen bg-background pb-20`}>
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}
         <div className='flex items-center gap-3 mb-8'>
-          <button onClick={() => setLocation('/profile')} className='p-2 hover:bg-white/5 rounded-xl transition'>
+          <button onClick={() => setLocation(isBasketball ? '/basketball/profile' : '/profile')} className='p-2 hover:bg-white/5 rounded-xl transition'>
             <ChevronLeft className='w-5 h-5' />
           </button>
           <div className='flex-1'>

@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { PageLoader } from '@/components/ui/PageLoader';
 
 export default function PaymentBilling() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isBasketball = location.startsWith('/basketball');
   const { user, isPremium, isTrial, isLoading } = useAccess();
   
   const trialEnd = (user as any)?.trial_ends_at ? new Date((user as any).trial_ends_at) : null;
@@ -15,12 +16,12 @@ export default function PaymentBilling() {
   if (isLoading) return <PageLoader variant="minimal" />;
 
   return (
-    <div className='min-h-screen bg-background pb-20'>
+    <div className={`${isBasketball ? 'basketball-world ' : ''}min-h-screen bg-background pb-20`}>
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}
         <div className='flex items-center gap-3 mb-8'>
-          <button onClick={() => setLocation('/profile')} className='p-2 hover:bg-white/5 rounded-xl transition'>
+          <button onClick={() => setLocation(isBasketball ? '/basketball/profile' : '/profile')} className='p-2 hover:bg-white/5 rounded-xl transition'>
             <ChevronLeft className='w-5 h-5' />
           </button>
           <div className='flex-1'>
@@ -102,7 +103,7 @@ export default function PaymentBilling() {
                  <p className="text-sm font-bold text-white">Billing History</p>
                  <p className="text-xs text-white/40 mt-0.5">View your past subscription payments.</p>
               </div>
-              <button onClick={() => setLocation('/billing/history')} className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold">
+              <button onClick={() => setLocation(isBasketball ? '/basketball/billing/history' : '/billing/history')} className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold">
                  View Latest
               </button>
            </div>

@@ -125,7 +125,7 @@ router.get('/games', requireAuth, async (req, res) => {
     const from = req.query.from || new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const to = req.query.to || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const limit = Math.min(Number(req.query.limit || 300), 500);
-    const games = await listBasketballGames({ leagueKey, from, to, limit });
+    const games = await listBasketballGames({ leagueKey, from, to, limit, preferredEngineVersion: BASKETBALL_ENGINE_VERSION });
     res.json({ games, count: games.length, window: { from, to } });
   } catch (err) {
     handleError(res, err);
@@ -197,7 +197,7 @@ router.get('/best-picks', requirePremiumAccess, async (req, res) => {
     const days = Math.min(Math.max(Number(req.query.days || 7), 1), 14);
     const from = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const to = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-    const cached = await listBasketballPredictions({ leagueKey, from, to, limit: 120, engineVersion: null, onlyEdges: true });
+    const cached = await listBasketballPredictions({ leagueKey, from, to, limit: 120, engineVersion: BASKETBALL_ENGINE_VERSION, onlyEdges: true });
     const picks = cached
       .map((row) => row.prediction)
       .filter((p) => p && !p.recommendation?.noClearEdge);

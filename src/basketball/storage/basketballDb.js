@@ -336,7 +336,7 @@ export async function findBasketballGameByExternalId(leagueKey, externalGameId) 
   return r.rows?.[0] ? { ...r.rows[0], raw: safeParse(r.rows[0].raw_json, null) } : null;
 }
 
-export async function listBasketballGames({ leagueKey = null, from = null, to = null, limit = 100 } = {}) {
+export async function listBasketballGames({ leagueKey = null, from = null, to = null, limit = 100, preferredEngineVersion = null } = {}) {
   await initBasketballTables();
   const clauses = [];
   const args = [];
@@ -354,7 +354,7 @@ export async function listBasketballGames({ leagueKey = null, from = null, to = 
   });
   const rows = (r.rows || []).map((row) => ({ ...row, raw: safeParse(row.raw_json, null) }));
   const deduped = dedupeGames(rows).slice(0, limit);
-  const summaries = await getLatestBasketballPredictionSummaries(deduped.map((row) => row.id));
+  const summaries = await getLatestBasketballPredictionSummaries(deduped.map((row) => row.id), { preferredEngineVersion });
   return deduped.map((row) => ({
     ...row,
     prediction_summary: summaries.get(Number(row.id)) || null,
@@ -579,6 +579,8 @@ export async function getLatestBasketballPredictionSummaries(gameIds = [], { pre
 
   const args = [...ids];
   const placeholders = ids.map(() => '?').join(', ');
+  const versionClause = preferredEngineVersion ? 'AND bp.engine_version = ?' : '';
+  if (preferredEngineVersion) args.push(String(preferredEngineVersion));
   const r = await db.execute({
     sql: `
       SELECT 
@@ -593,28 +595,34 @@ export async function getLatestBasketballPredictionSummaries(gameIds = [], { pre
         bp.phantom_score,
         bp.risk_level,
         bp.no_clear_edge,
-        MAX(bp.updated_at) as updated_at
+        bp.updated_at
       FROM basketball_predictions bp
       WHERE bp.game_id IN (${placeholders})
-      GROUP BY bp.game_id
-      ORDER BY bp.game_id ASC
+      ${versionClause}
+      ORDER BY bp.game_id ASC, bp.updated_at DESC
     `,
     args,
   });
 
-  return new Map((r.rows || []).map((row) => [Number(row.game_id), {
-    engineVersion: row.engine_version || null,
-    market: row.best_pick_market || null,
-    selection: row.best_pick_selection || null,
-    modelProbability: row.model_probability != null ? Number(row.model_probability) : null,
-    bookmakerLine: row.bookmaker_line != null ? Number(row.bookmaker_line) : null,
-    bookmakerPrice: row.bookmaker_price != null ? Number(row.bookmaker_price) : null,
-    edge: row.edge != null ? Number(row.edge) : null,
-    phantomScore: row.phantom_score != null ? Number(row.phantom_score) : null,
-    riskLevel: row.risk_level || null,
-    noClearEdge: !!row.no_clear_edge,
-    updatedAt: row.updated_at || null,
-  }]));
+  const summaries = new Map();
+  for (const row of r.rows || []) {
+    const gameId = Number(row.game_id);
+    if (summaries.has(gameId)) continue;
+    summaries.set(gameId, {
+      engineVersion: row.engine_version || null,
+      market: row.best_pick_market || null,
+      selection: row.best_pick_selection || null,
+      modelProbability: row.model_probability != null ? Number(row.model_probability) : null,
+      bookmakerLine: row.bookmaker_line != null ? Number(row.bookmaker_line) : null,
+      bookmakerPrice: row.bookmaker_price != null ? Number(row.bookmaker_price) : null,
+      edge: row.edge != null ? Number(row.edge) : null,
+      phantomScore: row.phantom_score != null ? Number(row.phantom_score) : null,
+      riskLevel: row.risk_level || null,
+      noClearEdge: !!row.no_clear_edge,
+      updatedAt: row.updated_at || null,
+    });
+  }
+  return summaries;
 }
 
 export async function listBasketballPredictions({ leagueKey = null, from = null, to = null, limit = 50, engineVersion = null, onlyEdges = true } = {}) {

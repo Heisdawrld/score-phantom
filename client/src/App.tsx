@@ -11,6 +11,9 @@ const Signup = lazy(() => import("@/pages/Signup"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Basketball = lazy(() => import("@/pages/Basketball"));
 const BasketballGame = lazy(() => import("@/pages/BasketballGame"));
+const BasketballPicks = lazy(() => import("@/pages/BasketballPicks"));
+const BasketballAcca = lazy(() => import("@/pages/BasketballAcca"));
+const BasketballSimulator = lazy(() => import("@/pages/BasketballSimulator"));
 const BasketballAdmin = lazy(() => import("@/pages/BasketballAdmin"));
 const Paywall = lazy(() => import("@/pages/Paywall"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
@@ -159,8 +162,10 @@ function SmartRoot() {
 // VerifyEmailHandler removed — Google Auth handles email verification
 
 function MatchdayBackdrop() {
+  const [location] = useLocation();
+  const isBasketball = location.startsWith("/basketball");
   return (
-    <div className="sp-world" aria-hidden="true">
+    <div className={`sp-world${isBasketball ? " sp-world--basketball" : ""}`} aria-hidden="true">
       <div className="sp-world__grid" />
       <div className="sp-world__stadium" />
       <div className="sp-world__orb sp-world__orb--green" />
@@ -194,6 +199,14 @@ function Router() {
       <Route path="/acca-calculator" component={() => <ProtectedRoute component={AccaCalculator} />} />
       <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchCenter} />} />
+      <Route path="/basketball/picks" component={() => <ProtectedRoute component={BasketballPicks} />} />
+      <Route path="/basketball/acca" component={() => <ProtectedRoute component={BasketballAcca} />} />
+      <Route path="/basketball/simulator" component={() => <ProtectedRoute component={BasketballSimulator} />} />
+      <Route path="/basketball/profile" component={() => <ProtectedRoute component={Profile} />} />
+      <Route path="/basketball/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/basketball/billing/history" component={() => <ProtectedRoute component={BillingHistory} />} />
+      <Route path="/basketball/billing" component={() => <ProtectedRoute component={PaymentBilling} />} />
+      <Route path="/basketball/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
       <Route path="/basketball" component={() => <ProtectedRoute component={Basketball} />} />
       <Route path="/basketball/games/:league/:externalId" component={() => <ProtectedRoute component={BasketballGame} />} />
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />

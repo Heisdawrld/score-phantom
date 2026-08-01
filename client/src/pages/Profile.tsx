@@ -27,7 +27,8 @@ export default function Profile() {
   const isSubscribed = (user as any)?.subscription_active === true
     || (user as any)?.access_status === "active";
   const logout = useLogout();
-  const [, nav] = useLocation();
+  const [location, nav] = useLocation();
+  const isBasketball = location.startsWith('/basketball');
   const { toast } = useToast();
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -62,8 +63,8 @@ export default function Profile() {
   const fmt = (d: Date | null) => d ? d.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : null;
 
   const { data: td } = useQuery({
-    queryKey: ["/api/track-record"],
-    queryFn: () => fetchApi("/track-record?days=30&sport=football"),
+    queryKey: ["/api/track-record", isBasketball ? "basketball" : "football"],
+    queryFn: () => fetchApi(`/track-record?days=30&sport=${isBasketball ? "basketball" : "football"}`),
     staleTime: 300000,
   });
   const st = (td as any)?.overallStats || {};
@@ -75,19 +76,19 @@ export default function Profile() {
   });
 
   const navItems = [
-    { icon: CreditCard, label: "Payment & Billing", sub: "Manage your subscription plan", go: "/billing" },
-    { icon: Settings, label: "Account Settings", sub: "Preferences & notifications", go: "/settings" },
-    { icon: BarChart2, label: "Track Record", sub: "Win rates & prediction history", go: "/track-record" },
-    { icon: Heart, label: "Favourite Leagues", sub: "Personalise your match feed", go: "/league-favorites" },
+    { icon: CreditCard, label: "Payment & Billing", sub: "Manage your subscription plan", go: isBasketball ? "/basketball/billing" : "/billing" },
+    { icon: Settings, label: "Account Settings", sub: "Preferences & notifications", go: isBasketball ? "/basketball/settings" : "/settings" },
+    { icon: BarChart2, label: "Track Record", sub: `${isBasketball ? "Basketball" : "Football"} results and calibration`, go: isBasketball ? "/basketball/track-record" : "/track-record" },
+    { icon: Heart, label: isBasketball ? "Hoops Picks" : "Favourite Leagues", sub: isBasketball ? "Return to the basketball signal board" : "Personalise your match feed", go: isBasketball ? "/basketball/picks" : "/league-favorites" },
   ];
   const quickActions = [
-    { icon: CreditCard, label: "Billing", go: "/billing" },
-    { icon: BarChart2, label: "Track", go: "/track-record" },
-    { icon: Heart, label: "Leagues", go: "/league-favorites" },
+    { icon: CreditCard, label: "Billing", go: isBasketball ? "/basketball/billing" : "/billing" },
+    { icon: BarChart2, label: "Track", go: isBasketball ? "/basketball/track-record" : "/track-record" },
+    { icon: Heart, label: isBasketball ? "Picks" : "Leagues", go: isBasketball ? "/basketball/picks" : "/league-favorites" },
   ];
 
   return (
-    <div className="profile-2627 min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative">
+    <div className={`${isBasketball ? "basketball-world " : ""}profile-2627 min-h-screen bg-[#060a0e] text-white pb-24 selection:bg-primary/30 relative`}>
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] opacity-50 rounded-full mix-blend-screen" />
       </div>

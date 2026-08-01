@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, Clock, Loader2, Sparkles, Target, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import { basketballDecision, basketballDecisionTone } from "@/lib/basketball-world";
 import { cn } from "@/lib/utils";
 
 function pct(value?: number | null) {
@@ -175,6 +176,17 @@ export default function BasketballGame() {
   const intel = data?.intel || {};
   const candidates = data?.candidates || [];
   const cacheMeta = data?.cache || null;
+  const decision = basketballDecision(data);
+  const decisionHeading = decision === "BET"
+    ? "Bet signal"
+    : decision === "WATCH"
+      ? "Watch — verify closer to tip"
+      : "Skip this matchup";
+  const decisionCopy = decision === "BET"
+    ? "The edge clears ScorePhantom's probability, coverage and market-quality gates."
+    : decision === "WATCH"
+      ? "The model sees an angle, but the evidence is not strong enough for a bet call yet."
+      : "No market currently clears the safety gates. Preserve your bankroll.";
   const hasBookLines = odds.length > 0 || Number(intel.bookmakerCount || 0) > 0 || !!rec.bookmakerPrice;
   const showNoLinesState = !predictionQuery.isLoading && !predictionError && data && !hasBookLines;
   const homeName = game.homeTeam || game.home_team;
@@ -302,7 +314,10 @@ export default function BasketballGame() {
               <>
                 <section className="relative rounded-2xl overflow-hidden mb-4">
                   <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+                    <div className={cn(
+                      "absolute inset-0 bg-gradient-to-br via-transparent to-transparent",
+                      decision === "BET" ? "from-emerald-400/15" : decision === "WATCH" ? "from-amber-400/15" : "from-rose-400/12",
+                    )} />
                     <div className="absolute -top-10 -right-10 w-[200%] h-[200%] opacity-[0.07]" style={{
                       background: 'repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(16,231,116,0.3) 40px, rgba(16,231,116,0.3) 42px)',
                     }} />
@@ -314,11 +329,12 @@ export default function BasketballGame() {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <span className="text-primary text-sm">🎯</span>
-                        <span className="text-[10px] font-black text-primary/70 uppercase tracking-[0.2em]">Recommendation</span>
+                        <span className="text-[10px] font-black text-orange-100/70 uppercase tracking-[0.2em]">Engine decision</span>
                       </div>
+                      <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black tracking-[0.18em]", basketballDecisionTone(decision))}>{decision}</span>
                     </div>
 
-                    <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1 mt-2">Our Best Bet</p>
+                    <p className="text-[10px] text-white/35 uppercase tracking-wider mb-1 mt-2">{decisionHeading}</p>
                     <div className="flex items-center justify-between gap-4 mb-3">
                       <div className="min-w-0 flex-1 space-y-2">
                         <p className="text-2xl font-black text-white uppercase leading-tight">
@@ -355,6 +371,7 @@ export default function BasketballGame() {
                         <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-1">PHANTOM SCORE</span>
                       </div>
                     </div>
+                    <p className="mb-4 max-w-2xl text-xs leading-relaxed text-white/45">{decisionCopy}</p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">{rec.market || "Market"}</span>
@@ -396,7 +413,7 @@ export default function BasketballGame() {
 
                 {marketSignals.length > 0 && (
                   <section className="premium-surface rounded-3xl p-4">
-                    <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-4 w-4 text-orange-300" /><h3 className="text-sm font-black uppercase tracking-widest">Other Playable Angles</h3></div>
+                    <div className="flex items-center gap-2 mb-3"><TrendingUp className="h-4 w-4 text-orange-300" /><h3 className="text-sm font-black uppercase tracking-widest">Other Model Angles</h3></div>
                     <div className="space-y-2">
                       {marketSignals.map((c: any, i: number) => (
                         <div key={i} className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-black/20 p-3">

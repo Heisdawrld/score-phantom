@@ -12,7 +12,8 @@ function fmtDate(d: string) {
 }
 
 export default function BillingHistory() {
-  const [, setLocation] = useLocation();
+  const [location] = useLocation();
+  const isBasketball = location.startsWith('/basketball');
   const { data: user, isLoading: authLoading } = useAuth();
   
   const { data, isLoading } = useQuery({
@@ -26,7 +27,7 @@ export default function BillingHistory() {
   const history: any[] = data?.history || [];
 
   return (
-    <div className='min-h-screen bg-background pb-20'>
+    <div className={`${isBasketball ? 'basketball-world ' : ''}min-h-screen bg-background pb-20`}>
       <div className='max-w-2xl mx-auto px-4 pt-6'>
         
         {/* ── Header ── */}

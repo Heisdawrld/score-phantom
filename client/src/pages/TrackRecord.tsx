@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
+import { useLocation, useSearch } from 'wouter';
 import {
   BadgeCheck,
   BarChart2,
@@ -315,7 +316,9 @@ function ResultCard({ r, index }: { r: RecentResult; index: number }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function TrackRecord() {
-  const [activeSport, setActiveSport] = useState<'football' | 'basketball'>('football');
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const [activeSport, setActiveSport] = useState<'football' | 'basketball'>(() => location.startsWith('/basketball') || new URLSearchParams(search || '').get('sport') === 'basketball' ? 'basketball' : 'football');
   const [activeSource, setActiveSource] = useState<'live' | 'backtest'>('live');
   const [resultLimit, setResultLimit] = useState<ResultLimit>(25);
 
@@ -359,7 +362,7 @@ export default function TrackRecord() {
 
 
   return (
-    <div className="track-record-2627 relative min-h-screen overflow-hidden bg-[#060a0e] pb-24">
+    <div className={`${isBasketball ? 'basketball-world ' : ''}track-record-2627 relative min-h-screen overflow-hidden bg-[#060a0e] pb-24`}>
       <div className="pointer-events-none fixed inset-0">
         <div
           className={cn(
@@ -398,7 +401,10 @@ export default function TrackRecord() {
             {(['football', 'basketball'] as const).map((sport) => (
               <button
                 key={sport}
-                onClick={() => setActiveSport(sport)}
+                onClick={() => {
+                  setActiveSport(sport);
+                  setLocation(sport === 'basketball' ? '/basketball/track-record' : '/track-record');
+                }}
                 className={cn(
                   'px-3 py-1.5 rounded-[10px] text-2xs font-bold uppercase tracking-wider transition-all',
                   activeSport === sport

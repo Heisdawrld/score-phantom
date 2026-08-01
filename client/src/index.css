@@ -894,6 +894,40 @@ body {
   animation: sp-world-scan 11s ease-in-out infinite;
 }
 
+.sp-world--basketball .sp-world__grid {
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(255, 178, 80, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(153, 112, 255, 0.024) 1px, transparent 1px);
+  background-size: 46px 46px;
+}
+
+.sp-world--basketball .sp-world__stadium {
+  top: -27rem;
+  width: min(76vw, 74rem);
+  aspect-ratio: 1.72;
+  border-color: rgba(255, 178, 80, 0.09);
+  border-radius: 2.5rem;
+  box-shadow:
+    0 0 0 4rem rgba(255, 178, 80, 0.012),
+    0 0 0 11rem rgba(139, 92, 246, 0.01),
+    0 20rem 16rem rgba(255, 143, 45, 0.055);
+}
+
+.sp-world--basketball .sp-world__orb--green {
+  background: #ff963f;
+  opacity: 0.12;
+}
+
+.sp-world--basketball .sp-world__orb--blue {
+  background: #9b7bff;
+  opacity: 0.09;
+}
+
+.sp-world--basketball .sp-world__scan {
+  background: linear-gradient(90deg, transparent, rgba(255, 178, 80, 0.2), transparent);
+}
+
 @keyframes sp-world-scan {
   0%, 70%, 100% { opacity: 0; transform: translateY(0); }
   76% { opacity: 1; }
@@ -919,6 +953,15 @@ body {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(54, 241, 132, 0.25), transparent);
   opacity: 0.48;
+}
+
+.sp-header.is-basketball {
+  border-bottom-color: rgba(255, 178, 80, 0.12);
+  background: rgba(8, 8, 13, 0.86);
+}
+
+.sp-header.is-basketball::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 178, 80, 0.38), rgba(151, 113, 255, 0.22), transparent);
 }
 
 .sp-header__inner {
@@ -957,6 +1000,15 @@ body {
   transform: rotate(18deg);
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
   animation: sp-brand-sweep 7s ease-in-out infinite;
+}
+
+.sp-header.is-basketball .sp-brand__mark {
+  border-color: rgba(255, 178, 80, 0.22);
+  background: linear-gradient(145deg, rgba(255, 178, 80, 0.13), rgba(139, 92, 246, 0.035));
+}
+
+.sp-header.is-basketball .sp-brand__mark img {
+  filter: sepia(0.2) saturate(1.2) drop-shadow(0 0 12px rgba(255, 178, 80, 0.28));
 }
 
 @keyframes sp-brand-sweep {
@@ -1038,6 +1090,10 @@ body {
   color: var(--sp-green);
 }
 
+.sp-header.is-basketball .sp-header__nav-item.is-active svg {
+  color: var(--sp-orange);
+}
+
 .sp-header__nav-line {
   position: absolute;
   inset-inline: 0.8rem;
@@ -1046,6 +1102,11 @@ body {
   border-radius: 99px;
   background: var(--sp-green);
   box-shadow: 0 0 18px rgba(54, 241, 132, 0.6);
+}
+
+.sp-header.is-basketball .sp-header__nav-line {
+  background: var(--sp-orange);
+  box-shadow: 0 0 18px rgba(255, 178, 80, 0.55);
 }
 
 .sp-header__actions {
@@ -1063,8 +1124,15 @@ body {
   background: rgba(255, 255, 255, 0.024);
 }
 
+.sp-sport-switch.is-basketball {
+  border-color: rgba(255, 178, 80, 0.14);
+  background: rgba(255, 178, 80, 0.025);
+}
+
 .sp-sport-switch__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.4rem 0.58rem;
   border-radius: 0.52rem;
   color: rgba(255, 255, 255, 0.28);
@@ -1139,6 +1207,13 @@ body {
   background: linear-gradient(135deg, rgba(54, 241, 132, 0.2), rgba(54, 241, 132, 0.04));
   color: var(--sp-green);
   font-weight: 900;
+}
+
+.sp-header.is-basketball .sp-account-trigger__avatar,
+.sp-header.is-basketball .sp-account-menu__avatar {
+  border-color: rgba(255, 178, 80, 0.22);
+  background: linear-gradient(135deg, rgba(255, 178, 80, 0.2), rgba(139, 92, 246, 0.05));
+  color: #ffc36e;
 }
 
 .sp-account-trigger__avatar {
@@ -1445,6 +1520,26 @@ body {
   margin-top: 0.08rem;
 }
 
+.sp-bottom-nav.is-basketball {
+  border-color: rgba(255, 195, 110, 0.16);
+  background: rgba(10, 10, 16, 0.94);
+}
+
+.sp-bottom-nav.is-basketball .sp-bottom-nav__item.is-active {
+  color: #ffc36e;
+}
+
+.sp-bottom-nav.is-basketball .sp-bottom-nav__active {
+  border-color: rgba(255, 178, 80, 0.12);
+  background: rgba(255, 157, 52, 0.09);
+}
+
+.sp-bottom-nav.is-basketball .sp-bottom-nav__item.is-feature .sp-bottom-nav__icon {
+  background: linear-gradient(145deg, #ffc36e, #ff8a38);
+  color: #1a0c02;
+  box-shadow: 0 8px 30px rgba(255, 145, 55, 0.3);
+}
+
 .sp-footer {
   position: relative;
   z-index: 1;
@@ -1453,6 +1548,13 @@ body {
   border-top: 1px solid var(--sp-line);
   background: rgba(5, 9, 12, 0.52);
   backdrop-filter: blur(14px);
+}
+
+.sp-footer.is-basketball {
+  border-top-color: rgba(255, 174, 79, 0.12);
+  background:
+    radial-gradient(circle at 72% 0%, rgba(255, 139, 45, 0.08), transparent 34%),
+    rgba(7, 8, 12, 0.72);
 }
 
 /* Shared premium surfaces become richer without changing feature components. */
@@ -1484,10 +1586,13 @@ body {
   .sp-footer {
     display: block;
   }
+
+  .sp-bottom-nav {
+    display: none;
+  }
 }
 
 @media (max-width: 1279px) {
-  .sp-sport-switch,
   .sp-live-signal {
     display: none;
   }
@@ -1524,10 +1629,31 @@ body {
     font-size: 1.18rem;
   }
 
-  .sp-brand__season,
+  .sp-brand__copy,
   .sp-account-trigger__copy,
   .sp-account-trigger > svg {
     display: none;
+  }
+
+  .sp-header__inner {
+    gap: 0.5rem;
+  }
+
+  .sp-sport-switch {
+    margin-left: auto;
+    padding: 0.16rem;
+  }
+
+  .sp-sport-switch__item {
+    gap: 0.2rem;
+    padding: 0.34rem 0.42rem;
+    font-size: 0.46rem;
+    letter-spacing: 0.045em;
+  }
+
+  .sp-header__actions {
+    margin-left: 0;
+    gap: 0.38rem;
   }
 
   .sp-account-trigger {
@@ -1543,6 +1669,96 @@ body {
 
   .app-page {
     min-height: calc(100dvh - 60px);
+  }
+}
+
+/* Basketball world */
+.basketball-world {
+  background:
+    radial-gradient(circle at 80% 4%, rgba(255, 145, 55, 0.11), transparent 27rem),
+    radial-gradient(circle at 5% 52%, rgba(139, 92, 246, 0.065), transparent 30rem),
+    linear-gradient(180deg, rgba(7, 9, 13, 0.98), rgba(8, 11, 16, 0.96));
+  isolation: isolate;
+}
+
+.basketball-world__court {
+  position: fixed;
+  inset: 4rem -8rem auto;
+  z-index: -1;
+  height: 36rem;
+  opacity: 0.18;
+  pointer-events: none;
+  transform: perspective(850px) rotateX(64deg) translateY(-12rem);
+  border: 1px solid rgba(255, 178, 80, 0.18);
+  border-radius: 3rem;
+  background-image:
+    linear-gradient(rgba(255, 178, 80, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 178, 80, 0.045) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  mask-image: linear-gradient(to bottom, black 5%, transparent 90%);
+}
+
+.basketball-world__court::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 15rem;
+  height: 15rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 178, 80, 0.24);
+  border-radius: 50%;
+}
+
+.basketball-world__court::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 178, 80, 0.18);
+}
+
+.basketball-world__glow {
+  position: fixed;
+  z-index: -1;
+  width: 30rem;
+  height: 30rem;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+}
+
+.basketball-world__glow--one {
+  top: 2rem;
+  right: -18rem;
+  background: rgba(255, 145, 55, 0.12);
+}
+
+.basketball-world__glow--two {
+  top: 45%;
+  left: -22rem;
+  background: rgba(139, 92, 246, 0.09);
+}
+
+.basketball-sim-court {
+  position: absolute;
+  inset: -20% -10%;
+  opacity: 0.12;
+  pointer-events: none;
+  transform: rotate(-7deg);
+  border: 1px solid rgba(255, 178, 80, 0.22);
+  border-radius: 2rem;
+  background-image:
+    linear-gradient(rgba(255, 178, 80, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 178, 80, 0.045) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+}
+
+@media (max-width: 360px) {
+  .sp-sport-switch__item {
+    padding-inline: 0.3rem;
+    font-size: 0.42rem;
   }
 }
 

@@ -22,11 +22,18 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-const DESKTOP_NAV = [
+const FOOTBALL_NAV = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/picks", label: "Top Picks", icon: Flame },
   { href: "/acca", label: "ACCA Lab", icon: Zap },
   { href: "/simulator", label: "Simulator", icon: Dna },
+];
+
+const BASKETBALL_NAV = [
+  { href: "/basketball", label: "Court", icon: Gauge },
+  { href: "/basketball/picks", label: "Hoops Picks", icon: Flame },
+  { href: "/basketball/acca", label: "Parlay Lab", icon: Zap },
+  { href: "/basketball/simulator", label: "Game Lab", icon: Dna },
 ];
 
 function PlanBadge({ status }: { status: string }) {
@@ -69,6 +76,8 @@ export function Header() {
     (user as any)?.username || (user.email ? user.email.split("@")[0] : "Member");
   const initials = displayUsername.slice(0, 2).toUpperCase();
   const isBasketball = location.startsWith("/basketball");
+  const worldHome = isBasketball ? "/basketball" : "/";
+  const desktopNav = isBasketball ? BASKETBALL_NAV : FOOTBALL_NAV;
 
   const copyId = async () => {
     if (!user.id) return;
@@ -78,9 +87,9 @@ export function Header() {
   };
 
   return (
-    <header className="sp-header">
+    <header className={cn("sp-header", isBasketball && "is-basketball")}>
       <div className="sp-header__inner">
-        <Link href="/" className="sp-brand" aria-label="ScorePhantom overview">
+        <Link href={worldHome} className="sp-brand" aria-label={`ScorePhantom ${isBasketball ? "basketball" : "football"} overview`}>
           <span className="sp-brand__mark">
             <img src={`${import.meta.env.BASE_URL}images/logo.png`} alt="" />
           </span>
@@ -88,13 +97,15 @@ export function Header() {
             <span className="sp-brand__wordmark">
               SCORE<span>PHANTOM</span>
             </span>
-            <span className="sp-brand__season">Football intelligence · 26/27</span>
+            <span className="sp-brand__season">{isBasketball ? "Basketball intelligence · 26/27" : "Football intelligence · 26/27"}</span>
           </span>
         </Link>
 
         <nav className="sp-header__nav" aria-label="Primary navigation">
-          {DESKTOP_NAV.map(({ href, label, icon: Icon }) => {
-            const active = href === "/" ? location === "/" : location.startsWith(href);
+          {desktopNav.map(({ href, label, icon: Icon }) => {
+            const active = href === worldHome
+              ? location === worldHome || (isBasketball && location.startsWith("/basketball/games/"))
+              : location.startsWith(href);
             return (
               <Link href={href} key={href}>
                 <span className={cn("sp-header__nav-item", active && "is-active")}>
@@ -108,15 +119,15 @@ export function Header() {
         </nav>
 
         <div className="sp-header__actions">
-          <div className="sp-sport-switch" aria-label="Choose sport">
+          <div className={cn("sp-sport-switch", isBasketball && "is-basketball")} aria-label="Choose sport">
             <Link href="/">
               <span className={cn("sp-sport-switch__item", !isBasketball && "is-active")}>
-                Football
+                <span aria-hidden="true">⚽</span> Football
               </span>
             </Link>
             <Link href="/basketball">
               <span className={cn("sp-sport-switch__item", isBasketball && "is-basketball")}>
-                Basketball
+                <span aria-hidden="true">🏀</span> Basketball
               </span>
             </Link>
           </div>
@@ -179,16 +190,16 @@ export function Header() {
                   )}
 
                   <div className="sp-account-menu__links">
-                    <Link href="/profile" onClick={() => setOpen(false)}>
+                    <Link href={isBasketball ? "/basketball/profile" : "/profile"} onClick={() => setOpen(false)}>
                       <span><User /> Profile</span>
                     </Link>
-                    <Link href="/track-record" onClick={() => setOpen(false)}>
+                    <Link href={isBasketball ? "/basketball/track-record" : "/track-record"} onClick={() => setOpen(false)}>
                       <span><BarChart3 /> Track record</span>
                     </Link>
-                    <Link href="/league-favorites" onClick={() => setOpen(false)}>
-                      <span><Trophy /> League tracker</span>
+                    <Link href={isBasketball ? "/basketball/picks" : "/league-favorites"} onClick={() => setOpen(false)}>
+                      <span><Trophy /> {isBasketball ? "Hoops picks" : "League tracker"}</span>
                     </Link>
-                    <Link href="/settings" onClick={() => setOpen(false)}>
+                    <Link href={isBasketball ? "/basketball/settings" : "/settings"} onClick={() => setOpen(false)}>
                       <span><Settings /> Settings</span>
                     </Link>
                   </div>
