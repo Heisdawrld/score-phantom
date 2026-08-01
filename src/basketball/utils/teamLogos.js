@@ -37,7 +37,7 @@ const WNBA_LOGO_CODES = {
   'chicago sky': 'chi',
   'connecticut sun': 'con',
   'dallas wings': 'dal',
-  'golden state valkyries': 'gsv',
+  'golden state valkyries': 'gs',
   'indiana fever': 'ind',
   'las vegas aces': 'lv',
   'los angeles sparks': 'la',
@@ -46,6 +46,7 @@ const WNBA_LOGO_CODES = {
   'phoenix mercury': 'phx',
   'portland fire': 'por',
   'seattle storm': 'sea',
+  'toronto tempo': 'tor',
   'washington mystics': 'wsh',
 };
 
@@ -59,7 +60,7 @@ function normalize(value = '') {
 
 function espnLogo(sport, code) {
   if (!sport || !code) return null;
-  return `https://a.espncdn.com/i/teamlogos/${sport}/500/scoreboard/${code}.png`;
+  return `https://a.espncdn.com/i/teamlogos/${sport}/500/${code}.png`;
 }
 
 export function resolveBasketballTeamLogo({ leagueKey = '', teamName = '', teamAbbr = '', rawLogo = null } = {}) {

@@ -15,6 +15,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { basketballTeamLogoSrc } from '@/lib/basketball-team-logo';
 import { cn } from '@/lib/utils';
 import { basketballDecision, basketballGameHref, basketballPercent, type BasketballPrediction } from '@/lib/basketball-world';
 
@@ -65,11 +66,6 @@ function statusLabel(status?: string | null) {
   if (s.includes('final') || s.includes('finished') || s === 'ft') return 'FT';
   if (s.includes('live') || s.includes('q') || s.includes('half') || s.includes('in play')) return 'LIVE';
   return 'UPCOMING';
-}
-
-function initials(name?: string) {
-  if (!name) return '--';
-  return String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
 function rawOf(game: any) {
@@ -130,10 +126,16 @@ function groupGames(games: any[]) {
 
 // ── Tiny Components ─────────────────────────────────────────────────────────
 
-function TeamBadge({ name, logo }: { name: string; logo?: string | null }) {
+function TeamBadge({ name, logo, league }: { name: string; logo?: string | null; league?: string | null }) {
   return (
     <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.04]">
-      {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-1" loading="lazy" /> : <span className="text-[9px] font-black text-white/50">{initials(name)}</span>}
+      <img
+        src={basketballTeamLogoSrc({ logo, name, league })}
+        alt={`${name} logo`}
+        className="h-full w-full object-contain p-1"
+        loading="lazy"
+        decoding="async"
+      />
     </div>
   );
 }
@@ -176,12 +178,12 @@ function GameCard({ game, onOpen, index = 0 }: { game: any; onOpen: () => void; 
           {/* Teams */}
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-2">
-              <TeamBadge name={game.home_team} logo={homeLogo} />
+              <TeamBadge name={game.home_team} logo={homeLogo} league={game.league_key} />
               <p className="text-xs font-bold text-white truncate">{game.home_team}</p>
               {hasScore && <span className="ml-auto text-sm font-black tabular-nums text-white">{game.home_score ?? 0}</span>}
             </div>
             <div className="flex items-center gap-2">
-              <TeamBadge name={game.away_team} logo={awayLogo} />
+              <TeamBadge name={game.away_team} logo={awayLogo} league={game.league_key} />
               <p className="text-xs font-bold text-white/60 truncate">{game.away_team}</p>
               {hasScore && <span className="ml-auto text-sm font-black tabular-nums text-white/60">{game.away_score ?? 0}</span>}
             </div>

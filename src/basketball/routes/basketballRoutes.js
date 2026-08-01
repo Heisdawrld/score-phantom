@@ -8,12 +8,74 @@ import { runBasketballPrediction, BASKETBALL_ENGINE_VERSION } from '../engine/ba
 import { basketballAutoSyncStatus } from '../jobs/basketballAutoSync.js';
 import { requireAuth, requirePremiumAccess } from '../../auth/authRoutes.js';
 import { requireAdminAccess } from '../../middlewares/adminGuard.js';
+import { resolveBasketballTeamLogo } from '../utils/teamLogos.js';
 
 const router = express.Router();
 
 function handleError(res, err) {
   const code = err.statusCode || 500;
   return res.status(code).json({ error: err.message || 'Basketball API error' });
+}
+
+function escapeSvgText(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function logoInitials(teamName = '') {
+  const words = String(teamName || 'Basketball')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(-2).map((word) => word[0]).join('').toUpperCase() || 'BB';
+}
+
+function basketballLogoFallback(teamName = '') {
+  const initials = escapeSvgText(logoInitials(teamName));
+  const accessibleName = escapeSvgText(teamName || 'Basketball team');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="${accessibleName} crest">
+    <defs>
+      <linearGradient id="bg" x1="28" y1="20" x2="224" y2="238" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#FFB35E"/><stop offset="0.52" stop-color="#F47B28"/><stop offset="1" stop-color="#5B21B6"/>
+      </linearGradient>
+      <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>
+    </defs>
+    <path d="M128 12 224 47v73c0 59-36 102-96 124-60-22-96-65-96-124V47l96-35Z" fill="#090B11" stroke="#FFB35E" stroke-width="6"/>
+    <circle cx="128" cy="117" r="64" fill="url(#bg)" opacity=".24" filter="url(#glow)"/>
+    <circle cx="128" cy="117" r="58" fill="url(#bg)"/>
+    <path d="M76 117h104M128 59c-19 17-29 36-29 58s10 41 29 58M128 59c19 17 29 36 29 58s-10 41-29 58M87 78c25 12 57 12 82 0M87 156c25-12 57-12 82 0" fill="none" stroke="#1B0B03" stroke-width="5" stroke-linecap="round" opacity=".72"/>
+    <text x="128" y="128" text-anchor="middle" fill="#FFF8EC" font-family="Arial, sans-serif" font-size="34" font-weight="900" letter-spacing="1">${initials}</text>
+    <text x="128" y="220" text-anchor="middle" fill="#FFD29A" font-family="Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="4">BASKETBALL</text>
+  </svg>`;
+}
+
+function allowedLogoUrl(value = '') {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== 'https:') return null;
+    const host = url.hostname.toLowerCase();
+    const espnPath = /^\/i\/teamlogos\/(nba|wnba)\/500\/(scoreboard\/)?[a-z0-9-]+\.png$/i.test(url.pathname);
+    const apiSportsPath = /^\/basketball\/teams\/\d+\.png$/i.test(url.pathname);
+    const allowed = (host === 'a.espncdn.com' && espnPath)
+      || ((host === 'media.api-sports.io' || /^media-\d+\.api-sports\.io$/.test(host)) && apiSportsPath);
+    return allowed ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function sendLogoFallback(res, teamName) {
+  res.set({
+    'Content-Type': 'image/svg+xml; charset=utf-8',
+    'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  return res.status(200).send(basketballLogoFallback(teamName));
 }
 
 function normalizeGameState(status = '') {
@@ -91,6 +153,58 @@ router.get('/leagues', (req, res) => {
     selectedApiSports: getApiSportsTopBasketballLeagues({ limit: 15 }),
     all: Object.values(BASKETBALL_LEAGUES),
   });
+});
+
+router.get('/team-logo', async (req, res) => {
+  const teamName = String(req.query.name || 'Basketball team').slice(0, 100);
+  const leagueKey = String(req.query.league || '').slice(0, 50);
+  const suppliedUrl = String(req.query.url || '');
+  const canonicalUrl = resolveBasketballTeamLogo({ leagueKey, teamName });
+  const upstreamUrls = [...new Map(
+    [canonicalUrl, suppliedUrl]
+      .map(allowedLogoUrl)
+      .filter(Boolean)
+      .map((url) => [url.href, url])
+  ).values()];
+  if (!upstreamUrls.length) return sendLogoFallback(res, teamName);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    for (const upstreamUrl of upstreamUrls) {
+      let upstream;
+      try {
+        upstream = await fetch(upstreamUrl, {
+          signal: controller.signal,
+          redirect: 'error',
+          headers: { Accept: 'image/png,image/webp,image/svg+xml,image/*' },
+        });
+      } catch {
+        continue;
+      }
+      if (!upstream.ok) continue;
+
+      const contentType = String(upstream.headers.get('content-type') || '').toLowerCase();
+      const contentLength = Number(upstream.headers.get('content-length') || 0);
+      if (!contentType.startsWith('image/') || contentLength > 1_500_000) continue;
+
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (!bytes.length || bytes.length > 1_500_000) continue;
+      res.set({
+        'Content-Type': contentType,
+        'Content-Length': String(bytes.length),
+        'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.status(200).send(bytes);
+    }
+    return sendLogoFallback(res, teamName);
+  } catch {
+    return sendLogoFallback(res, teamName);
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 router.get('/health', async (req, res) => {

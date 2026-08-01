@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, Clock, Loader2, Sparkles, Target, TrendingUp } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { basketballDecision, basketballDecisionTone } from "@/lib/basketball-world";
+import { basketballTeamLogoSrc } from "@/lib/basketball-team-logo";
 import { cn } from "@/lib/utils";
 
 function pct(value?: number | null) {
@@ -45,17 +46,6 @@ function shortTeam(name?: string) {
     .replace("Golden State ", "GS ")
     .replace("Oklahoma City ", "OKC ")
     .replace("Philadelphia ", "PHI ");
-}
-
-function initials(name?: string) {
-  if (!name) return "--";
-  return String(name)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
 }
 
 function rawOf(game: any) {
@@ -101,10 +91,16 @@ function Metric({ label, value, sub }: { label: string; value: any; sub?: any })
   );
 }
 
-function TeamBadge({ name, logo }: { name: string; logo?: string | null }) {
+function TeamBadge({ name, logo, league }: { name: string; logo?: string | null; league?: string | null }) {
   return (
     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/15 bg-orange-400/10 text-xl font-black text-orange-100 shadow-[0_0_30px_rgba(251,146,60,0.08)] overflow-hidden">
-      {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-2" loading="lazy" /> : initials(name)}
+      <img
+        src={basketballTeamLogoSrc({ logo, name, league })}
+        alt={`${name} logo`}
+        className="h-full w-full object-contain p-2"
+        loading="eager"
+        decoding="async"
+      />
     </div>
   );
 }
@@ -262,12 +258,12 @@ export default function BasketballGame() {
 
               <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                 <div className="text-center min-w-0">
-                  <TeamBadge name={homeName} logo={homeLogo} />
+                  <TeamBadge name={homeName} logo={homeLogo} league={league} />
                   <p className="mt-3 text-base font-black leading-tight text-white truncate">{shortTeam(homeName)}</p>
                 </div>
                 <div className="text-center text-white/25 font-black">VS</div>
                 <div className="text-center min-w-0">
-                  <TeamBadge name={awayName} logo={awayLogo} />
+                  <TeamBadge name={awayName} logo={awayLogo} league={league} />
                   <p className="mt-3 text-base font-black leading-tight text-white truncate">{shortTeam(awayName)}</p>
                 </div>
               </div>
