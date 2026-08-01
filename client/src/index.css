@@ -1203,7 +1203,7 @@ html.sp-sport-traveling body {
     transparent 65% 100%
   );
   filter: blur(22px);
-  animation: sp-portal-spin 1.05s linear infinite;
+  animation: sp-portal-spin 2.1s linear infinite;
 }
 
 .sp-sport-portal::after {
@@ -1211,7 +1211,7 @@ html.sp-sport-traveling body {
   opacity: 0.58;
   filter: blur(55px);
   animation-direction: reverse;
-  animation-duration: 0.72s;
+  animation-duration: 1.45s;
 }
 
 .sp-sport-portal__vortex {
@@ -1235,15 +1235,15 @@ html.sp-sport-traveling body {
     inset 0 0 1.3rem rgba(var(--portal-rgb), 0.16);
   opacity: 0;
   transform-style: preserve-3d;
-  animation: sp-portal-ring 0.78s linear infinite;
-  animation-delay: calc(var(--portal-index) * -0.0975s);
+  animation: sp-portal-ring 1.42s linear infinite;
+  animation-delay: calc(var(--portal-index) * -0.1775s);
 }
 
 .sp-sport-portal__streaks {
   position: absolute;
   inset: 0;
   opacity: 0.9;
-  animation: sp-portal-streak-field 1.05s ease-in forwards;
+  animation: sp-portal-streak-field 2.18s ease-in-out forwards;
 }
 
 .sp-sport-portal__streaks > span {
@@ -1256,8 +1256,8 @@ html.sp-sport-traveling body {
   transform: rotate(calc(var(--portal-index) * 22.5deg)) translateX(5vmin);
   background: linear-gradient(90deg, rgba(var(--portal-rgb), 0), rgba(var(--portal-rgb), 0.75), transparent 72%);
   filter: drop-shadow(0 0 0.35rem rgba(var(--portal-rgb), 0.8));
-  animation: sp-portal-streak 0.5s ease-in infinite;
-  animation-delay: calc(var(--portal-index) * -0.037s);
+  animation: sp-portal-streak 0.82s ease-in infinite;
+  animation-delay: calc(var(--portal-index) * -0.061s);
 }
 
 .sp-sport-portal__core {
@@ -1286,7 +1286,7 @@ html.sp-sport-traveling body {
     0 0 0 0.55rem rgba(var(--portal-rgb), 0.045),
     0 0 3.8rem rgba(var(--portal-rgb), 0.4),
     inset 0 0 1.7rem rgba(var(--portal-rgb), 0.2);
-  animation: sp-portal-ball 0.48s ease-in-out infinite alternate;
+  animation: sp-portal-ball 0.68s ease-in-out infinite alternate;
 }
 
 .sp-sport-portal__core small {
@@ -1321,7 +1321,7 @@ html.sp-sport-traveling body {
   pointer-events: none;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.94), rgba(var(--portal-rgb), 0.35) 10%, transparent 35%);
   opacity: 0;
-  animation: sp-portal-flash 1.05s ease-in-out forwards;
+  animation: sp-portal-flash 2.18s ease-in-out forwards;
 }
 
 @keyframes sp-portal-spin {
@@ -1353,9 +1353,9 @@ html.sp-sport-traveling body {
 }
 
 @keyframes sp-portal-flash {
-  0%, 38% { opacity: 0; transform: scale(0.2); }
-  49% { opacity: 0.86; transform: scale(1.05); }
-  58%, 100% { opacity: 0; transform: scale(2.3); }
+  0%, 42% { opacity: 0; transform: scale(0.2); }
+  50% { opacity: 0.9; transform: scale(1.05); }
+  60%, 100% { opacity: 0; transform: scale(2.3); }
 }
 
 @media (max-width: 640px) {

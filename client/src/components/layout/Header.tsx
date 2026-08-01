@@ -121,11 +121,11 @@ export function Header() {
     document.documentElement.classList.add("sp-sport-traveling");
     portalTimers.current.forEach((timer) => window.clearTimeout(timer));
     portalTimers.current = [
-      window.setTimeout(() => setLocation(href), 500),
+      window.setTimeout(() => setLocation(href), 2200),
       window.setTimeout(() => {
         setSportPortal(null);
         document.documentElement.classList.remove("sp-sport-traveling");
-      }, 1120),
+      }, 2500),
     ];
   };
 
@@ -299,8 +299,8 @@ export function Header() {
             <motion.div
               className="sp-sport-portal__core"
               initial={{ opacity: 0, scale: 0.65 }}
-              animate={{ opacity: [0, 1, 1, 0], scale: [0.65, 1, 1.04, 1.45] }}
-              transition={{ duration: 1.02, times: [0, 0.22, 0.68, 1], ease: "easeInOut" }}
+              animate={{ opacity: [0, 1, 1, 1, 0], scale: [0.58, 1, 1.02, 1.08, 1.55] }}
+              transition={{ duration: 2.18, times: [0, 0.16, 0.48, 0.78, 1], ease: "easeInOut" }}
             >
               <span className="sp-sport-portal__ball" aria-hidden="true">{sportPortal === "basketball" ? "🏀" : "⚽"}</span>
               <small>Entering</small>
