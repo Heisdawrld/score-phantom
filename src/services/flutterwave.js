@@ -77,6 +77,18 @@ export async function verifyTransaction(transactionId) {
   return data.data; // { status: 'successful'|'failed', amount, currency, tx_ref, ... }
 }
 
+export function transactionMatchesExpected(transaction, { txRef, amount, currency = 'NGN' } = {}) {
+  const expectedAmount = Number(amount);
+  return Boolean(
+    transaction &&
+    transaction.status === 'successful' &&
+    String(transaction.tx_ref || '') === String(txRef || '') &&
+    transaction.currency === currency &&
+    Number.isFinite(expectedAmount) &&
+    Number(transaction.amount) === expectedAmount
+  );
+}
+
 // ── Webhook signature verification ───────────────────────────────────────────
 // Flutterwave sends verif-hash header = your FLUTTERWAVE_WEBHOOK_HASH
 import crypto from 'crypto';

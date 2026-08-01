@@ -26,6 +26,7 @@ import { refreshClvCalibration } from "./storage/clvCalibration.js";
 import { refreshLearnedWeights } from "./probabilities/ensemble.js";
 import { runMaintenanceJobs } from "./scripts/maintenance.js";
 import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
+import { FOOTBALL_ENGINE_VERSION } from './config/engineVersion.js';
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
@@ -96,16 +97,21 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
       if (!bsdKey) {
         checks.bsd_api = "no_key";
       } else {
-        const { fetchLeagues } = await import('./services/bsd.js');
-        const leagues = await fetchLeagues();
-        checks.bsd_api = leagues.length > 0 ? "ok" : "error:no_leagues";
-        checks.bsd_leagues = leagues.length;
+        const { bsdFetch } = await import('./services/bsd.js');
+        const leagueProbe = await bsdFetch(
+          '/leagues/',
+          { is_active: true, limit: 1, offset: 0 },
+          { retries: 0, timeoutMs: 4000, cacheTtlMs: 5 * 60 * 1000 },
+        );
+        const leagueCount = Number(leagueProbe?.count || leagueProbe?.results?.length || 0);
+        checks.bsd_api = leagueCount > 0 ? "ok" : "error:no_leagues";
+        checks.bsd_leagues = leagueCount;
       }
     } catch (e) {
       checks.bsd_api = "fetch_error";
       checks.bsd_error = e.message;
     }
-    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    checks.email = process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured';
     checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
     checks.flutterwave = process.env.FLUTTERWAVE_SECRET_KEY ? 'configured' : 'not_configured';
     checks.admin_secret = process.env.ADMIN_SECRET ? 'configured' : 'not_configured';
@@ -122,38 +128,116 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
 app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
   try {
     const { getAccuracySummary } = await import('./storage/accuracyCache.js');
-    const summary = await getAccuracySummary();
+    const [summary, predictionCountResult, overviewResult, marketResult, calibrationResult] = await Promise.all([
+      getAccuracySummary(),
+      db.execute({
+        sql: `SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN COALESCE(no_safe_pick, 0) = 0 AND UPPER(COALESCE(
+                  json_extract(prediction_json, '$.engineResult.bestPick.advisor_status'), ''
+                )) IN ('BET', 'FIRE', 'RECOMMENDED') THEN 1 ELSE 0 END) AS bet,
+                SUM(CASE WHEN COALESCE(no_safe_pick, 0) = 0 AND UPPER(COALESCE(
+                  json_extract(prediction_json, '$.engineResult.bestPick.advisor_status'), ''
+                )) IN ('WATCH', 'GAMBLE', 'CAUTIOUS') THEN 1 ELSE 0 END) AS watch,
+                SUM(CASE WHEN COALESCE(no_safe_pick, 0) = 1 OR UPPER(COALESCE(
+                  json_extract(prediction_json, '$.engineResult.bestPick.advisor_status'), ''
+                )) IN ('SKIP', 'AVOID') THEN 1 ELSE 0 END) AS skip,
+                SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
+              FROM predictions_v2
+              WHERE json_valid(prediction_json)
+                AND COALESCE(
+                  json_extract(prediction_json, '$.engineVersion'),
+                  json_extract(prediction_json, '$.engineResult.engineVersion')
+                ) = ?`,
+        args: [FOOTBALL_ENGINE_VERSION],
+      }),
+      db.execute({
+        sql: `SELECT
+                COUNT(*) AS total_predictions,
+                SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) AS losses,
+                SUM(CASE WHEN outcome = 'void' AND home_score IS NOT NULL THEN 1 ELSE 0 END) AS true_voids,
+                SUM(CASE WHEN outcome = 'void' AND home_score IS NULL THEN 1 ELSE 0 END) AS ghost_voids
+              FROM prediction_outcomes
+              WHERE created_at >= datetime('now', '-30 days')
+                AND engine_version = ?
+                AND prediction_source IN ('live', 'ws_live')
+                AND COALESCE(is_retroactive, 0) = 0`,
+        args: [FOOTBALL_ENGINE_VERSION],
+      }),
+      db.execute({
+        sql: `SELECT predicted_market AS market,
+                COUNT(*) AS total,
+                SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN outcome IN ('loss', 'wrong') THEN 1 ELSE 0 END) AS losses
+              FROM prediction_outcomes
+              WHERE created_at >= datetime('now', '-30 days')
+                AND engine_version = ?
+                AND prediction_source IN ('live', 'ws_live')
+                AND COALESCE(is_retroactive, 0) = 0
+                AND outcome IN ('win', 'loss', 'correct', 'wrong')
+              GROUP BY predicted_market
+              ORDER BY total DESC`,
+        args: [FOOTBALL_ENGINE_VERSION],
+      }),
+      db.execute({
+        sql: `SELECT CAST(predicted_probability * 10 AS INTEGER) * 10 AS bucket_min,
+                COUNT(*) AS total,
+                SUM(CASE WHEN outcome IN ('win', 'correct') THEN 1 ELSE 0 END) AS wins
+              FROM prediction_outcomes
+              WHERE engine_version = ?
+                AND prediction_source IN ('live', 'ws_live')
+                AND COALESCE(is_retroactive, 0) = 0
+                AND outcome IN ('win', 'loss', 'correct', 'wrong')
+                AND predicted_probability > 0
+              GROUP BY bucket_min
+              ORDER BY bucket_min DESC`,
+        args: [FOOTBALL_ENGINE_VERSION],
+      }),
+    ]);
     const topMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 8);
     const weakMarkets = (summary.marketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 8);
     const topLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => b.winRate - a.winRate).slice(0, 10);
     const weakLeagueMarkets = (summary.leagueMarketBreakdown || []).slice().sort((a, b) => a.winRate - b.winRate).slice(0, 10);
 
-    let predictionCounts = { total: 0, fire: 0, gamble: 0, avoid: 0, no_safe: 0 };
-    try {
-      const r = await db.execute(`
-        SELECT
-          COUNT(*) AS total,
-          SUM(CASE WHEN confidence_model = 'FIRE' THEN 1 ELSE 0 END) AS fire,
-          SUM(CASE WHEN confidence_model = 'GAMBLE' THEN 1 ELSE 0 END) AS gamble,
-          SUM(CASE WHEN confidence_model = 'AVOID' THEN 1 ELSE 0 END) AS avoid,
-          SUM(CASE WHEN no_safe_pick = 1 THEN 1 ELSE 0 END) AS no_safe
-        FROM predictions_v2
-      `);
-      predictionCounts = {
-        total: Number(r.rows?.[0]?.total || 0),
-        fire: Number(r.rows?.[0]?.fire || 0),
-        gamble: Number(r.rows?.[0]?.gamble || 0),
-        avoid: Number(r.rows?.[0]?.avoid || 0),
-        no_safe: Number(r.rows?.[0]?.no_safe || 0),
-      };
-    } catch (e) {
-      predictionCounts.error = e.message;
-    }
+    const rawPredictionCounts = predictionCountResult.rows?.[0] || {};
+    const predictionCounts = {
+      total: Number(rawPredictionCounts.total || 0),
+      bet: Number(rawPredictionCounts.bet || 0),
+      watch: Number(rawPredictionCounts.watch || 0),
+      skip: Number(rawPredictionCounts.skip || 0),
+      no_safe: Number(rawPredictionCounts.no_safe || 0),
+    };
+    predictionCounts.unclassified = Math.max(
+      0,
+      predictionCounts.total - predictionCounts.bet - predictionCounts.watch - predictionCounts.skip,
+    );
+
+    const rawOverview = overviewResult.rows?.[0] || {};
+    const overview = Object.fromEntries(
+      ['total_predictions', 'wins', 'losses', 'true_voids', 'ghost_voids']
+        .map((key) => [key, Number(rawOverview[key] || 0)]),
+    );
+    const markets = (marketResult.rows || []).map((row) => ({
+      market: row.market,
+      total: Number(row.total || 0),
+      wins: Number(row.wins || 0),
+      losses: Number(row.losses || 0),
+    }));
+    const calibration = (calibrationResult.rows || []).map((row) => ({
+      bucket_min: Number(row.bucket_min || 0),
+      total: Number(row.total || 0),
+      wins: Number(row.wins || 0),
+    }));
 
     return res.json({
       status: 'ok',
       generatedAt: new Date().toISOString(),
+      engineVersion: FOOTBALL_ENGINE_VERSION,
       predictionCounts,
+      overview,
+      markets,
+      calibration,
       totalOutcomes: summary.totalOutcomes || 0,
       cacheAge: summary.cacheAge,
       marketBreakdown: summary.marketBreakdown || [],
@@ -166,7 +250,7 @@ app.get("/api/admin/engine-stats", requireAdminAccess, async (req, res) => {
       recommendations: [
         weakLeagueMarkets.length ? 'Review restricted league-market combos before trusting them in ACCA.' : 'No league-market weakness detected yet.',
         (summary.totalOutcomes || 0) < 50 ? 'Learning sample is still small; calibration will remain conservative.' : 'Outcome sample is large enough for stronger calibration reads.',
-        'Use FIRE picks for premium surfacing and keep GAMBLE picks separate from ACCA unless volatility is low.',
+        'Use BET picks for premium surfacing, keep WATCH picks out of ACCA, and respect every SKIP decision.',
       ],
     });
   } catch (err) {

@@ -296,11 +296,21 @@ router.delete("/users/:id", adminLimiter, requireAdmin, async (req, res) => {
     const user = userResult.rows?.[0];
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Delete related data first
-    await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] });
-    await db.execute({ sql: "DELETE FROM partner_commissions WHERE referred_user_id = ? OR referrer_user_id = ?", args: [userId, userId] });
-    await db.execute({ sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] });
-    await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [userId] });
+    // Remove the complete account footprint atomically so user deletion cannot
+    // leave push tokens, notifications, subscriptions, or referral orphans.
+    await db.batch([
+      { sql: "DELETE FROM partner_commissions WHERE referred_user_id = ? OR referrer_user_id = ?", args: [userId, userId] },
+      { sql: "DELETE FROM partner_referrals WHERE user_id = ?", args: [userId] },
+      { sql: "UPDATE users SET referred_by_user_id = NULL, referred_by_code = NULL WHERE referred_by_user_id = ?", args: [userId] },
+      { sql: "UPDATE partners SET user_id = NULL WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM match_subscriptions WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM push_subscriptions WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM push_tokens WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM notifications WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM users WHERE id = ?", args: [userId] },
+    ], "write");
 
     return res.json({
       success: true,
@@ -459,9 +469,8 @@ router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
         missingDays.push({ i, dateStr, count });
       }
       console.log(`[Admin/reseed] Day counts: ${missingDays.map(d => `${d.dateStr}:${d.count}`).join(', ')}`);
-      // Force-seed all 7 days (clear only future fixtures, keep predictions)
-      const today = new Date().toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
-      await db.execute({ sql: "DELETE FROM fixtures WHERE match_date >= ?", args: [`${today}T00:00:00`] });
+      // The seeder upserts by provider fixture ID. Deleting first could orphan
+      // predictions and odds whenever the provider returns a partial schedule.
       const result = await seedFixtures({ days: 7, startOffset: 0, clearFirst: false });
       console.log("[Admin] Safe reseed complete:", result);
       return result;
@@ -476,11 +485,26 @@ router.post("/reseed", adminLimiter, requireAdmin, async (req, res) => {
 // ── GET /fixture-stats — count fixtures, enriched, with odds ─────────────────
 router.get("/fixture-stats", adminLimiter, requireAdmin, async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = now.toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
+    const tomorrow = new Date(now.getTime() + 86400000)
+      .toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
     const [total, enriched, withOdds, predictions, fixtureOdds] = await Promise.all([
-      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ?", args: [`${today}%`] }),
-      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND enriched = 1", args: [`${today}%`] }),
-      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date LIKE ? AND odds_home IS NOT NULL", args: [`${today}%`] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date >= ? AND match_date < ?", args: [today, tomorrow] }),
+      db.execute({ sql: "SELECT COUNT(*) as c FROM fixtures WHERE match_date >= ? AND match_date < ? AND enriched = 1", args: [today, tomorrow] }),
+      db.execute({
+        sql: `SELECT COUNT(*) as c FROM fixtures f
+              WHERE f.match_date >= ? AND f.match_date < ?
+                AND (
+                  f.odds_home IS NOT NULL
+                  OR EXISTS (
+                    SELECT 1 FROM fixture_odds fo
+                    WHERE fo.fixture_id = f.id
+                      AND (fo.home IS NOT NULL OR fo.draw IS NOT NULL OR fo.away IS NOT NULL OR fo.over_under IS NOT NULL)
+                  )
+                )`,
+        args: [today, tomorrow],
+      }),
       db.execute("SELECT COUNT(*) as c FROM predictions_v2"),
       db.execute("SELECT COUNT(*) as c FROM fixture_odds"),
     ]);
@@ -548,7 +572,7 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
       }
     } catch(e) { checks.bsd_api = "fetch_error"; }
     // Email
-    checks.email = process.env.GMAIL_USER ? 'configured' : (process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured');
+    checks.email = process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured';
     // Groq
     checks.groq = process.env.GROQ_API_KEY ? 'configured' : 'not_configured';
     // Flutterwave

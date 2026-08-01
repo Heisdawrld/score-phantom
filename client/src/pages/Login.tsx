@@ -239,7 +239,7 @@ export default function Login() {
     if (!resetEmail.trim()) return setGeneralError("Please enter your email address.");
     setResetLoading(true); setGeneralError("");
     try {
-      try { await fetchApi("/auth/password/reset-request", { method: "POST", body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }) }); } catch (_) {}
+      await fetchApi("/auth/password/reset-request", { method: "POST", body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }) });
       setSuccessMsg(`Reset email sent to ${resetEmail}. Check your inbox.`);
       setResetEmail("");
       goTo("email-signin", -1);

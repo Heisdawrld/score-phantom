@@ -351,7 +351,7 @@ export async function requirePremiumAccess(req, res, next) {
 
 // ── Flutterwave V4 helpers ──────────────────────────────────────────────────────
 import { sendPasswordResetEmail } from '../services/emailService.js';
-import { initializePayment, verifyTransaction, verifyWebhookSignature, isConfigured as flwConfigured } from '../services/flutterwave.js';
+import { initializePayment, verifyTransaction, verifyWebhookSignature, transactionMatchesExpected, isConfigured as flwConfigured } from '../services/flutterwave.js';
 
 async function activatePremium(userId, flwChargeId, reference, amountPaid = PLAN_AMOUNT_NGN, customDays = null) {
   const durationDays = customDays ? customDays : ((amountPaid === WEEKLY_PLAN_AMOUNT_NGN) ? WEEKLY_PLAN_DURATION_DAYS : PLAN_DURATION_DAYS);
@@ -973,6 +973,12 @@ router.put("/profile", requireAuth, async (req, res) => {
 // Step 1: Store a short-lived reset token and deliver it through the server email provider.
 router.post("/password/reset-request", authLimiter, async (req, res) => {
   try {
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(503).json({
+        error: "Password reset email is temporarily unavailable. Please contact support.",
+        code: "email_delivery_unavailable",
+      });
+    }
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: "Email required" });
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -1147,19 +1153,6 @@ router.get("/payment/callback", async (req, res) => {
       return res.redirect(`${appUrl}/paywall?payment=failed`);
     }
 
-    // Verify with Flutterwave API (anti-fraud)
-    const txData = await verifyTransaction(String(transaction_id));
-
-    if (
-      txData?.status !== 'successful' ||
-      (Number(txData?.amount) !== PLAN_AMOUNT_NGN && Number(txData?.amount) !== WEEKLY_PLAN_AMOUNT_NGN) ||
-      txData?.currency !== 'NGN' ||
-      txData?.tx_ref !== String(tx_ref)
-    ) {
-      console.warn('[FLW Callback] Verification failed:', txData);
-      return res.redirect(`${appUrl}/paywall?payment=failed`);
-    }
-
     // Find payment record by tx_ref
     const paymentResult = await db.execute({
       sql: 'SELECT * FROM payments WHERE reference = ? LIMIT 1',
@@ -1174,6 +1167,18 @@ router.get("/payment/callback", async (req, res) => {
     // Idempotency — already activated
     if (payment.status === 'verified') {
       return res.redirect(`${appUrl}/?payment=success`);
+    }
+
+    // Match the verified reference, amount and currency to the payment that this
+    // server initialized before granting any subscription value.
+    const txData = await verifyTransaction(String(transaction_id));
+    if (!transactionMatchesExpected(txData, {
+      txRef: String(tx_ref),
+      amount: payment.amount,
+      currency: payment.amount_currency || 'NGN',
+    })) {
+      console.warn('[FLW Callback] Transaction does not match initialized payment:', tx_ref);
+      return res.redirect(`${appUrl}/paywall?payment=failed`);
     }
 
     // Activate premium
@@ -1203,7 +1208,7 @@ router.post("/webhook/flutterwave", async (req, res) => {
     }
 
     const event = req.body;
-    if (event.event !== 'charge.completed') return res.sendStatus(200);
+    if ((event.event || event.type) !== 'charge.completed') return res.sendStatus(200);
 
     const charge   = event.data;
     const txRef    = charge?.tx_ref;
@@ -1228,10 +1233,18 @@ router.post("/webhook/flutterwave", async (req, res) => {
     const payment = paymentResult.rows?.[0];
     if (!payment) { console.warn('[FLW Webhook] No record for tx_ref:', txRef); return res.sendStatus(200); }
     if (payment.status === 'verified') { console.log('[FLW Webhook] Already verified:', txRef); return res.sendStatus(200); }
+    if (amount !== Number(payment.amount) || currency !== (payment.amount_currency || 'NGN')) {
+      console.warn('[FLW Webhook] Event does not match initialized payment:', txRef);
+      return res.sendStatus(200);
+    }
 
     // Double-verify
     const verified = await verifyTransaction(txId);
-    if (verified?.status !== 'successful' || (Number(verified?.amount) !== PLAN_AMOUNT_NGN && Number(verified?.amount) !== WEEKLY_PLAN_AMOUNT_NGN)) {
+    if (!transactionMatchesExpected(verified, {
+      txRef,
+      amount: payment.amount,
+      currency: payment.amount_currency || 'NGN',
+    })) {
       console.warn('[FLW Webhook] Re-verification failed for tx:', txId);
       return res.sendStatus(200);
     }
@@ -1411,9 +1424,19 @@ router.delete("/admin/remove-user", adminLimiter, requireAdminAccess, async (req
     const found = await db.execute({ sql: "SELECT id FROM users WHERE email = ? LIMIT 1", args: [email.toLowerCase().trim()] });
     if (!found.rows?.length) return res.status(404).json({ error: "User not found" });
     const userId = found.rows[0].id;
-    await db.execute({ sql: "DELETE FROM payments WHERE user_id = ?",            args: [userId] });
-    await db.execute({ sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] });
-    await db.execute({ sql: "DELETE FROM users WHERE id = ?",                    args: [userId] });
+    await db.batch([
+      { sql: "DELETE FROM partner_commissions WHERE referred_user_id = ? OR referrer_user_id = ?", args: [userId, userId] },
+      { sql: "DELETE FROM partner_referrals WHERE user_id = ?", args: [userId] },
+      { sql: "UPDATE users SET referred_by_user_id = NULL, referred_by_code = NULL WHERE referred_by_user_id = ?", args: [userId] },
+      { sql: "UPDATE partners SET user_id = NULL WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM payments WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM trial_daily_counts WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM match_subscriptions WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM push_subscriptions WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM push_tokens WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM notifications WHERE user_id = ?", args: [userId] },
+      { sql: "DELETE FROM users WHERE id = ?", args: [userId] },
+    ], "write");
     return res.json({ success: true, message: `User ${email} removed` });
   } catch (err) {
     console.error("[Admin Remove]", err);

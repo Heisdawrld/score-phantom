@@ -1243,7 +1243,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         {tab === "engine" && (
           <div className="space-y-6">
             <h2 className="text-lg font-black text-white flex items-center justify-between">
-               Engine Telemetry (30 Days)
+               <span>Engine Telemetry (30 Days) <span className="text-xs text-gray-500">v{engineStats?.engineVersion || "current"}</span></span>
                <button onClick={loadEngineStats} className="text-xs font-bold text-gray-500 hover:text-white px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-2">
                  <RefreshCw size={14} className={engineLoading ? "animate-spin" : ""} /> Refresh
                </button>
@@ -1256,10 +1256,19 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                   {/* Overview Stats */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                      <StatCard label="Live Picks" value={engineStats.overview?.total_predictions || 0} sub="Evaluated records" />
-                     <StatCard label="Win Rate" value={`${engineStats.overview?.total_predictions ? ((engineStats.overview.wins / (engineStats.overview.wins + engineStats.overview.losses)) * 100).toFixed(1) : 0}%`} color="text-primary" />
+                     <StatCard label="Win Rate" value={`${(engineStats.overview?.wins + engineStats.overview?.losses) > 0 ? ((engineStats.overview.wins / (engineStats.overview.wins + engineStats.overview.losses)) * 100).toFixed(1) : 0}%`} color="text-primary" />
                      <StatCard label="True Voids" value={engineStats.overview?.true_voids || 0} color="text-amber-400" sub="Scores found, outcome void" />
                      <StatCard label="Ghost Voids" value={engineStats.overview?.ghost_voids || 0} color="text-red-400" sub="Score missing (inflating void rate)" />
                   </div>
+
+                  {engineStats.predictionCounts && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <StatCard label="BET Now" value={engineStats.predictionCounts.bet || 0} color="text-emerald-400" sub="Current engine cache" />
+                      <StatCard label="WATCH Now" value={engineStats.predictionCounts.watch || 0} color="text-amber-400" sub="Edge needs caution" />
+                      <StatCard label="SKIP Now" value={engineStats.predictionCounts.skip || 0} color="text-red-400" sub="Engine abstained" />
+                      <StatCard label="Pending Class" value={engineStats.predictionCounts.unclassified || 0} color="text-gray-400" sub="Awaiting a final signal" />
+                    </div>
+                  )}
 
                   {/* Market Performance */}
                   <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-5">
@@ -1276,7 +1285,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                               </tr>
                            </thead>
                            <tbody>
-                              {engineStats.markets?.map((m: any) => {
+                               {engineStats.markets?.map((m: any) => {
                                  const settled = m.wins + m.losses;
                                  const rate = settled > 0 ? ((m.wins / settled) * 100).toFixed(1) : "0.0";
                                  return (
@@ -1287,8 +1296,11 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                                        <td className="py-2.5 px-4 text-right text-red-400 font-mono text-xs">{m.losses}</td>
                                        <td className="py-2.5 px-4 text-right font-bold text-white">{rate}%</td>
                                     </tr>
-                                 );
-                              })}
+                                  );
+                               })}
+                               {!engineStats.markets?.length && (
+                                 <tr><td colSpan={5} className="py-8 px-4 text-center text-xs text-gray-500">No settled outcomes for the current engine version yet.</td></tr>
+                               )}
                            </tbody>
                         </table>
                      </div>
@@ -1314,6 +1326,9 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
                               </div>
                            );
                         })}
+                        {!engineStats.calibration?.length && (
+                          <p className="py-5 text-center text-xs text-gray-500">Calibration will appear after current-version picks settle.</p>
+                        )}
                      </div>
                   </div>
                </div>

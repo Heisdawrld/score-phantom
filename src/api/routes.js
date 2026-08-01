@@ -33,6 +33,8 @@ import { generateSimulationTimeline } from "../engine/generateSimulationTimeline
 
 const router = Router();
 let _bgEnrichRunning = false; // prevent concurrent background enrichment from fixture list loads
+const ACCA_CACHE_TTL_MS = 30_000;
+const accaResponseCache = new Map();
 
 // ─── Per-user rate limiter for Groq chat ──────────────────────────────────────
 const CHAT_RATE_LIMIT = 20;       // max messages per user per hour
@@ -114,6 +116,16 @@ function normalizeAdvisorStatus(status) {
   if (value === 'SKIP' || value === 'AVOID') return 'SKIP';
   if (value) return 'WATCH';
   return null;
+}
+
+function dbBoolean(value) {
+  return value === true || value === 1 || value === '1';
+}
+
+function finiteNumberOrNull(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function mapDataQualityScore(rawValue, fallback = 0.5) {
@@ -531,7 +543,36 @@ router.get("/fixtures", requireAuth, async (req, res) => {
          p.best_pick_score, p.best_pick_edge, p.best_pick_implied_probability,
          p.confidence_model AS pick_confidence_level, p.confidence_volatility,
          p.script_primary AS pick_script,
-         p.prediction_json
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.valueTier'),
+           json_extract(p.prediction_json, '$.bestPick.valueTier')
+         ) END AS stored_value_tier,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.ev'),
+           json_extract(p.prediction_json, '$.bestPick.ev')
+         ) END AS stored_ev,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.bookmakerOdds'),
+           json_extract(p.prediction_json, '$.engineResult.bestPick.odds'),
+           json_extract(p.prediction_json, '$.bestPick.bookmakerOdds'),
+           json_extract(p.prediction_json, '$.bestPick.odds')
+         ) END AS stored_odds,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.isAccaEligible'),
+           json_extract(p.prediction_json, '$.bestPick.isAccaEligible')
+         ) END AS stored_is_acca_eligible,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.advisor_status'),
+           json_extract(p.prediction_json, '$.bestPick.advisor_status')
+         ) END AS stored_advisor_status,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.isSafeBet'),
+           json_extract(p.prediction_json, '$.bestPick.isSafeBet')
+         ) END AS stored_is_safe_bet,
+         CASE WHEN json_valid(p.prediction_json) THEN COALESCE(
+           json_extract(p.prediction_json, '$.engineResult.bestPick.isValueBet'),
+           json_extract(p.prediction_json, '$.bestPick.isValueBet')
+         ) END AS stored_is_value_bet
    FROM fixtures f
    LEFT JOIN predictions_v2 p ON p.fixture_id = f.id
    WHERE 1=1`;
@@ -564,9 +605,20 @@ router.get("/fixtures", requireAuth, async (req, res) => {
     }
 
     query += ` ORDER BY f.tournament_name ASC, f.match_date ASC LIMIT ? OFFSET ?`;
-    args.push(parseInt(limit, 10), parseInt(offset, 10));
+    const parsedLimit = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 200));
+    const parsedOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
+    args.push(parsedLimit, parsedOffset);
 
-    const result = await db.execute({ sql: query, args });
+    const deepCountPromise = date
+      ? db.execute({
+          sql: `SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ? AND enrichment_status = 'deep'`,
+          args: [`${date}%`],
+        })
+      : Promise.resolve(null);
+    const [result, deepResult] = await Promise.all([
+      db.execute({ sql: query, args }),
+      deepCountPromise,
+    ]);
     const fixtures = result.rows.map(f => {
       const prob = parseFloat(f.best_pick_probability || 0);
       const impl = parseFloat(f.best_pick_implied_probability || 0);
@@ -580,19 +632,15 @@ router.get("/fixtures", requireAuth, async (req, res) => {
 
       // ── Extract v4 fields from prediction_json ──────────────────────────
       // Syncs fixture list badges with the EV-aware engine output
-      let v4Fields = { valueTier: null, ev: null, odds: null, isAccaEligible: false, advisor_status: null, isSafeBet: null, isValueBet: null };
-      try {
-        const bp = getStoredBestPick(f.prediction_json);
-        if (bp) {
-          v4Fields.valueTier = bp.valueTier || null;
-          v4Fields.ev = bp.ev != null ? bp.ev : null;
-          v4Fields.odds = bp.bookmakerOdds || bp.odds || null;
-          v4Fields.isAccaEligible = bp.isAccaEligible === true;
-          v4Fields.advisor_status = bp.advisor_status || null;
-          v4Fields.isSafeBet = bp.isSafeBet != null ? bp.isSafeBet : null;
-          v4Fields.isValueBet = bp.isValueBet != null ? bp.isValueBet : null;
-        }
-      } catch (_) {}
+      const v4Fields = {
+        valueTier: f.stored_value_tier || null,
+        ev: finiteNumberOrNull(f.stored_ev),
+        odds: finiteNumberOrNull(f.stored_odds),
+        isAccaEligible: dbBoolean(f.stored_is_acca_eligible),
+        advisor_status: f.stored_advisor_status || null,
+        isSafeBet: f.stored_is_safe_bet == null ? null : dbBoolean(f.stored_is_safe_bet),
+        isValueBet: f.stored_is_value_bet == null ? null : dbBoolean(f.stored_is_value_bet),
+      };
 
       // ── is_safe_bet: prefer engine-computed value, fallback to derived ──
       f.is_safe_bet = v4Fields.isSafeBet != null
@@ -653,8 +701,13 @@ router.get("/fixtures", requireAuth, async (req, res) => {
         if (f.advisor_status !== 'WATCH') f.is_acca_eligible = false;
       }
 
-      // Remove prediction_json from response (too large for fixture list)
-      delete f.prediction_json;
+      delete f.stored_value_tier;
+      delete f.stored_ev;
+      delete f.stored_odds;
+      delete f.stored_is_acca_eligible;
+      delete f.stored_advisor_status;
+      delete f.stored_is_safe_bet;
+      delete f.stored_is_value_bet;
 
       return f;
     });
@@ -674,15 +727,7 @@ router.get("/fixtures", requireAuth, async (req, res) => {
       });
     }
 
-    // Count deeply-enriched fixtures for the requested date
-    let enrichedDeepCount = 0;
-    if (date) {
-      const deepResult = await db.execute({
-        sql: `SELECT COUNT(*) as count FROM fixtures WHERE match_date LIKE ? AND enrichment_status = 'deep'`,
-        args: [`%${date}%`],
-      });
-      enrichedDeepCount = Number(deepResult.rows[0]?.count || 0);
-    }
+    const enrichedDeepCount = Number(deepResult?.rows?.[0]?.count || 0);
 
     // Cache fixtures for 60s client-side — reduces redundant full-list loads
     res.set('Cache-Control', 'private, max-age=60');
@@ -1031,6 +1076,16 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     const tomorrow  = new Date(d + 86400000).toLocaleString('en-CA', { timeZone: 'Africa/Lagos' }).split(',')[0].trim();
 
     const mode = req.query.mode === 'value' ? 'value' : 'safe';
+    const cachedAcca = accaResponseCache.get(mode);
+    if (cachedAcca && cachedAcca.expiresAt > Date.now()) {
+      res.set('Cache-Control', 'private, max-age=15');
+      return res.json({
+        ...cachedAcca.payload,
+        cache: 'memory',
+        access: buildAccessPayload(req.access),
+      });
+    }
+    if (cachedAcca) accaResponseCache.delete(mode);
 
     // Pull all today's qualifying predictions WITH prediction_json
     // so we can extract multiple ranked markets per fixture
@@ -1172,10 +1227,19 @@ router.get("/acca", requirePremiumAccess, async (req, res) => {
     const { buildAcca } = await import('../engine/buildAcca.js');
     const acca = await buildAcca(expandedRows, mode);
 
-    return res.json({
+    const payload = {
       ...acca,
       mode,
       source: rows.length > 0 ? 'cache' : 'live',
+    };
+    accaResponseCache.set(mode, {
+      expiresAt: Date.now() + ACCA_CACHE_TTL_MS,
+      payload,
+    });
+    res.set('Cache-Control', 'private, max-age=15');
+    return res.json({
+      ...payload,
+      cache: 'database',
       access: buildAccessPayload(req.access),
     });
   } catch (err) {
