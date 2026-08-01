@@ -25,6 +25,7 @@ import { normalizeEventStatsPayload } from '../services/bsdStatsNormalizer.js';
 import { enrichTopPlayerCareers, buildRefereeVolatilityProfile, extractMetadataInsights } from '../services/bsdDeepIntel.js';
 import { buildTeamProfile } from '../services/teamProfileBuilder.js';
 import db from '../config/database.js';
+import { compactStandings } from './fixtureMeta.js';
 
 async function fetchLocalTeamForm(teamName) {
   try {
@@ -362,7 +363,11 @@ export async function fetchAndStoreEnrichment(fixture) {
 
   await sleep(300);
   const standingsRaw = await fetchStandings(fixture.tournament_id).catch(() => []);
-  const standings = (standingsRaw || []).map(normaliseStandingsRow);
+  const normalizedStandings = (standingsRaw || []).map(normaliseStandingsRow);
+  const standings = compactStandings(normalizedStandings);
+  if (normalizedStandings.length > standings.length) {
+    console.warn(`[enrichmentService] Ignoring oversized standings payload (${normalizedStandings.length} rows) for fixture ${fixture.id}`);
+  }
   const homeFormFallback = homeFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.home_team_id, fixture.home_team_name) : [];
   const awayFormFallback = awayFormMerged.length < 3 ? extractFormFromStandings(standings, fixture.away_team_id, fixture.away_team_name) : [];
   // FIX: Increased form cap from 5 → 10. The dataCompletenessScore formula in

@@ -8,6 +8,7 @@
 
 import db from '../config/database.js';
 import { fetchAndStoreEnrichment } from './enrichmentService.js';
+import { buildStoredFixtureMeta } from './fixtureMeta.js';
 
 function parseScore(scoreStr) {
   if (!scoreStr || !scoreStr.includes('-')) return { home: null, away: null };
@@ -152,63 +153,7 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
   }
 
   const refreshedAt = new Date().toISOString();
-  const meta = {
-    enrichedAt: refreshedAt,
-    bsdRefreshedAt: refreshedAt,
-    dataFreshness: {
-      provider: 'BSD',
-      refreshedAt,
-      h2hCount: Array.isArray(data?.h2h) ? data.h2h.length : 0,
-      homeFormCount: Array.isArray(data?.homeForm) ? data.homeForm.length : 0,
-      awayFormCount: Array.isArray(data?.awayForm) ? data.awayForm.length : 0,
-      standingsCount: Array.isArray(data?.standings) ? data.standings.length : 0,
-      hasHomeStats: !!data?.homeStats,
-      hasAwayStats: !!data?.awayStats,
-      hasMatchStats: !!data?.matchStats,
-    },
-    standings: Array.isArray(data?.standings) ? data.standings : [],
-    homeStats: data?.homeStats ?? null,
-    awayStats: data?.awayStats ?? null,
-    homeProfile: data?.homeProfile ?? null,
-    awayProfile: data?.awayProfile ?? null,
-    lineupModifier: data?.lineupModifier ?? null,
-    completeness: data?.completeness ?? null,
-    homeMomentum: data?.homeMomentum ?? null,
-    awayMomentum: data?.awayMomentum ?? null,
-    h2h: Array.isArray(data?.h2h) ? data.h2h : [],
-    homeForm: Array.isArray(data?.homeForm) ? data.homeForm : [],
-    awayForm: Array.isArray(data?.awayForm) ? data.awayForm : [],
-    matchStats: data?.matchStats ?? null,
-    matchEvents: data?.matchEvents ?? null,
-    actualHomeXg: data?.actualHomeXg ?? null,
-    actualAwayXg: data?.actualAwayXg ?? null,
-    shotmap: data?.shotmap ?? null,
-    lineups: data?.lineups ?? null,
-    predicted_lineup: data?.lineups ?? null,
-    unavailable_players: data?.injuries ?? null,
-    average_positions: data?.average_positions ?? null,
-    momentum: data?.momentum ?? null,
-    xg_per_minute: data?.xg_per_minute ?? null,
-    bsd_home_form_stats: data?.bsdHomeFormStats ?? null,
-    bsd_away_form_stats: data?.bsdAwayFormStats ?? null,
-    odds_data: data?.oddsData ?? null,
-    odds_comparison: data?.oddsComparison ?? null,
-    polymarket_odds: data?.polymarketOdds ?? null,
-    home_manager: data?.homeManager ?? null,
-    away_manager: data?.awayManager ?? null,
-    bsd_prediction: data?.bsdPrediction ?? null,
-
-    // Full BSD intelligence bridge: fetched -> stored -> loaded -> used.
-    refereeData: data?.refereeData ?? null,
-    refereeVolatility: data?.refereeVolatility ?? null,
-    injuries: data?.injuries ?? null,
-    metadata: data?.metadata ?? null,
-    metadataInsights: data?.metadataInsights ?? null,
-    eventContext: data?.eventContext ?? null,
-    venue: data?.venue ?? null,
-    playerStats: Array.isArray(data?.playerStats) ? data.playerStats : [],
-    deepPlayerIntel: data?.deepPlayerIntel ?? null,
-  };
+  const meta = buildStoredFixtureMeta(data, refreshedAt);
 
   const completenessTier = data?.completeness?.tier ?? 'thin';
   const tierMap = {
@@ -220,8 +165,10 @@ export async function storeEnrichment(fixtureId, data, markEnriched = true) {
   const { enrichment_status, data_quality } = tierMap[completenessTier] ?? tierMap.thin;
 
   await db.execute({
-    sql: `UPDATE fixtures SET enriched = ?, meta = ?, enrichment_status = ?, data_quality = ? WHERE id = ?`,
-    args: [markEnriched ? 1 : 0, JSON.stringify(meta), enrichment_status, data_quality, fixtureId],
+    sql: `UPDATE fixtures
+          SET enriched = ?, meta = ?, enrichment_status = ?, data_quality = ?, enriched_at = ?
+          WHERE id = ?`,
+    args: [markEnriched ? 1 : 0, JSON.stringify(meta), enrichment_status, data_quality, refreshedAt, fixtureId],
   });
 }
 

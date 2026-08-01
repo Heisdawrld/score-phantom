@@ -404,25 +404,22 @@ async function autoSeed() {
 }
 
 // ── Auto-enrichment: startup + recurring freshness queue ────────────────────
-const ENRICH_BATCH = Math.max(1, Number(process.env.ENRICH_BATCH) || 40);
+// Render's entry tier has a small Node heap. Keep each provider-heavy cycle
+// deliberately short; recurring cycles will drain the queue without a large
+// startup memory spike.
+const MAX_ENRICH_BATCH = 12;
+const ENRICH_BATCH = Math.min(MAX_ENRICH_BATCH, Math.max(1, Number(process.env.ENRICH_BATCH) || 8));
 const ENRICH_DELAY_MS = Math.max(0, Number(process.env.ENRICH_DELAY_MS) || 750);
 const ENRICH_REFRESH_HOURS = Math.max(1, Number(process.env.ENRICHMENT_REFRESH_HOURS) || 6);
 const FINISHED_MATCH_STATUSES = new Set(['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD']);
 
 let activeEnrichmentRun = null;
 
-function parseFixtureMeta(meta) {
-  if (!meta) return {};
-  if (typeof meta === 'object') return meta;
-  try { return JSON.parse(meta); } catch { return {}; }
-}
-
 function fixtureNeedsEnrichment(fixture) {
   if (!fixture || FINISHED_MATCH_STATUSES.has(String(fixture.match_status || '').toUpperCase())) return false;
   if (!Number(fixture.enriched)) return true;
 
-  const meta = parseFixtureMeta(fixture.meta);
-  const timestamp = meta?.dataFreshness?.refreshedAt || meta?.enrichedAt || meta?.bsdRefreshedAt;
+  const timestamp = fixture.enriched_at;
   if (!timestamp) return true;
 
   const refreshedAt = new Date(timestamp).getTime();
@@ -433,17 +430,19 @@ function fixtureNeedsEnrichment(fixture) {
 async function runAutoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
     const today = dateFilter || new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const requestedLimit = Math.max(1, Number(limit) || ENRICH_BATCH);
+    const requestedLimit = Math.min(MAX_ENRICH_BATCH, Math.max(1, Number(limit) || ENRICH_BATCH));
     const previousDay = new Date(Date.now() - 86400000)
       .toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const fromDate = dateFilter || previousDay;
 
-    // Inspect a wider lightweight window in JS so legacy/malformed JSON metadata
-    // cannot break the query and stale enriched fixtures are not overlooked.
-    const scanLimit = Math.max(requestedLimit * 5, 500);
+    // Never fetch fixtures.meta here. Some legacy Club Friendlies rows contain
+    // 400-500 KB JSON documents; selecting 500 of them consumed ~60 MB before
+    // JSON parsing and exhausted the 256 MB Render heap.
+    const scanLimit = Math.min(Math.max(requestedLimit * 4, 40), 100);
     const pending = await db.execute({
       sql: `SELECT id, home_team_name, away_team_name, home_team_id, away_team_id,
-                   tournament_id, match_date, match_status, enriched, enrichment_status, meta
+                   tournament_id, tournament_name, category_name, match_date,
+                   match_status, enriched, enrichment_status, enriched_at
             FROM fixtures
             WHERE match_date >= ?
               AND COALESCE(match_status, 'NS') NOT IN ('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD')
@@ -538,7 +537,6 @@ async function initializeRuntime() {
   console.log("ScorePhantom running on port " + PORT);
   startLiveScoreWatcher();
   console.log("[Live] BSD live score watcher started");
-  startBasketballAutoSync();
   initBacktestingTable().catch(err => console.error("[Backtest init]", err.message));
 
   // ── Startup cache refresh (Tier 3) ────────────────────────────────────────
@@ -561,7 +559,7 @@ async function initializeRuntime() {
   console.log('[PredRunner] Starting fast startup prediction warm-up...');
   const { autoBuildPredictions } = await import('./services/predictionRunner.js');
   const startupWarmStart = Date.now();
-  autoBuildPredictions({ limit: 200 })
+  void autoBuildPredictions({ limit: 200 })
     .then((warmResult) => {
       recordJobRun('startup_prediction_warmup', {
         success: true,
@@ -579,26 +577,28 @@ async function initializeRuntime() {
         return result;
       });
     })
+    .then(async () => {
+      // Do not overlap backfill with warm-up or enrichment. Those three jobs
+      // previously ran together after 30 seconds and exhausted Render's heap.
+      const backfillStart = Date.now();
+      const { backfillResults } = await import("./services/resultChecker.js");
+      const results = await backfillResults(30);
+      recordJobRun('startup_backfill', {
+        success: true,
+        durationMs: Date.now() - backfillStart,
+        meta: { days: 30, results: results.length },
+      });
+      console.log("[ResultChecker] Startup backfill done:", results.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
+    })
     .catch((err) => {
       recordJobRun('startup_prediction_pipeline', { success: false, durationMs: Date.now() - startupWarmStart, error: err.message });
       console.error('[AutoEnrich/PredRunner] startup error:', err.message);
+    })
+    .finally(() => {
+      // Basketball's multi-provider startup sync is also memory-heavy. Its
+      // scheduler starts only after the football startup pipeline has settled.
+      startBasketballAutoSync();
     });
-  // Immediately backfill last 7 days of results on startup (fixes void outcomes)
-  setTimeout(async () => {
-    const backfillStart = Date.now();
-    try {
-      const { autoBuildPredictions } = await import("./services/predictionRunner.js");
-      await autoBuildPredictions({ limit: 300 }).catch(e => console.warn("[PredRunner] Startup build failed:", e.message));
-      const { backfillResults } = await import("./services/resultChecker.js");
-      const res = await backfillResults(30);
-      recordJobRun('startup_backfill', { success: true, durationMs: Date.now() - backfillStart, meta: { days: 30, results: res.length } });
-      console.log("[ResultChecker] Startup backfill done:", res.map(r => r.date + " " + JSON.stringify(r.outcomes)).join(", "));
-    } catch (err) {
-      recordJobRun('startup_backfill', { success: false, durationMs: Date.now() - backfillStart, error: err.message });
-      console.error("[ResultChecker] Startup backfill failed:", err.message);
-    }
-  }, 30000);
-
   // Continuous enrichment pipeline: Every 15 minutes, aggressively prefetch data
   setInterval(async () => {
     const cronStart = Date.now();

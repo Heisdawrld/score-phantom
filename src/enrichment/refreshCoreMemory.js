@@ -8,6 +8,7 @@ import {
   extractFormFromStandings,
 } from '../services/bsd.js';
 import { filterRelevantForm } from './enrichmentService.js';
+import { compactStandings } from './fixtureMeta.js';
 
 function safeJsonParse(value, fallback = {}) {
   if (!value) return fallback;
@@ -125,7 +126,7 @@ export async function refreshCoreFixtureMemory(fixture) {
       : Promise.resolve([]),
   ]);
 
-  const standings = (standingsRaw || []).map(normaliseStandingsRow);
+  const standings = compactStandings((standingsRaw || []).map(normaliseStandingsRow));
   const remoteHome = (remoteHomeRaw || []).map(normaliseEventToForm).filter(Boolean);
   const remoteAway = (remoteAwayRaw || []).map(normaliseEventToForm).filter(Boolean);
   const remoteH2h = (remoteH2hRaw || []).filter(Boolean);
@@ -165,8 +166,14 @@ export async function refreshCoreFixtureMemory(fixture) {
   };
 
   await db.execute({
-    sql: `UPDATE fixtures SET enriched = 1, meta = ?, enrichment_status = COALESCE(enrichment_status, 'basic'), data_quality = CASE WHEN ? >= 3 AND ? >= 3 THEN 'good' ELSE COALESCE(data_quality, 'moderate') END WHERE id = ?`,
-    args: [JSON.stringify(meta), homeForm.length, awayForm.length, fixture.id],
+    sql: `UPDATE fixtures
+          SET enriched = 1,
+              meta = ?,
+              enrichment_status = COALESCE(enrichment_status, 'basic'),
+              data_quality = CASE WHEN ? >= 3 AND ? >= 3 THEN 'good' ELSE COALESCE(data_quality, 'moderate') END,
+              enriched_at = ?
+          WHERE id = ?`,
+    args: [JSON.stringify(meta), homeForm.length, awayForm.length, refreshedAt, fixture.id],
   });
 
   return { homeForm, awayForm, h2h, standings, refreshedAt };

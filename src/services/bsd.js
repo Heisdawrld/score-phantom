@@ -17,8 +17,15 @@ const BSD_BASE = process.env.BSD_BASE_URL || 'https://sports.bzzoiro.com/api/v2'
 const IMG_BASE = 'https://sports.bzzoiro.com/img';
 
 const _cache = new Map();
+const _inFlight = new Map();
 const _leagueCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_MAX_ENTRIES = Math.max(10, Number(process.env.BSD_CACHE_MAX_ENTRIES) || 80);
+const CACHE_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.BSD_CACHE_MAX_BYTES) || 8 * 1024 * 1024);
+const CACHE_MAX_ENTRY_BYTES = Math.max(64 * 1024, Number(process.env.BSD_CACHE_MAX_ENTRY_BYTES) || 512 * 1024);
+const RESPONSE_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.BSD_RESPONSE_MAX_BYTES) || 8 * 1024 * 1024);
+const LEAGUE_CACHE_MAX_ENTRIES = 100;
+let _cacheBytes = 0;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -28,14 +35,35 @@ function cacheGet(key, ttlMs = CACHE_TTL_MS) {
   const entry = _cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.ts > ttlMs) {
-    _cache.delete(key);
+    cacheDelete(key);
     return null;
   }
+  // Refresh insertion order so eviction behaves like an LRU cache.
+  _cache.delete(key);
+  _cache.set(key, entry);
   return entry.data;
 }
 
-function cacheSet(key, data) {
-  _cache.set(key, { data, ts: Date.now() });
+function cacheDelete(key) {
+  const entry = _cache.get(key);
+  if (!entry) return;
+  _cacheBytes = Math.max(0, _cacheBytes - Number(entry.sizeBytes || 0));
+  _cache.delete(key);
+}
+
+function cacheSet(key, data, sizeBytes = 0) {
+  const safeSize = Math.max(0, Number(sizeBytes) || 0);
+  if (safeSize > CACHE_MAX_ENTRY_BYTES) return;
+
+  cacheDelete(key);
+  while (_cache.size >= CACHE_MAX_ENTRIES || _cacheBytes + safeSize > CACHE_MAX_BYTES) {
+    const oldestKey = _cache.keys().next().value;
+    if (oldestKey == null) break;
+    cacheDelete(oldestKey);
+  }
+
+  _cache.set(key, { data, ts: Date.now(), sizeBytes: safeSize });
+  _cacheBytes += safeSize;
 }
 
 // Periodic cleanup: prune expired entries every 5 minutes to prevent unbounded memory growth
@@ -43,11 +71,22 @@ const cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of _cache) {
     if (now - entry.ts > CACHE_TTL_MS) {
-      _cache.delete(key);
+      cacheDelete(key);
     }
   }
 }, 5 * 60 * 1000);
 cacheCleanupTimer.unref?.();
+
+export function getBsdCacheStats() {
+  return {
+    entries: _cache.size,
+    bytes: _cacheBytes,
+    inFlight: _inFlight.size,
+    leagueEntries: _leagueCache.size,
+    maxEntries: CACHE_MAX_ENTRIES,
+    maxBytes: CACHE_MAX_BYTES,
+  };
+}
 
 // ── GLOBAL RATE LIMITER (Token Bucket) ───────────────────────────────────
 // BSD enforces ~5 requests/second on our plan. Without a global concurrency
@@ -99,6 +138,47 @@ function firstDefined(...values) {
   return null;
 }
 
+function responseSizeError(sizeBytes) {
+  const error = new Error(`Response too large (${sizeBytes} bytes)`);
+  error.nonRetryable = true;
+  return error;
+}
+
+async function readBoundedJson(res) {
+  const declaredBytes = Number(res.headers.get('content-length') || 0);
+  if (declaredBytes > RESPONSE_MAX_BYTES) throw responseSizeError(declaredBytes);
+
+  if (!res.body?.getReader) {
+    const rawBody = await res.text();
+    const sizeBytes = Buffer.byteLength(rawBody, 'utf8');
+    if (sizeBytes > RESPONSE_MAX_BYTES) throw responseSizeError(sizeBytes);
+    return { data: JSON.parse(rawBody), sizeBytes };
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const textParts = [];
+  let sizeBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      sizeBytes += value.byteLength;
+      if (sizeBytes > RESPONSE_MAX_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw responseSizeError(sizeBytes);
+      }
+      textParts.push(decoder.decode(value, { stream: true }));
+    }
+    textParts.push(decoder.decode());
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  return { data: JSON.parse(textParts.join('')), sizeBytes };
+}
+
 export async function bsdFetch(path, params = {}, {
   cacheable = true,
   cacheTtlMs = CACHE_TTL_MS,
@@ -121,9 +201,12 @@ export async function bsdFetch(path, params = {}, {
   if (cacheable) {
     const cached = cacheGet(cacheKey, cacheTtlMs);
     if (cached) return cached;
+    const active = _inFlight.get(cacheKey);
+    if (active) return active;
   }
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  const request = (async () => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
     // Wait for a rate-limit slot before every attempt (including retries).
     // This is the critical fix — without it, parallel enrichment fires 7+
     // requests simultaneously and BSD returns 429 for all of them.
@@ -144,10 +227,14 @@ export async function bsdFetch(path, params = {}, {
         return null;
       }
 
-      const data = await res.json();
-      if (cacheable) cacheSet(cacheKey, data);
+      const { data, sizeBytes } = await readBoundedJson(res);
+      if (cacheable) cacheSet(cacheKey, data, sizeBytes);
       return data;
     } catch (err) {
+      if (err?.nonRetryable) {
+        console.error(`[BSD] Fetch rejected for ${cleanPath(path)}:`, err.message);
+        return null;
+      }
       if (attempt >= retries) {
         console.error(`[BSD] Fetch failed after ${retries} retries for ${cleanPath(path)}:`, err.message);
         return null;
@@ -156,10 +243,18 @@ export async function bsdFetch(path, params = {}, {
       const wait = backoffMs * Math.pow(2, attempt);
       console.warn(`[BSD] ${err.message} on ${cleanPath(path)}. Retrying in ${wait}ms (${attempt + 1}/${retries})...`);
       await sleep(wait);
+      }
     }
-  }
 
-  return null;
+    return null;
+  })();
+
+  if (cacheable) _inFlight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (_inFlight.get(cacheKey) === request) _inFlight.delete(cacheKey);
+  }
 }
 
 /**
@@ -221,10 +316,22 @@ export async function fetchLeagues(params = {}) {
 export async function fetchLeagueDetail(leagueId) {
   if (!leagueId) return null;
   const key = String(leagueId);
-  if (_leagueCache.has(key)) return _leagueCache.get(key);
+  if (_leagueCache.has(key)) {
+    const cached = _leagueCache.get(key);
+    _leagueCache.delete(key);
+    _leagueCache.set(key, cached);
+    return cached;
+  }
 
   const league = await bsdFetch(`/leagues/${leagueId}/`);
-  if (league) _leagueCache.set(key, league);
+  if (league) {
+    while (_leagueCache.size >= LEAGUE_CACHE_MAX_ENTRIES) {
+      const oldestKey = _leagueCache.keys().next().value;
+      if (oldestKey == null) break;
+      _leagueCache.delete(oldestKey);
+    }
+    _leagueCache.set(key, league);
+  }
   return league;
 }
 

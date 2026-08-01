@@ -235,7 +235,10 @@ function needsEnrichmentRefresh(fixture, historyRows) {
   if (!fixture.enriched || !hasUsableHistory(historyRows)) return true;
 
   const meta = safeJsonParse(fixture?.meta, {});
-  const ts = meta?.dataFreshness?.refreshedAt || meta?.enrichedAt || meta?.bsdRefreshedAt;
+  const ts = fixture?.enriched_at
+    || meta?.dataFreshness?.refreshedAt
+    || meta?.enrichedAt
+    || meta?.bsdRefreshedAt;
   if (!ts) {
     console.log(`[predictionCache] No enrichment timestamp on fixture ${fixture.id} — refreshing`);
     return true;

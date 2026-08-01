@@ -160,6 +160,7 @@ async function runSchema() {
       live_minute TEXT,
       enrichment_status TEXT DEFAULT 'none',
       data_quality TEXT DEFAULT 'unknown',
+      enriched_at TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS historical_matches (
@@ -415,6 +416,11 @@ async function runSchema() {
   await addColumnIfNotExists("fixtures", "away_score", "INTEGER");
   await addColumnIfNotExists("fixtures", "match_status", "TEXT DEFAULT 'NS'");
   await addColumnIfNotExists("fixtures", "live_minute", "TEXT");
+  await addColumnIfNotExists("fixtures", "enriched_at", "TEXT");
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_fixtures_enriched_at
+    ON fixtures(enriched_at)
+  `);
 
   // Predictions v2
   await addColumnIfNotExists("predictions_v2", "pick_id", "INTEGER");
