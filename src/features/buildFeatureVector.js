@@ -37,9 +37,9 @@ function fairTwoWayImplied(outcomeOdds, oppositeOdds) {
   if (!price || price <= 1) return null;
   const raw = 1 / price;
   const opposite = safeNum(oppositeOdds, null);
-  if (!opposite || opposite <= 1) return raw;
+  if (!opposite || opposite <= 1) return null;
   const overround = raw + (1 / opposite);
-  return overround > 1.001 && overround <= 1.35 ? raw / overround : raw;
+  return overround >= 0.85 && overround <= 1.35 ? raw / overround : null;
 }
 
 async function getMatches(fixtureId, type) {
@@ -321,10 +321,12 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
 
   // Primary: from the fixture odds parameter
   if (odds) {
-    const margin = odds.home && odds.draw && odds.away
-      ? (1/odds.home + 1/odds.draw + 1/odds.away) : 1;
-    if (odds.home) impliedHomeProb = parseFloat(((1 / odds.home) / margin).toFixed(4));
-    if (odds.away) impliedAwayProb = parseFloat(((1 / odds.away) / margin).toFixed(4));
+    const hasFull1X2 = odds.home > 1 && odds.draw > 1 && odds.away > 1;
+    const margin = hasFull1X2 ? (1 / odds.home + 1 / odds.draw + 1 / odds.away) : null;
+    if (margin >= 0.85 && margin <= 1.35) {
+      impliedHomeProb = parseFloat(((1 / odds.home) / margin).toFixed(4));
+      impliedAwayProb = parseFloat(((1 / odds.away) / margin).toFixed(4));
+    }
     const fairOver25 = fairTwoWayImplied(odds.over_2_5, odds.under_2_5);
     const fairOver15 = fairTwoWayImplied(odds.over_1_5, odds.under_1_5);
     const fairBttsYes = fairTwoWayImplied(odds.btts_yes, odds.btts_no);
@@ -344,8 +346,10 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
       const a = safeNum(ao.away_win || ao.away, null);
       if (h && d && a) {
         const margin = 1/h + 1/d + 1/a;
-        if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
-        if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+        if (margin >= 0.85 && margin <= 1.35) {
+          if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
+          if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+        }
       }
     }
     if (impliedOver25 == null) {
@@ -376,8 +380,10 @@ export async function buildFeatureVector(fixtureId, homeTeamName, awayTeamName, 
     const a = safeNum(bo.away || bo.away_win, null);
     if (h && d && a) {
       const margin = 1/h + 1/d + 1/a;
-      if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
-      if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+      if (margin >= 0.85 && margin <= 1.35) {
+        if (impliedHomeProb == null) impliedHomeProb = parseFloat(((1/h)/margin).toFixed(4));
+        if (impliedAwayProb == null) impliedAwayProb = parseFloat(((1/a)/margin).toFixed(4));
+      }
     }
   }
 

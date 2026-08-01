@@ -385,8 +385,8 @@ export function ensembleProbabilities({ calibratedProbs, bsdPrediction, polymark
     blended.under15 = parseFloat((1 - blended.over15).toFixed(4));
   }
   if (blended.over35 != null && blended.over25 != null && blended.over25 < blended.over35) {
-    blended.over25 = blended.over35;
-    blended.under25 = parseFloat((1 - blended.over25).toFixed(4));
+    blended.over35 = blended.over25;
+    blended.under35 = parseFloat((1 - blended.over35).toFixed(4));
   }
 
   // ── Renormalize 1X2 to sum to 1.0 ───────────────────────────────────────

@@ -106,6 +106,16 @@ export function computeLeagueContext(standings = [], homeProfile = null, awayPro
   // than Poisson estimates. If we have enough profiles, use them to correct.
   const profiles = [homeProfile, awayProfile].filter(Boolean);
   let profileCorrection = null;
+  const profileMatchCount = profiles.reduce(
+    (sum, profile) => sum + Math.max(0, safeNum(profile?.matchesAnalyzed ?? profile?.matches_played, 0)),
+    0,
+  );
+  const profileCoverage = profiles.length / 2;
+  const profileEvidenceWeight = clamp(
+    (Math.min(profileMatchCount, 30) / 30) * profileCoverage * 0.45,
+    profiles.length > 0 ? 0.06 : 0,
+    0.45,
+  );
 
   if (profiles.length >= 1) {
     const bttsRates = profiles.map(p => safeNum(p.bttsRate, null)).filter(v => v != null);
@@ -127,42 +137,50 @@ export function computeLeagueContext(standings = [], homeProfile = null, awayPro
   if (fromStandings) {
     result = { ...fromStandings };
 
-    // Profile BTTS/Over rates are more accurate than Poisson estimates
-    // Blend: 60% profile + 40% Poisson estimate when profile data exists
+    // Team profiles may refine a league baseline, but cannot replace it.
     if (profileCorrection) {
+      const correctionWeight = Math.min(0.25, profileEvidenceWeight);
+      const standingsWeight = 1 - correctionWeight;
       if (profileCorrection.btts != null) {
-        result.leagueBttsRate = clamp(0.40 * result.leagueBttsRate + 0.60 * profileCorrection.btts, 0.15, 0.85);
+        result.leagueBttsRate = clamp(standingsWeight * result.leagueBttsRate + correctionWeight * profileCorrection.btts, 0.15, 0.85);
       }
       if (profileCorrection.over25 != null) {
-        result.leagueOver25Rate = clamp(0.40 * result.leagueOver25Rate + 0.60 * profileCorrection.over25, 0.15, 0.85);
+        result.leagueOver25Rate = clamp(standingsWeight * result.leagueOver25Rate + correctionWeight * profileCorrection.over25, 0.15, 0.85);
       }
       if (profileCorrection.over35 != null) {
-        result.leagueOver35Rate = clamp(0.40 * result.leagueOver35Rate + 0.60 * profileCorrection.over35, 0.05, 0.70);
+        result.leagueOver35Rate = clamp(standingsWeight * result.leagueOver35Rate + correctionWeight * profileCorrection.over35, 0.05, 0.70);
       }
       if (profileCorrection.cs != null) {
-        result.leagueCleanSheetRate = clamp(0.40 * result.leagueCleanSheetRate + 0.60 * profileCorrection.cs, 0.10, 0.55);
+        result.leagueCleanSheetRate = clamp(standingsWeight * result.leagueCleanSheetRate + correctionWeight * profileCorrection.cs, 0.10, 0.55);
       }
       result._source = 'standings+profiles';
     }
+    result._profileCount = profiles.length;
+    result._profileMatches = profileMatchCount;
+    result._reliability = clamp(0.60 + (Math.min(result._gameCount, 120) / 120) * 0.35, 0.60, 0.95);
   } else if (profileCorrection) {
     // No standings, but we have profile data — use it as a rough proxy
     // Profiles are team-level, not league-level, but still better than global defaults
     const avgBtts = profileCorrection.btts ?? GLOBAL_DEFAULTS.leagueBttsRate;
     const avgOver25 = profileCorrection.over25 ?? GLOBAL_DEFAULTS.leagueOver25Rate;
-    // Reverse-engineer goals-per-game from BTTS rate (rough approximation)
-    const approxGpg = avgOver25 > 0.55 ? 2.9 : avgOver25 > 0.45 ? 2.6 : 2.3;
+    const shrunkBtts = (GLOBAL_DEFAULTS.leagueBttsRate * (1 - profileEvidenceWeight)) + (avgBtts * profileEvidenceWeight);
+    const shrunkOver25 = (GLOBAL_DEFAULTS.leagueOver25Rate * (1 - profileEvidenceWeight)) + (avgOver25 * profileEvidenceWeight);
+    const approxGpg = clamp(solveLambdaFromOverRate(shrunkOver25, 2.5), 2.15, 3.25);
 
     result = {
       leagueAvgGoalsPerTeam:  approxGpg / 2,
       leagueAvgGoalsPerGame:  approxGpg,
-      leagueBttsRate:         avgBtts,
-      leagueCleanSheetRate:   profileCorrection.cs ?? GLOBAL_DEFAULTS.leagueCleanSheetRate,
-      leagueOver25Rate:       avgOver25,
-      leagueOver35Rate:       profileCorrection.over35 ?? GLOBAL_DEFAULTS.leagueOver35Rate,
+      leagueBttsRate:         shrunkBtts,
+      leagueCleanSheetRate:   (GLOBAL_DEFAULTS.leagueCleanSheetRate * (1 - profileEvidenceWeight)) + ((profileCorrection.cs ?? GLOBAL_DEFAULTS.leagueCleanSheetRate) * profileEvidenceWeight),
+      leagueOver25Rate:       shrunkOver25,
+      leagueOver35Rate:       (GLOBAL_DEFAULTS.leagueOver35Rate * (1 - profileEvidenceWeight)) + ((profileCorrection.over35 ?? GLOBAL_DEFAULTS.leagueOver35Rate) * profileEvidenceWeight),
       leagueScoreSuccessRate: 1 - Math.exp(-approxGpg / 2),
       _source: 'profiles_only',
       _teamCount: 0,
       _gameCount: 0,
+      _profileCount: profiles.length,
+      _profileMatches: profileMatchCount,
+      _reliability: clamp(0.30 + profileEvidenceWeight, 0.30, 0.72),
     };
   } else {
     // No data at all — use global defaults
@@ -171,6 +189,9 @@ export function computeLeagueContext(standings = [], homeProfile = null, awayPro
       _source: 'global_defaults',
       _teamCount: 0,
       _gameCount: 0,
+      _profileCount: 0,
+      _profileMatches: 0,
+      _reliability: 0.35,
     };
   }
 
@@ -235,4 +256,16 @@ function estimateOverRate(avgGoalsPerGame, threshold) {
     pUnderOrEqual += poissonPmf(k, lambda);
   }
   return 1 - pUnderOrEqual;
+}
+
+function solveLambdaFromOverRate(probability, threshold) {
+  const target = clamp(safeNum(probability, 0.5), 0.05, 0.95);
+  let low = 0.2;
+  let high = 7;
+  for (let i = 0; i < 55; i++) {
+    const mid = (low + high) / 2;
+    if (estimateOverRate(mid, threshold) < target) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
 }

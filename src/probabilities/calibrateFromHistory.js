@@ -143,8 +143,8 @@ export function calibrateFromHistory(calibratedProbs, accuracyCache) {
     adjusted.under15 = parseFloat((1 - adjusted.over15).toFixed(4));
   }
   if (adjusted.over25 < adjusted.over35) {
-    adjusted.over25 = adjusted.over35;
-    adjusted.under25 = parseFloat((1 - adjusted.over25).toFixed(4));
+    adjusted.over35 = adjusted.over25;
+    adjusted.under35 = parseFloat((1 - adjusted.over35).toFixed(4));
   }
 
   if (debugLog.length > 0) {

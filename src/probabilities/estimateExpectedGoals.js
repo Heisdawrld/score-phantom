@@ -1,5 +1,6 @@
 import { safeNum, clamp } from "../utils/math.js";
 import { computeFormDerivedBoosts } from "./computeFormDerivedBoosts.js";
+import { anchorExpectedGoalsToMarket, getXgDataReliability } from "./marketXgAnchor.js";
 
 // ── League-aware defaults (overridden by feature vector league context) ──────
 // These are ONLY used as fallbacks when no league-specific data is available.
@@ -453,32 +454,43 @@ function applySquadManagementAdjustments(homeXg, awayXg, fv) {
 /**
  * xG capping — LEAGUE-DEPENDENT caps.
  *
- * v3: Caps now scale with league goal rate. High-scoring leagues (Swiss SL, Eredivisie)
- * routinely produce 4-6 goal games, so a flat 5.5 total cap still biased UNDER.
+ * v4: A high-scoring outcome distribution does not justify a 6-7 goal mean.
+ * The guardrail now scales with league baseline and data reliability.
  *
- * League O3.5 rate > 35% (attacking): per-team cap 3.5, total cap 7.0
- * League O3.5 rate 25-35% (typical):  per-team cap 3.0, total cap 6.0
- * League O3.5 rate < 25% (defensive): per-team cap 2.5, total cap 5.0
- *
- * This ensures the model can express high-scoring expectations in attacking leagues
- * while remaining conservative in low-scoring ones.
+ * Strong fair-market evidence can loosen the ceiling modestly, while friendlies
+ * and profile-only contexts receive the more conservative limit.
  */
 function capXg(homeXg, awayXg, baseHome, baseAway, fv) {
-  const leagueOver35 = safeNum(fv?.leagueOver35Rate, 0.30);
-  let perTeamCap, totalCap;
-  if (leagueOver35 > 0.35) { perTeamCap = 3.5; totalCap = 7.0; }      // High-scoring leagues
-  else if (leagueOver35 >= 0.25) { perTeamCap = 3.0; totalCap = 6.0; } // Typical leagues
-  else { perTeamCap = 2.5; totalCap = 5.0; }                            // Low-scoring leagues
+  const reliability = getXgDataReliability(fv);
+  const leagueGpg = clamp(safeNum(fv?.leagueAvgGoalsPerGame, 2.70), 2.0, 3.5);
+  let totalCap = clamp(leagueGpg + 0.85 + (reliability * 0.65), 3.55, 4.60);
+  const competition = `${fv?.tournamentName || ''} ${fv?.categoryName || ''}`.toLowerCase();
+  if (competition.includes('friendl')) totalCap = Math.min(totalCap, 4.25);
+  const marketTotalXg = safeNum(fv?._marketAnchor?.marketTotalXg, null);
+  if (marketTotalXg != null) totalCap = Math.max(totalCap, Math.min(4.80, marketTotalXg + 0.65));
+  const perTeamCap = Math.min(3.60, totalCap - 0.30);
 
   const cap = (h,a) => {
-    h=clamp(h,0.2,perTeamCap); a=clamp(a,0.2,perTeamCap);
-    const t=h+a;
-    if(t>totalCap){const s=totalCap/t;h*=s;a*=s;}
+    h=clamp(h,0.2,20); a=clamp(a,0.2,20);
+    let t=h+a;
+    if(t>totalCap){const s=totalCap/t;h*=s;a*=s;t=totalCap;}
+    if(h>perTeamCap){h=perTeamCap;a=Math.min(a,totalCap-h);}
+    if(a>perTeamCap){a=perTeamCap;h=Math.min(h,totalCap-a);}
+    t=h+a;
     if(t<0.8){const s=0.8/t;h*=s;a*=s;}
     return {h,a};
   };
   const {h:fh,a:fa}=cap(homeXg,awayXg), {h:bh,a:ba}=cap(baseHome,baseAway);
-  return { homeExpectedGoals:parseFloat(fh.toFixed(3)), awayExpectedGoals:parseFloat(fa.toFixed(3)), totalExpectedGoals:parseFloat((fh+fa).toFixed(3)), baseHomeXg:parseFloat(bh.toFixed(3)), baseAwayXg:parseFloat(ba.toFixed(3)) };
+  return {
+    homeExpectedGoals: parseFloat(fh.toFixed(3)),
+    awayExpectedGoals: parseFloat(fa.toFixed(3)),
+    totalExpectedGoals: parseFloat((fh + fa).toFixed(3)),
+    baseHomeXg: parseFloat(bh.toFixed(3)),
+    baseAwayXg: parseFloat(ba.toFixed(3)),
+    xgReliability: parseFloat(reliability.toFixed(3)),
+    xgTotalCap: parseFloat(totalCap.toFixed(3)),
+    marketAnchor: fv?._marketAnchor || null,
+  };
 }
 
 export function estimateExpectedGoals(fv, script) {
@@ -495,5 +507,14 @@ export function estimateExpectedGoals(fv, script) {
   ({ homeXg, awayXg } = applyDeepBsdSignals(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applyBsdContextAdjustments(homeXg, awayXg, fv));
   ({ homeXg, awayXg } = applySquadManagementAdjustments(homeXg, awayXg, fv));  // NEW: rotation/fatigue/rest/cup
-  return capXg(homeXg, awayXg, baseHomeXg, baseAwayXg, fv);
+  const anchored = anchorExpectedGoalsToMarket(homeXg, awayXg, fv);
+  const anchoredBase = anchorExpectedGoalsToMarket(baseHomeXg, baseAwayXg, fv);
+  const anchoredFeatures = { ...fv, _marketAnchor: anchored.metadata };
+  return capXg(
+    anchored.homeXg,
+    anchored.awayXg,
+    anchoredBase.homeXg,
+    anchoredBase.awayXg,
+    anchoredFeatures,
+  );
 }

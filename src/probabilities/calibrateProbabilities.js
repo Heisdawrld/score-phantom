@@ -1,4 +1,22 @@
 import { clamp } from '../utils/math.js';
+import { getXgDataReliability } from './marketXgAnchor.js';
+
+function adaptiveMarketWeight(baseWeight, maximumWeight, modelValues, marketValues, context) {
+  const model = modelValues.filter(Number.isFinite);
+  const market = marketValues.filter(Number.isFinite);
+  const count = Math.min(model.length, market.length);
+  let disagreement = 0;
+  for (let i = 0; i < count; i++) disagreement = Math.max(disagreement, Math.abs(model[i] - market[i]));
+
+  const reliability = getXgDataReliability(context || {});
+  const source = String(context?.leagueContextSource || '').toLowerCase();
+  const competition = `${context?.tournamentName || ''} ${context?.categoryName || ''}`.toLowerCase();
+  let weight = baseWeight + ((1 - reliability) * 0.16);
+  if (source === 'profiles_only' || source === 'global_defaults') weight += 0.04;
+  if (competition.includes('friendl')) weight += 0.05;
+  weight += clamp((disagreement - 0.15) * 0.25, 0, 0.10);
+  return clamp(weight, baseWeight, maximumWeight);
+}
 
 /**
  * calibrateProbabilities.js
@@ -29,7 +47,7 @@ import { clamp } from '../utils/math.js';
  * 2. After any adjustment, enforce: under_X = 1 - over_X for each line.
  * 3. Enforce monotonic ordering: over15 >= over25 >= over35.
  */
-export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = null, impliedOdds = null) {
+export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = null, impliedOdds = null, context = null) {
   const script = scriptOutput || {};
   const primary = script.primary || '';
 
@@ -69,10 +87,18 @@ export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = 
       const oldHome = cal.homeWin;
       const oldDraw = cal.draw || (1 - cal.homeWin - cal.awayWin);
       const oldAway = cal.awayWin;
+      const marketWeight = adaptiveMarketWeight(
+        0.45,
+        0.72,
+        [oldHome, oldDraw, oldAway],
+        [impHome, impDraw, impAway],
+        context,
+      );
+      const modelWeight = 1 - marketWeight;
 
-      cal.homeWin = parseFloat(((oldHome * 0.55) + (impHome * 0.45)).toFixed(4));
-      cal.draw = parseFloat(((oldDraw * 0.55) + (impDraw * 0.45)).toFixed(4));
-      cal.awayWin = parseFloat(((oldAway * 0.55) + (impAway * 0.45)).toFixed(4));
+      cal.homeWin = parseFloat(((oldHome * modelWeight) + (impHome * marketWeight)).toFixed(4));
+      cal.draw = parseFloat(((oldDraw * modelWeight) + (impDraw * marketWeight)).toFixed(4));
+      cal.awayWin = parseFloat(((oldAway * modelWeight) + (impAway * marketWeight)).toFixed(4));
 
       console.log(`[calibrate] Bookmaker 1X2 blend: H ${oldHome.toFixed(3)}→${cal.homeWin.toFixed(3)} D ${oldDraw.toFixed(3)}→${cal.draw.toFixed(3)} A ${oldAway.toFixed(3)}→${cal.awayWin.toFixed(3)} (implied: H=${(impHome*100).toFixed(1)}% D=${(impDraw*100).toFixed(1)}% A=${(impAway*100).toFixed(1)}%)`);
     }
@@ -80,21 +106,24 @@ export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = 
     // Over/Under blending
     if (impOver25 != null && cal.over25 != null) {
       const oldOver25 = cal.over25;
-      cal.over25 = parseFloat(((oldOver25 * 0.65) + (impOver25 * 0.35)).toFixed(4));
+      const marketWeight = adaptiveMarketWeight(0.35, 0.62, [oldOver25], [impOver25], context);
+      cal.over25 = parseFloat(((oldOver25 * (1 - marketWeight)) + (impOver25 * marketWeight)).toFixed(4));
       cal.under25 = parseFloat((1 - cal.over25).toFixed(4));
       console.log(`[calibrate] Bookmaker O2.5 blend: ${oldOver25.toFixed(3)}→${cal.over25.toFixed(3)} (implied: ${(impOver25*100).toFixed(1)}%)`);
     }
 
     if (impOver15 != null && cal.over15 != null) {
       const oldOver15 = cal.over15;
-      cal.over15 = parseFloat(((oldOver15 * 0.65) + (impOver15 * 0.35)).toFixed(4));
+      const marketWeight = adaptiveMarketWeight(0.35, 0.62, [oldOver15], [impOver15], context);
+      cal.over15 = parseFloat(((oldOver15 * (1 - marketWeight)) + (impOver15 * marketWeight)).toFixed(4));
       cal.under15 = parseFloat((1 - cal.over15).toFixed(4));
     }
 
     // BTTS blending
     if (impBttsYes != null && cal.bttsYes != null) {
       const oldBtts = cal.bttsYes;
-      cal.bttsYes = parseFloat(((oldBtts * 0.60) + (impBttsYes * 0.40)).toFixed(4));
+      const marketWeight = adaptiveMarketWeight(0.40, 0.65, [oldBtts], [impBttsYes], context);
+      cal.bttsYes = parseFloat(((oldBtts * (1 - marketWeight)) + (impBttsYes * marketWeight)).toFixed(4));
       cal.bttsNo = parseFloat((1 - cal.bttsYes).toFixed(4));
       console.log(`[calibrate] Bookmaker BTTS blend: ${oldBtts.toFixed(3)}→${cal.bttsYes.toFixed(3)} (implied: ${(impBttsYes*100).toFixed(1)}%)`);
     }
@@ -185,8 +214,8 @@ export function calibrateProbabilities(rawProbs, scriptOutput, polymarketOdds = 
     cal.under15 = parseFloat((1 - cal.over15).toFixed(4));
   }
   if (cal.over35 != null && cal.over25 != null && cal.over25 < cal.over35) {
-    cal.over25 = cal.over35;
-    cal.under25 = parseFloat((1 - cal.over25).toFixed(4));
+    cal.over35 = cal.over25;
+    cal.under35 = parseFloat((1 - cal.over35).toFixed(4));
   }
 
   // ── Enforce 1X2 sum ≈ 1.0 ───────────────────────────────────────────────

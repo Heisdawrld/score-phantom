@@ -27,6 +27,7 @@ import { refreshLearnedWeights } from "./probabilities/ensemble.js";
 import { runMaintenanceJobs } from "./scripts/maintenance.js";
 import { recordJobRun, getJobHealthSummary } from './services/healthMonitor.js';
 import { FOOTBALL_ENGINE_VERSION } from './config/engineVersion.js';
+import { getPredictionEligibility } from './services/predictionEligibility.js';
 // Team logos are now served via BSD URL template — no API calls or caching needed
 // e.g. https://sports.bzzoiro.com/img/team/{api_id}/
 
@@ -417,6 +418,7 @@ let activeEnrichmentRun = null;
 
 function fixtureNeedsEnrichment(fixture) {
   if (!fixture || FINISHED_MATCH_STATUSES.has(String(fixture.match_status || '').toUpperCase())) return false;
+  if (!getPredictionEligibility(fixture).canBuild) return false;
   if (!Number(fixture.enriched)) return true;
 
   const timestamp = fixture.enriched_at;
@@ -478,6 +480,10 @@ async function runAutoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
 
     for (const fixture of fixtures) {
       try {
+        if (!getPredictionEligibility(fixture).canBuild) {
+          console.log(`[AutoEnrich] Skipping ${fixture.id}: kickoff reached`);
+          continue;
+        }
         await refreshFixtureEnrichment(fixture);
         success++;
         console.log(`[AutoEnrich] ✓ ${fixture.home_team_name} vs ${fixture.away_team_name}`);

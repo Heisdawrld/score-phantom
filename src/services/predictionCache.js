@@ -18,6 +18,7 @@ import { adaptResponseFormat } from '../api/responseAdapter.js';
 import { enrichFixture } from '../enrichment/enrichOne.js';
 import { fetchPredictedLineup, fetchPlayerStats, fetchBestOdds } from './bsd.js';
 import { insertPredictionPickIfMaterialChange } from '../storage/predictionPicks.js';
+import { getPredictionEligibility, predictionWindowClosedError } from './predictionEligibility.js';
 // Odds are now sourced from fixture_odds table and live BSD v2 odds as fallback.
 
 // Cache is valid for 6 hours — predictions refresh each morning via automation
@@ -170,6 +171,14 @@ function buildMetaFromFixtureAndHistory(fixture, historyRows) {
 export async function getFixtureById(fixtureId) {
   const result = await db.execute({
     sql: `SELECT * FROM fixtures WHERE id = ?`,
+    args: [fixtureId],
+  });
+  return result.rows?.[0] || null;
+}
+
+async function getFixtureScheduleState(fixtureId) {
+  const result = await db.execute({
+    sql: 'SELECT id, match_date, match_status FROM fixtures WHERE id = ? LIMIT 1',
     args: [fixtureId],
   });
   return result.rows?.[0] || null;
@@ -561,6 +570,30 @@ async function loadCachedPrediction(fixtureId, { allowVersionMismatch = false } 
  * @returns {{ prediction, odds, meta, engineResult, fixture, fromCache, stale }}
  */
 export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, staleWhileRevalidate = false, skipEnrichment = false } = {}) {
+  // Once kickoff is reached, an existing pre-match cache may be read but the
+  // prediction must never be enriched, regenerated or overwritten.
+  const scheduleState = await getFixtureScheduleState(fixtureId);
+  const initialEligibility = getPredictionEligibility(scheduleState);
+  if (!initialEligibility.canBuild) {
+    const cached = await loadCachedPrediction(fixtureId, { allowVersionMismatch: true });
+    if (cached?.prediction) {
+      const fixture = await getFixtureById(fixtureId);
+      const odds = await getOdds(fixtureId);
+      const historyRows = await getHistoryRows(fixtureId);
+      return {
+        prediction: cached.prediction,
+        odds,
+        meta: fixture ? buildMetaFromFixtureAndHistory(fixture, historyRows) : {},
+        engineResult: cached.engineResult,
+        fixture,
+        fromCache: true,
+        stale: cached.versionMismatch === true,
+        predictionLocked: true,
+      };
+    }
+    throw predictionWindowClosedError(fixtureId, initialEligibility.reason);
+  }
+
   // ── Stale-while-revalidate fast path ───────────────────────────────────────
   // PROBLEM: ensureFixtureData() is called BEFORE the cache check, and it may trigger
   // enrichFixtureDedup() which does 40+ BSD API calls (10-30s). Users clicking into a
@@ -717,12 +750,19 @@ export async function getOrBuildPrediction(fixtureId, { forceRefresh = false, st
   // ── Run the engine ────────────────────────────────────────────────────────
   const engineResult = await runPredictionEngine(fixtureId, bundle);
 
+  // A slow build can cross kickoff. Re-check immediately before any write.
+  const finalScheduleState = await getFixtureScheduleState(fixtureId);
+  const finalEligibility = getPredictionEligibility(finalScheduleState);
+  if (!finalEligibility.canBuild) {
+    throw predictionWindowClosedError(fixtureId, finalEligibility.reason);
+  }
+
   if (engineResult && !engineResult.noSafePick && engineResult.bestPick) {
     const kickoffDate = fixture?.match_date ? new Date(fixture.match_date) : null;
     const kickoffAt = kickoffDate && !isNaN(kickoffDate.getTime()) ? kickoffDate.toISOString() : null;
     const now = new Date();
     const generatedAt = now.toISOString();
-    const predictionSource = kickoffAt && now.getTime() < new Date(kickoffAt).getTime() ? 'pre_match' : 'post_match_backfill';
+    const predictionSource = 'pre_match';
 
     const bp = engineResult.bestPick;
     const insertedId = await insertPredictionPickIfMaterialChange({

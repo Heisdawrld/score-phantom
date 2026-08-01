@@ -48,6 +48,7 @@ async function runPredictionWarmup({ limit }) {
             WHERE f.enriched = 1
               AND f.match_date >= ?
               AND f.match_date < ?
+              AND datetime(f.match_date) > datetime('now')
               AND COALESCE(f.match_status, 'NS') NOT IN (${FINISHED_STATUSES})
               AND (
                 p.fixture_id IS NULL

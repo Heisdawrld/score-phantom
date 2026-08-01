@@ -286,6 +286,7 @@ function flattenFeatureVector(fv) {
     leagueOver35Rate:       safeNum(lc.leagueOver35Rate, 0.30),
     leagueScoreSuccessRate: safeNum(lc.leagueScoreSuccessRate, 0.70),
     leagueContextSource:    lc._source || 'global_defaults',
+    leagueContextReliability: safeNum(lc._reliability, 0.35),
     h2hOver35Rate:          safeNum(h2h.over_3_5_rate, null),
 
     // ── Implied odds from bookmaker (CRITICAL — previously missing) ──────

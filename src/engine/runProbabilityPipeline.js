@@ -16,12 +16,11 @@ import { computeCornersCardsProbabilities, computeAsianHandicapProbabilities } f
  * blending. This is the fix for the "all predictions are under_35" bug —
  * the model was producing 16% homeWin when bookmaker said 55%.
  *
- * v3 (ENSEMBLE): Blends our Poisson output with BSD's CatBoost ML model and
- * Polymarket prediction-market prices. The ensemble is a THIRD calibration
- * layer that runs AFTER bookmaker calibration and historical calibration.
+ * v4: Independent model signals are combined before the final bookmaker
+ * calibration, preventing a noisy ensemble member from undoing the anchor.
  *
  * Pipeline:
- *   raw Poisson → bookmaker calibration → history calibration → ensemble (BSD + Polymarket)
+ *   raw Poisson → script shaping → history calibration → ensemble → bookmaker calibration
  *
  * The ensemble gracefully falls back to the input if BSD prediction and
  * Polymarket are both missing — so fixtures without external signals behave
@@ -55,13 +54,12 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
     impliedBttsYes: features.impliedBttsYes || null,
   };
 
-  // L1: Bookmaker + Script calibration.
-  // External market feeds are intentionally not allowed to steer ScorePhantom's core probabilities.
-  const calibratedProbs = calibrateProbabilities(rawProbs, script, null, impliedOdds);
+  // L1: Match-script shaping only. Bookmaker calibration is the final layer.
+  const scriptedProbs = calibrateProbabilities(rawProbs, script, null, null, features);
 
   // L2: Version-scoped calibration against outcomes from the same probability
   // band. This avoids treating a market's overall pick win rate as probability.
-  const historyCalibratedProbs = calibrateFromHistory(calibratedProbs, accuracyCache);
+  const historyCalibratedProbs = calibrateFromHistory(scriptedProbs, accuracyCache);
 
   // L3 (ENSEMBLE — v3): Blend with BSD CatBoost + Polymarket.
   // This is the multi-model ensemble layer. Falls back gracefully if no external signals.
@@ -76,7 +74,15 @@ export function runProbabilityPipeline(features, script, accuracyCache = null) {
     features,
   });
 
-  const finalProbs = ensembleResult.probabilities;
+  // Apply fair-market calibration last so an external ensemble member cannot
+  // undo it. The empty script prevents micro-adjustments from being applied twice.
+  const finalProbs = calibrateProbabilities(
+    ensembleResult.probabilities,
+    { primary: '' },
+    null,
+    impliedOdds,
+    features,
+  );
   const ensembleMeta = ensembleResult.ensembleMeta;
 
   if (ensembleMeta.active) {
