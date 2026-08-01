@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -59,8 +60,10 @@ export function Header() {
   const logout = useLogout();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [location] = useLocation();
+  const [sportPortal, setSportPortal] = useState<"football" | "basketball" | null>(null);
+  const [location, setLocation] = useLocation();
   const ref = useRef<HTMLDivElement>(null);
+  const portalTimers = useRef<number[]>([]);
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -68,6 +71,11 @@ export function Header() {
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  useEffect(() => () => {
+    portalTimers.current.forEach((timer) => window.clearTimeout(timer));
+    document.documentElement.classList.remove("sp-sport-traveling");
   }, []);
 
   if (isLoading || !user) return null;
@@ -86,7 +94,43 @@ export function Header() {
     window.setTimeout(() => setCopied(false), 1800);
   };
 
+  const travelToSport = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    sport: "football" | "basketball",
+    href: string,
+  ) => {
+    const currentSport = isBasketball ? "basketball" : "football";
+    if (
+      sport === currentSport ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) return;
+
+    event.preventDefault();
+    if (sportPortal) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setLocation(href);
+      return;
+    }
+
+    setOpen(false);
+    setSportPortal(sport);
+    document.documentElement.classList.add("sp-sport-traveling");
+    portalTimers.current.forEach((timer) => window.clearTimeout(timer));
+    portalTimers.current = [
+      window.setTimeout(() => setLocation(href), 500),
+      window.setTimeout(() => {
+        setSportPortal(null);
+        document.documentElement.classList.remove("sp-sport-traveling");
+      }, 1120),
+    ];
+  };
+
   return (
+    <>
     <header className={cn("sp-header", isBasketball && "is-basketball")}>
       <div className="sp-header__inner">
         <Link href={worldHome} className="sp-brand" aria-label={`ScorePhantom ${isBasketball ? "basketball" : "football"} overview`}>
@@ -120,12 +164,12 @@ export function Header() {
 
         <div className="sp-header__actions">
           <div className={cn("sp-sport-switch", isBasketball && "is-basketball")} aria-label="Choose sport">
-            <Link href="/">
+            <Link href="/" onClick={(event) => travelToSport(event, "football", "/")}>
               <span className={cn("sp-sport-switch__item", !isBasketball && "is-active")}>
                 <span aria-hidden="true">⚽</span> Football
               </span>
             </Link>
-            <Link href="/basketball">
+            <Link href="/basketball" onClick={(event) => travelToSport(event, "basketball", "/basketball")}>
               <span className={cn("sp-sport-switch__item", isBasketball && "is-basketball")}>
                 <span aria-hidden="true">🏀</span> Basketball
               </span>
@@ -229,5 +273,46 @@ export function Header() {
         </div>
       </div>
     </header>
+    {typeof document !== "undefined" && createPortal(
+      <AnimatePresence>
+        {sportPortal && (
+          <motion.div
+            className={cn("sp-sport-portal", `is-${sportPortal}`)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            role="status"
+            aria-live="polite"
+            aria-label={`Entering ${sportPortal} world`}
+          >
+            <div className="sp-sport-portal__vortex" aria-hidden="true">
+              {Array.from({ length: 8 }, (_, index) => (
+                <span key={index} style={{ "--portal-index": index } as CSSProperties} />
+              ))}
+            </div>
+            <div className="sp-sport-portal__streaks" aria-hidden="true">
+              {Array.from({ length: 16 }, (_, index) => (
+                <span key={index} style={{ "--portal-index": index } as CSSProperties} />
+              ))}
+            </div>
+            <motion.div
+              className="sp-sport-portal__core"
+              initial={{ opacity: 0, scale: 0.65 }}
+              animate={{ opacity: [0, 1, 1, 0], scale: [0.65, 1, 1.04, 1.45] }}
+              transition={{ duration: 1.02, times: [0, 0.22, 0.68, 1], ease: "easeInOut" }}
+            >
+              <span className="sp-sport-portal__ball" aria-hidden="true">{sportPortal === "basketball" ? "🏀" : "⚽"}</span>
+              <small>Entering</small>
+              <strong>{sportPortal} world</strong>
+              <span className="sp-sport-portal__signal">Recalibrating the engine</span>
+            </motion.div>
+            <div className="sp-sport-portal__flash" aria-hidden="true" />
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body,
+    )}
+    </>
   );
 }

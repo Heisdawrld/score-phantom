@@ -1153,6 +1153,223 @@ body {
   background: rgba(255, 157, 52, 0.1);
 }
 
+html.sp-sport-traveling,
+html.sp-sport-traveling body {
+  overflow: hidden;
+}
+
+.sp-sport-portal {
+  --portal-rgb: 54, 241, 132;
+  --portal-accent: #36f184;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: white;
+  pointer-events: all;
+  perspective: 900px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(var(--portal-rgb), 0.16), transparent 18%),
+    radial-gradient(circle at 50% 50%, #06110c 0%, #020504 48%, #000 100%);
+  isolation: isolate;
+}
+
+.sp-sport-portal.is-basketball {
+  --portal-rgb: 255, 154, 58;
+  --portal-accent: #ff9a3a;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.14), transparent 26%),
+    radial-gradient(circle at 50% 50%, rgba(var(--portal-rgb), 0.18), transparent 18%),
+    radial-gradient(circle at 50% 50%, #180b04 0%, #080405 48%, #000 100%);
+}
+
+.sp-sport-portal::before,
+.sp-sport-portal::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 20deg,
+    transparent 0 8%,
+    rgba(var(--portal-rgb), 0.12) 10%,
+    transparent 13% 31%,
+    rgba(var(--portal-rgb), 0.08) 34%,
+    transparent 38% 58%,
+    rgba(var(--portal-rgb), 0.14) 61%,
+    transparent 65% 100%
+  );
+  filter: blur(22px);
+  animation: sp-portal-spin 1.05s linear infinite;
+}
+
+.sp-sport-portal::after {
+  inset: -15%;
+  opacity: 0.58;
+  filter: blur(55px);
+  animation-direction: reverse;
+  animation-duration: 0.72s;
+}
+
+.sp-sport-portal__vortex {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  perspective: 650px;
+}
+
+.sp-sport-portal__vortex > span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(32vmin, 18rem);
+  aspect-ratio: 1;
+  margin: 0;
+  border: 1px solid rgba(var(--portal-rgb), 0.54);
+  border-radius: 50%;
+  box-shadow:
+    0 0 1.3rem rgba(var(--portal-rgb), 0.28),
+    inset 0 0 1.3rem rgba(var(--portal-rgb), 0.16);
+  opacity: 0;
+  transform-style: preserve-3d;
+  animation: sp-portal-ring 0.78s linear infinite;
+  animation-delay: calc(var(--portal-index) * -0.0975s);
+}
+
+.sp-sport-portal__streaks {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  animation: sp-portal-streak-field 1.05s ease-in forwards;
+}
+
+.sp-sport-portal__streaks > span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 54vmax;
+  height: 1px;
+  transform-origin: 0 50%;
+  transform: rotate(calc(var(--portal-index) * 22.5deg)) translateX(5vmin);
+  background: linear-gradient(90deg, rgba(var(--portal-rgb), 0), rgba(var(--portal-rgb), 0.75), transparent 72%);
+  filter: drop-shadow(0 0 0.35rem rgba(var(--portal-rgb), 0.8));
+  animation: sp-portal-streak 0.5s ease-in infinite;
+  animation-delay: calc(var(--portal-index) * -0.037s);
+}
+
+.sp-sport-portal__core {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  min-width: min(80vw, 25rem);
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  text-transform: uppercase;
+  filter: drop-shadow(0 0 2rem rgba(var(--portal-rgb), 0.35));
+}
+
+.sp-sport-portal__ball {
+  display: grid;
+  width: 5.5rem;
+  height: 5.5rem;
+  place-items: center;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(var(--portal-rgb), 0.36);
+  border-radius: 50%;
+  font-size: 3rem;
+  background: radial-gradient(circle, rgba(var(--portal-rgb), 0.2), rgba(0, 0, 0, 0.56));
+  box-shadow:
+    0 0 0 0.55rem rgba(var(--portal-rgb), 0.045),
+    0 0 3.8rem rgba(var(--portal-rgb), 0.4),
+    inset 0 0 1.7rem rgba(var(--portal-rgb), 0.2);
+  animation: sp-portal-ball 0.48s ease-in-out infinite alternate;
+}
+
+.sp-sport-portal__core small {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.38em;
+}
+
+.sp-sport-portal__core strong {
+  margin-top: 0.35rem;
+  color: #fff;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.45rem, 4vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  text-shadow: 0 0 1.6rem rgba(var(--portal-rgb), 0.65);
+}
+
+.sp-sport-portal__signal {
+  margin-top: 0.62rem;
+  color: var(--portal-accent);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.sp-sport-portal__flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.94), rgba(var(--portal-rgb), 0.35) 10%, transparent 35%);
+  opacity: 0;
+  animation: sp-portal-flash 1.05s ease-in-out forwards;
+}
+
+@keyframes sp-portal-spin {
+  to { transform: rotate(360deg) scale(1.08); }
+}
+
+@keyframes sp-portal-ring {
+  0% { opacity: 0; transform: translate(-50%, -50%) translateZ(-520px) scale(0.12) rotate(0deg); }
+  18% { opacity: 0.88; }
+  82% { opacity: 0.48; }
+  100% { opacity: 0; transform: translate(-50%, -50%) translateZ(240px) scale(4.6) rotate(42deg); }
+}
+
+@keyframes sp-portal-streak {
+  0% { opacity: 0; width: 4vmax; }
+  35% { opacity: 0.85; }
+  100% { opacity: 0; width: 64vmax; }
+}
+
+@keyframes sp-portal-streak-field {
+  0% { transform: scale(0.5) rotate(-4deg); }
+  55% { transform: scale(1.12) rotate(3deg); }
+  100% { transform: scale(1.7) rotate(8deg); opacity: 0; }
+}
+
+@keyframes sp-portal-ball {
+  from { transform: scale(0.94) rotate(-3deg); }
+  to { transform: scale(1.06) rotate(3deg); }
+}
+
+@keyframes sp-portal-flash {
+  0%, 38% { opacity: 0; transform: scale(0.2); }
+  49% { opacity: 0.86; transform: scale(1.05); }
+  58%, 100% { opacity: 0; transform: scale(2.3); }
+}
+
+@media (max-width: 640px) {
+  .sp-sport-portal__ball {
+    width: 4.6rem;
+    height: 4.6rem;
+    font-size: 2.45rem;
+  }
+
+  .sp-sport-portal__core strong {
+    font-size: 1.65rem;
+  }
+}
+
 .sp-live-signal {
   display: inline-flex;
   align-items: center;
