@@ -36,10 +36,13 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function cacheGet(key, ttlMs = CACHE_TTL_MS) {
+function cacheGet(key, ttlOverride = null) {
   const entry = _cache.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.ts > ttlMs) {
+  // Read acceptance: explicit override (e.g. quota-stale stretch) wins, else
+  // the entry's own write-time TTL, else the global default.
+  const ttl = ttlOverride != null ? ttlOverride : (entry.ttl || CACHE_TTL_MS);
+  if (Date.now() - entry.ts > ttl) {
     cacheDelete(key);
     return null;
   }
@@ -56,7 +59,7 @@ function cacheDelete(key) {
   _cache.delete(key);
 }
 
-function cacheSet(key, data, sizeBytes = 0) {
+function cacheSet(key, data, sizeBytes = 0, ttlMs = CACHE_TTL_MS) {
   const safeSize = Math.max(0, Number(sizeBytes) || 0);
   if (safeSize > CACHE_MAX_ENTRY_BYTES) return;
 
@@ -67,7 +70,8 @@ function cacheSet(key, data, sizeBytes = 0) {
     cacheDelete(oldestKey);
   }
 
-  _cache.set(key, { data, ts: Date.now(), sizeBytes: safeSize });
+  const ttl = Math.max(1000, Number(ttlMs) || CACHE_TTL_MS);
+  _cache.set(key, { data, ts: Date.now(), sizeBytes: safeSize, ttl });
   _cacheBytes += safeSize;
 }
 
@@ -79,7 +83,7 @@ const cacheCleanupTimer = setInterval(() => {
   if (Date.now() < _quotaOpenUntil) return;
   const now = Date.now();
   for (const [key, entry] of _cache) {
-    if (now - entry.ts > CACHE_TTL_MS) {
+    if (now - entry.ts > (entry.ttl || CACHE_TTL_MS)) {
       cacheDelete(key);
     }
   }
@@ -203,6 +207,15 @@ function joinUrl(base, path) {
   return `${String(base).replace(/\/$/, '')}${cleanPath(path)}`;
 }
 
+/** Build the exact cache key bsdFetch uses for a path+params pair. */
+function bsdCacheKey(base, path, params = {}) {
+  const url = new URL(joinUrl(base, path));
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
+  }
+  return url.toString();
+}
+
 function asArray(data, key = 'results') {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.[key])) return data[key];
@@ -260,7 +273,10 @@ async function readBoundedJson(res) {
 
 export async function bsdFetch(path, params = {}, {
   cacheable = true,
-  cacheTtlMs = CACHE_TTL_MS,
+  // null → the entry's write-time TTL governs read acceptance (writes default
+  // to CACHE_TTL_MS). An explicit value acts as BOTH the write TTL and the
+  // max-age the caller accepts — e.g. fetchLiveMatches' 25s, odds 15min.
+  cacheTtlMs = null,
   retries = 3,
   backoffMs = 1500,
   base = BSD_BASE,
@@ -271,19 +287,17 @@ export async function bsdFetch(path, params = {}, {
     return null;
   }
 
-  const url = new URL(joinUrl(base, path));
-  for (const [k, v] of Object.entries(params || {})) {
-    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
-  }
-
-  const cacheKey = url.toString();
+  const cacheKey = bsdCacheKey(base, path, params);
+  const url = new URL(cacheKey); // fetch target — cacheKey IS the full request URL
   // Quota circuit breaker: while OPEN, nothing is sent to BSD. Cached data is
   // served with a stretched TTL (degraded-but-alive beats blind) and uncached
   // paths fail fast with null — instead of the old behavior where every
   // scheduled job still burned its full 3-retry budget against a dead quota.
   const circuitOpen = Date.now() < _quotaOpenUntil;
   if (cacheable) {
-    const effectiveTtl = circuitOpen ? Math.max(cacheTtlMs, QUOTA_STALE_TTL_MS) : cacheTtlMs;
+    // While the circuit is open, cached entries are served far past their normal
+    // TTL (stretched) — degraded-but-alive beats blind.
+    const effectiveTtl = circuitOpen ? Math.max(cacheTtlMs ?? CACHE_TTL_MS, QUOTA_STALE_TTL_MS) : cacheTtlMs;
     const cached = cacheGet(cacheKey, effectiveTtl);
     if (cached) return cached;
     const active = _inFlight.get(cacheKey);
@@ -352,7 +366,7 @@ export async function bsdFetch(path, params = {}, {
       }
 
       const { data, sizeBytes } = await readBoundedJson(res);
-      if (cacheable) cacheSet(cacheKey, data, sizeBytes);
+      if (cacheable) cacheSet(cacheKey, data, sizeBytes, cacheTtlMs);
       return data;
     } catch (err) {
       if (err?.nonRetryable) {
@@ -604,6 +618,42 @@ function mapOddsPayload(data) {
   };
 }
 
+// ── ODDS CACHE SCHEDULING ────────────────────────────────────────────────────
+// BSD updates odds on its own cadence: /events/{id}/odds/ returns
+// next_update_at + update_interval_seconds (observed: hours pre-match,
+// tens of minutes near kickoff). Every odds consumer in this app polls on a
+// 15-minute grid (autoEnrich loop, CLV capture, prediction builds), so a
+// comparison-odds cache TTL aligned to that grid loses ZERO freshness — the
+// data literally cannot change faster than consumers look, and re-fetching
+// identical payloads between BSD's own update windows is pure quota waste.
+const ODDS_TTL_MIN_MS = 2 * 60 * 1000;
+const ODDS_TTL_MAX_MS = 60 * 60 * 1000;
+const ODDS_COMPARISON_TTL_MS = Math.min(
+  ODDS_TTL_MAX_MS,
+  Math.max(ODDS_TTL_MIN_MS, Number(process.env.BSD_ODDS_COMPARISON_TTL_MS) || 15 * 60 * 1000)
+);
+
+/**
+ * Derive a cache TTL from BSD's own odds schedule.
+ * Prefers next_update_at (exact "odds change at"), falls back to
+ * update_interval_seconds (cadence). Returns 0 when the payload carries no
+ * schedule — caller keeps the default TTL in that case.
+ */
+function deriveOddsCacheTtlMs(data) {
+  let ms = 0;
+  const nextAt = Date.parse(data?.next_update_at || '');
+  if (!Number.isNaN(nextAt)) {
+    const untilNext = nextAt - Date.now();
+    if (untilNext > 0) ms = untilNext;
+  }
+  if (!ms) {
+    const intervalSecs = Number(data?.update_interval_seconds);
+    if (Number.isFinite(intervalSecs) && intervalSecs > 0) ms = intervalSecs * 1000;
+  }
+  if (!ms) return 0;
+  return Math.min(ODDS_TTL_MAX_MS, Math.max(ODDS_TTL_MIN_MS, ms));
+}
+
 /**
  * Map a BSD /events/{id}/odds/comparison/ payload into the FLAT odds shape
  * the engine consumes (extended with all 11 markets BSD serves).
@@ -687,7 +737,7 @@ export async function fetchEventOdds(eventId, opts = {}) {
   if (!eventId) return null;
   const includeComparison = opts.includeComparison !== false;
   if (includeComparison) {
-    const compData = await bsdFetch(`/events/${eventId}/odds/comparison/`);
+    const compData = await bsdFetch(`/events/${eventId}/odds/comparison/`, {}, { cacheTtlMs: ODDS_COMPARISON_TTL_MS });
     if (compData && compData.markets) {
       const flat = mapOddsComparisonToFlat(compData);
       if (flat) return flat;
@@ -695,6 +745,15 @@ export async function fetchEventOdds(eventId, opts = {}) {
   }
   const data = await bsdFetch(`/events/${eventId}/odds/`);
   if (!data?.odds) return null;
+  // Schedule-aware re-cache: this payload carries BSD's own update schedule.
+  // Re-stamp the cache entry with that TTL so repeated reads inside one BSD
+  // update window (enrichment + CLV + predict) share a single fetch.
+  const ttlMs = deriveOddsCacheTtlMs(data);
+  if (ttlMs > 0) {
+    try {
+      cacheSet(bsdCacheKey(BSD_BASE, `/events/${eventId}/odds/`), data, JSON.stringify(data).length, ttlMs);
+    } catch { /* best-effort re-cache */ }
+  }
   return mapOddsPayload(data);
 }
 
@@ -720,7 +779,9 @@ export async function fetchBestOdds(eventId) {
  */
 export async function fetchOddsComparison(eventId) {
   if (!eventId) return null;
-  const data = await bsdFetch(`/events/${eventId}/odds/comparison/`);
+  // Same TTL as fetchEventOdds' comparison call → both consumers share one
+  // cache entry per update window instead of re-fetching identical payloads.
+  const data = await bsdFetch(`/events/${eventId}/odds/comparison/`, {}, { cacheTtlMs: ODDS_COMPARISON_TTL_MS });
   if (!data || !data.markets) return null;
 
   // Aggregate movement signals across all markets

@@ -11,6 +11,7 @@
  */
 
 import db from '../config/database.js';
+import { initClvColumns } from './clvTracker.js';
 
 const MIN_SAMPLES = 15;
 const MIN_SAMPLES_CONFIDENCE = 30;
@@ -24,6 +25,12 @@ function rowsOf(result) {
 }
 
 async function buildClvMaps() {
+  // Fresh installs: predictions_v2 lacks the CLV columns until initClvColumns
+  // runs (its only trigger used to be the first CLV capture, up to 15 min
+  // after boot). Calibration queries p.clv / p.closing_odds directly — ensure
+  // the idempotent migration has run or every boot-time refresh on a fresh DB
+  // crashes with "no such column: p.clv".
+  await initClvColumns();
   console.log('[ClvCalibration] Building CLV calibration cache...');
 
   let perMarket = { rows: [] };

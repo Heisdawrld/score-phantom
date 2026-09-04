@@ -1,7 +1,7 @@
 import { broadcastPush, saveNotification } from './pushService.js';
 // wsLiveScores.js — BSD live scores polling + SSE push to frontend
 import db from '../config/database.js';
-import { bsdFetchAll, fetchLiveMatches, fetchEventDetail } from './bsd.js';
+import { fetchLiveMatches, fetchEventDetail } from './bsd.js';
 import { normalizeEventStatsPayload } from './bsdStatsNormalizer.js';
 import { computeProfitUnits } from '../storage/profitUnits.js';
 import { evaluatePrediction } from './predictionSettlement.js';
@@ -68,11 +68,17 @@ async function fetchKickoffWindowCandidates() {
 }
 
 async function fetchExpandedLiveMatches() {
-  const statuses = ['inprogress', 'halftime', '1st_half', '2nd_half', 'ht', 'live'];
+  // /events/live/ is a SUPERSET per the BSD spec: its status enum covers
+  // notstarted/delayed/inprogress/penalties/finished and its period enum
+  // covers 1st_half/halftime/2nd_half/extra_time. The six extra
+  // /events/?status=… list calls this used to fire (up to 12 requests per
+  // minute with maxPages:2) returned subsets of the same events — pure
+  // duplicate quota burn. Pre-match coverage comes from the DB
+  // kickoff-window scan below (kickoff −4h … +35 min), which the live feed
+  // intentionally excludes.
   const batches = await Promise.all([
     fetchLiveMatches().catch(() => []),
     fetchKickoffWindowCandidates().catch(() => []),
-    ...statuses.map(status => bsdFetchAll('/events/', { status }, { maxPages: 2 }).catch(() => [])),
   ]);
   const byId = new Map();
   for (const row of batches.flat()) {

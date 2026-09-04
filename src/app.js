@@ -420,7 +420,19 @@ async function autoSeed() {
 // deliberately short; recurring cycles will drain the queue without a large
 // startup memory spike.
 const MAX_ENRICH_BATCH = 12;
-const ENRICH_BATCH = Math.min(MAX_ENRICH_BATCH, Math.max(1, Number(process.env.ENRICH_BATCH) || 8));
+// ENRICH_BATCH=0 fully disables provider enrichment (predictions still build
+// from stored data) — a quota emergency brake. Unset or non-numeric → default 8.
+const _enrichBatchRaw = process.env.ENRICH_BATCH;
+const _enrichBatchNum = (_enrichBatchRaw == null || _enrichBatchRaw === '') ? NaN : Number(_enrichBatchRaw);
+const ENRICH_BATCH = Number.isFinite(_enrichBatchNum)
+  ? Math.min(MAX_ENRICH_BATCH, Math.max(0, Math.floor(_enrichBatchNum)))
+  : 8;
+if (_enrichBatchRaw != null && _enrichBatchRaw !== '' && !Number.isFinite(_enrichBatchNum)) {
+  console.warn(`[AutoEnrich] Invalid ENRICH_BATCH="${_enrichBatchRaw}" — using default ${8}`);
+}
+if (ENRICH_BATCH === 0) {
+  console.warn('[AutoEnrich] ENRICH_BATCH=0 — provider enrichment disabled (predictions build from stored data only)');
+}
 const ENRICH_DELAY_MS = Math.max(0, Number(process.env.ENRICH_DELAY_MS) || 750);
 const ENRICH_REFRESH_HOURS = Math.max(1, Number(process.env.ENRICHMENT_REFRESH_HOURS) || 6);
 const FINISHED_MATCH_STATUSES = new Set(['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD']);
@@ -442,8 +454,11 @@ function fixtureNeedsEnrichment(fixture) {
 
 async function runAutoEnrich({ limit = ENRICH_BATCH, dateFilter = null } = {}) {
   try {
+    const requestedLimit = Math.min(MAX_ENRICH_BATCH, Math.max(0, Math.floor(Number(limit) || 0)));
+    if (requestedLimit <= 0) {
+      return { enriched: 0, predictions: 0, failed: 0, skipped: true };
+    }
     const today = dateFilter || new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-    const requestedLimit = Math.min(MAX_ENRICH_BATCH, Math.max(1, Number(limit) || ENRICH_BATCH));
     const previousDay = new Date(Date.now() - 86400000)
       .toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const fromDate = dateFilter || previousDay;
