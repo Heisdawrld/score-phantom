@@ -1309,6 +1309,15 @@ export function normaliseBsdEventToFixture(event) {
   const tournamentId = String(event.league_id || league.id || '');
   const matchDate = event.event_date || '';
 
+  // VERIFIED against live API (2026-09-04, 5 real ET finals incl. shootouts):
+  //   • Matches decided after extra time / penalties arrive as
+  //     status:'finished' + period:'AET'|'PEN'  →  normalised to 'FT' below.
+  //   • home_score/away_score are the REGULATION (90-minute) score only;
+  //     extra-time goals are in event.extra_time_score, shootout in
+  //     event.penalty_shootout (both intentionally not persisted — settlement
+  //     is bookmaker-standard 90-minute, matching our odds + CLV baseline).
+  //   • The aet/penalties/extratime status entries stay as a defensive net in
+  //     case BSD ever surfaces those as top-level status values.
   const statusMap = {
     notstarted: 'NS',
     finished: 'FT',

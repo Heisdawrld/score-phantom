@@ -16,6 +16,7 @@ const STORAGE_KEY = "sp_admin_session";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AdminSession { token: string; adminSecret: string; email: string; }
 interface AdminStats { total_users: number; premium_users: number; trial_users: number; expired_users: number; revenue_total: number; payments_today: number; revenue_today: number; fixtures_total: number; }
+interface SystemHealth { status: "healthy" | "degraded"; checks: Record<string, string>; }
 interface AdminUser { id: number; email: string; status: string; trial_ends_at: string | null; premium_expires_at: string | null; subscription_expires_at: string | null; payments?: any[]; access?: any; own_referral_code?: string | null; referred_by_code?: string | null; }
 interface AdminPayment { id: number; user_id: number; reference: string; amount: number; amount_currency: string; status: string; paid_at: string | null; created_at: string; }
 interface Partner { partner_id: number; name: string; email: string | null; referral_code: string; referral_link: string; commission_rate: number; status: string; notes: string | null; total_referred_signups: number; total_referred_trials: number; total_referred_premium: number; total_referred_paid: number; total_revenue: number; total_commission: number; pending_commission: number; settled_commission: number; last_payout_at: string | null; created_at: string; own_referral_code?: string; }
@@ -187,6 +188,7 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
   const referralBaseUrl = typeof window !== "undefined" ? `${window.location.origin}/login` : "/login";
   const [tab, setTab] = useState<"overview" | "users" | "payments" | "partners" | "system" | "engine">("overview");
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [health, setHealth] = useState<SystemHealth | null>(null);
   const [engineStats, setEngineStats] = useState<any>(null);
   const [engineLoading, setEngineLoading] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -236,6 +238,8 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
         call("/api/admin/system-health"),
       ]);
       if (s.status === "fulfilled") setStats(s.value);
+      // System health (BSD API + quota circuit breaker, DB, email, Groq, Flutterwave)
+      if (h.status === "fulfilled" && h.value?.checks) setHealth(h.value);
     } catch (e: any) {
       flash(false, e.message);
     } finally { setLoading(false); }
@@ -545,6 +549,41 @@ function AdminDashboard({ session, onLogout }: { session: AdminSession; onLogout
               </>
             ) : (
               <div className="text-center py-12 text-gray-500 text-sm">No stats available. Check server logs.</div>
+            )}
+
+            {/* System Health — live integration status (BSD API, quota circuit, DB, email, Groq, Flutterwave) */}
+            {health && (
+              <div className="bg-[#0f172a] border border-white/[0.06] rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Activity size={15} className="text-primary" /> System Health
+                  </h3>
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                    health.status === "healthy"
+                      ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/30"
+                      : "text-amber-400 bg-amber-400/10 border-amber-400/30"
+                  }`}>
+                    {health.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {Object.entries(health.checks).map(([key, val]) => {
+                    const v = String(val);
+                    const isOk = ["ok", "configured", "resend_configured", "odds_configured"].includes(v);
+                    const isDown = v.startsWith("error") || v.startsWith("fetch_error") || v === "no_key" || v === "not_configured";
+                    const dot = isOk ? "bg-emerald-400" : isDown ? "bg-red-400" : "bg-amber-400";
+                    return (
+                      <div key={key} className="flex items-center justify-between gap-3 py-1 border-b border-white/[0.04] last:border-0">
+                        <span className="flex items-center gap-2 text-xs text-gray-300">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                          {key.replace(/_/g, " ")}
+                        </span>
+                        <span className={`text-xs font-mono truncate ${isOk ? "text-emerald-400" : isDown ? "text-red-400" : "text-amber-400"}`}>{v}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {/* Quick Upgrade */}

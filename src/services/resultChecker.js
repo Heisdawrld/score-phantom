@@ -167,6 +167,15 @@ export async function checkResults(dateStr) {
     // FIX: BSD also reports finals as 'aet' (after extra time / penalties) —
     // previously only 'finished' counted, so cup ties decided after ET/pens
     // never entered the score map and their predictions never settled.
+    //
+    // VERIFIED against live API (2026-09-04, 5 real ET finals incl. shootouts):
+    // ET-decided ties actually arrive as status:'finished' + period:'AET'|'PEN',
+    // and home_score/away_score are the REGULATION (90-minute) score only —
+    // extra-time goals live in extra_time_score, shootout in penalty_shootout.
+    // ⇒ Storing them as FT and settling every market on these scores is the
+    // bookmaker-standard "90 minutes" convention (same basis as the app's own
+    // 1X2/DC/OU/BTTS odds and the CLV closing-line comparison). Intentional —
+    // do NOT add extra_time_score to settlement totals.
     const isFinal = ['finished', 'aet', 'penalties'].includes(f.status)
       || f.match_status === 'FT' || f.match_status === 'AET';
     const hScore = f.home_score;
