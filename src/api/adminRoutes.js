@@ -13,6 +13,7 @@ const adminLimiter = rateLimit({
 });
 import db from "../config/database.js";
 import { computeAccessStatus } from "../auth/authRoutes.js";
+import { getBsdQuotaState } from "../services/bsd.js";
 
 const router = express.Router();
 const PLAN_DURATION_DAYS = 30;
@@ -565,12 +566,22 @@ router.get("/system-health", adminLimiter, requireAdmin, async (req, res) => {
     try {
       const bsdKey = process.env.BSD_API_KEY || "";
       if (!bsdKey) { checks.bsd_api = "no_key"; } else {
-        const r = await fetch(`https://sports.bzzoiro.com/api/v2/leagues/?limit=1`, {
+        // FIX: use the configured base URL (was hardcoded, ignoring BSD_BASE_URL env)
+        const bsdBase = (process.env.BSD_BASE_URL || "https://sports.bzzoiro.com/api/v2").replace(/\/$/, "");
+        const r = await fetch(`${bsdBase}/leagues/?limit=1`, {
           headers: { Authorization: `Token ${bsdKey}` }
         });
         checks.bsd_api = r.ok ? "ok" : ("error:" + r.status);
       }
     } catch(e) { checks.bsd_api = "fetch_error"; }
+    // BSD quota circuit breaker state (circuitOpen=true → all BSD calls are
+    // short-circuiting until daily-quota reset; lastRateLimit=null = paid/unlimited)
+    try {
+      const quota = getBsdQuotaState();
+      checks.bsd_quota = quota.circuitOpen
+        ? `circuit_open:${quota.openForSecs}s:${quota.reason}`
+        : (quota.lastRateLimit ? `remaining:${quota.lastRateLimit.remaining}` : 'unlimited');
+    } catch { checks.bsd_quota = 'unknown'; }
     // Email
     checks.email = process.env.RESEND_API_KEY ? 'resend_configured' : 'not_configured';
     // Groq
@@ -840,7 +851,9 @@ router.get("/diagnose-results", adminLimiter, requireAdmin, async (req, res) => 
     const poRes = await db.execute({sql:"SELECT outcome,COUNT(*) cnt FROM prediction_outcomes GROUP BY outcome",args:[]});
     let apiRaw=null,apiError=null;
     try {
-        const r = await fetch(`https://sports.bzzoiro.com/api/v2/events/?date_from=${date}&date_to=${date}&limit=5`, {
+        // FIX: use configured base URL + encode the date (was hardcoded + interpolated raw)
+        const bsdBase = (process.env.BSD_BASE_URL || "https://sports.bzzoiro.com/api/v2").replace(/\/$/, "");
+        const r = await fetch(`${bsdBase}/events/?date_from=${encodeURIComponent(date)}&date_to=${encodeURIComponent(date)}&limit=5`, {
           headers: { Authorization: `Token ${bsdKey}` }
         });
         if (r.ok) {

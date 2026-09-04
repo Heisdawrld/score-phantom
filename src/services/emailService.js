@@ -2,11 +2,35 @@
 // Firebase handles: verification + password reset
 
 const FROM = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || 'ScorePhantom <noreply@score-phantom.onrender.com>';
-const APP_URL = process.env.APP_URL || 'https://score-phantom.onrender.com';
+const APP_URL = String(process.env.APP_URL || 'https://score-phantom.onrender.com').replace(/\/+$/, '');
+
+// ── Fail-LOUD config validation ──────────────────────────────────────────────
+// The old code silently returned { reason: 'not_configured' } and only logged a
+// console.warn per send — password-reset and digest emails were DOWN in
+// production with nobody noticing. Surface config problems once, at ERROR
+// level, at boot. (Send-time returns stay non-throwing so auth flows that
+// tolerate an email outage don't 500.)
+if (!process.env.RESEND_API_KEY) {
+  console.error(
+    '[Email] ⛔ RESEND_API_KEY is not set — ALL outbound email is DOWN (password reset, daily digest). ' +
+    'Set RESEND_API_KEY in the environment (create at https://resend.com/api-keys).'
+  );
+}
+if (/@(gmail|googlemail|yahoo|hotmail|outlook|live)\./i.test(FROM) || /\.onrender\.com>/i.test(FROM)) {
+  console.error(
+    `[Email] ⛔ Sending address "${FROM}" uses a domain that CANNOT be verified on Resend ` +
+    '(free mailbox providers and *.onrender.com are rejected). Resend only delivers from verified ' +
+    'custom domains — set RESEND_FROM_EMAIL to e.g. "ScorePhantom <noreply@yourdomain.com>" ' +
+    'after adding + verifying the domain at https://resend.com/domains.'
+  );
+}
 
 export async function sendEmail({ to, subject, html, text }) {
   const key = process.env.RESEND_API_KEY;
-  if (!key) { console.warn('[Email] RESEND_API_KEY not set'); return { success: false, reason: 'not_configured' }; }
+  if (!key) {
+    console.error(`[Email] ⛔ sendEmail skipped (RESEND_API_KEY not set) — "${subject}" to ${Array.isArray(to) ? to.join(',') : to} NOT delivered. Configure RESEND_API_KEY + a verified sending domain.`);
+    return { success: false, reason: 'not_configured' };
+  }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

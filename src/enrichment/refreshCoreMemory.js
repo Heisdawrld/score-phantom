@@ -2,6 +2,7 @@ import db from '../config/database.js';
 import {
   fetchTeamRecentEvents,
   deriveH2H,
+  fetchEventH2H,
   fetchStandings,
   normaliseEventToForm,
   normaliseStandingsRow,
@@ -122,7 +123,21 @@ export async function refreshCoreFixtureMemory(fixture) {
       ? fetchTeamRecentEvents(fixture.away_team_id, fixture.away_team_name, 10, { yearsBack: 2, pageLimit: 60, dateTo })
       : Promise.resolve([]),
     needsRemoteH2h
-      ? deriveH2H(fixture.home_team_id, fixture.home_team_name, fixture.away_team_id, fixture.away_team_name, { target: 5, dateTo })
+      ? (async () => {
+          // H2H chain (cheapest first): embedded/local check already passed
+          // (localH2h < 5), so try the single-call /events/{id}/h2h/ endpoint
+          // (1 BSD call) before falling back to deriveH2H's 4-6 call fan-out.
+          const native = await fetchEventH2H(fixture.id, 5).catch(() => []);
+          if (native.length >= 5) return native;
+          const derived = await deriveH2H(
+            fixture.home_team_id,
+            fixture.home_team_name,
+            fixture.away_team_id,
+            fixture.away_team_name,
+            { target: 5, dateTo }
+          ).catch(() => []);
+          return derived.length > native.length ? derived : native;
+        })()
       : Promise.resolve([]),
   ]);
 

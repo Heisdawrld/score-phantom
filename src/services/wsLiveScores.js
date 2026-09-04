@@ -177,7 +177,7 @@ async function handleScoreUpdate(msg) {
         xg_per_minute: liveMeta.xg_per_minute || null,
       } : null,
     });
-    if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'Pen') {
+    if (msg.status === 'FT' || msg.status === 'AET' || msg.status === 'PEN') {
         setTimeout(() => triggerResultCheck(fixtureId, msg.home_score, msg.away_score).catch(() => {}), 5000);
       }
   } catch (err) {

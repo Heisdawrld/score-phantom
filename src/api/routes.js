@@ -2104,29 +2104,54 @@ router.get("/matches/:id", requireAuth, async (req, res) => {
     }
     const standings = Array.isArray(meta?.standings) ? meta.standings : [];
     
-    // Live Match Bypass: If the match is currently live, fetch spatial data directly from BSD API
+    // Live Match Bypass: fetch fresh spatial data for live matches.
+    // FIX: the old code called /events/{id}/?full=true and read momentum,
+    //   shotmap, average_positions, incidents and lineups off the response.
+    //   `full` is not a real v2 query param (docs: tolerated no-op), and the
+    //   event detail does NOT embed spatial data — it lives on dedicated
+    //   endpoints: /events/{id}/stats/ returns {stats, shotmap, momentum,
+    //   average_positions, xg_per_minute}; incidents and lineups have their
+    //   own endpoints. Result: live spatial data silently never updated.
+    // Now: 3 parallel calls (event core + stats + incidents) with a 25s cache
+    //   (live lists are server-cached 10-30s — faster polling is pointless and
+    //   rapid page refreshes must not hammer BSD). Lineups are only fetched
+    //   when meta is missing them (they rarely change during a match).
     const isLive = ['LIVE', 'HT', '1H', '2H', 'ET', 'PEN'].includes(fixture.match_status || '');
     if (isLive) {
       try {
         console.log(`[MatchCenter] Live match detected (${fixtureId}). Fetching live spatial data from BSD...`);
-        // BSD API /events/{id}/ uses the internal integer ID (which maps to our fixtureId)
-        const liveBsdEvent = await bsdFetch(`/events/${fixtureId}/`, { full: 'true' }, { cacheable: false });
+        const [liveBsdEvent, liveStatsData, liveIncidentsData] = await Promise.all([
+          bsdFetch(`/events/${fixtureId}/`, {}, { cacheTtlMs: 25 * 1000 }),
+          bsdFetch(`/events/${fixtureId}/stats/`, {}, { cacheTtlMs: 25 * 1000 }),
+          bsdFetch(`/events/${fixtureId}/incidents/`, {}, { cacheTtlMs: 25 * 1000 }),
+        ]);
         if (liveBsdEvent) {
-          // Update meta with live spatial data
-          if (liveBsdEvent.momentum) meta.momentum = liveBsdEvent.momentum;
-          if (liveBsdEvent.shotmap) meta.shotmap = liveBsdEvent.shotmap;
-          if (liveBsdEvent.lineups) meta.lineups = liveBsdEvent.lineups;
-          if (liveBsdEvent.average_positions) meta.average_positions = liveBsdEvent.average_positions;
-          if (liveBsdEvent.incidents) meta.matchEvents = liveBsdEvent.incidents;
-          
-          // Update live score and minutes
+          // Spatial data from /stats/
+          if (liveStatsData?.momentum) meta.momentum = liveStatsData.momentum;
+          if (liveStatsData?.shotmap) meta.shotmap = liveStatsData.shotmap;
+          if (liveStatsData?.average_positions) meta.average_positions = liveStatsData.average_positions;
+          if (liveStatsData?.stats) meta.liveStats = liveStatsData.stats;
+
+          // Incidents (goals/cards/subs) from /incidents/
+          if (liveIncidentsData?.incidents?.length) meta.matchEvents = liveIncidentsData.incidents;
+
+          // Lineups only when not already present (rarely change mid-match)
+          if (!meta?.lineups) {
+            const liveLineups = await bsdFetch(`/events/${fixtureId}/lineups/`, {}, { cacheTtlMs: 60 * 1000 });
+            if (liveLineups?.lineups) meta.lineups = liveLineups.lineups;
+          }
+
+          // Live score / minute / xG from the event core (current_minute,
+          // home_xg_live / away_xg_live are readOnly fields on the event).
           fixture.home_score = liveBsdEvent.home_score ?? fixture.home_score;
           fixture.away_score = liveBsdEvent.away_score ?? fixture.away_score;
-          fixture.live_minute = liveBsdEvent.current_minute;
-          
-          // Update live xG
-          if (liveBsdEvent.home_xg_live !== undefined) fixture.home_xg_live = liveBsdEvent.home_xg_live;
-          if (liveBsdEvent.away_xg_live !== undefined) fixture.away_xg_live = liveBsdEvent.away_xg_live;
+          if (liveBsdEvent.current_minute != null) fixture.live_minute = liveBsdEvent.current_minute;
+          if (liveBsdEvent.home_xg_live != null) fixture.home_xg_live = liveBsdEvent.home_xg_live;
+          if (liveBsdEvent.away_xg_live != null) fixture.away_xg_live = liveBsdEvent.away_xg_live;
+          const liveHomeXg = liveStatsData?.stats?.home?.xg?.actual;
+          const liveAwayXg = liveStatsData?.stats?.away?.xg?.actual;
+          if (liveHomeXg != null) fixture.home_xg_live = liveHomeXg;
+          if (liveAwayXg != null) fixture.away_xg_live = liveAwayXg;
         }
       } catch (bsdErr) {
         console.warn(`[MatchCenter] Failed to fetch live spatial data for ${fixtureId}:`, bsdErr.message);

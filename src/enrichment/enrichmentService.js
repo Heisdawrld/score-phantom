@@ -10,6 +10,7 @@ import {
   extractFormFromStandings,
   fetchTeamRecentEvents,
   deriveH2H,
+  fetchEventH2H,
   fetchStandings,
   fetchPredictedLineup,
   fetchEventOdds,
@@ -350,15 +351,28 @@ export async function fetchAndStoreEnrichment(fixture) {
   const localH2h = await fetchLocalH2H(fixture.home_team_name, fixture.away_team_name);
   const homeFormMerged = mergeForm(homeFormRaw, localHome);
   const awayFormMerged = mergeForm(awayFormRaw, localAway);
-  const derivedBsdH2h = bsdH2H.length >= 5
-    ? bsdH2H
-    : await deriveH2H(
-        fixture.home_team_id,
-        fixture.home_team_name,
-        fixture.away_team_id,
-        fixture.away_team_name,
-        { target: 5, dateTo }
-      );
+  // H2H chain (cheapest first):
+  //   1. head_to_head embedded in the event detail we already fetched (0 calls)
+  //   2. /events/{id}/h2h/ — ONE call (verified 2026-09-04: rich aggregate +
+  //      recent_matches with event_id). The old code jumped straight to
+  //      deriveH2H here, burning 4-6 calls per fixture (2x 2-year team-fixture
+  //      windows) — the single biggest avoidable quota drain in enrichment.
+  //   3. deriveH2H fan-out only as a last resort when the endpoint is thin.
+  let derivedBsdH2h = bsdH2H;
+  if (derivedBsdH2h.length < 5) {
+    const native = await fetchEventH2H(eventId, 5).catch(() => []);
+    if (native.length > derivedBsdH2h.length) derivedBsdH2h = native;
+  }
+  if (derivedBsdH2h.length < 5) {
+    const derived = await deriveH2H(
+      fixture.home_team_id,
+      fixture.home_team_name,
+      fixture.away_team_id,
+      fixture.away_team_name,
+      { target: 5, dateTo }
+    ).catch(() => []);
+    if (derived.length > derivedBsdH2h.length) derivedBsdH2h = derived;
+  }
   const h2hMerged = mergeForm(derivedBsdH2h.length > 0 ? derivedBsdH2h : bsdH2H, localH2h).slice(0, 5);
 
   await sleep(300);

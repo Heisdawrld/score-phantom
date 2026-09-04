@@ -673,6 +673,57 @@ async function runSchema() {
     console.error('[Migration] normalize_confidence_case_v1 error:', confCaseErr.message);
   }
 
+  // ── One-time migration: normalize match_status to the canonical UPPERCASE vocabulary ──
+  // The BSD statusMap previously missed aet/penalties/extratime/delayed/unresolved,
+  // so cup ties decided after ET/pens stored raw lowercase statuses. Those rows
+  // silently failed every `match_status IN ('FT','AET','PEN')` settlement query
+  // (resultChecker, wsLiveScores, enrichment, engine features) — predictions on
+  // such matches were never settled. This migration uppercases all known
+  // lowercase variants in fixtures + historical_matches. The client-side mapping
+  // fix (bsd.js statusMap) prevents recurrence.
+  try {
+    const statusFix = await db.execute({ sql: `SELECT name FROM _migrations WHERE name = ?`, args: ['normalize_match_status_v1'] });
+    if ((statusFix.rows || []).length === 0) {
+      console.log('[Migration] Running normalize_match_status_v1 — uppercasing/normalizing match_status values...');
+
+      const statusPairs = [
+        ["aet", "AET"],
+        ["penalties", "PEN"],
+        ["Pen", "PEN"],
+        ["extratime", "ET"],
+        ["delayed", "DELAYED"],
+        ["unresolved", "UNRESOLVED"],
+        ["finished", "FT"],
+        ["ft", "FT"],
+        ["notstarted", "NS"],
+        ["ns", "NS"],
+        ["inprogress", "LIVE"],
+        ["live", "LIVE"],
+        ["1st_half", "LIVE"],
+        ["2nd_half", "LIVE"],
+        ["halftime", "HT"],
+        ["ht", "HT"],
+        ["postponed", "PPD"],
+        ["cancelled", "CANC"],
+      ];
+      let totalFixed = 0;
+      for (const [from, to] of statusPairs) {
+        try {
+          const r = await db.execute({ sql: `UPDATE fixtures SET match_status = ? WHERE match_status = ?`, args: [to, from] });
+          totalFixed += r.rowsAffected || 0;
+        } catch (e) { /* table may lack rows; ignore */ }
+        try {
+          await db.execute({ sql: `UPDATE historical_matches SET match_status = ? WHERE match_status = ?`, args: [to, from] });
+        } catch (e) { /* historical_matches may not track match_status; ignore */ }
+      }
+      console.log(`[Migration] normalize_match_status_v1: ${totalFixed} fixture rows normalized`);
+      await db.execute({ sql: `INSERT INTO _migrations (name) VALUES (?)`, args: ['normalize_match_status_v1'] });
+      console.log('[Migration] normalize_match_status_v1 completed');
+    }
+  } catch (statusErr) {
+    console.error('[Migration] normalize_match_status_v1 error:', statusErr.message);
+  }
+
   // ── One-time migration: backfill best_pick_odds from predictions_v2 ────────
   // Recover only bookmaker prices captured with the exact immutable pick.
   // Model/fair probabilities are not executable odds and must never drive ROI.

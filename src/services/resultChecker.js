@@ -163,8 +163,12 @@ export async function checkResults(dateStr) {
   const scoreMap = {};
   const nameMap = {};
   for (const f of apiFixtures) {
-    // BSD uses status='finished' and id (not match_id)
-    const isFinal = f.status === 'finished' || f.match_status === 'FT' || f.match_status === 'AET';
+    // BSD uses status='finished' and id (not match_id).
+    // FIX: BSD also reports finals as 'aet' (after extra time / penalties) —
+    // previously only 'finished' counted, so cup ties decided after ET/pens
+    // never entered the score map and their predictions never settled.
+    const isFinal = ['finished', 'aet', 'penalties'].includes(f.status)
+      || f.match_status === 'FT' || f.match_status === 'AET';
     const hScore = f.home_score;
     const aScore = f.away_score;
     if (isFinal && hScore != null && aScore != null) {
@@ -176,7 +180,10 @@ export async function checkResults(dateStr) {
       if (hk && ak) { nameMap[hk + ':' + ak] = s; nameMap[hk.split(' ')[0] + ':' + ak.split(' ')[0]] = s; }
     }
   }
-  const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND match_status IN ('FT','AET','Pen') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
+  // FIX: UPPER() makes this case-proof — rows stored before the statusMap fix
+  // carry raw lowercase 'aet'/'penalties' which previously never matched and
+  // left cup-tie predictions unsettled forever.
+  const dbScores = await db.execute({ sql: "SELECT * FROM fixtures WHERE match_date LIKE ? AND UPPER(match_status) IN ('FT','AET','PEN') AND home_score IS NOT NULL", args: ['%' + date + '%'] });
   for (const f of dbScores.rows || []) {
     if (!scoreMap[f.id]) {
       const s = { home: Number(f.home_score), away: Number(f.away_score) };
@@ -252,12 +259,13 @@ export async function checkResults(dateStr) {
     // Read stake_units from the prediction pick (persisted by predictionCache.js).
     // Falls back to 1 if not available (legacy picks or missing stake data).
     const stakeUnits = pick?.stake_units != null ? parseFloat(pick.stake_units) : 1;
-    const profitUnits = computeProfitUnits(outcome, bookmakerOdds, stakeUnits);
-    const pickId = pick?.id != null ? Number(pick.id) : null;
+    // FIX (crash): `outcome` was previously read here BEFORE its declaration
+    // below (temporal dead zone) — any newly finished fixture with a score
+    // threw "ReferenceError: Cannot access 'outcome' before initialization"
+    // and killed the whole checkResults() run mid-loop. Declaration moved up;
+    // computeProfitUnits now runs after evaluatePrediction.
     const market = pick?.market_key || fix.best_pick_market;
     const selection = pick?.selection || fix.best_pick_selection;
-    const probability = pick?.model_probability ?? parseFloat(fix.best_pick_probability || 0);
-    const modelConfidence = pick?.model_confidence || fix.confidence_model || '';
     // Settle the exact immutable pre-match pick that will be written to the
     // outcome row. predictions_v2 may have been refreshed after kickoff.
     const outcome = evaluatePrediction(
@@ -268,6 +276,10 @@ export async function checkResults(dateStr) {
       fix.home_team_name,
       fix.away_team_name,
     );
+    const profitUnits = computeProfitUnits(outcome, bookmakerOdds, stakeUnits);
+    const pickId = pick?.id != null ? Number(pick.id) : null;
+    const probability = pick?.model_probability ?? parseFloat(fix.best_pick_probability || 0);
+    const modelConfidence = pick?.model_confidence || fix.confidence_model || '';
     
     // Determine if this is a sharp value pick (high edge)
     const edge = parseFloat(fix.best_pick_edge || 0);

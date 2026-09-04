@@ -24,6 +24,11 @@ const CACHE_MAX_ENTRIES = Math.max(10, Number(process.env.BSD_CACHE_MAX_ENTRIES)
 const CACHE_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.BSD_CACHE_MAX_BYTES) || 8 * 1024 * 1024);
 const CACHE_MAX_ENTRY_BYTES = Math.max(64 * 1024, Number(process.env.BSD_CACHE_MAX_ENTRY_BYTES) || 512 * 1024);
 const RESPONSE_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.BSD_RESPONSE_MAX_BYTES) || 8 * 1024 * 1024);
+// While the quota circuit is open, cached entries are served with this stretched
+// TTL so the app degrades to "somewhat stale" instead of "blind" during a
+// daily-quota outage. Hard ceiling is CACHE_TTL_MS for idle entries (cleanup
+// timer pauses during an outage to preserve them).
+const QUOTA_STALE_TTL_MS = 60 * 60 * 1000;
 const LEAGUE_CACHE_MAX_ENTRIES = 100;
 let _cacheBytes = 0;
 
@@ -68,6 +73,10 @@ function cacheSet(key, data, sizeBytes = 0) {
 
 // Periodic cleanup: prune expired entries every 5 minutes to prevent unbounded memory growth
 const cacheCleanupTimer = setInterval(() => {
+  // Preserve stale data while the quota circuit is open — that stale data is
+  // exactly what the stretched-TTL lookup serves during an outage. LRU bounds
+  // still hold (no new entries are inserted during an outage).
+  if (Date.now() < _quotaOpenUntil) return;
   const now = Date.now();
   for (const [key, entry] of _cache) {
     if (now - entry.ts > CACHE_TTL_MS) {
@@ -114,6 +123,76 @@ async function acquireRateLimitSlot() {
     _lastRequestTime = Date.now();
   });
   return _rateLimitQueue;
+}
+
+// ── QUOTA CIRCUIT BREAKER ────────────────────────────────────────────────────
+// BSD v2 returns two distinct 429 flavors (docs → Rate limits #) and they want
+// OPPOSITE reactions:
+//   {"code":"taster_exhausted"} — daily account quota gone. Retry-After holds
+//     seconds to midnight UTC; "sooner is pointless" → OPEN the circuit until
+//     reset instead of burning 3 retries × every in-flight call.
+//   {"code":"rate_limited"} — per-IP burst (25 r/s on cached reads). Retry-After: 1
+//     → wait exactly that long, then retry (transient, do NOT open the circuit).
+// Every response may carry IETF ratelimit-headers:
+//   RateLimit-Policy: "football";q=7500;w=86400
+//   RateLimit: "football";r=7213;t=52800
+// r = requests remaining, t = seconds to reset. ABSENCE means unlimited (paid
+// plan) — never back off just because the header is missing.
+let _quotaOpenUntil = 0;
+let _quotaReason = null;
+let _quotaLastLog = 0;
+let _lastRateLimit = null; // last parsed RateLimit header: { remaining, resetSecs, ts }
+
+function nextUtcMidnightMs() {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0);
+}
+
+function openQuotaCircuit(untilMs, reason) {
+  if (untilMs > _quotaOpenUntil) {
+    _quotaOpenUntil = untilMs;
+    _quotaReason = reason;
+    _quotaLastLog = Date.now();
+    console.error(
+      `[BSD] ⛔ QUOTA CIRCUIT OPEN (${reason}) — all BSD calls short-circuit until ${new Date(untilMs).toISOString()}`
+    );
+  }
+}
+
+/**
+ * Live quota/circuit state for dashboards and health probes.
+ * circuitOpen=true means bsdFetch calls are short-circuiting (serve stale/null).
+ */
+export function getBsdQuotaState() {
+  const now = Date.now();
+  const open = now < _quotaOpenUntil;
+  return {
+    circuitOpen: open,
+    openUntil: open ? new Date(_quotaOpenUntil).toISOString() : null,
+    openForSecs: open ? Math.ceil((_quotaOpenUntil - now) / 1000) : 0,
+    reason: open ? _quotaReason : null,
+    lastRateLimit: _lastRateLimit,
+  };
+}
+
+function parseRetryAfterMs(res) {
+  const raw = res?.headers?.get?.('retry-after');
+  if (!raw) return null;
+  const secs = Number(raw);
+  if (Number.isFinite(secs) && secs >= 0) return secs * 1000;
+  const asDate = Date.parse(raw);
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now());
+  return null;
+}
+
+function parseRateLimitHeader(res) {
+  // RateLimit: "football";r=7213;t=52800 (HTTP Structured Fields — light parse)
+  const raw = res?.headers?.get?.('ratelimit');
+  if (!raw) return null;
+  const r = /(?:^|;)\s*r=(\d+)/i.exec(raw);
+  if (!r) return null;
+  const t = /(?:^|;)\s*t=(\d+)/i.exec(raw);
+  return { remaining: Number(r[1]), resetSecs: t ? Number(t[1]) : null, ts: Date.now() };
 }
 
 function cleanPath(path = '') {
@@ -198,11 +277,26 @@ export async function bsdFetch(path, params = {}, {
   }
 
   const cacheKey = url.toString();
+  // Quota circuit breaker: while OPEN, nothing is sent to BSD. Cached data is
+  // served with a stretched TTL (degraded-but-alive beats blind) and uncached
+  // paths fail fast with null — instead of the old behavior where every
+  // scheduled job still burned its full 3-retry budget against a dead quota.
+  const circuitOpen = Date.now() < _quotaOpenUntil;
   if (cacheable) {
-    const cached = cacheGet(cacheKey, cacheTtlMs);
+    const effectiveTtl = circuitOpen ? Math.max(cacheTtlMs, QUOTA_STALE_TTL_MS) : cacheTtlMs;
+    const cached = cacheGet(cacheKey, effectiveTtl);
     if (cached) return cached;
     const active = _inFlight.get(cacheKey);
     if (active) return active;
+  }
+  if (circuitOpen) {
+    if (Date.now() - _quotaLastLog > 60_000) {
+      _quotaLastLog = Date.now();
+      console.warn(
+        `[BSD] Circuit open (${_quotaReason}) until ${new Date(_quotaOpenUntil).toISOString()} — skipping ${cleanPath(path)}`
+      );
+    }
+    return null;
   }
 
   const request = (async () => {
@@ -218,9 +312,39 @@ export async function bsdFetch(path, params = {}, {
         signal: AbortSignal.timeout(timeoutMs),
       });
 
+      // Track quota state from the IETF RateLimit header on every response.
+      // Header ABSENT = unlimited (paid plan) — never treat absence as zero.
+      const rlHeader = parseRateLimitHeader(res);
+      if (rlHeader) _lastRateLimit = rlHeader;
+
       if (!res.ok) {
         if (res.status === 404) return null;
-        if (res.status === 429 || res.status === 502 || res.status >= 500) {
+        if (res.status === 429) {
+          const bodyText = await res.text().catch(() => '');
+          let code = '';
+          try { code = String(JSON.parse(bodyText)?.code || ''); } catch { /* non-JSON body */ }
+          const retryAfterMs = parseRetryAfterMs(res);
+
+          if (code === 'taster_exhausted') {
+            // Daily account quota gone. Docs: "sooner is pointless" — open the
+            // circuit until Retry-After (seconds to midnight UTC) and stop retrying.
+            const until = Date.now() + (retryAfterMs ?? Math.max(0, nextUtcMidnightMs() - Date.now()));
+            openQuotaCircuit(until, 'taster_exhausted (daily quota exhausted)');
+            return null;
+          }
+
+          if (rlHeader && rlHeader.remaining === 0 && rlHeader.resetSecs != null) {
+            // RateLimit r=0: quota exhausted per header — same reaction, no retry.
+            openQuotaCircuit(Date.now() + rlHeader.resetSecs * 1000, 'RateLimit r=0');
+            return null;
+          }
+
+          // rate_limited (per-IP burst) or unknown 429 — transient: retry after
+          // the server-advised wait (default 1s per docs).
+          const waitMs = Math.max(retryAfterMs ?? 0, 1000);
+          throw Object.assign(new Error(`HTTP 429 (${code || 'rate_limited'})`), { rateLimitWaitMs: waitMs });
+        }
+        if (res.status === 502 || res.status >= 500) {
           throw new Error(`HTTP ${res.status}`);
         }
         console.error(`[BSD] HTTP ${res.status} for ${cleanPath(path)}`, await res.text().catch(() => ''));
@@ -239,8 +363,9 @@ export async function bsdFetch(path, params = {}, {
         console.error(`[BSD] Fetch failed after ${retries} retries for ${cleanPath(path)}:`, err.message);
         return null;
       }
-      // Exponential backoff: 1500ms → 3000ms → 6000ms
-      const wait = backoffMs * Math.pow(2, attempt);
+      // Honor the server-advised wait for rate-limited retries; otherwise
+      // exponential backoff: 1500ms → 3000ms → 6000ms
+      const wait = err.rateLimitWaitMs != null ? err.rateLimitWaitMs : backoffMs * Math.pow(2, attempt);
       console.warn(`[BSD] ${err.message} on ${cleanPath(path)}. Retrying in ${wait}ms (${attempt + 1}/${retries})...`);
       await sleep(wait);
       }
@@ -310,7 +435,10 @@ export function getPlayerPhotoUrl(playerId) {
 // ── Leagues / seasons / standings ────────────────────────────────────────────
 
 export async function fetchLeagues(params = {}) {
-  return await bsdFetchAll('/leagues/', { is_active: true, ...params });
+  // NOTE: do NOT send `is_active` — BSD v2 rejects unknown query params with 400
+  // (verified live 2026-09-04; accepted: country, include_inactive, is_women, limit, offset).
+  // /leagues/ returns active leagues by default; pass { include_inactive: true } if needed.
+  return await bsdFetchAll('/leagues/', { ...params });
 }
 
 export async function fetchLeagueDetail(leagueId) {
@@ -801,6 +929,42 @@ export async function fetchTeamRecentEvents(teamId, teamName, n = 50, opts = {})
 
 // ── H2H ───────────────────────────────────────────────────────────────────────
 
+/**
+ * Native H2H via the single-call /events/{id}/h2h/ endpoint.
+ *
+ * Replaces deriveH2H's 4-6 call fan-out (2x /teams/{id}/fixtures with 2-year
+ * windows, ~85-match payloads each) with ONE request that returns the aggregate
+ * block (total_matches, wins/draws, avg_total_goals) plus recent_matches rows
+ * shaped {home, away, score, date, event_id, home_score, away_score}.
+ *
+ * Output rows match normaliseEventToForm's contract ({home, away, score, date,
+ * competition, home_xg, away_xg, _bsdId...}) so they drop straight into the
+ * mergeForm/uniqueByKey history pipeline.
+ */
+export async function fetchEventH2H(eventId, n = 10) {
+  if (!eventId) return [];
+  const data = await bsdFetch(`/events/${eventId}/h2h/`);
+  if (!data) return [];
+
+  const rows = Array.isArray(data?.recent_matches) ? data.recent_matches : [];
+  const limit = Math.max(1, Number(n) || 10);
+  return rows
+    .filter(m => m && m.score)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, limit)
+    .map(m => ({
+      home: m.home || '',
+      away: m.away || '',
+      score: m.score || null,
+      date: m.date || '',
+      competition: '',
+      home_xg: null,
+      away_xg: null,
+      _bsdId: m.event_id ?? null,
+      _bsdApiId: m.event_id ?? null,
+    }));
+}
+
 export async function fetchH2H(team1Id, team2Id, n = 10) {
   if (!team1Id || !team2Id) return [];
   return deriveH2H(team1Id, '', team2Id, '', { target: n });
@@ -1093,6 +1257,22 @@ export function normaliseBsdEventToFixture(event) {
     cancelled: 'CANC',
     '1st_half': 'LIVE',
     '2nd_half': 'LIVE',
+    // FIX: BSD v2 status vocabulary (per official spec) also includes:
+    //   delayed    — kickoff delayed (pre-live)
+    //   extratime  — extra time in progress (live)
+    //   penalties  — penalty shootout in progress (live)
+    //   aet        — FINAL after extra time (may include pens-decided)
+    //   unresolved — match interrupted/unknown (scores null)
+    // These MUST map to the uppercase canonical vocabulary the whole codebase
+    // filters on ('FT','AET','PEN','ET'...) — otherwise cup ties decided after
+    // ET/pens store raw lowercase 'aet', never match resultChecker's
+    // IN ('FT','AET','PEN') queries, never settle, and get deleted by the
+    // 3-day fixture cleanup.
+    aet: 'AET',
+    penalties: 'PEN',
+    extratime: 'ET',
+    delayed: 'DELAYED',
+    unresolved: 'UNRESOLVED',
   };
 
   const odds = event.odds || {};

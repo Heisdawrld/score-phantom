@@ -98,15 +98,26 @@ app.get("/api/admin/system-health", requireAdminAccess, async (req, res) => {
       if (!bsdKey) {
         checks.bsd_api = "no_key";
       } else {
-        const { bsdFetch } = await import('./services/bsd.js');
+        const { bsdFetch, getBsdQuotaState } = await import('./services/bsd.js');
+        // FIX: do NOT send is_active — BSD v2 rejects unknown params with 400
+        // (accepted: country, include_inactive, is_women, limit, offset).
+        // Default response already excludes inactive leagues.
         const leagueProbe = await bsdFetch(
           '/leagues/',
-          { is_active: true, limit: 1, offset: 0 },
+          { limit: 1, offset: 0 },
           { retries: 0, timeoutMs: 4000, cacheTtlMs: 5 * 60 * 1000 },
         );
         const leagueCount = Number(leagueProbe?.count || leagueProbe?.results?.length || 0);
         checks.bsd_api = leagueCount > 0 ? "ok" : "error:no_leagues";
         checks.bsd_leagues = leagueCount;
+        // Quota circuit breaker state (circuitOpen=true → calls short-circuit
+        // until daily-quota reset; lastRateLimit=null → paid/unlimited plan)
+        try {
+          const quota = getBsdQuotaState();
+          checks.bsd_quota = quota.circuitOpen
+            ? `circuit_open:${quota.openForSecs}s:${quota.reason}`
+            : (quota.lastRateLimit ? `remaining:${quota.lastRateLimit.remaining}` : 'unlimited');
+        } catch { checks.bsd_quota = 'unknown'; }
       }
     } catch (e) {
       checks.bsd_api = "fetch_error";
