@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { RealityCheck } from '@/components/ui/RealityCheck';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface OverallStats {
@@ -541,6 +542,9 @@ export default function TrackRecord() {
             </p>
           </div>
         )}
+
+        {/* ── Phase 4 honesty layer: expectations, variance, bankroll ── */}
+        <RealityCheck hitRate={hasData ? overall.hitRate : null} />
 
         {/* ── Charts & Breakdowns ── */}
         {hasData && (

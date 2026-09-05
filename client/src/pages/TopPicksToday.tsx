@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ConfidenceRing } from "@/components/ui/ConfidenceRing";
 import { ConfidenceBadge, getConfidenceTier } from "@/components/ui/ConfidenceBadge";
 import { ModelAdvisorBadge, AdvisorStatus } from "@/components/ui/ModelAdvisorBadge";
+import { HonestyStrip } from "@/components/ui/RealityCheck";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TeamLogo } from "@/components/TeamLogo";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -283,6 +284,9 @@ export default function TopPicksToday() {
             )}
           </div>
         </motion.div>
+
+        {/* ── Phase 4 honesty layer: one-line expectations strip ── */}
+        <HonestyStrip />
 
         {/* ── Inline warming-up banner (shown when picks exist but more are being generated) ── */}
         {warmingUp && nonAvoidPicks.length > 0 && (

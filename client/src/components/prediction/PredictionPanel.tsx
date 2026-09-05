@@ -629,7 +629,8 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                               )}
 
                               {!isWatch && stake?.shouldBet && (
-                                <div className="mb-3 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
+                                <>
+                                <div className="mb-2 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
                                   <div>
                                     <p className="text-[9px] font-bold uppercase tracking-wider text-primary/70">Approved exposure</p>
                                     <p className="text-xs font-black text-primary">{stake.exposureLabel || 'STANDARD'}</p>
@@ -639,6 +640,12 @@ export function PredictionPanel({ fixtureId, onClose, onError, limitReached }: P
                                     <span className="ml-1 text-[9px] font-medium uppercase text-white/30">bankroll</span>
                                   </p>
                                 </div>
+                                {/* Phase 4 honesty layer: stake guidance next to the exposure figure */}
+                                <p className="mb-3 text-[9px] leading-snug text-white/30">
+                                  Guidance, not a guarantee — even sharp picks lose ~4 in 10, and losing runs
+                                  of 4–6 are normal. Never exceed your planned stake.
+                                </p>
+                                </>
                               )}
 
                               {/* v4: Analyst Summary */}
