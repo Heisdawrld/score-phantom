@@ -39,6 +39,29 @@ const SAFETY_FALLBACKS = Object.freeze({
   away_over_15: ['away_over_05', 'over_15'],
 });
 
+// ── Phase 2 market quarantine (money-map item 4) ──────────────────────────────
+// btts_no bled cash across every lens: −63.6% ROI priced (n=9), 58.1% win vs
+// 56.1% break-even legacy (n=172), −0.63 to −2.33 mean CLV. The model cannot
+// price BTTS-No reliably yet — force SKIP until the recalibrated engine re-audits
+// it at n≥200 (money map re-run). Kill switch: DISABLE_MARKET_QUARANTINE=1.
+const QUARANTINED_MARKETS = Object.freeze(new Set(['btts_no']));
+
+// ── Phase 2 odds gate (money-map item 2) ──────────────────────────────────────
+// Only the odds < 1.50 band was profitable in the priced era (+12.8%); losses
+// grew monotonically with odds (1.50–1.79: −18.1%, 1.80–2.19: −30.1%, 2.20+:
+// −100%). Until the recalibrated engine clears ≥200 priced bets at positive ROI,
+// do not PUBLISH bets at 1.80+ — downgrade to WATCH instead. The thesis may be
+// fine; the price is not proven enough for this engine's users yet.
+// Kill switch: DISABLE_ODDS_GATE=1. Tune: ODDS_GATE_MAX.
+function getOddsGateMax() {
+  const v = Number(process.env.ODDS_GATE_MAX);
+  return Number.isFinite(v) && v > 1 ? v : 1.80;
+}
+
+function isOddsGateEnabled() {
+  return process.env.DISABLE_ODDS_GATE !== '1';
+}
+
 function numOr(value, fallback) {
   return value === null || value === undefined || value === ''
     ? fallback
@@ -127,6 +150,12 @@ export function evaluateRecommendation(candidate, context = {}) {
   const hasCapturedPrice = odds > 1;
   const isModelOnly = candidate.modelOnly === true || candidate.isModelOnly === true || !hasCapturedPrice;
   const isSafety = isSafetyMarket(candidate.marketKey);
+  const marketKeyLower = String(candidate.marketKey || '').toLowerCase();
+  const isQuarantined =
+    process.env.DISABLE_MARKET_QUARANTINE !== '1' && QUARANTINED_MARKETS.has(marketKeyLower);
+  const oddsGateMax = getOddsGateMax();
+  const oddsGateBlocksBet =
+    isOddsGateEnabled() && hasCapturedPrice && odds >= oddsGateMax;
 
   const evidenceScore = clamp(
     (dataQuality * 0.34) +
@@ -182,10 +211,20 @@ export function evaluateRecommendation(candidate, context = {}) {
     isSafety,
     valueTier: valueTier.tier,
     challengeRecommendation,
+    isQuarantined,
+    oddsGateBlocked: oddsGateBlocksBet,
   };
 
   if (challengeRecommendation === 'FAIL') {
     return buildDecision('SKIP', 'ADVERSARIAL_FAIL', 'The self-challenge found too many ways for this pick to fail.', metrics);
+  }
+  if (isQuarantined) {
+    return buildDecision(
+      'SKIP',
+      'MARKET_QUARANTINE',
+      'The track record for this market is negative and it is quarantined pending re-audit.',
+      metrics,
+    );
   }
   if (probability < 0.50) {
     return buildDecision('SKIP', 'LOW_PROBABILITY', 'Model probability is below the minimum recommendation floor.', metrics);
@@ -251,6 +290,18 @@ export function evaluateRecommendation(candidate, context = {}) {
     confidenceLabel !== 'LEAN';
 
   if (clearsValue && clearsEvidence) {
+    // Phase 2 odds gate: never PUBLISH a bet at unproven prices. WATCH keeps
+    // the angle visible without recommending users stake at 1.80+.
+    if (oddsGateBlocksBet) {
+      return buildDecision(
+        'WATCH',
+        'ODDS_GATE_HIGH_PRICE',
+        `The value thesis clears, but the price (${odds.toFixed(2)}) is above the publish gate (${oddsGateMax.toFixed(2)}) until the engine re-audits at positive ROI.`,
+        metrics,
+        'WATCH',
+      );
+    }
+
     let convictionTier = 'STANDARD';
     if (
       probability >= 0.72 &&

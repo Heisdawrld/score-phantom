@@ -1,4 +1,5 @@
 import { safeNum } from '../utils/math.js';
+import { applyTrackRecordCalibration, isTrackCalibrationEnabled } from '../probabilities/trackRecordCalibration.js';
 
 const MARKET_DEFINITIONS = [
   { marketKey: 'home_win',           selection: 'Home Win',             probKey: 'homeWin' },
@@ -67,6 +68,15 @@ export function buildMarketCandidates(calibratedProbs, odds) {
   const probs = calibratedProbs || {};
   const candidates = [];
 
+  // ── Phase 2 recalibration (money-map item 1) ─────────────────────────────
+  // The prod track record proved systematic overconfidence (predicted 85.9% →
+  // actual 67.5%, n=609). EVERY probability crossing from model logic into
+  // selection logic (edge, EV, pruning, floors, policy) must pass through the
+  // empirical map fitted on the settled track record. The raw scale is kept on
+  // rawModelProbability for internal heuristics and persisted for future refits
+  // (never refit on already-calibrated values — that compounds).
+  const calibrationOn = isTrackCalibrationEnabled();
+
   for (const def of MARKET_DEFINITIONS) {
     let modelProbability;
 
@@ -78,10 +88,16 @@ export function buildMarketCandidates(calibratedProbs, odds) {
       continue;
     }
 
+    const rawModelProbability = parseFloat(Math.max(0, Math.min(1, modelProbability)).toFixed(4));
+    const modelProbabilityCalibrated = calibrationOn
+      ? applyTrackRecordCalibration(rawModelProbability)
+      : rawModelProbability;
+
     candidates.push({
       marketKey: def.marketKey,
       selection: def.selection,
-      modelProbability: parseFloat(Math.max(0, Math.min(1, modelProbability)).toFixed(4)),
+      modelProbability: modelProbabilityCalibrated,
+      rawModelProbability,
       impliedProbability: null,
       edge: null,
       finalScore: 0,

@@ -33,6 +33,15 @@ interface OverallStats {
   avgOdds?: number;
   picksWithOdds?: number;
   oddsCoverage?: number;
+  // Era transparency (Phase 2 legacy hygiene)
+  era?: 'priced' | 'all';
+}
+
+interface LegacyStats {
+  total: number;
+  won: number;
+  hitRate: number;
+  reason: string;
 }
 
 interface MarketStat {
@@ -99,6 +108,7 @@ interface CalibrationStat {
 interface TrackRecordStats {
   sport: string;
   overall: OverallStats;
+  legacy?: LegacyStats | null;
   live: { total: number; won: number };
   backtest: { total: number; won: number; note: string };
   byMarket: MarketStat[];
@@ -338,6 +348,7 @@ export default function TrackRecord() {
   });
 
   const overall = stats?.overall || { total: 0, won: 0, lost: 0, voided: 0, hitRate: 0 };
+  const legacy = stats?.legacy || null;
   const hasData = overall.total > 0;
   const realRoi = overall.roi ?? null;
   const totalProfit = overall.totalProfit ?? null;
@@ -389,9 +400,14 @@ export default function TrackRecord() {
             </div>
             <p className="mt-1 text-xs text-white/40">
               {hasData
-                ? `${overall.total} settled picks · ${(overall.hitRate * 100).toFixed(1)}% win rate`
+                ? `${overall.total} settled picks · ${(overall.hitRate * 100).toFixed(1)}% win rate${overall.era === 'priced' ? ' (priced era — odds captured)' : ''}`
                 : 'No picks settled yet'}
             </p>
+            {legacy && legacy.total > 0 && (
+              <p className="mt-0.5 text-2xs text-white/25" title={legacy.reason}>
+                + {legacy.total} legacy picks ({(legacy.hitRate * 100).toFixed(1)}% win, no odds captured) — excluded from ROI stats
+              </p>
+            )}
           </div>
         </div>
 

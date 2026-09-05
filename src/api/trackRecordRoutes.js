@@ -18,16 +18,25 @@ router.get("/stats", async (req, res) => {
     // Source filter: exclude backtest and retroactive predictions from user-facing stats
     const sourceFilter = `(prediction_source IN ('live', 'ws_live') OR prediction_source IS NULL) AND (is_retroactive = 0 OR is_retroactive IS NULL)`;
 
-    // 1. Overall — now with ROI, profit, odds coverage
+    // 1. Overall — Phase 2 legacy hygiene (money-map item 5): the headline stats
+    // now come from the PRICED era only (odds captured, engine 5.x). Win% over
+    // unpriced legacy picks at unknown odds is meaningless for ROI claims, and
+    // mixing eras inflated the displayed sample (1,765 mixed vs 85 priced).
+    // Legacy totals are disclosed separately. If the priced sample is too small
+    // (< 30), the all-era stats remain the headline (also covers basketball).
     const liveOverall = await db.execute(`
       SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won,
-        SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost,
-        SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided,
-        SUM(stake_units) as total_staked,
-        SUM(profit_units) as total_profit,
-        AVG(best_pick_odds) as avg_odds,
+        COUNT(*) as total_all,
+        SUM(CASE WHEN outcome IN ('win','correct') THEN 1 ELSE 0 END) as won_all,
+        SUM(CASE WHEN outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as lost_all,
+        SUM(CASE WHEN outcome = 'void' THEN 1 ELSE 0 END) as voided_all,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL THEN 1 ELSE 0 END) as priced_total,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL AND outcome IN ('win','correct') THEN 1 ELSE 0 END) as priced_won,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL AND outcome IN ('loss','wrong') THEN 1 ELSE 0 END) as priced_lost,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL AND outcome = 'void' THEN 1 ELSE 0 END) as priced_voided,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL THEN stake_units ELSE 0 END) as priced_staked,
+        SUM(CASE WHEN best_pick_odds IS NOT NULL THEN profit_units ELSE 0 END) as priced_profit,
+        AVG(CASE WHEN best_pick_odds IS NOT NULL THEN best_pick_odds END) as avg_odds,
         SUM(CASE WHEN best_pick_odds IS NOT NULL THEN 1 ELSE 0 END) as picks_with_odds
       FROM prediction_outcomes
       WHERE outcome IN ('win','correct','loss','wrong','void')
@@ -152,15 +161,56 @@ router.get("/stats", async (req, res) => {
 
     // ── Build response ──────────────────────────────────────────────────────
     const liveRow = liveOverall.rows[0] || {};
-    const totalMatches = Number(liveRow.total || 0);
-    const totalWon = Number(liveRow.won || 0);
-    const totalLost = Number(liveRow.lost || 0);
-    const settled = totalWon + totalLost;
-    const overallHitRate = settled > 0 ? totalWon / settled : 0;
-    const totalStaked = Number(liveRow.total_staked || 0);
-    const totalProfit = Number(liveRow.total_profit || 0);
+    const totalMatches = Number(liveRow.total_all || 0);
+    const totalWon = Number(liveRow.won_all || 0);
+    const totalLost = Number(liveRow.lost_all || 0);
+
+    const pricedTotal = Number(liveRow.priced_total || 0);
+    const pricedWon = Number(liveRow.priced_won || 0);
+    const pricedLost = Number(liveRow.priced_lost || 0);
+    const pricedSettled = pricedWon + pricedLost;
+    const pricedStaked = Number(liveRow.priced_staked || 0);
+    const pricedProfit = Number(liveRow.priced_profit || 0);
+
+    // Headline era selection: priced era when it has a meaningful sample.
+    const usePricedHeadline = pricedTotal >= 30;
+    const headline = usePricedHeadline
+      ? {
+          settled: pricedSettled,
+          won: pricedWon,
+          lost: pricedLost,
+          voided: Number(liveRow.priced_voided || 0),
+          staked: pricedStaked,
+          profit: pricedProfit,
+        }
+      : {
+          settled: totalWon + totalLost,
+          won: totalWon,
+          lost: totalLost,
+          voided: Number(liveRow.voided_all || 0),
+          staked: Number(liveRow.priced_staked || 0),
+          profit: Number(liveRow.priced_profit || 0),
+        };
+
+    const settled = headline.settled;
+    const overallHitRate = settled > 0 ? headline.won / settled : 0;
+    const totalStaked = headline.staked;
+    const totalProfit = headline.profit;
     const roi = totalStaked > 0 ? totalProfit / totalStaked : 0;
     const picksWithOdds = Number(liveRow.picks_with_odds || 0);
+
+    // Legacy disclosure — shown separately so nothing is hidden, nothing inflated.
+    const legacyStats = usePricedHeadline
+      ? {
+          total: totalMatches - pricedTotal,
+          won: totalWon - pricedWon,
+          hitRate:
+            (totalWon + totalLost) - (pricedWon + pricedLost) > 0
+              ? (totalWon - pricedWon) / ((totalWon + totalLost) - (pricedWon + pricedLost))
+              : 0,
+          reason: 'Odds were not captured for these picks — win% at unknown odds is excluded from ROI stats',
+        }
+      : null;
 
     const mapWithRoi = (rows, opts = {}) => (rows || []).map(r => {
       const staked = Number(r.staked || 0);
@@ -228,13 +278,16 @@ router.get("/stats", async (req, res) => {
     res.json({
       sport: sportKey,
       overall: {
-        total: settled, won: totalWon, lost: totalLost,
-        voided: Number(liveRow.voided || 0), hitRate: overallHitRate,
-        // ROI fields (NEW)
+        total: settled, won: headline.won, lost: headline.lost,
+        voided: headline.voided, hitRate: overallHitRate,
+        // ROI fields
         totalStaked, totalProfit, roi,
         avgOdds: Number(liveRow.avg_odds || 0),
         picksWithOdds, oddsCoverage: totalMatches > 0 ? picksWithOdds / totalMatches : 0,
+        // Era transparency (Phase 2 legacy hygiene)
+        era: usePricedHeadline ? 'priced' : 'all',
       },
+      legacy: legacyStats,
       live: { total: totalMatches, won: totalWon },
       backtest: { total: backtestTotal, won: backtestWon, note: 'Historical simulation data — not shown to users' },
       byMarket,

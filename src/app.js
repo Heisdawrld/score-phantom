@@ -783,14 +783,16 @@ async function initializeRuntime() {
   }, 3 * 60 * 60 * 1000);
 
   // ── CLV (Closing Line Value) capture: every 15 min ───────────────────────────
-  // Captures closing odds for predictions whose kickoff is within the next 2 hours.
-  // This is the only honest measure of model edge — if we consistently beat the
-  // closing line, our model has real value. If not, any positive yield is variance.
+  // Captures closing odds for predictions whose kickoff is inside the capture
+  // window [kickoff − 25min, kickoff + 10min] (env-tunable). This is the only
+  // honest measure of model edge — if we consistently beat the closing line,
+  // our model has real value. If not, any positive yield is variance.
+  // Phase 2: window tightened from −2h (stale "close") per money-map item 3.
   const { captureClosingOdds } = await import('./storage/clvTracker.js');
   setInterval(async () => {
     const clvStart = Date.now();
     try {
-      const result = await captureClosingOdds({ hoursAhead: 2, limit: 50 });
+      const result = await captureClosingOdds({ limit: 50 });
       recordJobRun('clv_capture', {
         success: true,
         durationMs: Date.now() - clvStart,

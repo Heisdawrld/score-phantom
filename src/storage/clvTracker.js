@@ -123,23 +123,40 @@ export async function storeOpeningOdds(fixtureId, openingOdds, bestPickMarket) {
 /**
  * Capture closing odds for predictions whose kickoff is approaching.
  *
- * This should be called by a cron job ~30-60 minutes before kickoff.
- * It fetches the latest odds from BSD and stores them as "closing" odds.
+ * Phase 2 (money-map item 3): the OLD window (kickoff −2h..0) produced
+ * "closing" lines captured up to two hours early — the money map found
+ * opening==closing in 36/95 rows and CLV sign inversely correlated with
+ * profit, proof the capture was not a real closing line.
  *
- * @param {Object} opts - { hoursAhead: 2 (capture for kickoffs in next N hours), limit: 50 }
+ * NEW window: [kickoff − minutesBefore, kickoff + graceAfter] with defaults
+ * 25 min before / 10 min after (env: CLV_CAPTURE_MIN_BEFORE,
+ * CLV_CAPTURE_GRACE_AFTER). The 15-min cron guarantees at least one pass
+ * inside the window; the post-kickoff grace catches predictions the primary
+ * pass missed (quota blip, restart). Late captures (after kickoff) remain
+ * detectable in analysis via closing_odds_captured_at > match_date.
+ *
+ * @param {Object} opts - { minutesBefore: 25, graceAfter: 10, limit: 50 }
  * @returns {{ captured: number, failed: number, skipped: number }}
  */
-export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
+export async function captureClosingOdds({ minutesBefore, graceAfter, limit = 50 } = {}) {
   await initClvColumns();
+
+  const envBefore = Number(process.env.CLV_CAPTURE_MIN_BEFORE);
+  const envGrace = Number(process.env.CLV_CAPTURE_GRACE_AFTER);
+  const minBefore = Number.isFinite(minutesBefore) ? minutesBefore
+    : (Number.isFinite(envBefore) && envBefore > 0 ? envBefore : 25);
+  const graceAfterKickoff = Number.isFinite(graceAfter) ? graceAfter
+    : (Number.isFinite(envGrace) && envGrace >= 0 ? envGrace : 10);
 
   const result = { captured: 0, failed: 0, skipped: 0 };
 
   try {
     // Find predictions in predictions_v2 that have opening odds but no closing odds yet,
-    // and whose kickoff is within the next N hours.
+    // and whose kickoff is inside the capture window [now − grace, now + minBefore].
     // We join with fixtures to get the match_date and bsd_internal_event_id.
     const now = new Date();
-    const cutoff = new Date(now.getTime() + hoursAhead * 3600 * 1000);
+    const windowStart = new Date(now.getTime() - graceAfterKickoff * 60 * 1000);
+    const windowEnd = new Date(now.getTime() + minBefore * 60 * 1000);
 
     const rows = await db.execute({
       sql: `SELECT p.fixture_id, p.best_pick_market, p.opening_odds,
@@ -152,7 +169,7 @@ export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
               AND f.match_date <= ?
               AND f.match_date >= ?
             LIMIT ?`,
-      args: [cutoff.toISOString(), now.toISOString(), limit],
+      args: [windowEnd.toISOString(), windowStart.toISOString(), limit],
     });
 
     const predictions = rows.rows || [];
@@ -185,6 +202,16 @@ export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
           continue;
         }
 
+        const capturedAt = new Date();
+        const kickoffAt = new Date(pred.match_date);
+        const isLate = Number.isFinite(kickoffAt?.getTime()) && capturedAt > kickoffAt;
+        if (isLate) {
+          // Late capture = post-kickoff fallback. Analysis must filter these via
+          // closing_odds_captured_at > match_date; they are NOT a true close.
+          result.skippedLate = (result.skippedLate || 0) + 1;
+          console.log(`[CLV] ${pred.fixture_id}: LATE capture (${Math.round((capturedAt - kickoffAt) / 60000)}min after kickoff) — flagged via closing_odds_captured_at`);
+        }
+
         await db.execute({
           sql: `UPDATE predictions_v2
                 SET closing_odds = ?,
@@ -198,7 +225,7 @@ export async function captureClosingOdds({ hoursAhead = 2, limit = 50 } = {}) {
             clvResult.closingImplied,
             clvResult.clv,
             clvResult.clvPct,
-            new Date().toISOString(),
+            capturedAt.toISOString(),
             pred.fixture_id,
           ],
         });
