@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import db from "../config/database.js";
 import { requirePremiumAccess, computeAccessStatus } from "../auth/authRoutes.js";
 import { adaptResponseFormat } from "./responseAdapter.js";
+import { buildPredictionPresentation } from './predictionPresentation.js';
 import { explainPrediction, chatAboutMatch } from "../services/groqExplainer.js";
 import { seedFixtures } from "../services/fixtureSeeder.js";
 import { addSseClient, getLiveStatus } from '../services/wsLiveScores.js';
@@ -826,6 +827,7 @@ router.get("/predict/:fixtureId", requireAuth, async (req, res) => {
 
     const response = {
       ...prediction,
+      analysis: buildPredictionPresentation(result.engineResult || {}),
       odds,
       meta,
       stale: stale === true, // true when served from stale cache with background refresh in progress

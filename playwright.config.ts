@@ -4,6 +4,7 @@ const baseURL = process.env.E2E_BASE_URL || 'https://score-phantom.onrender.com'
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/public/**',
   timeout: 60000,
   expect: { timeout: 10000 },
   retries: process.env.CI ? 1 : 0,

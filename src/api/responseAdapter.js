@@ -5,6 +5,7 @@
  */
 
 import { computeSharpMoneySignal } from '../probabilities/sharpMoneySignal.js';
+import { buildPredictionPresentation } from './predictionPresentation.js';
 
 function safeNum(val, fallback = 0) {
   const n = parseFloat(val);
@@ -693,6 +694,7 @@ export function adaptResponseFormat(engineResult, homeTeam, awayTeam) {
 
   return {
     fixture: { id: fixtureId, homeTeam, awayTeam },
+    analysis: buildPredictionPresentation(engineResult),
     model,
     gameScript,
     predictions: {

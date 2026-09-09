@@ -130,7 +130,11 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
   });
 
   // A. No candidates
-  if (ranked.length === 0) return abstain('No candidates survived pruning — nothing to pick', 'NO_CANDIDATES');
+  const pricedBeforeFiltering = options.pricedCandidatesBeforeFiltering;
+  const filteredPriceReason = 'Bookmaker prices were available, but no priced market passed the analysis filters';
+  if (ranked.length === 0) return pricedBeforeFiltering > 0
+    ? abstain(filteredPriceReason, 'PRICED_MARKETS_FILTERED')
+    : abstain('No candidates survived pruning', 'NO_CANDIDATES');
 
   if (pricedRanked.length === 0) {
     const modelOnly = ranked.find(c => isModelOnlyEligible(c, fv, script));
@@ -164,10 +168,15 @@ export function selectBestPickOrAbstain(rankedCandidates, scriptOutput, featureV
       };
     }
 
-    return abstain('No priced markets available — refusing to headline weak unpriced markets', 'NO_PRICED_MARKETS');
+    return pricedBeforeFiltering > 0
+      ? abstain(filteredPriceReason, 'PRICED_MARKETS_FILTERED')
+      : abstain('No qualifying priced markets remain; the available unpriced analysis is too weak to recommend', 'NO_PRICED_MARKETS');
   }
 
   if (qualityPricedRanked.length === 0) {
+    if (pricedRanked.every(c => !isHeadlineEligibleMarket(c.marketKey))) {
+      return abstain('Priced markets survived, but none is approved for a main recommendation', 'NO_HEADLINE_ELIGIBLE_MARKETS');
+    }
     const top = pricedRanked[0];
     const prob = safeNum(top?.modelProbability, 0);
     const finalScore = safeNum(top?.finalScore, 0);

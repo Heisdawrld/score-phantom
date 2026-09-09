@@ -1,3 +1,5 @@
+import { computeAccessStatus } from './accessPolicy.js';
+export { computeAccessStatus } from './accessPolicy.js';
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -215,64 +217,6 @@ async function ensureReferralCode(user) {
     return finalCode;
   }
   return null;
-}
-
-export function computeAccessStatus(user) {
-  // Admins always have full access (check both is_admin flag and ADMIN_EMAIL)
-  const userEmail = String(user?.email || "").trim().toLowerCase();
-  if (user?.is_admin || (ADMIN_EMAIL && userEmail === ADMIN_EMAIL)) {
-    return {
-      status:              "active",
-      trial_active:        false,
-      subscription_active: true,
-      has_full_access:     true,
-    };
-  }
-  const now = new Date();
-  
-  // Clean up potential invalid dates from CSV imports
-  const parsedTrialEnds = user?.trial_ends_at ? new Date(user.trial_ends_at) : null;
-  const trialIsValid = parsedTrialEnds && !isNaN(parsedTrialEnds.getTime());
-  
-  const parsedPremiumExpires = user?.premium_expires_at ? new Date(user.premium_expires_at) : null;
-  const premiumIsValid = parsedPremiumExpires && !isNaN(parsedPremiumExpires.getTime());
-
-  const parsedSubExpires = user?.subscription_expires_at ? new Date(user.subscription_expires_at) : null;
-  const subIsValid = parsedSubExpires && !isNaN(parsedSubExpires.getTime());
-
-  const trialActive   = trialIsValid && parsedTrialEnds > now;
-  const premiumActive = premiumIsValid && parsedPremiumExpires > now;
-  const subActive     = subIsValid && parsedSubExpires > now;
-  
-  let status = "expired";
-  
-  // If they have no valid trial date but their DB status explicitly says "trial", 
-  // give them a fallback grace period so they aren't instantly blocked.
-  let isFallbackTrial = false;
-  if (!trialIsValid && user?.status === "trial" && !premiumActive && !subActive) {
-    isFallbackTrial = true;
-    status = "trial";
-  }
-  
-  let isFallbackPremium = false;
-  if (!premiumIsValid && user?.status === "premium" && !subActive) {
-    isFallbackPremium = true;
-    status = "active";
-  }
-
-  if (premiumActive || subActive || isFallbackPremium) status = "active";
-  else if (trialActive || isFallbackTrial)           status = "trial";
-
-  // Add referral code to the payload
-  const referralCode  = user?.own_referral_code || null;
-
-  return {
-    status,
-    trial_active:        !!trialActive || isFallbackTrial,
-    subscription_active: !!(premiumActive || subActive || isFallbackPremium),
-    has_full_access:     !!trialActive || isFallbackTrial || !!premiumActive || !!subActive || isFallbackPremium,
-    referral_code:       referralCode,
-  };
 }
 
 function publicUser(user) {

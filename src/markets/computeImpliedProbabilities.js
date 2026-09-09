@@ -34,7 +34,7 @@ const ODDS_MAP = {
 /**
  * Look up odds for a given market key from the odds snapshot.
  */
-function lookupOdds(marketKey, oddsSnapshot) {
+export function lookupOdds(marketKey, oddsSnapshot) {
   if (!oddsSnapshot) return null;
   const snapshot = oddsSnapshot.odds && typeof oddsSnapshot.odds === 'object'
     ? oddsSnapshot.odds

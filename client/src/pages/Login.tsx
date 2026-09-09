@@ -281,7 +281,7 @@ export default function Login() {
 
         <div className="auth-2627__signal-card">
           <div>
-            <span>Phantom signal</span>
+            <span>Example signal</span>
             <strong>Over 2.5 goals</strong>
             <small>ARS vs CHE · 20:00 WAT</small>
           </div>

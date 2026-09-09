@@ -5,11 +5,12 @@
   "scripts": {
     "start": "node src/app.js",
     "build": "cd client && npm install && npm run build",
-    "test": "node tests/test-engine-math.mjs && node tests/test-isotonic.mjs && node tests/test-ensemble.mjs && node tests/test-clv.mjs && node tests/test-sharp-money.mjs && node --test tests/test-settlement.mjs tests/test-engine-policy.mjs tests/test-recommendation-policy.mjs tests/test-probability-thresholds.mjs tests/test-stake-sizing.mjs tests/test-acca-pricing.mjs tests/test-payment-validation.mjs tests/test-memory-guards.mjs tests/test-prediction-calibration.mjs tests/test-track-calibration.mjs",
+    "test": "node tests/test-engine-math.mjs && node tests/test-isotonic.mjs && node tests/test-ensemble.mjs && node tests/test-clv.mjs && node tests/test-sharp-money.mjs && node --test tests/test-settlement.mjs tests/test-engine-policy.mjs tests/test-recommendation-policy.mjs tests/test-probability-thresholds.mjs tests/test-stake-sizing.mjs tests/test-acca-pricing.mjs tests/test-payment-validation.mjs tests/test-memory-guards.mjs tests/test-prediction-calibration.mjs tests/test-track-calibration.mjs tests/test-access-policy.mjs tests/test-track-record.mjs tests/test-history-evaluation.mjs tests/test-prediction-presentation.mjs",
     "test:live": "node tests/test-live-pipeline.mjs",
     "check": "npm test && npm --prefix client run typecheck && npm --prefix client run build",
     "seed": "node src/services/fixtureSeeder.js",
-    "enrich": "node src/scripts/enrichFixtures.js"
+    "enrich": "node src/scripts/enrichFixtures.js",
+    "test:public": "playwright test --config playwright.public.config.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
@@ -28,6 +29,7 @@
   },
   "buildTime": "2026-04-04T11:00:00.000Z",
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/web-push": "^3.6.4"
   }
 }

@@ -58,7 +58,7 @@ test('priced markets outside the headline registry cannot become the main pick',
     { dataCompletenessScore: 0.90, matchChaosScore: 0.20 },
   );
   assert.equal(result.noSafePick, true);
-  assert.equal(result.abstainCode, 'LOW_HEADLINE_QUALITY');
+  assert.equal(result.abstainCode, 'NO_HEADLINE_ELIGIBLE_MARKETS');
 });
 
 test('approved priced markets still pass the final headline gate', () => {
@@ -108,4 +108,38 @@ test('persisted market keys resolve to engine probability keys', () => {
   assert.equal(getMarketProbability(probabilities, 'double_chance_home'), 0.75);
   assert.equal(getMarketProbability(probabilities, 'dnb_home'), 2 / 3);
   assert.equal(getMarketProbability(probabilities, 'unknown_market'), null);
+});
+
+
+test('filtered priced markets are distinguished from absent odds, including empty survivors', () => {
+  for (const survivors of [[], [{marketKey: 'ah_home_1_5', modelProbability: 0.67, finalScore: 0.43}]]) {
+    const result = selectBestPickOrAbstain(survivors, {}, {}, {pricedCandidatesBeforeFiltering: 8});
+    assert.equal(result.noSafePick, true);
+    assert.equal(result.bestPick, null);
+    assert.equal(result.abstainCode, 'PRICED_MARKETS_FILTERED');
+    assert.match(result.noSafePickReason, /prices were available/);
+  }
+});
+
+test('truly unpriced weak markets stay abstained without claiming a provider outage', () => {
+  const result = selectBestPickOrAbstain([{marketKey: 'ah_home_1_5', modelProbability: 0.67}], {}, {}, {pricedCandidatesBeforeFiltering: 0});
+  assert.equal(result.abstainCode, 'NO_PRICED_MARKETS');
+  assert.equal(result.noSafePick, true);
+});
+
+import { buildFeatureEvidence } from '../src/engine/featureEvidence.js';
+import { lookupOdds } from '../src/markets/computeImpliedProbabilities.js';
+test('default form and model estimates are not presented as observed evidence', () => {
+  const evidence = buildFeatureEvidence({homePointsLast5: 0, awayPointsLast5: 0}, {homeExpectedGoals: 1.2, awayExpectedGoals: 1});
+  assert.equal(evidence.formUsed, false);
+  assert.equal(evidence.xgUsed, false);
+  assert.equal(evidence.modeledExpectedGoalsAvailable, true);
+  const observed = buildFeatureEvidence({homeStatsMatchCount: 10, awayStatsMatchCount: 10, homeAvgXgFor: 0, awayAvgXgFor: 1.1});
+  assert.equal(observed.formUsed, true);
+  assert.equal(observed.xgUsed, true);
+});
+test('diagnostic odds lookup uses the same aliases as candidate pricing', () => {
+  assert.equal(lookupOdds('home_win', {odds: {home: 1.9}}), 1.9);
+  assert.equal(lookupOdds('over_25', {over_under: {over25: 2.1}}), 2.1);
+  assert.equal(lookupOdds('away_win', {}), null);
 });

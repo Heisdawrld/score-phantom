@@ -175,10 +175,10 @@ export default function Landing() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLocation("/login")}
+                  onClick={() => setLocation("/track-record")}
                   className="landing-button landing-button--ghost"
                 >
-                  <Activity /> Explore the product
+                  <Activity /> View track record
                 </button>
               </motion.div>
 
@@ -190,7 +190,7 @@ export default function Landing() {
               >
                 <span><Check /> 7-day free trial</span>
                 <span><Check /> No card required</span>
-                <span><ShieldCheck /> Transparent record</span>
+                <Link href="/track-record"><ShieldCheck /> View track record</Link>
               </motion.div>
             </div>
 
@@ -202,8 +202,8 @@ export default function Landing() {
             >
               <div className="matchday-console__glow" />
               <div className="matchday-console__topbar">
-                <span className="matchday-console__live"><i /> Model live</span>
-                <span>Matchday 01 · 20:00 WAT</span>
+                <span className="matchday-console__live"><i /> Example analysis</span>
+                <span>Illustrative match · not a live pick</span>
               </div>
 
               <div className="matchday-console__league">
@@ -363,7 +363,7 @@ export default function Landing() {
             </Reveal>
 
             <Reveal className="bento-card bento-card--wide bento-card--record" delay={0.1}>
-              <div className="record-visual">
+              <div className="record-visual" aria-hidden="true">
                 {[42, 58, 48, 70, 64, 78, 73, 86, 82, 92].map((height, index) => (
                   <i key={index} style={{ height: `${height}%` }} />
                 ))}
@@ -375,6 +375,7 @@ export default function Landing() {
                   Wins, losses, voids and confidence calibration remain visible, so the model
                   earns trust over time.
                 </p>
+                <Link href="/track-record" className="landing-text-link">Inspect every result <ArrowRight /></Link>
               </div>
             </Reveal>
           </div>
@@ -433,6 +434,7 @@ export default function Landing() {
             <span className="landing-brand__wordmark">SCORE<span>PHANTOM</span></span>
           </div>
           <div className="landing-footer__links">
+            <Link href="/track-record">Track record</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
             <a href="https://wa.me/2348117024699" target="_blank" rel="noreferrer">Support</a>

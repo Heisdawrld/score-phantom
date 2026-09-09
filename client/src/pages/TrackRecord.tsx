@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { useLocation, useSearch } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import {
   BadgeCheck,
   BarChart2,
@@ -28,10 +28,11 @@ interface OverallStats {
   voided: number;
   hitRate: number;
   // ROI fields (from engine upgrade)
-  totalStaked?: number;
-  totalProfit?: number;
-  roi?: number;
-  avgOdds?: number;
+  totalStaked?: number | null;
+  totalProfit?: number | null;
+  roi?: number | null;
+  roiPicks?: number;
+  avgOdds?: number | null;
   picksWithOdds?: number;
   oddsCoverage?: number;
   // Era transparency (Phase 2 legacy hygiene)
@@ -51,10 +52,11 @@ interface MarketStat {
   won: number;
   lost: number;
   hitRate: number;
-  staked?: number;
-  profit?: number;
-  roi?: number;
-  avgOdds?: number;
+  staked?: number | null;
+  profit?: number | null;
+  roi?: number | null;
+  roiPicks?: number;
+  avgOdds?: number | null;
 }
 
 interface ConfidenceStat {
@@ -62,9 +64,10 @@ interface ConfidenceStat {
   total: number;
   won: number;
   hitRate: number;
-  staked?: number;
-  profit?: number;
-  roi?: number;
+  staked?: number | null;
+  profit?: number | null;
+  roi?: number | null;
+  roiPicks?: number;
 }
 
 interface MonthlyStat {
@@ -72,9 +75,10 @@ interface MonthlyStat {
   total: number;
   won: number;
   hitRate: number;
-  staked?: number;
-  profit?: number;
-  roi?: number;
+  staked?: number | null;
+  profit?: number | null;
+  roi?: number | null;
+  roiPicks?: number;
 }
 
 interface OddsBandStat {
@@ -82,9 +86,10 @@ interface OddsBandStat {
   total: number;
   won: number;
   hitRate: number;
-  staked: number;
-  profit: number;
-  roi: number;
+  staked: number | null;
+  profit: number | null;
+  roi: number | null;
+  roiPicks?: number;
 }
 
 interface SharpStat {
@@ -92,9 +97,10 @@ interface SharpStat {
   total: number;
   won: number;
   hitRate: number;
-  staked: number;
-  profit: number;
-  roi: number;
+  staked: number | null;
+  profit: number | null;
+  roi: number | null;
+  roiPicks?: number;
 }
 
 interface CalibrationStat {
@@ -107,6 +113,9 @@ interface CalibrationStat {
 }
 
 interface TrackRecordStats {
+  engineVersion?: string | null;
+  currentEngineVersion?: string | null;
+  engineVersions?: string[];
   sport: string;
   overall: OverallStats;
   legacy?: LegacyStats | null;
@@ -330,21 +339,23 @@ export default function TrackRecord() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const [activeSport, setActiveSport] = useState<'football' | 'basketball'>(() => location.startsWith('/basketball') || new URLSearchParams(search || '').get('sport') === 'basketball' ? 'basketball' : 'football');
+  const [engineVersion, setEngineVersion] = useState('');
   const [activeSource, setActiveSource] = useState<'live' | 'backtest'>('live');
   const [resultLimit, setResultLimit] = useState<ResultLimit>(25);
 
   const effectiveSource = activeSport === 'basketball' ? 'live' : activeSource;
   const isBasketball = activeSport === 'basketball';
+  const versionQuery = engineVersion ? `&engineVersion=${encodeURIComponent(engineVersion)}` : '';
 
-  const { data: stats, isLoading: statsLoading } = useQuery<TrackRecordStats>({
-    queryKey: ['track-record-stats', activeSport],
-    queryFn: () => fetchApi(`/track-record/stats?sport=${activeSport}`),
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: reloadStats } = useQuery<TrackRecordStats>({
+    queryKey: ['track-record-stats', activeSport, engineVersion],
+    queryFn: () => fetchApi(`/track-record/stats?sport=${activeSport}${versionQuery}`),
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: recent, isLoading: recentLoading } = useQuery<RecentResponse>({
-    queryKey: ['track-record-recent', activeSport, effectiveSource],
-    queryFn: () => fetchApi(`/track-record/recent?limit=50&source=${effectiveSource}&sport=${activeSport}`),
+  const { data: recent, isLoading: recentLoading, isError: recentError, refetch: reloadRecent } = useQuery<RecentResponse>({
+    queryKey: ['track-record-recent', activeSport, effectiveSource, engineVersion],
+    queryFn: () => fetchApi(`/track-record/recent?limit=50&source=${effectiveSource}&sport=${activeSport}${versionQuery}`),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -386,6 +397,18 @@ export default function TrackRecord() {
       </div>
       <main className="relative z-10 mx-auto max-w-5xl space-y-6 px-4 pt-4">
 
+        <nav aria-label="Track record navigation" className="flex items-center justify-between text-sm">
+          <Link href="/home" className="font-bold text-primary">ScorePhantom</Link>
+          <Link href="/" className="text-white/70">Open app</Link>
+        </nav>
+
+        {(statsError || recentError) && (
+          <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+            Some results could not be loaded. Missing data does not mean zero results.
+            <button onClick={() => { void reloadStats(); void reloadRecent(); }} className="ml-3 underline">Retry</button>
+          </div>
+        )}
+
         {/* ── Page Header ── */}
         <div className="flex items-end justify-between gap-4">
           <div>
@@ -396,13 +419,13 @@ export default function TrackRecord() {
                 title="Outcomes verified automatically against live match results"
               >
                 <BadgeCheck className="h-3 w-3 text-primary" />
-                <span className="text-2xs font-bold uppercase tracking-[0.16em] text-primary/80">Verified</span>
+                <span className="text-2xs font-bold uppercase tracking-[0.16em] text-primary/80">Settled</span>
               </div>
             </div>
             <p className="mt-1 text-xs text-white/40">
               {hasData
                 ? `${overall.total} settled picks · ${(overall.hitRate * 100).toFixed(1)}% win rate${overall.era === 'priced' ? ' (priced era — odds captured)' : ''}`
-                : 'No picks settled yet'}
+                : statsError ? 'Results temporarily unavailable' : statsLoading ? 'Loading results…' : 'No picks settled yet'}
             </p>
             {legacy && legacy.total > 0 && (
               <p className="mt-0.5 text-2xs text-white/25" title={legacy.reason}>
@@ -410,6 +433,19 @@ export default function TrackRecord() {
               </p>
             )}
           </div>
+        </div>
+
+        <div className="space-y-2 text-xs text-white/60">
+          <label className="flex flex-wrap items-center gap-2">
+            Engine version
+            <select aria-label="Engine version" value={engineVersion} onChange={(event) => setEngineVersion(event.target.value)} className="rounded-lg border border-white/20 bg-[#101820] px-3 py-2 text-white">
+              <option value="">All versions</option>
+              {Array.from(new Set([...(stats?.engineVersions || []), ...(stats?.currentEngineVersion ? [stats.currentEngineVersion] : []), ...(engineVersion ? [engineVersion] : [])])).map(version => (
+                <option key={version} value={version}>{version}{version === stats?.currentEngineVersion ? ' (current)' : ''}</option>
+              ))}
+            </select>
+          </label>
+          <p>{engineVersion ? `Live statistics for engine ${engineVersion}.` : 'Live statistics combine engine versions; they do not measure the current engine alone.'} Calibration and win rate include unpriced results. ROI uses only priced wins/losses with a recorded positive stake and known profit; voids are excluded from turnover.</p>
         </div>
 
         {/* ── Sport + Source Toggles ── */}
@@ -420,6 +456,7 @@ export default function TrackRecord() {
                 key={sport}
                 onClick={() => {
                   setActiveSport(sport);
+                  setEngineVersion('');
                   setLocation(sport === 'basketball' ? '/basketball/track-record' : '/track-record');
                 }}
                 className={cn(
@@ -445,7 +482,7 @@ export default function TrackRecord() {
                   activeSport === 'basketball' && src === 'backtest' && 'cursor-not-allowed opacity-25'
                 )}
               >
-                {src === 'live' ? 'Live' : 'History'}
+                {src === 'live' ? 'Published results' : 'Backtest simulation'}
               </button>
             ))}
           </div>
@@ -456,7 +493,7 @@ export default function TrackRecord() {
           <div className="glass-panel flex items-center justify-center rounded-2xl border border-white/5 p-8">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
-        ) : hasData ? (
+        ) : statsError ? null : hasData ? (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -485,15 +522,16 @@ export default function TrackRecord() {
                   <Info className="h-4 w-4 cursor-help text-white/20" />
                   <div className="pointer-events-none absolute right-0 top-6 z-30 hidden w-56 rounded-lg border border-white/10 bg-surface-3 p-3 text-2xs leading-relaxed text-white/70 shadow-2xl group-hover:block">
                     <p className="mb-1 font-bold text-white/90">ROI (Yield)</p>
-                    <p>Return on investment from flat-staking 1 unit on every pick. Based on {overall.picksWithOdds ?? 0} picks with recorded bookmaker odds ({(oddsCoverage * 100).toFixed(0)}% coverage). Net profit: <span className={totalProfit != null && totalProfit >= 0 ? 'font-bold text-primary' : 'font-bold text-red-400'}>{totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u` : '—'}</span></p>
+                    <p>Return on recorded stake units, not a flat 1-unit simulation. Based on {overall.roiPicks ?? 0} eligible wins/losses. Odds coverage across all results: {(oddsCoverage * 100).toFixed(0)}%. Net profit: <span className={totalProfit != null && totalProfit >= 0 ? 'font-bold text-primary' : 'font-bold text-red-400'}>{totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u` : '—'}</span></p>
                   </div>
                 </div>
               </div>
-              <p className={cn('mt-3 text-4xl font-display leading-none', realRoi != null ? roiTextColor(realRoi) : 'text-white/40')}>
-                {realRoi != null ? formatRoi(realRoi) : '—'}
+              <p className={cn('mt-3 leading-none', realRoi != null ? `text-4xl font-display ${roiTextColor(realRoi)}` : 'text-lg font-semibold text-white/50')}>
+                {realRoi != null ? formatRoi(realRoi) : 'Unavailable'}
               </p>
               <p className="mt-2 text-2xs text-white/40">
-                {totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u profit` : 'No odds data'}
+                {totalProfit != null ? `${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(1)}u profit` : 'No eligible priced results'}
+                <span className="block">{overall.roiPicks ?? 0} picks in ROI sample</span>
               </p>
             </div>
 
@@ -730,7 +768,7 @@ export default function TrackRecord() {
                 </p>
                 <div className="space-y-2">
                   {stats.bySharp.filter((s) => s.total >= 3).map((s) => {
-                    const isPositive = s.profit >= 0;
+                    const isPositive = s.profit != null && s.profit >= 0;
                     return (
                       <div key={s.kind} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                         <div>
@@ -742,7 +780,7 @@ export default function TrackRecord() {
                             {(s.hitRate * 100).toFixed(1)}<span className="text-sm text-white/30">%</span>
                           </p>
                           <p className={cn('text-2xs font-bold', isPositive ? 'text-primary' : 'text-red-400')}>
-                            ROI {isPositive ? '+' : ''}{(s.roi * 100).toFixed(1)}%
+                            ROI {s.roi == null ? 'Unavailable' : formatRoi(s.roi)} · {s.roiPicks ?? 0} priced picks
                           </p>
                         </div>
                       </div>
@@ -800,7 +838,7 @@ export default function TrackRecord() {
           ) : (
             <div className="glass-panel rounded-2xl border border-white/5 p-8 text-center">
               <p className="mb-2 text-3xl">📝</p>
-              <p className="text-sm text-white/60">No results yet for this source.</p>
+              <p className="text-sm text-white/60">{recentError ? 'Results temporarily unavailable.' : 'No results yet for this source.'}</p>
               <p className="mt-2 text-2xs text-white/30">
                 {effectiveSource === 'live'
                   ? 'Live picks are evaluated automatically after matches end.'

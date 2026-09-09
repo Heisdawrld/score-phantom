@@ -1,8 +1,6 @@
-﻿name: E2E (Playwright)
+name: Manual production journey (deployed version)
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
 
 jobs:

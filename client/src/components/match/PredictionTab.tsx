@@ -38,6 +38,11 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
     staleTime: 5 * 60 * 1000,
   });
   const data = predictionData || fetchedData;
+  const analysis = (data as any)?.analysis;
+  const analysisDate = typeof analysis?.generatedAt === 'string' ? new Date(analysis.generatedAt) : null;
+  const analysisTime = analysisDate && Number.isFinite(analysisDate.getTime())
+    ? analysisDate.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
 
   if (!isPremium) return (
     <div className="match-tab match-tab--prediction match-tab--locked relative mt-4 rounded-3xl overflow-hidden border border-white/10 bg-white/[0.02]">
@@ -272,6 +277,15 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             )}
           </motion.div>
 
+          <div className="mb-4 space-y-2 text-xs leading-relaxed text-white/55">
+            <p>{analysisTime ? `Analysis generated: ${analysisTime}` : 'Analysis time unavailable'}</p>
+            {(data as any)?.stale === true && (
+              <p role="status" className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-amber-200">
+                Showing older analysis. Check again for an updated recommendation before acting.
+              </p>
+            )}
+          </div>
+
           {/* Verdict label */}
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className={cn("text-[10px] font-black uppercase", verdictColor)}>
@@ -290,7 +304,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
               <div className="p-4 rounded-xl bg-red-500/[0.06] border border-red-500/15">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">Skip This Match</p>
+                  <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">{analysis?.title || 'No bet recommended'}</p>
                 </div>
                 {isAvoidedPick && rec.pick && rec.pick !== "No Clear Edge" ? (
                   <>
@@ -303,7 +317,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
                   </>
                 ) : (
                   <p className="text-xs text-white/50 leading-relaxed">
-                    {avoidReason || rec.reasons?.[0] || "No market with enough value to recommend a bet."}
+                    {avoidReason || analysis?.explanation || rec.reasons?.[0] || "No market with enough value to recommend a bet."}
                   </p>
                 )}
               </div>
@@ -362,7 +376,7 @@ export function PredictionTab({ fixtureId, isPremium, setLocation, matchData, pr
             <div className="mt-3 mb-3 p-3 rounded-xl bg-amber-400/[0.06] border border-amber-400/20">
               <p className="text-[10px] font-black uppercase tracking-wider text-amber-400 mb-1">Monitor, don&apos;t bet yet</p>
               <p className="text-xs leading-relaxed text-white/55">
-                {decision?.reason || "The direction is credible, but the current evidence or price has not cleared the bet threshold."}
+                {analysis?.explanation || decision?.reason || "The direction is credible, but the current evidence or price has not cleared the bet threshold."}
               </p>
             </div>
           )}

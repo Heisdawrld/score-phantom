@@ -192,7 +192,7 @@ function Router() {
       <Route path="/paywall" component={() => <ProtectedRoute component={Paywall} />} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/basketball" component={BasketballAdmin} />
-      <Route path="/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
+      <Route path="/track-record" component={TrackRecord} />
       <Route path="/top-picks" component={() => <ProtectedRoute component={TopPicksToday} />} />
       <Route path="/results" component={() => <ProtectedRoute component={PredictionResults} />} />
       <Route path="/league-favorites" component={() => <ProtectedRoute component={LeagueFavorites} />} />
@@ -206,7 +206,7 @@ function Router() {
       <Route path="/basketball/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/basketball/billing/history" component={() => <ProtectedRoute component={BillingHistory} />} />
       <Route path="/basketball/billing" component={() => <ProtectedRoute component={PaymentBilling} />} />
-      <Route path="/basketball/track-record" component={() => <ProtectedRoute component={TrackRecord} />} />
+      <Route path="/basketball/track-record" component={TrackRecord} />
       <Route path="/basketball" component={() => <ProtectedRoute component={Basketball} />} />
       <Route path="/basketball/games/:league/:externalId" component={() => <ProtectedRoute component={BasketballGame} />} />
       <Route path="/picks" component={() => <ProtectedRoute component={TopPicksToday} />} />

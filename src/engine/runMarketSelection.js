@@ -1,5 +1,5 @@
 import { buildMarketCandidates } from '../markets/buildMarketCandidates.js';
-import { computeImpliedProbabilities } from '../markets/computeImpliedProbabilities.js';
+import { computeImpliedProbabilities, lookupOdds } from '../markets/computeImpliedProbabilities.js';
 import { scoreMarketCandidates } from '../markets/scoreMarketCandidates.js';
 import { rankMarkets } from '../markets/rankMarkets.js';
 import { computeLayer2Override } from '../markets/computeLayer2Override.js';
@@ -133,6 +133,10 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
 
   // ── Stage 3d: Build candidates (with adjusted probs) ───────────────────────
   const allCandidates = buildMarketCandidates(adjustedProbs, odds);
+  const countStage = (items) => ({
+    candidates: items.length,
+    priced: items.filter(c => lookupOdds(c.marketKey, odds) > 1).length,
+  });
 
   // ── Stage 3e: Apply market-specific restrictions from predictability gate ──
   const restrictionResult = applyMarketRestrictions(allCandidates, assessment.restrictions || {});
@@ -177,13 +181,19 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
 
   // ── Stage 3i: Rank survivors ───────────────────────────────────────────────
   const ranked = rankMarkets(withEscalationBonuses);
+  const selectionDiagnostics = {
+    generated: countStage(allCandidates),
+    afterRestrictions: countStage(candidatesAfterRestrictions),
+    afterProbabilityFilter: countStage(candidatesAfterPreFilter),
+    afterPruning: countStage(ranked),
+  };
 
   // ── Stage 3j: Layer 2 override detection ───────────────────────────────────
   const { override: layer2Override, topProbKey } = computeLayer2Override({ rankedCandidates: ranked, shiftMap, features });
 
   // ── Stage 3k: Select best pick or abstain ──────────────────────────────────
   let { bestPick, backupPicks, noSafePick, noSafePickReason, layer2OverrideApplied, abstainCode } =
-    selectBestPickOrAbstain(ranked, script, features, { layer2Override, layer2ShiftMarket: maxShiftMarket, layer2ShiftPp: maxShift });
+    selectBestPickOrAbstain(ranked, script, features, { layer2Override, layer2ShiftMarket: maxShiftMarket, layer2ShiftPp: maxShift, pricedCandidatesBeforeFiltering: selectionDiagnostics.generated.priced });
 
   // ── Stage 3l: Check market escalation (Phase 5A) ──────────────────────────
   // If the best pick is at low odds with high probability, consider escalating
@@ -249,6 +259,7 @@ export async function runMarketSelection({ calibratedProbs, odds, script, featur
     noSafePickReason,
     abstainCode: abstainCode || null,
     rankedCandidates: ranked,
+    selectionDiagnostics,
     layer2Override,
     layer2OverrideApplied: layer2OverrideApplied ?? false,
     maxShift,

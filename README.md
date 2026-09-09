@@ -66,6 +66,28 @@ npm start
 
 ## 📁 Project Structure
 
+### Local verification
+
+Use Node.js 24 for the verification suite (the isolated reporting tests use Node's in-memory SQLite).
+
+```bash
+npm install
+npm --prefix client install
+npm run check
+npx playwright install chromium
+npm run test:public
+```
+
+Public journey tests serve this checkout with synthetic records; they need no production credentials.
+For a manual preview after building, run `node scripts/previewReview.mjs` and open `http://127.0.0.1:4173`.
+The production journey workflow is manual and checks the deployed site, not the source checkout.
+
+Track-record ROI uses recorded stake units from priced wins/losses with known profit. Voids, unpriced
+results, unknown profit and zero stakes are excluded from ROI turnover. `null` economics mean unavailable,
+not break-even. All-version results remain available; use the engine-version selector to isolate a release.
+Subscriptions and trials require a valid future expiry. Repair imported accounts explicitly rather than
+granting indefinite access based on a status label.
+
 ```
 ├── client/                             # Vite + React frontend
 ├── src/
@@ -106,3 +128,8 @@ npm start
 | `FLUTTERWAVE_WEBHOOK_HASH` | Flutterwave webhook secret hash |
 | `RESEND_API_KEY` | Resend API key for email |
 | `RESEND_FROM_EMAIL` | Verified sender address for Resend |
+
+
+### Read-only history evaluation
+
+Run `node scripts/evaluateHistory.mjs <ignored-env-file> <ISO-cutoff> <output-json>`. The env file supplies TURSO_DATABASE_URL and TURSO_AUTH_TOKEN. Uses a direct client SELECT without application migrations. Choose a cutoff after the fit window (2026-09-07T00:00:00Z for the recorded September 6 fit). Includes live and ws_live, verifies pre-match snapshot timestamps and fixture/version identity, and excludes unpriced/zero-stake records from ROI. Evaluates captured probabilities without recalibrating them. This cannot evaluate unrecorded rejected markets or verify original training membership.

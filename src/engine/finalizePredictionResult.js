@@ -1,3 +1,4 @@
+import { buildFeatureEvidence } from './featureEvidence.js';
 import { safeNum } from "../utils/math.js";
 import { buildConfidenceProfile } from "./buildConfidenceProfile.js";
 import { getClvCalibration } from "../storage/clvCalibration.js";
@@ -449,14 +450,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     };
   }
 
-  const featureEvidence = {
-    formUsed: features.homePointsLast5 != null && features.awayPointsLast5 != null,
-    h2hUsed: (features.h2hMatchesAvailable || 0) > 0,
-    xgUsed: xg.homeExpectedGoals > 0 && xg.awayExpectedGoals > 0,
-    tacticalUsed: !!(features.tacticalMatchup && features.tacticalMatchup.tacticalConfidence !== 'low'),
-    sharpUsed: !!features.advancedOdds || !!features.oddsComparison,
-    injuriesUsed: features.homeMissingXgImpact > 0 || features.awayMissingXgImpact > 0,
-  };
+  const featureEvidence = buildFeatureEvidence(features, xg);
 
   // ── AVOID-badge sync + adversarial challenge abstain ─────────────────────
   const isAvoidedPick = bestPick?.isAvoidedPick === true;
@@ -530,6 +524,7 @@ export async function finalizePredictionResult({ fixtureId, homeTeamName, awayTe
     topProbKey: topProbKey || null,
     features,
     featureEvidence,
+    selectionDiagnostics: selection.selectionDiagnostics || null,
     narrative: narrative || null,
     contextMods: contextMods || null,
     reasonChain: reasonChain || null,
